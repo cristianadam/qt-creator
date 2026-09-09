@@ -156,6 +156,13 @@ private slots:
     void typeAt_data();
     void typeAt();
 
+    void completeAfterAnArrow();
+    void completeAfterADot();
+    void completeAnUnqualifiedName();
+    void completeOffersInheritedMembers();
+    void argumentHints();
+    void noCompletionWhereNoneWasAsked();
+
     void reportsDiagnostics();
     void unsupportedQueries();
 };
@@ -360,6 +367,88 @@ void tst_cxxfrontenddocument::typeAt()
         = document.typeAt(positions.first().line, positions.first().column);
 
     QCOMPARE(found.type, type);
+}
+
+// Completion. The parser works out what could be written at the position on
+// its way past it, which is also how it copes with the half-written
+// expression that is there while someone is typing -- there is no valid file
+// to parse at that moment, and none is needed.
+namespace {
+
+CxxFrontendDocument::Completion completeAt(const QByteArray &marked)
+{
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    Q_ASSERT(positions.size() == 1);
+
+    CxxFrontendDocument::Config config;
+    config.completionLine = positions.first().line;
+    config.completionColumn = positions.first().column;
+
+    return CxxFrontendDocument(QString::fromUtf8(source), "<stdin>", config).completion();
+}
+
+} // namespace
+
+void tst_cxxfrontenddocument::completeAfterAnArrow()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct S { int m; void g(); };\nvoid f(S *s) { s->$ }\n");
+
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
+    QCOMPARE(completion.objectType, QString("S*"));
+    QVERIFY(completion.candidates.contains("m"));
+    QVERIFY(completion.candidates.contains("g"));
+}
+
+void tst_cxxfrontenddocument::completeAfterADot()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct S { int m; };\nvoid f(S s) { s.$ }\n");
+
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
+    QCOMPARE(completion.objectType, QString("S"));
+    QVERIFY(completion.candidates.contains("m"));
+}
+
+void tst_cxxfrontenddocument::completeAnUnqualifiedName()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("void f() { int local; $ }\n");
+
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Unqualified);
+    QVERIFY(completion.candidates.contains("local"));
+}
+
+void tst_cxxfrontenddocument::completeOffersInheritedMembers()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct B { int inherited; };\nstruct D : B { int own; };\n"
+                     "void f(D *d) { d->$ }\n");
+
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
+    QVERIFY(completion.candidates.contains("own"));
+    QVERIFY2(completion.candidates.contains("inherited"),
+             qPrintable(completion.candidates.join(", ")));
+}
+
+void tst_cxxfrontenddocument::argumentHints()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("int g(int a, char b);\nvoid f() { g($ }\n");
+
+    // A name can be written there too, so both are offered at once.
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Unqualified);
+    QCOMPARE(completion.activeParameter, 0);
+    QVERIFY2(!completion.signatures.isEmpty(), "no candidate signature");
+    QVERIFY2(completion.signatures.first().contains("g("),
+             qPrintable(completion.signatures.join(", ")));
+}
+
+void tst_cxxfrontenddocument::noCompletionWhereNoneWasAsked()
+{
+    const CxxFrontendDocument document("struct S { int m; };\n", "<stdin>");
+    QVERIFY(!document.completion().isValid());
 }
 
 void tst_cxxfrontenddocument::reportsDiagnostics()

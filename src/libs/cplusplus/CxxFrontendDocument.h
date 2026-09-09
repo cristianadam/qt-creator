@@ -57,12 +57,23 @@ public:
         std::function<std::optional<QStringList>(const QString &name, bool isSystem,
                                                  const QStringList &inForce)>
             onInclude;
+
+        // Ask what could be written at this position, one-based, zero for
+        // neither. It has to be set before parsing rather than asked
+        // afterwards: the parser is told where to stop and look around, which
+        // is also how it copes with the half-written expression that is there
+        // while someone is typing.
+        int completionLine = 0;
+        int completionColumn = 0;
     };
 
     // Parses \a source straight away; there is nothing useful to do with an
-    // unparsed one.
+    // unparsed one. Two overloads rather than a defaulted argument, because
+    // Config carries default member initializers and cannot be written as {}
+    // while this class is still being defined.
+    CxxFrontendDocument(const QString &source, const QString &fileName);
     CxxFrontendDocument(const QString &source, const QString &fileName,
-                        const Config &config = {});
+                        const Config &config);
     ~CxxFrontendDocument();
 
     QString fileName() const;
@@ -166,6 +177,35 @@ public:
         bool isValid() const { return !type.isEmpty(); }
     };
     ExpressionType typeAt(int line, int column) const;
+
+    // What could be written where Config asked. The parser works this out on
+    // its way past the position, so a document built without asking has
+    // nothing here.
+    struct Completion
+    {
+        enum class Kind {
+            None,
+            Unqualified,  // a name, anywhere a name can go
+            Member,       // after a . or ->
+            Scope         // after a ::
+        };
+
+        Kind kind = Kind::None;
+        // What is being looked into, for a member or scope completion.
+        QString objectType;
+        // The names on offer.
+        QStringList candidates;
+
+        // Inside the parentheses of a call both apply at once: a name can be
+        // written there, and the call it belongs to has a signature worth
+        // showing. So the hints sit beside the names rather than instead of
+        // them, which is also how an editor shows them.
+        QStringList signatures;
+        int activeParameter = 0;
+
+        bool isValid() const { return kind != Kind::None || !signatures.isEmpty(); }
+    };
+    const Completion &completion() const;
 
     // The identifier written at a position, empty if there is none. What the
     // snapshot needs in order to go looking elsewhere.

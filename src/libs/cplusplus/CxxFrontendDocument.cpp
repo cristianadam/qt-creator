@@ -110,6 +110,26 @@ QString applyStarBinding(const QString &declaration, const Overview &settings)
     return result;
 }
 
+// The class a type names, looked through a pointer or a reference, since
+// completing after -> or . means the thing pointed at.
+cxx::ScopeSymbol *classScopeOf(const cxx::Type *type)
+{
+    while (type) {
+        if (auto *pointer = cxx::type_cast<cxx::PointerType>(type)) {
+            type = pointer->elementType();
+            continue;
+        }
+        if (auto *reference = cxx::type_cast<cxx::LvalueReferenceType>(type)) {
+            type = reference->elementType();
+            continue;
+        }
+        if (auto *cls = cxx::type_cast<cxx::ClassType>(type))
+            return cls->symbol();
+        return nullptr;
+    }
+    return nullptr;
+}
+
 // The path to a symbol, the way Overview prints a fully qualified name: the
 // named scopes it is inside, outermost first, then the symbol itself. The
 // global scope has no name and contributes nothing.
@@ -319,6 +339,13 @@ public:
     cxx::MemoryLayout memoryLayout{64};
     cxx::TranslationUnit unit{&diagnosticsClient};
 
+    CxxFrontendDocument::Completion completion;
+
+    // Turns what the parser found at the completion point into the names a
+    // caller can offer.
+    void recordCompletion(const cxx::CodeCompletionContext &context);
+    [[nodiscard]] QStringList visibleNamesIn(cxx::ScopeSymbol *scope) const;
+
     QList<CxxFrontendDocument::Symbol> symbols;
     // Kept alongside symbols, same indices: the model behind each entry.
     std::vector<cxx::Symbol *> cxxSymbols;
@@ -444,6 +471,90 @@ QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
     return found;
 }
 
+QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope) const
+{
+    QStringList names;
+    if (!scope)
+        return names;
+
+    // What the scope itself declares, and what it inherits. Walking the bases
+    // here rather than asking lookup, because lookup answers about one name
+    // and this is the question the other way round.
+    const std::function<void(cxx::ScopeSymbol *, QSet<cxx::ScopeSymbol *> &)> collect =
+        [&](cxx::ScopeSymbol *current, QSet<cxx::ScopeSymbol *> &seen) {
+            if (!current || seen.contains(current))
+                return;
+            seen.insert(current);
+
+            for (cxx::Symbol *member : current->members()) {
+                if (member->isHidden())
+                    continue;
+                if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                    for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
+                        if (function->name())
+                            names.append(fromStd(cxx::to_string(function->name())));
+                    }
+                    continue;
+                }
+                if (dynamic_cast<cxx::BaseClassSymbol *>(member))
+                    continue;
+                if (member->name())
+                    names.append(fromStd(cxx::to_string(member->name())));
+            }
+
+            if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(current)) {
+                for (cxx::BaseClassSymbol *base : cls->baseClasses()) {
+                    if (auto *baseScope = base->symbol() ? base->symbol()->asScopeSymbol()
+                                                         : nullptr) {
+                        collect(baseScope, seen);
+                    }
+                }
+            }
+        };
+
+    QSet<cxx::ScopeSymbol *> seen;
+    collect(scope, seen);
+    names.removeDuplicates();
+    names.sort();
+    return names;
+}
+
+void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionContext &context)
+{
+    using Kind = CxxFrontendDocument::Completion::Kind;
+
+    std::visit(
+        [&](const auto &what) {
+            using T = std::decay_t<decltype(what)>;
+
+            if constexpr (std::is_same_v<T, cxx::UnqualifiedCompletionContext>) {
+                completion.kind = Kind::Unqualified;
+                completion.candidates = visibleNamesIn(what.scope);
+            } else if constexpr (std::is_same_v<T, cxx::ScopeCompletionContext>) {
+                completion.kind = Kind::Scope;
+                completion.candidates = visibleNamesIn(what.scope);
+            } else if constexpr (std::is_same_v<T, cxx::MemberCompletionContext>) {
+                completion.kind = Kind::Member;
+                if (what.objectType) {
+                    completion.objectType = fromStd(
+                        cxx::to_string(what.objectType, "", {.omitEnclosingScope = true}));
+                    completion.candidates = visibleNamesIn(classScopeOf(what.objectType));
+                }
+            } else if constexpr (std::is_same_v<T, cxx::ArgumentHintsContext>) {
+                completion.activeParameter = what.activeParameter;
+                for (cxx::FunctionSymbol *candidate : what.candidates) {
+                    if (!candidate->name())
+                        continue;
+                    completion.signatures.append(fromStd(
+                        cxx::to_string(candidate->type(),
+                                       cxx::to_string(candidate->name()),
+                                       {.omitEnclosingScope = true})));
+                }
+            }
+        },
+        context);
+}
+
 cxx::Symbol *CxxFrontendDocument::Private::resolvedSymbolAt(int line, int column) const
 {
     const cxx::SourceLocation location = tokenAt(line, column);
@@ -520,6 +631,13 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
             preprocessor->defineMacro(macro.toStdString(), {});
     }
 
+    // Before preprocessing, not before parsing: the position is marked with a
+    // token of its own as the text is read, and the parser finds it there.
+    if (this->config.completionLine > 0 && this->config.completionColumn > 0) {
+        preprocessor->requestCodeCompletionAt(std::uint32_t(this->config.completionLine),
+                                              std::uint32_t(this->config.completionColumn));
+    }
+
     unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
     IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders,
                        &macroCollector.inForce()};
@@ -527,11 +645,18 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
         std::visit(state, unit.continuePreprocessing());
     unit.endPreprocessing();
 
-    unit.parse({.checkTypes = true});
+    unit.parse({.checkTypes = true,
+                .complete = [this](const cxx::CodeCompletionContext &context) {
+                    recordCompletion(context);
+                }});
 
     if (cxx::ScopeSymbol *global = unit.globalScope())
         collect(global, {});
 }
+
+CxxFrontendDocument::CxxFrontendDocument(const QString &source, const QString &fileName)
+    : CxxFrontendDocument(source, fileName, Config{})
+{}
 
 CxxFrontendDocument::CxxFrontendDocument(const QString &source, const QString &fileName,
                                          const Config &config)
@@ -609,6 +734,11 @@ bool CxxFrontendDocument::isValidFor(const QStringList &environment) const
             return false;
     }
     return true;
+}
+
+const CxxFrontendDocument::Completion &CxxFrontendDocument::completion() const
+{
+    return d->completion;
 }
 
 const QList<CxxFrontendDocument::Diagnostic> &CxxFrontendDocument::diagnostics() const
