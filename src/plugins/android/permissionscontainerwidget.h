@@ -51,7 +51,7 @@ private:
     bool isCMakePermissionsSupported() const;
     void revertCMakePermissionsCheckBox(Qt::CheckState state, const QString &error);
 
-    bool hasPermissionsInManifest(Utils::FilePath &manifestPath) const;
+    bool hasPermissionsInManifest(const Utils::FilePath &manifestPath) const;
     void updateCMakeFileWatch();
     bool resolveCMakeProjectInfo();
     void loadPermissionsFromCMake();

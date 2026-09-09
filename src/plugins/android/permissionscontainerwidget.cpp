@@ -7,6 +7,8 @@
 
 #include <cmakeprojectmanager/cmakeparser.h>
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
+#include <coreplugin/documentmanager.h>
+#include <coreplugin/editormanager/documentmodel.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/project.h>
@@ -97,16 +99,37 @@ static bool isPermissionCallForTarget(const CMakeFunctionCall &func, const QStri
     return false;
 }
 
-static Utils::Result<CMakePermissionCalls> parseAllPermissionCalls(const Utils::FilePath &path,
-                                                                   const QString &targetName)
+static Utils::Result<CMakeProjectManager::CMakeListFile> syncAndParseCMakeFile(
+    const Utils::FilePath &path)
 {
-    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(path);
-    if (!cmakeFile)
-        return Utils::ResultError(cmakeFile.error());
+    if (!Core::DocumentManager::saveModifiedDocumentSilently(
+            Core::DocumentModel::documentForFilePath(path))) {
+        return Utils::ResultError(
+            Tr::tr("\"%1\" has unsaved changes that could not be saved.")
+                .arg(path.toUserOutput()));
+    }
+    return CMakeProjectManager::parseCMakeFile(path);
+}
 
+static Utils::Result<CMakeProjectManager::CMakeListFile> parseCMakeFileOrDocument(
+    const Utils::FilePath &path)
+{
+    if (const auto *textDocument = qobject_cast<TextEditor::TextDocument *>(
+            Core::DocumentModel::documentForFilePath(path))) {
+        if (textDocument->isModified())
+            return CMakeProjectManager::parseCMakeText(textDocument->plainText(), path.fileName());
+    }
+    return CMakeProjectManager::parseCMakeFile(path);
+}
+
+
+static Utils::Result<CMakePermissionCalls> parseAllPermissionCalls(
+    const CMakeProjectManager::CMakeListFile &cmakeFile, const QString &targetName,
+    const Utils::FilePath &path)
+{
     CMakePermissionCalls result;
-    result.content = cmakeFile->content;
-    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+    result.content = cmakeFile.content;
+    for (const CMakeFunctionCall &func : cmakeFile.functions) {
         if (!isPermissionCallForTarget(func, targetName))
             continue;
         const std::optional<ParsedPermission> parsed = parsePermissionCall(func);
@@ -324,7 +347,7 @@ PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
 {
 }
 
-bool PermissionsContainerWidget::hasPermissionsInManifest(Utils::FilePath &manifestPath) const
+bool PermissionsContainerWidget::hasPermissionsInManifest(const Utils::FilePath &manifestPath) const
 {
     auto dataResult = AndroidManifestParser::readManifest(manifestPath);
     return dataResult && !dataResult->permissions.isEmpty();
@@ -444,7 +467,7 @@ void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
     bool checked = false;
     bool cmakeFileBroken = false;
     if (resolveCMakeProjectInfo()) {
-        if (const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath)) {
+        if (const auto cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath)) {
             checked = Utils::anyOf(cmakeFile->functions,
                                    [this](const CMakeFunctionCall &func) {
                                         return isPermissionCallForTarget(func, m_CMakeTargetName);
@@ -994,7 +1017,7 @@ void PermissionsContainerWidget::loadPermissionsFromManifest()
 Utils::Result<> PermissionsContainerWidget::addCMakePermission(
     const QString &permission, const QMap<QString, QString> &attributes)
 {
-    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return Utils::ResultError(cmakeFile.error());
 
@@ -1084,7 +1107,7 @@ void PermissionsContainerWidget::loadPermissionsFromCMake()
     if (!resolveCMakeProjectInfo())
         return;
 
-    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
+    const auto cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath);
     if (!cmakeFile)
         return;
 
@@ -1112,7 +1135,7 @@ void PermissionsContainerWidget::loadPermissionsFromCMake()
 
 Utils::Result<> PermissionsContainerWidget::removeCMakePermission(const QString &permission)
 {
-    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return Utils::ResultError(cmakeFile.error());
 
@@ -1155,7 +1178,11 @@ Utils::Result<> PermissionsContainerWidget::migratePermissionsManifestToCMake()
     if (!manifestData)
         return Utils::ResultError(manifestData.error());
 
-    const auto parsed = parseAllPermissionCalls(m_CMakeFilePath, m_CMakeTargetName);
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return Utils::ResultError(cmakeFile.error());
+
+    const auto parsed = parseAllPermissionCalls(*cmakeFile, m_CMakeTargetName, m_CMakeFilePath);
     if (!parsed)
         return Utils::ResultError(parsed.error());
 
@@ -1210,7 +1237,11 @@ Utils::Result<> PermissionsContainerWidget::migratePermissionsCMakeToManifest()
         return Utils::ResultError(error);
     };
 
-    const auto parsed = parseAllPermissionCalls(m_CMakeFilePath, m_CMakeTargetName);
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return Utils::ResultError(cmakeFile.error());
+
+    const auto parsed = parseAllPermissionCalls(*cmakeFile, m_CMakeTargetName, m_CMakeFilePath);
     if (!parsed)
         return Utils::ResultError(parsed.error());
 
@@ -1240,7 +1271,7 @@ Utils::Result<> PermissionsContainerWidget::updateCMakePermission(const QString 
     if (m_CMakeFilePath.isEmpty())
         return Utils::ResultError(Tr::tr("No CMake target found for the Android manifest."));
 
-    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return Utils::ResultError(cmakeFile.error());
 

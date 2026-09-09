@@ -5,9 +5,6 @@
 
 #include <cmakelang/cmakedocument.h>
 
-#include <coreplugin/documentmanager.h>
-#include <coreplugin/editormanager/documentmodel.h>
-
 #include <utils/algorithm.h>
 #include <utils/textfileformat.h>
 
@@ -45,8 +42,6 @@ Utils::Result<CMakeListFile> parseCMakeText(const QString &content, const QStrin
 
 Utils::Result<CMakeListFile> parseCMakeFile(const Utils::FilePath &filePath)
 {
-    Core::DocumentManager::saveModifiedDocumentSilently(
-        Core::DocumentModel::documentForFilePath(filePath));
     QByteArray fileContent;
     const Utils::Result<> result = Utils::TextFileFormat::readFileUtf8(filePath,
                                                                         Utils::TextEncoding::Utf8,
