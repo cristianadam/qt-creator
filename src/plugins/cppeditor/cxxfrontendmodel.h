@@ -76,9 +76,11 @@ void forgetCxxFrontendModel(const Utils::FilePath &filePath);
 // the caller already has them.
 //
 // An invalid link means the model has nothing to say -- it was never run over
-// this file, or the name is one of the things it cannot resolve
-// (CxxFrontendSnapshot::unsupportedLookups()) -- and then the caller answers
-// the way it did before. So this can only add answers, never change one.
+// this file, the name is one of the things it cannot resolve
+// (CxxFrontendSnapshot::unsupportedLookups()), or it has only a declaration
+// of what the name means and not the definition someone following it wants.
+// The caller then answers the way it did before, so this can only add
+// answers, never change one.
 Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
                                     int linkTextStart, int linkTextEnd);
 

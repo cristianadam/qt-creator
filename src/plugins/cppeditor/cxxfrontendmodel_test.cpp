@@ -227,4 +227,25 @@ void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
     QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
 }
 
+// The case that stopped follow symbol from using this: a class forward
+// declared in the file being edited and defined in another, where the answer
+// has to be the definition and this model does not have it. Offering the
+// forward declaration would send someone to a line that declares nothing, so
+// it offers nothing and the built-in lookup finds the definition as before.
+void CxxFrontendModelTest::testDeclinesAForwardDeclaration()
+{
+    const Parsed parsed({{"main.cpp", "class Foo;\nFoo *p;\nclass Bar { int m; };\nBar b;\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    // Foo, declared on line 1 and defined nowhere here.
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 0, 0, 0).hasValidTarget());
+
+    // Bar, defined on line 3, still answers -- so this is about the
+    // declaration and not about classes.
+    const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 4, 0, 0, 0);
+    QVERIFY(link.hasValidTarget());
+    QCOMPARE(link.target.line, 3);
+}
+
 } // namespace CppEditor::Internal

@@ -179,6 +179,14 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     if (!found.isValid())
         return {};
 
+    // Only a declaration, and the definition is somewhere this document does
+    // not reach: a class declared in this file and defined in another, say.
+    // Follow symbol wants the definition and the built-in lookup can find it,
+    // so this leaves the question to it rather than offering the line that
+    // declares nothing.
+    if (!found.isDefinition)
+        return {};
+
     // And a link counts from zero again, the way Symbol::toLink() does it.
     Link link(FilePath::fromUserInput(found.filePath), found.line, found.column - 1);
     link.linkTextStart = linkTextStart;
