@@ -93,13 +93,18 @@ public:
         }
     }
 
+    // These say which token kind a piece of text is, without reference to any
+    // lexer state, and are public because CxxFrontendLexer classifies with
+    // them what the cxx-frontend scanner has delimited. The Qt and
+    // Objective-C keywords live here and nowhere else.
+    static int classify(const char *string, int length, LanguageFeatures features);
+    static int classifyObjCAtKeyword(const char *s, int n);
+    static int classifyOperator(const char *string, int length);
+
 private:
     void pushLineStartOffset();
     void scan_helper(Token *tok);
     void setSource(const char *firstChar, const char *lastChar);
-    static int classify(const char *string, int length, LanguageFeatures features);
-    static int classifyObjCAtKeyword(const char *s, int n);
-    static int classifyOperator(const char *string, int length);
 
     void scanStringLiteral(Token *tok, unsigned char hint = 0);
     void scanRawStringLiteral(Token *tok, unsigned char hint = 0);
