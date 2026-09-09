@@ -1073,11 +1073,11 @@ QString CxxFrontendDocument::functionAt(int line, int column) const
 QStringList CxxFrontendDocument::unsupportedQueries()
 {
     return {
-        // Whether an already parsed document can be reused under a different
-        // set of macros. Needs to know which macros this file's preprocessing
-        // actually consulted, which the delegate reports but nothing records
-        // here yet.
-        "isValidForCurrentEnvironment",
+        // Where each #include is written. Document carries a line for every
+        // one of them, which is what the include hierarchy is built from and
+        // how anything can be said about an include that is not used; this
+        // reports the headers and not the lines.
+        "the line each include is on",
     };
 }
 

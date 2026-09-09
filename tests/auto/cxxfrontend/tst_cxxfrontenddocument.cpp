@@ -470,7 +470,19 @@ void tst_cxxfrontenddocument::unsupportedQueries()
 
     QVERIFY(!unsupported.contains("scopeAt"));
     QVERIFY(!unsupported.contains("Snapshot"));
-    QVERIFY(unsupported.contains("isValidForCurrentEnvironment"));
+    QVERIFY(unsupported.contains("the line each include is on"));
+
+    // What the list said before, and it went stale the moment the document
+    // began recording which macros it consulted. The document answers it, so
+    // asking is enough to say the entry had to go; whether a header is reused
+    // under a given environment is asserted on in tst_cxxfrontendsnapshot,
+    // because that is where the decision is made.
+    QVERIFY(!unsupported.contains("isValidForCurrentEnvironment"));
+
+    const CxxFrontendDocument document("#ifdef FEATURE\nint a;\n#else\nint b;\n#endif\n",
+                                       "<stdin>");
+    QVERIFY(document.isValidFor({}));
+    QVERIFY(!document.isValidFor({"FEATURE 1"}));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)
