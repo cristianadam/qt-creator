@@ -523,10 +523,34 @@ class ScopeSymbol : public Symbol {
   void truncate(std::size_t count);
   void reset();
 
+  // Where the scope was written: the first token of the construct that opened
+  // it, and the token after the one that closed it. Both are invalid for a
+  // scope that did not come from source, such as the global scope or one
+  // created by an instantiation. A scope written in more than one place, as a
+  // namespace may be, carries the last of them.
+  //
+  // A location says which token, not which character, so ask the translation
+  // unit for the position when a place in the text is what is wanted.
+  [[nodiscard]] auto extentBegin() const -> SourceLocation { return extentBegin_; }
+  [[nodiscard]] auto extentEnd() const -> SourceLocation { return extentEnd_; }
+  void setExtent(SourceLocation begin, SourceLocation end) {
+    extentBegin_ = begin;
+    extentEnd_ = end;
+  }
+
+  // Whether the scope was written around this token. False for a scope with
+  // no extent, since nothing is known about where it reaches.
+  [[nodiscard]] auto contains(SourceLocation loc) const -> bool {
+    if (!extentBegin_ || !extentEnd_ || !loc) return false;
+    return extentBegin_.index() <= loc.index() && loc.index() < extentEnd_.index();
+  }
+
  private:
   void rehash();
 
  private:
+  SourceLocation extentBegin_;
+  SourceLocation extentEnd_;
   std::vector<Symbol*> members_;
   std::vector<Symbol*> buckets_;
   std::vector<ScopeSymbol*> usingDirectives_;

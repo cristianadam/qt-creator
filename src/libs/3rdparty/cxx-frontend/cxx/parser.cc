@@ -226,20 +226,47 @@ struct Parser::CombinedScopeGuard {
   Parser* parser;
   ScopeSymbol* savedBinderScope;
   Scope* savedLexicalScope;
+  // Where the construct this guard covers began, so that whatever scope it
+  // opened can be told how far it reached. Which scope that is only becomes
+  // clear at the end: most callers create the guard to save the current scope
+  // and enter the new one a few lines later, once they have parsed enough to
+  // know what it is.
+  SourceLocation enteredAt;
 
   explicit CombinedScopeGuard(Parser* p)
       : parser(p),
         savedBinderScope(p->binder_.scope()),
-        savedLexicalScope(p->lexicalScope_) {}
+        savedLexicalScope(p->lexicalScope_),
+        enteredAt(p->currentLocation()) {}
 
   CombinedScopeGuard(Parser* p, ScopeSymbol* scope)
       : parser(p),
         savedBinderScope(p->binder_.scope()),
-        savedLexicalScope(p->lexicalScope_) {
+        savedLexicalScope(p->lexicalScope_),
+        enteredAt(p->currentLocation()) {
     if (scope) p->setScope(scope);
   }
 
   ~CombinedScopeGuard() {
+    const auto until = parser->currentLocation();
+    ScopeSymbol* entered = parser->binder_.scope();
+    if (entered && entered != savedBinderScope &&
+        enteredAt.index() < until.index()) {
+      entered->setExtent(enteredAt, until);
+
+      // Entering a function means entering its parameters, and a reader
+      // asking which scope a place is in means the function. Give it the
+      // same reach, unless something already gave it a wider one.
+      if (symbol_cast<FunctionParametersSymbol>(entered)) {
+        if (auto* function = symbol_cast<FunctionSymbol>(entered->parent())) {
+          const auto begin = function->extentBegin();
+          const auto end = function->extentEnd();
+          const bool wider = begin && end && begin.index() <= enteredAt.index() &&
+                             end.index() >= until.index();
+          if (!wider) function->setExtent(enteredAt, until);
+        }
+      }
+    }
     parser->binder_.setScope(savedBinderScope);
     parser->lexicalScope_ = savedLexicalScope;
   }

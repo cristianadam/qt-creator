@@ -68,6 +68,10 @@ public:
     // Document decides what the cursor is inside of. Empty if there is none.
     QString lastVisibleSymbolAt(int line, int column) const;
 
+    // The name of the innermost scope written around the position, empty if
+    // that is the file itself. What Document::scopeAt answers.
+    QString scopeAt(int line, int column) const;
+
     // Document's questions that cannot be answered on this model yet, each
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list
     // cannot go stale.

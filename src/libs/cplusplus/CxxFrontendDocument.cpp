@@ -5,6 +5,8 @@
 
 #include <QRegularExpression>
 
+#include <functional>
+
 #include <cxx/control.h>
 #include <cxx/diagnostics_client.h>
 #include <cxx/memory_layout.h>
@@ -126,6 +128,13 @@ public:
     // The index of the last symbol declared at or before the position, or -1.
     [[nodiscard]] int lastVisibleIndex(int line, int column) const;
 
+    // The name of the innermost scope written around the position.
+    [[nodiscard]] QString scopeNameAt(int line, int column) const;
+
+    // The token at a position, or an invalid location if there is none. A
+    // scope's extent is in tokens, and a position is in the text.
+    [[nodiscard]] cxx::SourceLocation tokenAt(int line, int column) const;
+
     QString fileName;
     Overview settings;
 
@@ -209,6 +218,57 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         collect(inner, enclosing + QStringList(name));
 }
 
+cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column) const
+{
+    // A scope's extent is a range of tokens and a position is a place in the
+    // text, so find the first token at or after the position.
+    for (unsigned i = 1; i < unit.tokenCount(); ++i) {
+        const cxx::SourceLocation location{i};
+        if (unit.tokenAt(location).fileId()
+            != std::uint32_t(unit.preprocessor()->mainSourceFileId())) {
+            continue;
+        }
+        const cxx::SourcePosition position = unit.tokenStartPosition(location);
+        if (int(position.line) > line
+            || (int(position.line) == line && int(position.column) >= column)) {
+            return location;
+        }
+    }
+    return {};
+}
+
+QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
+{
+    const cxx::SourceLocation location = tokenAt(line, column);
+    if (!location)
+        return {};
+
+    // Walk in, taking the innermost scope written around the token. A
+    // function is reached through the overload set it lives in, which is not
+    // itself a scope.
+    QString found;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        const auto consider = [&](cxx::ScopeSymbol *inner) {
+            if (!inner->contains(location))
+                return;
+            if (inner->name())
+                found = fromStd(cxx::to_string(inner->name()));
+            walk(inner);
+        };
+        for (cxx::Symbol *member : scope->members()) {
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions())
+                    consider(function);
+                continue;
+            }
+            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                consider(inner);
+        }
+    };
+    walk(unit.globalScope());
+    return found;
+}
+
 int CxxFrontendDocument::Private::lastVisibleIndex(int line, int column) const
 {
     // The last symbol whose declaration begins at or before the position,
@@ -273,6 +333,11 @@ QString CxxFrontendDocument::lastVisibleSymbolAt(int line, int column) const
     return index < 0 ? QString() : d->symbols.at(index).name;
 }
 
+QString CxxFrontendDocument::scopeAt(int line, int column) const
+{
+    return d->scopeNameAt(line, column);
+}
+
 QString CxxFrontendDocument::functionAt(int line, int column) const
 {
     if (line < 1 || column < 1)
@@ -297,10 +362,6 @@ QString CxxFrontendDocument::functionAt(int line, int column) const
 QStringList CxxFrontendDocument::unsupportedQueries()
 {
     return {
-        // A cxx::ScopeSymbol knows where it was declared and not how far it
-        // reaches, so there is no way to ask which scope contains a position.
-        // The AST has the extent; a scope would have to carry it.
-        "scopeAt",
         // Needs the whole include closure, which is the slice after this one.
         "Snapshot",
         "isValidForCurrentEnvironment",

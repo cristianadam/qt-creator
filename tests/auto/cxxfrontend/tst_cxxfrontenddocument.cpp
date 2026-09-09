@@ -147,6 +147,9 @@ private slots:
     void functionAt_data();
     void functionAt();
 
+    void scopeAt_data();
+    void scopeAt();
+
     void reportsDiagnostics();
     void unsupportedQueries();
 };
@@ -185,6 +188,44 @@ void tst_cxxfrontenddocument::functionAt()
     QCOMPARE(actual, expected);
 }
 
+// Which scope a position is in, which is what the built-in Document answers
+// out of each scope's start and end offset and what the other model could not
+// answer at all until a scope learned how far it reaches.
+void tst_cxxfrontenddocument::scopeAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("file scope") << QByteArray("$int x;\n") << QString();
+    QTest::newRow("inside a function")
+        << QByteArray("void f()\n{\n    $int x;\n}\n") << QString("f");
+    QTest::newRow("after a function")
+        << QByteArray("void f() {}\n$int x;\n") << QString();
+    QTest::newRow("inside a class")
+        << QByteArray("struct S {\n    $int m;\n};\n") << QString("S");
+    QTest::newRow("inside a member function")
+        << QByteArray("struct S {\n    void m()\n    {\n        $int x;\n    }\n};\n")
+        << QString("m");
+    QTest::newRow("inside a namespace")
+        << QByteArray("namespace N {\n$int x;\n}\n") << QString("N");
+    QTest::newRow("innermost of several")
+        << QByteArray("namespace N {\nstruct S {\n    void m() { $int x; }\n};\n}\n")
+        << QString("m");
+}
+
+void tst_cxxfrontenddocument::scopeAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.scopeAt(positions.first().line, positions.first().column), expected);
+}
+
 void tst_cxxfrontenddocument::reportsDiagnostics()
 {
     const CxxFrontendDocument good("int x;\n", "<stdin>");
@@ -202,10 +243,7 @@ void tst_cxxfrontenddocument::unsupportedQueries()
 {
     const QStringList unsupported = CxxFrontendDocument::unsupportedQueries();
 
-    // A cxx::ScopeSymbol knows where it was declared and not how far it
-    // reaches, so nothing can say which scope contains a position.
-    QVERIFY2(unsupported.contains("scopeAt"),
-             "cxx::ScopeSymbol carries an extent now: implement scopeAt and drop this");
+    QVERIFY(!unsupported.contains("scopeAt"));
     QVERIFY(unsupported.contains("Snapshot"));
 }
 
