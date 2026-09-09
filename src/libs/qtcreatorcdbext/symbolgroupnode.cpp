@@ -9,6 +9,7 @@
 #include "extensioncontext.h"
 
 #include <algorithm>
+#include <map>
 
 typedef std::vector<int>::size_type VectorIndexType;
 typedef std::vector<std::string> StringVector;
@@ -1074,10 +1075,13 @@ int SymbolGroupNode::dumpNode(std::ostream &str,
         if (m_dumperContainerSize > 0) {
             childCountGuess = m_dumperContainerSize; // See Obscured handling
         } else {
-            if (children().empty())
+            if (children().empty()) {
+                if (!canExpand())
+                    completePointerType();
                 childCountGuess = m_parameters.SubElements; // Guess
-            else
+            } else {
                 childCountGuess = unsigned(children().size());
+            }
         }
     }
     // No children..suppose we are editable and enabled.
@@ -1177,6 +1181,75 @@ bool SymbolGroupNode::collapse(std::string *errorMessage)
     return true;
 }
 
+static std::string moduleDefiningType(const std::string &typeName)
+{
+    struct Lookup
+    {
+        ULONG moduleCount;
+        std::string module;
+    };
+
+    CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
+    ULONG loaded = 0;
+    ULONG unloaded = 0;
+    if (FAILED(symbols->GetNumberModules(&loaded, &unloaded)))
+        return std::string();
+    const ULONG moduleCount = loaded + unloaded;
+
+    // A type keeps its module, so remember where it was found. A type found
+    // nowhere can still arrive with a library, so retry once the set of
+    // modules changes.
+    static std::map<std::string, Lookup> lookups;
+    const auto known = lookups.find(typeName);
+    if (known != lookups.end()
+        && (!known->second.module.empty() || known->second.moduleCount == moduleCount)) {
+        return known->second.module;
+    }
+
+    char buf[BufSize];
+    std::string module;
+    for (ULONG index = 0; index < moduleCount; ++index) {
+        ULONG64 base = 0;
+        if (FAILED(symbols->GetModuleByIndex(index, &base)))
+            continue;
+        ULONG typeId = 0;
+        if (symbols->GetTypeId(base, typeName.c_str(), &typeId) != S_OK)
+            continue;
+        // GetTypeId() answers with the type of a symbol of that name while the
+        // module has no type of it, so check what it found.
+        if (FAILED(symbols->GetTypeName(base, typeId, buf, BufSize, NULL)))
+            continue;
+        if (SymbolGroupValue::stripClassPrefixes(buf) != typeName)
+            continue;
+        module = moduleNameByOffset(symbols, base);
+        if (!module.empty())
+            break;
+    }
+    lookups[typeName] = {moduleCount, module};
+    return module;
+}
+
+// dbgeng leaves a pointer whose pointee type only another module defines
+// without children. A cast naming that module completes the type.
+bool SymbolGroupNode::completePointerType()
+{
+    const std::string pointerType = type();
+    if (!SymbolGroupValue::isPointerType(pointerType))
+        return false;
+    const std::string targetType =
+        SymbolGroupValue::stripClassPrefixes(SymbolGroupValue::stripPointerType(pointerType));
+    if (targetType.empty() || targetType == "void"
+        || targetType.find_first_of("!(*[") != std::string::npos) {
+        return false;
+    }
+    const std::string module = moduleDefiningType(targetType);
+    if (module.empty())
+        return false;
+
+    std::string errorMessage;
+    return typeCast(module + '!' + targetType + " *", &errorMessage) && canExpand();
+}
+
 // Expand!
 bool SymbolGroupNode::expand(std::string *errorMessage)
 {
@@ -1186,7 +1259,7 @@ bool SymbolGroupNode::expand(std::string *errorMessage)
                     << m_index << DebugNodeFlags(flags());
     if (isExpanded())
         return true;
-    if (!canExpand()) {
+    if (!canExpand() && !completePointerType()) {
         *errorMessage = msgExpandFailed(name(), absoluteFullIName(), m_index,
                                         "No subelements to expand in node.");
         return false;

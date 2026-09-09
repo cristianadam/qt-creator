@@ -53,22 +53,23 @@ and no members come with it:
 
 ## The symbol group path
 
-The extension's `locals` command, which the cdb backend of `tst_backends` and
-a cdb without Python read locals through, does not go through that lookup, and
-dbgeng leaves the pointer childless there:
+The extension's `locals` command, which a cdb without Python reads locals
+through, does not go through that lookup. dbgeng leaves the pointer childless
+there, while `appProbe`, asked for in the same call, does get its member:
 
     !qtcreatorcdbext.locals -t 1 -D -e watch.0,watch.1 -W -w watch.0 libProbe -w watch.1 appProbe 0
     {iname="watch.0",name="libProbe",type="struct LibProbe *",...,numchild="0"}
     {iname="watch.1",name="appProbe",type="struct AppProbe *",...,numchild="1",
      children=[{iname="watch.1.appValue",name="appValue",...}]}
 
-`appProbe`, asked for in the same call, does get its member. dbgeng completes
-the type for a cast that names the module:
+Only a cast that names the module defining the type completes it:
 
     0:000> ?? (problib!LibProbe *)libProbe
     struct LibProbe * 0x00007ff6`fd70c000
        +0x000 probeValue       : 0n4711
 
-which is what a fix on that path would have to arrange, and why
-`resolvesATypeArrivingWithALaterLibrary()` in `tst_backends` keeps its cdb row
-disabled.
+The extension casts a childless pointer that way itself now, after a lookup of
+the type over the loaded modules, so the call above answers
+
+    {iname="watch.0",name="libProbe",type="struct LibProbe *",...,numchild="1",
+     children=[{iname="watch.0.probeValue",name="probeValue",...}]}

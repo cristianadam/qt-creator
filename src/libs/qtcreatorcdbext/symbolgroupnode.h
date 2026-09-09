@@ -264,6 +264,7 @@ private:
     // Notify about expansion/collapsing of a node, shift indexes
     bool notifyIndexesMoved(ULONG index, bool inserted, ULONG offset);
     bool runSimpleDumpers(const SymbolGroupValueContext &ctx);
+    bool completePointerType();
     ULONG nextSymbolIndex() const;
 
     SymbolGroup *const m_symbolGroup = nullptr;
