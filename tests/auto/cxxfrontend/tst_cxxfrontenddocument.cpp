@@ -150,6 +150,9 @@ private slots:
     void scopeAt_data();
     void scopeAt();
 
+    void declarationAt_data();
+    void declarationAt();
+
     void reportsDiagnostics();
     void unsupportedQueries();
 };
@@ -224,6 +227,56 @@ void tst_cxxfrontenddocument::scopeAt()
 
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
     QCOMPARE(document.scopeAt(positions.first().line, positions.first().column), expected);
+}
+
+// Follow symbol: the name at one position, and where it was declared.
+//
+// The source marks both with $ -- the first is the use to ask about, the
+// second is the declaration the answer has to be. A case reads as the file it
+// is about, and the positions cannot drift out of step with the text.
+void tst_cxxfrontenddocument::declarationAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("name");
+
+    QTest::newRow("a local variable")
+        << QByteArray("void f()\n{\n    int $x;\n    $x = 1;\n}\n") << QString("f::x");
+    QTest::newRow("a global variable")
+        << QByteArray("int $g;\nvoid f() { $g = 1; }\n") << QString("g");
+    QTest::newRow("a parameter")
+        << QByteArray("void f(int $p)\n{\n    $p = 1;\n}\n") << QString("f::p");
+    QTest::newRow("a member from a member function")
+        << QByteArray("struct S {\n    int $m;\n    void f() { $m = 1; }\n};\n")
+        << QString("S::m");
+    QTest::newRow("a name in a namespace")
+        << QByteArray("namespace N { int $v; }\nvoid f() { N::$v = 1; }\n")
+        << QString("N::v");
+    QTest::newRow("an enumerator")
+        << QByteArray("enum E { $A };\nint x = $A;\n") << QString("E::A");
+    QTest::newRow("the second use of the same name")
+        << QByteArray("int $g;\nvoid f() { g = 1; $g = 2; }\n") << QString("g");
+}
+
+void tst_cxxfrontenddocument::declarationAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, name);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 2);
+
+    const Position declaration = positions.at(0);
+    const Position use = positions.at(1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::Declaration found
+        = document.declarationAt(use.line, use.column);
+
+    QVERIFY2(found.isValid(), "nothing was resolved at the use");
+    QCOMPARE(found.name, name);
+    QCOMPARE(found.line, declaration.line);
+    QCOMPARE(found.column, declaration.column);
 }
 
 void tst_cxxfrontenddocument::reportsDiagnostics()

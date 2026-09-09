@@ -128,6 +128,23 @@ public:
     // that is the file itself. What Document::scopeAt answers.
     QString scopeAt(int line, int column) const;
 
+    // Where the name used at a position was declared. What follow symbol
+    // needs, and what find usages and completion are built on.
+    //
+    // The built-in model answers this by resolving the name through
+    // LookupContext over the snapshot. The cxx-frontend parser has already
+    // resolved it while parsing and left the answer on the syntax tree, so
+    // this reads it off rather than working it out again.
+    struct Declaration
+    {
+        QString name;   // fully qualified
+        int line = 0;
+        int column = 0;
+
+        bool isValid() const { return line != 0; }
+    };
+    Declaration declarationAt(int line, int column) const;
+
     // Document's questions that cannot be answered on this model yet, each
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list
     // cannot go stale.

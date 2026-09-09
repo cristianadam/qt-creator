@@ -8,6 +8,8 @@
 
 #include <functional>
 
+#include <cxx/ast.h>
+#include <cxx/ast_cursor.h>
 #include <cxx/control.h>
 #include <cxx/diagnostics_client.h>
 #include <cxx/memory_layout.h>
@@ -290,6 +292,10 @@ public:
     // The name of the innermost scope written around the position.
     [[nodiscard]] QString scopeNameAt(int line, int column) const;
 
+    // The symbol the name at a position resolves to, as the parser resolved
+    // it. Null if there is no name there, or if the parser could not say.
+    [[nodiscard]] cxx::Symbol *resolvedSymbolAt(int line, int column) const;
+
     // The token at a position, or an invalid location if there is none. A
     // scope's extent is in tokens, and a position is in the text.
     [[nodiscard]] cxx::SourceLocation tokenAt(int line, int column) const;
@@ -432,6 +438,28 @@ QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
     return found;
 }
 
+cxx::Symbol *CxxFrontendDocument::Private::resolvedSymbolAt(int line, int column) const
+{
+    const cxx::SourceLocation location = tokenAt(line, column);
+    if (!location || !unit.ast())
+        return nullptr;
+
+    // The parser wrote the answer onto the id-expression it resolved, so the
+    // question is only which id-expression is at this token.
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+        auto *node = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!node || !*node)
+            continue;
+        auto *idExpression = dynamic_cast<cxx::IdExpressionAST *>(*node);
+        if (!idExpression || !idExpression->unqualifiedId)
+            continue;
+        if (idExpression->unqualifiedId->firstSourceLocation() != location)
+            continue;
+        return idExpression->symbol;
+    }
+    return nullptr;
+}
+
 int CxxFrontendDocument::Private::lastVisibleIndex(int line, int column) const
 {
     // The last symbol whose declaration begins at or before the position,
@@ -571,6 +599,24 @@ QString CxxFrontendDocument::lastVisibleSymbolAt(int line, int column) const
 QString CxxFrontendDocument::scopeAt(int line, int column) const
 {
     return d->scopeNameAt(line, column);
+}
+
+CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
+                                                                    int column) const
+{
+    cxx::Symbol *symbol = d->resolvedSymbolAt(line, column);
+    if (!symbol)
+        return {};
+
+    Declaration declaration;
+    declaration.name = qualifiedNameOf(symbol);
+
+    if (const cxx::SourceLocation location = symbol->location()) {
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        declaration.line = int(position.line);
+        declaration.column = int(position.column);
+    }
+    return declaration;
 }
 
 QString CxxFrontendDocument::functionAt(int line, int column) const
