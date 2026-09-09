@@ -23,6 +23,12 @@
 #include <projectexplorer/sysrootkitaspect.h>
 #include <projectexplorer/toolchain.h>
 #include <projectexplorer/toolchainkitaspect.h>
+#include <projectexplorer/toolchainmanager.h>
+
+#include <qtsupport/qtkitaspect.h>
+#include <qtsupport/qtversionfactory.h>
+#include <qtsupport/qtversionmanager.h>
+
 #include <remote/sshdevicewizard.h>
 
 #include <utils/algorithm.h>
@@ -194,6 +200,58 @@ static FilePath sdkRootFromToolchain(const Toolchain *toolchain)
     return {};
 }
 
+// The compiler travels in Qt Creator's own package, so it is detected afresh on every
+// start and carries an id of its own each time. A kit restored from settings that an
+// unclean exit never wrote names one that no longer exists, and nothing puts a toolchain
+// back into a kit that already is there.
+static bool bindToolchain(Kit *kit)
+{
+    const IDevice::ConstPtr device = BuildDeviceKitAspect::device(kit);
+    if (!device)
+        return false;
+    const Toolchains toolchains = ToolchainManager::toolchains([&device](const Toolchain *tc) {
+        return tc->isSameDevice(device->rootPath());
+    });
+    const QList<ToolchainBundle> bundles = ToolchainBundle::collectBundles(
+        toolchains, ToolchainBundle::HandleMissing::NotApplicable);
+    for (const ToolchainBundle &bundle : bundles) {
+        if (bundle.isCompletelyValid()) {
+            ToolchainKitAspect::setBundle(kit, bundle);
+            return true;
+        }
+    }
+    return false;
+}
+
+// The Qt here came with Qt Creator's package rather than from an installer, so nothing
+// registered it. Neither does the generic Qt kit setup pick it: it goes by the kit's
+// device type, and a kit that builds and runs on this one is not what a HarmonyOS Qt
+// announces itself for.
+static bool bindQtVersion(Kit *kit)
+{
+    const IDevice::ConstPtr device = BuildDeviceKitAspect::device(kit);
+    if (!device)
+        return false;
+    const FilePath deviceRoot = device->rootPath();
+    QtSupport::QtVersion *version = QtSupport::QtVersionManager::version(
+        [&deviceRoot](const QtSupport::QtVersion *candidate) {
+            return candidate->isValid() && candidate->qmakeFilePath().isSameDevice(deviceRoot);
+        });
+    if (!version) {
+        const FilePath qmake = FilePath::fromString(Constants::HARMONYOS_NATIVE_PACKAGE_BIN)
+                                   .pathAppended("qmake");
+        if (!qmake.isExecutableFile())
+            return false;
+        version = QtSupport::QtVersionFactory::createQtVersionFromQMakePath(
+            qmake, DetectionSource::FromSystem);
+        if (!version)
+            return false;
+        QtSupport::QtVersionManager::addVersion(version);
+    }
+    QtSupport::QtKitAspect::setQtVersion(kit, version);
+    return true;
+}
+
 // The headers of EGL and the other platform libraries sit in that SDK's sysroot, which
 // CMake looks at only once the kit names it. The Qt on the device is a native build, so
 // unlike a cross-built one its qt.toolchain.cmake says nothing about OpenHarmony: without
@@ -202,6 +260,10 @@ static FilePath sdkRootFromToolchain(const Toolchain *toolchain)
 // settings for the run configuration to read the application from.
 static void completeKit(Kit *kit)
 {
+    if (!ToolchainKitAspect::cxxToolchain(kit) && bindToolchain(kit))
+        KitManager::completeKit(kit);
+    if (!QtSupport::QtKitAspect::qtVersion(kit))
+        bindQtVersion(kit);
     const Toolchain *toolchain = ToolchainKitAspect::cxxToolchain(kit);
     if (!toolchain)
         return;
