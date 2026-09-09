@@ -123,7 +123,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
                 // clang-format off
                 const QtTaskTree::Group recipe {
                     dockerDevice->autoDetectDeviceToolsRecipe(),
-                    ProjectExplorer::removeDetectedKitsRecipe(dockerDevice, log),
+                    ProjectExplorer::removeDetectedKitItemsRecipe(dockerDevice, log),
                     ProjectExplorer::kitDetectionRecipe(dockerDevice, DetectionSource::FromSystem, log)
                 };
                 // clang-format on

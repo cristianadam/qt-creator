@@ -91,6 +91,9 @@ PROJECTEXPLORER_EXPORT QtTaskTree::Group kitDetectionRecipe(
     DetectionSource::DetectionType detectionType,
     const LogCallback &logCallback);
 
+PROJECTEXPLORER_EXPORT QtTaskTree::Group removeDetectedKitItemsRecipe(
+    const IDeviceConstPtr &device, const LogCallback &logCallback);
+
 PROJECTEXPLORER_EXPORT QtTaskTree::Group removeDetectedKitsRecipe(
     const IDeviceConstPtr &device, const LogCallback &logCallback);
 

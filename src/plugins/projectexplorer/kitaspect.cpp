@@ -530,10 +530,11 @@ Group kitDetectionRecipe(
 
     Storage<GroupItems> detectorItems;
     Storage<Kit *> kit;
+    Storage<bool> isNewKit;
 
     const DetectionSource detectionSource{detectionType, device->id().toString()};
 
-    const auto setup = [kit, detectorItems, device, detectionSource, logCallback] {
+    const auto setup = [kit, isNewKit, detectorItems, device, detectionSource, logCallback] {
         const auto root = device->rootPath();
 
         const FilePaths searchPaths
@@ -541,22 +542,27 @@ Group kitDetectionRecipe(
                   return root.withNewPath(path.path());
               });
 
-        const QString detectionSourceId = device->id().toString();
-
         logCallback(Tr::tr("Auto detecting kits for device: %1").arg(device->displayName()));
 
-        *kit = KitManager::registerKit([detectionSourceId, device, detectionSource](Kit *k) {
-            k->setDetectionSource(detectionSource);
-            k->setUnexpandedDisplayName("%{Device:Name}");
-
-            RunDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
-            RunDeviceKitAspect::setDevice(k, device);
-            BuildDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
-            BuildDeviceKitAspect::setDevice(k, device);
-
-            k->setSticky(BuildDeviceKitAspect::id(), true);
-            k->setSticky(BuildDeviceTypeKitAspect::id(), true);
+        *kit = Utils::findOrDefault(KitManager::kits(), [&detectionSource](const Kit *k) {
+            return k->detectionSource() == detectionSource;
         });
+        *isNewKit = *kit == nullptr;
+
+        if (*isNewKit) {
+            *kit = KitManager::registerKit([device, detectionSource](Kit *k) {
+                k->setDetectionSource(detectionSource);
+                k->setUnexpandedDisplayName("%{Device:Name}");
+
+                RunDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
+                RunDeviceKitAspect::setDevice(k, device);
+                BuildDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
+                BuildDeviceKitAspect::setDevice(k, device);
+
+                k->setSticky(BuildDeviceKitAspect::id(), true);
+                k->setSticky(BuildDeviceTypeKitAspect::id(), true);
+            });
+        }
 
         for (const auto &factory : KitAspectFactory::kitAspectFactories()) {
             const auto detector
@@ -572,11 +578,11 @@ Group kitDetectionRecipe(
 
     // clang-format off
     return Group {
-        kit, detectorItems,
+        kit, isNewKit, detectorItems,
         QSyncTask(setup),
         QTaskTreeTask(setupDetectorTree),
-        QSyncTask([kit,logCallback] {
-            if (!(*kit)->isValid()) {
+        QSyncTask([kit, isNewKit, logCallback] {
+            if (*isNewKit && !(*kit)->isValid()) {
                 KitManager::deregisterKit(*kit);
                 return;
             }
@@ -591,11 +597,10 @@ Group kitDetectionRecipe(
     // clang-format on
 }
 
-Group removeDetectedKitsRecipe(const IDeviceConstPtr &device, const LogCallback &logCallback)
+Group removeDetectedKitItemsRecipe(const IDeviceConstPtr &device, const LogCallback &logCallback)
 {
     using namespace QtTaskTree;
 
-    const auto root = device->rootPath();
     const QString detectionSource = device->id().toString();
 
     GroupItems removerItems{};
@@ -604,6 +609,20 @@ Group removeDetectedKitsRecipe(const IDeviceConstPtr &device, const LogCallback 
         if (remover)
             removerItems.append({*remover});
     }
+
+    // clang-format off
+    return Group {
+        parallelIdealThreadCountLimit,
+        removerItems,
+    };
+    // clang-format on
+}
+
+Group removeDetectedKitsRecipe(const IDeviceConstPtr &device, const LogCallback &logCallback)
+{
+    using namespace QtTaskTree;
+
+    const QString detectionSource = device->id().toString();
 
     const auto removeKits = [device, detectionSource, logCallback]() {
         logCallback(Tr::tr("Removing kits for device: %1.").arg(device->displayName()));
@@ -621,10 +640,7 @@ Group removeDetectedKitsRecipe(const IDeviceConstPtr &device, const LogCallback 
     // clang-format off
     return Group {
         QSyncTask(removeKits),
-        Group {
-            parallelIdealThreadCountLimit,
-            removerItems,
-        }
+        removeDetectedKitItemsRecipe(device, logCallback)
     };
     // clang-format on
 }
