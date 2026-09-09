@@ -166,6 +166,8 @@ private slots:
     void reportsDiagnostics();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
+    void theDefinitionIsPreferredToTheDeclaration();
+    void aDeclarationWithoutItsDefinitionSaysSo();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -515,6 +517,60 @@ void tst_cxxfrontenddocument::anOverloadedCallIsNotResolved()
     QCOMPARE(fromInt.line, fromDouble.line);
 
     QVERIFY(CxxFrontendDocument::unsupportedQueries().contains("which overload a call means"));
+}
+
+// What follow symbol wants: the place that defines the thing, not the place
+// that promised it. Where this file has both, the definition is the answer.
+void tst_cxxfrontenddocument::theDefinitionIsPreferredToTheDeclaration()
+{
+    const QByteArray source =
+        "class Foo;\n"
+        "class Foo { int m; };\n"
+        "void f(Foo *p);\n"
+        "void f(Foo *p) {}\n"
+        "void g() { Foo a; f(&a); }\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // Foo in "Foo a;", forward declared on line 1 and defined on line 2.
+    const CxxFrontendDocument::Declaration type = document.declarationAt(5, 12);
+    QVERIFY(type.isValid());
+    QCOMPARE(type.name, QString("Foo"));
+    QCOMPARE(type.line, 2);
+    QVERIFY(type.isDefinition);
+
+    // And the same for a function declared before it is defined.
+    const CxxFrontendDocument::Declaration function = document.lookup({}, "f");
+    QVERIFY(function.isValid());
+    QCOMPARE(function.line, 4);
+    QVERIFY(function.isDefinition);
+}
+
+// And when the file has only the promise, it says so, so that a caller with
+// somewhere else to look knows to look there rather than sending someone to a
+// line that declares nothing.
+void tst_cxxfrontenddocument::aDeclarationWithoutItsDefinitionSaysSo()
+{
+    const QByteArray source =
+        "class Foo;\n"
+        "void f();\n"
+        "void g() { Foo *p; f(); }\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Declaration type = document.declarationAt(3, 12);
+    QVERIFY(type.isValid());
+    QCOMPARE(type.line, 1);
+    QVERIFY(!type.isDefinition);
+
+    const CxxFrontendDocument::Declaration function = document.lookup({}, "f");
+    QVERIFY(function.isValid());
+    QCOMPARE(function.line, 2);
+    QVERIFY(!function.isDefinition);
+
+    // A variable is declared where it stands, and nothing is pending about it.
+    const CxxFrontendDocument other("int x;\nvoid h() { x = 1; }\n", "<stdin>");
+    const CxxFrontendDocument::Declaration variable = other.declarationAt(2, 12);
+    QVERIFY(variable.isValid());
+    QVERIFY(variable.isDefinition);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

@@ -156,6 +156,16 @@ public:
         int line = 0;
         int column = 0;
 
+        // Whether this place defines the thing, rather than only declaring
+        // it. A class forward declared here and defined elsewhere, or a
+        // function declared here and defined in another file, answers false
+        // -- and a caller that wanted the definition, as follow symbol does,
+        // then knows to keep looking rather than to send someone here.
+        //
+        // The definition is preferred where this document has both, so false
+        // means the document does not have it at all.
+        bool isDefinition = true;
+
         bool isValid() const { return line != 0; }
     };
 

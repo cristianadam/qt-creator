@@ -130,6 +130,24 @@ cxx::ScopeSymbol *classScopeOf(const cxx::Type *type)
     return nullptr;
 }
 
+// Where to point for a name, and whether that place defines the thing.
+//
+// A class or a function can be declared in one place and defined in another,
+// and what someone following a name means is the definition -- the built-in
+// follow symbol skips a forward declaration to find it. So where this document
+// has the definition, that is the answer; where it has only a declaration, it
+// says so, because a caller with somewhere else to look has to be told to look
+// there.
+struct Definition
+{
+    cxx::Symbol *symbol = nullptr;
+    bool isDefinition = true;
+    // Set when the place to point at is not where the symbol was recorded: a
+    // class is recorded where it was first named, which for one forward
+    // declared above its body is the declaration.
+    cxx::SourceLocation location;
+};
+
 // The path to a symbol, the way Overview prints a fully qualified name: the
 // named scopes it is inside, outermost first, then the symbol itself. The
 // global scope has no name and contributes nothing.
@@ -337,6 +355,14 @@ public:
     [[nodiscard]] QStringList basesOfClass(
         const std::function<bool(cxx::ClassSpecifierAST *)> &wanted) const;
 
+    // Where to point for \a symbol, and whether that place defines what it
+    // declares. See the Definition comment above.
+    [[nodiscard]] Definition definitionOf(cxx::Symbol *symbol) const;
+
+    // The name of the class specifier that has a body for \a symbol, if this
+    // document holds one.
+    [[nodiscard]] cxx::SourceLocation classBodyNameOf(cxx::ClassSymbol *symbol) const;
+
     // The symbol the name at a position resolves to, as the parser resolved
     // it. Null if there is no name there, or if the parser could not say.
     [[nodiscard]] cxx::Symbol *resolvedSymbolAt(int line, int column) const;
@@ -437,6 +463,65 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
 
     if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
         collect(inner, enclosing + QStringList(name));
+}
+
+cxx::SourceLocation CxxFrontendDocument::Private::classBodyNameOf(
+    cxx::ClassSymbol *symbol) const
+{
+    if (!unit.ast())
+        return {};
+
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto *cls = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!cls || cls->symbol != symbol || !cls->lbraceLoc || !cls->unqualifiedId)
+            continue;
+        return cls->unqualifiedId->firstSourceLocation();
+    }
+    return {};
+}
+
+Definition CxxFrontendDocument::Private::definitionOf(cxx::Symbol *symbol) const
+{
+    // A declaration of a function points at its definition when the file has
+    // one; failing that, the declaration is defined only if it carries the
+    // body itself.
+    const auto ofFunction = [](cxx::FunctionSymbol *function) -> Definition {
+        if (cxx::FunctionSymbol *defined = function->definition())
+            return {defined, true, {}};
+        return {function, function->isDefined(), {}};
+    };
+
+    // Functions of one name live in a set, and the set is what a lookup
+    // answers with. What is wanted is whichever of them has a body.
+    if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(symbol)) {
+        const std::vector<cxx::FunctionSymbol *> &functions = overloadSet->declaredFunctions();
+        if (functions.empty())
+            return {symbol, true, {}};
+        for (cxx::FunctionSymbol *function : functions) {
+            if (const Definition definition = ofFunction(function); definition.isDefinition)
+                return definition;
+        }
+        return ofFunction(functions.front());
+    }
+
+    if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol))
+        return ofFunction(function);
+
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(symbol)) {
+        if (!cls->isComplete())
+            return {cls, false, {}};
+        // One symbol stands for every declaration of the class, recorded
+        // where it was first named. The body is on whichever specifier has
+        // one, and that is the place to point at.
+        return {cls, true, classBodyNameOf(cls)};
+    }
+
+    // Everything else is declared where it stands: a variable, an enumerator,
+    // a namespace. Nothing to prefer and nothing to warn about.
+    return {symbol, true, {}};
 }
 
 cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column) const
@@ -819,11 +904,16 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
             symbol = target;
     }
 
+    const Definition definition = d->definitionOf(symbol);
+    symbol = definition.symbol;
+
     Declaration declaration;
     declaration.name = qualifiedNameOf(symbol);
     declaration.filePath = d->fileName;
+    declaration.isDefinition = definition.isDefinition;
 
-    if (const cxx::SourceLocation location = symbol->location()) {
+    if (const cxx::SourceLocation location = definition.location ? definition.location
+                                                                 : symbol->location()) {
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
         declaration.line = int(position.line);
         declaration.column = int(position.column);
@@ -1067,10 +1157,17 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     if (!d->isFromMainFile(symbol))
         return {};
 
+    const Definition definition = d->definitionOf(symbol);
+    symbol = definition.symbol;
+    if (!d->isFromMainFile(symbol))
+        return {};
+
     Declaration declaration;
     declaration.name = qualifiedNameOf(symbol);
     declaration.filePath = d->fileName;
-    const cxx::SourcePosition position = d->unit.tokenStartPosition(symbol->location());
+    declaration.isDefinition = definition.isDefinition;
+    const cxx::SourcePosition position = d->unit.tokenStartPosition(
+        definition.location ? definition.location : symbol->location());
     declaration.line = int(position.line);
     declaration.column = int(position.column);
     return declaration;

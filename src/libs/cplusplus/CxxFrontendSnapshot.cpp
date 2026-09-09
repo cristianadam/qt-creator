@@ -367,12 +367,13 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // is what the using file writes down, and the type of an object is
         // not written at the place it is used.
         "members named through an object across files",
-        // Which of a declaration and its definition to answer with. Follow
-        // symbol wants the definition, and skips a forward declaration to
-        // find it; this answers with whatever the parser bound the name to,
-        // which for a class declared in this file and defined in another is
-        // the wrong one of the two.
-        "preferring a definition to a declaration across files",
+        // Finding a definition that is in a file this one does not include.
+        // Within a file the definition is preferred and a declaration on its
+        // own is reported as one -- Declaration::isDefinition -- so a caller
+        // is told to look further; but there is nowhere here to look, since
+        // the definition of a class forward declared in this file may be in a
+        // file nothing here includes.
+        "finding a definition across files that are not included",
         // Whether "extern int x;" here declares the x a header declared or
         // one of this file's own. Needs linkage, where everything above is
         // about scopes, so the two stay two things and a search from either
