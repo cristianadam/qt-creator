@@ -28,6 +28,18 @@ public:
     // which includes it back must not be processed a second time on the way
     // down, or the recursion has no end.
     QSet<QString> inProgress;
+
+    // Looks for \a name in \a base and then in the bases of \a base, across
+    // however many files the chain runs through. \a visited stops a cycle in
+    // the inheritance, which is ill-formed but has to be survived.
+    [[nodiscard]] auto throughBases(const QStringList &closure, const QString &base,
+                                    const QString &name, QSet<QString> &visited) const
+        -> CxxFrontendDocument::Declaration;
+
+    // The documents in \a closure, nearest first.
+    [[nodiscard]] auto documentsIn(const QStringList &closure) const
+        -> QList<const CxxFrontendDocument *>;
+
 };
 
 QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
@@ -83,6 +95,49 @@ QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
     established.append(document->definedMacros());
     establishedMacros.insert(filePath, established);
     return established;
+}
+
+auto CxxFrontendSnapshot::Private::documentsIn(const QStringList &closure) const
+    -> QList<const CxxFrontendDocument *>
+{
+    QList<const CxxFrontendDocument *> result;
+    for (const QString &file : closure) {
+        if (const auto it = documents.constFind(file); it != documents.cend())
+            result.append(it->get());
+    }
+    return result;
+}
+
+auto CxxFrontendSnapshot::Private::throughBases(const QStringList &closure,
+                                                const QString &base, const QString &name,
+                                                QSet<QString> &visited) const
+    -> CxxFrontendDocument::Declaration
+{
+    if (base.isEmpty() || visited.contains(base))
+        return {};
+    visited.insert(base);
+
+    const QList<const CxxFrontendDocument *> candidates = documentsIn(closure);
+
+    // The base may declare it.
+    for (const CxxFrontendDocument *candidate : candidates) {
+        const CxxFrontendDocument::Declaration found
+            = candidate->lookup(QStringList(base), name);
+        if (found.isValid())
+            return found;
+    }
+
+    // Or a base of it may, in a file the one declaring this base could not
+    // see either.
+    for (const CxxFrontendDocument *candidate : candidates) {
+        for (const QString &next : candidate->basesOf(base)) {
+            const CxxFrontendDocument::Declaration found
+                = throughBases(closure, next, name, visited);
+            if (found.isValid())
+                return found;
+        }
+    }
+    return {};
 }
 
 CxxFrontendSnapshot::CxxFrontendSnapshot()
@@ -179,13 +234,28 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
             paths.append(QStringList(base));
     }
 
+    const QStringList closure = allIncludesFor(filePath);
+
     // Nearest first, which is the order allIncludesFor walks.
-    for (const QString &included : allIncludesFor(filePath)) {
+    for (const QString &included : closure) {
         const CxxFrontendDocument *candidate = document(included);
         if (!candidate)
             continue;
         for (const QStringList &path : paths) {
             const CxxFrontendDocument::Declaration found = candidate->lookup(path, identifier);
+            if (found.isValid())
+                return found;
+        }
+    }
+
+    // A base whose own base is in a third file. Each document can only follow
+    // the bases it can see, so where one stops the search picks the chain up
+    // and carries it into the file that declares the next one.
+    if (qualifier.isEmpty()) {
+        QSet<QString> visited;
+        for (const QString &base : from->basesAt(line, column)) {
+            const CxxFrontendDocument::Declaration found
+                = d->throughBases(closure, base, identifier, visited);
             if (found.isValid())
                 return found;
         }
@@ -209,9 +279,6 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
     // saying nothing, because a wrong answer sends someone to the wrong line
     // and looks right doing it.
     return {
-        // A base of a base, where the chain leaves a file more than once:
-        // the header naming the next base cannot resolve it either.
-        "base chains across more than one file",
         // Which of several declarations a call means. Needs the argument
         // types, which this does not look at.
         "overload resolution across files",

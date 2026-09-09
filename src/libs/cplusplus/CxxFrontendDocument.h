@@ -165,6 +165,11 @@ public:
     // the snapshot go and find it.
     QStringList basesAt(int line, int column) const;
 
+    // The bases of a class this file declares, by name. Same reading as
+    // basesAt, addressed by name rather than by position, so that a search
+    // that has followed a base here can go on to the next one.
+    QStringList basesOf(const QString &className) const;
+
     // Looks a name up in what this file declares, through the front end's own
     // lookup rather than by scanning what symbols() flattened.
     //

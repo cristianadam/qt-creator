@@ -9,6 +9,7 @@
 #include <functional>
 
 #include <cxx/ast.h>
+#include <cxx/ast_fwd.h>
 #include <cxx/ast_cursor.h>
 #include <cxx/control.h>
 #include <cxx/diagnostics_client.h>
@@ -292,6 +293,10 @@ public:
 
     // The name of the innermost scope written around the position.
     [[nodiscard]] QString scopeNameAt(int line, int column) const;
+
+    // The bases named by whichever class specifier the predicate accepts.
+    [[nodiscard]] QStringList basesOfClass(
+        const std::function<bool(cxx::ClassSpecifierAST *)> &wanted) const;
 
     // The symbol the name at a position resolves to, as the parser resolved
     // it. Null if there is no name there, or if the parser could not say.
@@ -683,44 +688,65 @@ QStringList CxxFrontendDocument::qualifierAt(int line, int column) const
     return qualifier;
 }
 
-QStringList CxxFrontendDocument::basesAt(int line, int column) const
+// Read the base clause off the syntax tree rather than off the class symbol.
+// A base declared in a header is not in this translation unit, so the parser
+// had nothing to resolve the name to and the symbol has no bases at all --
+// but the name is still written here, which is the whole of what is needed to
+// go and look for it.
+QStringList CxxFrontendDocument::Private::basesOfClass(
+    const std::function<bool(cxx::ClassSpecifierAST *)> &wanted) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
-    if (!location || !d->unit.ast())
+    if (!unit.ast())
         return {};
 
-    // Read the base clause off the syntax tree rather than off the class
-    // symbol. A base declared in a header is not in this translation unit, so
-    // the parser had nothing to resolve the name to and the symbol has no
-    // bases at all -- but the name is still written here, which is the whole
-    // of what is needed to go and look for it.
     QStringList bases;
-    unsigned innermost = 0;
+    unsigned best = 0;
 
-    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot || !*slot)
             continue;
         auto *cls = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
-        if (!cls || !cls->baseSpecifierList)
+        if (!cls || !cls->baseSpecifierList || !wanted(cls))
             continue;
 
+        // Nested classes: the one that starts latest is the innermost.
         const unsigned first = cls->firstSourceLocation().index();
-        const unsigned last = cls->lastSourceLocation().index();
-        if (location.index() < first || location.index() >= last)
+        if (first < best)
             continue;
-        // Nested classes: the one that starts latest is the one it is in.
-        if (first < innermost)
-            continue;
-        innermost = first;
+        best = first;
 
         bases.clear();
         for (auto *node : cxx::ListView{cls->baseSpecifierList}) {
             if (node && node->unqualifiedId)
-                bases.append(fromStd(d->unit.tokenText(node->unqualifiedId->firstSourceLocation())));
+                bases.append(fromStd(unit.tokenText(node->unqualifiedId->firstSourceLocation())));
         }
     }
     return bases;
+}
+
+QStringList CxxFrontendDocument::basesAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+
+    return d->basesOfClass([&](cxx::ClassSpecifierAST *cls) {
+        return location.index() >= cls->firstSourceLocation().index()
+               && location.index() < cls->lastSourceLocation().index();
+    });
+}
+
+QStringList CxxFrontendDocument::basesOf(const QString &className) const
+{
+    if (className.isEmpty())
+        return {};
+
+    return d->basesOfClass([&](cxx::ClassSpecifierAST *cls) {
+        return cls->unqualifiedId
+               && fromStd(d->unit.tokenText(cls->unqualifiedId->firstSourceLocation()))
+                      == className;
+    });
 }
 
 CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &qualifier,

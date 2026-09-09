@@ -89,7 +89,9 @@ private slots:
     void aMemberOfAnIndirectBaseInAHeaderResolves();
     void aUsingDeclarationInsideAHeaderIsHonoured();
     void aNameInANestedNamespaceInAHeaderResolves();
-    void aBaseChainThatLeavesTheFileTwiceDoesNotResolve();
+    void aBaseChainAcrossThreeFilesResolves();
+    void aBaseChainAcrossFourFilesResolves();
+    void aCycleInTheBasesTerminates();
     void unsupportedLookups();
 };
 
@@ -527,10 +529,10 @@ void tst_cxxfrontendsnapshot::aNameInANestedNamespaceInAHeaderResolves()
     QCOMPARE(found.name, QString("A::B::S"));
 }
 
-// And where it stops. A chain of bases is followed as far as one document can
-// see, and no further: the header that names the next base cannot resolve it
-// either, for exactly the reason the file using it could not.
-void tst_cxxfrontendsnapshot::aBaseChainThatLeavesTheFileTwiceDoesNotResolve()
+// A chain of bases running through several files. Each document follows the
+// bases it can see; where one stops, the search picks the chain up and
+// carries it into the file that declares the next.
+void tst_cxxfrontendsnapshot::aBaseChainAcrossThreeFilesResolves()
 {
     Files files;
     files.add("a.h", "struct A { int m; };\n");
@@ -540,8 +542,39 @@ void tst_cxxfrontendsnapshot::aBaseChainThatLeavesTheFileTwiceDoesNotResolve()
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
 
-    // D names B, b.h names A and cannot see it, and nothing chains the two
-    // searches together. Saying nothing is right; guessing would not be.
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 26);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("A::m"));
+    QCOMPARE(found.filePath, QString("a.h"));
+}
+
+void tst_cxxfrontendsnapshot::aBaseChainAcrossFourFilesResolves()
+{
+    Files files;
+    files.add("a.h", "struct A { int m; };\n");
+    files.add("b.h", "#include \"a.h\"\nstruct B : A {};\n");
+    files.add("c.h", "#include \"b.h\"\nstruct C : B {};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"c.h\"\nstruct D : C { void f() { m = 1; } };\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 26);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.filePath, QString("a.h"));
+}
+
+void tst_cxxfrontendsnapshot::aCycleInTheBasesTerminates()
+{
+    Files files;
+    // Ill-formed, and it still must not hang.
+    files.add("a.h", "struct B;\nstruct A : B {};\n");
+    files.add("b.h", "#include \"a.h\"\nstruct B : A {};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { nowhere = 1; } };\n");
+
     QVERIFY(!snapshot.declarationAt("a.cpp", 2, 26).isValid());
 }
 
@@ -551,7 +584,6 @@ void tst_cxxfrontendsnapshot::aBaseChainThatLeavesTheFileTwiceDoesNotResolve()
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
-    QVERIFY(unsupported.contains("base chains across more than one file"));
     QVERIFY(unsupported.contains("overload resolution across files"));
     QVERIFY(unsupported.contains("using directives across files"));
 
