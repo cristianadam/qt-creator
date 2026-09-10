@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
 #include <functional>
 
 #include <cxx/ast.h>
@@ -359,6 +360,9 @@ public:
     // declares. See the Definition comment above.
     [[nodiscard]] Definition definitionOf(cxx::Symbol *symbol) const;
 
+    // The innermost function written around \a location, or null.
+    [[nodiscard]] cxx::FunctionSymbol *functionAround(cxx::SourceLocation location) const;
+
     // Whether a using declaration in this file names \a symbol, or brought in
     // the function \a symbol is.
     [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
@@ -467,6 +471,43 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
 
     if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
         collect(inner, enclosing + QStringList(name));
+}
+
+cxx::FunctionSymbol *CxxFrontendDocument::Private::functionAround(
+    cxx::SourceLocation location) const
+{
+    cxx::ScopeSymbol *global = unit.globalScope();
+    if (!global || !location)
+        return nullptr;
+
+    // Outermost wins: a cursor inside a lambda is inside the function the
+    // lambda is written in, and the locals worth showing are that function's
+    // -- which is how the built-in model reads it too, driven by the enclosing
+    // function definition.
+    cxx::FunctionSymbol *found = nullptr;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            const auto consider = [&](cxx::ScopeSymbol *inner) {
+                if (!inner->contains(location))
+                    return;
+                if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(inner)) {
+                    if (!found)
+                        found = function;
+                    return;
+                }
+                walk(inner);
+            };
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions())
+                    consider(function);
+                continue;
+            }
+            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                consider(inner);
+        }
+    };
+    walk(global);
+    return found;
 }
 
 bool CxxFrontendDocument::Private::isThroughUsingDeclaration(cxx::Symbol *symbol) const
@@ -1037,6 +1078,105 @@ QList<CxxFrontendDocument::Occurrence> CxxFrontendDocument::occurrencesOf(
         result.append(occurrence);
     }
     return result;
+}
+
+QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::FunctionSymbol *function = d->functionAround(location);
+    if (!function || !d->unit.ast())
+        return {};
+
+    QList<Local> locals;
+    // Which local each symbol belongs to. A lambda's parameter arrives twice,
+    // as the parameter and as the variable standing for it in the body, and
+    // both are the one name written once -- so they share an entry, found by
+    // where the name was written.
+    QHash<cxx::Symbol *, int> symbolToLocal;
+    QHash<QString, int> localByDeclaration;
+
+    const std::function<void(cxx::ScopeSymbol *)> collect = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            if (dynamic_cast<cxx::ParameterSymbol *>(member)
+                || dynamic_cast<cxx::VariableSymbol *>(member)) {
+                if (!member->name() || member->isHidden())
+                    continue;
+
+                const QString name = fromStd(cxx::to_string(member->name()));
+                // The front end declares some of its own inside every body --
+                // __func__, and a parameter for each of a lambda's. Nobody
+                // wrote them, and a name reserved to the implementation is not
+                // one anybody can point at.
+                if (name.startsWith("__"))
+                    continue;
+
+                const cxx::SourceLocation declaration = member->location();
+                if (!declaration)
+                    continue;
+                const cxx::SourcePosition position = d->unit.tokenStartPosition(declaration);
+                const Occurrence place{int(position.line), int(position.column),
+                                       int(d->unit.tokenAt(declaration).length())};
+
+                const QString key = QString("%1 %2:%3")
+                                        .arg(name).arg(place.line).arg(place.column);
+                if (const auto known = localByDeclaration.constFind(key);
+                    known != localByDeclaration.cend()) {
+                    symbolToLocal.insert(member, *known);
+                    continue;
+                }
+
+                symbolToLocal.insert(member, int(locals.size()));
+                localByDeclaration.insert(key, int(locals.size()));
+                locals.append(Local{name, {place}});
+                continue;
+            }
+
+            // Into a lambda as well: its parameters are written inside this
+            // function and are highlighted along with the function's own
+            // locals, which is what the built-in model does.
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::FunctionSymbol *nested : overloadSet->declaredFunctions())
+                    collect(nested);
+                continue;
+            }
+            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                collect(inner);
+        }
+    };
+    collect(function);
+    if (locals.isEmpty())
+        return {};
+
+    // One walk of the tree rather than a lookup for each place: every name the
+    // parser resolved to one of these locals is a use of it, and the parser
+    // wrote that on the node while reading the file.
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto *idExpression = dynamic_cast<cxx::IdExpressionAST *>(*slot);
+        if (!idExpression || !idExpression->symbol || !idExpression->unqualifiedId)
+            continue;
+
+        const auto at = symbolToLocal.constFind(idExpression->symbol);
+        if (at == symbolToLocal.cend())
+            continue;
+
+        const cxx::SourceLocation used = idExpression->unqualifiedId->firstSourceLocation();
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(used);
+        const Occurrence place{int(position.line), int(position.column),
+                               int(d->unit.tokenAt(used).length())};
+
+        QList<Occurrence> &places = locals[*at].places;
+        // The same place can be reached twice, once for the parameter and once
+        // for the variable that stands for it.
+        const auto samePlace = [&place](const Occurrence &other) {
+            return other.line == place.line && other.column == place.column;
+        };
+        if (std::none_of(places.cbegin(), places.cend(), samePlace))
+            places.append(place);
+    }
+    return locals;
 }
 
 QString CxxFrontendDocument::identifierAt(int line, int column) const

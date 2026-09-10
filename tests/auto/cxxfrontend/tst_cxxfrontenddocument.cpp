@@ -169,6 +169,10 @@ private slots:
     void theDefinitionIsPreferredToTheDeclaration();
     void aDeclarationWithoutItsDefinitionSaysSo();
     void aNameFromAUsingDeclarationSaysSo();
+    void localsOfAFunction();
+    void localsOfNestedBlocksAreTheirOwn();
+    void localsOfALambdaBelongToItsFunction();
+    void noLocalsOutsideAFunction();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -618,6 +622,91 @@ void tst_cxxfrontenddocument::aNameFromAUsingDeclarationSaysSo()
     const CxxFrontendDocument::Declaration fromBlock = inner.declarationAt(6, 5);
     QVERIFY(fromBlock.isValid());
     QVERIFY(fromBlock.throughUsingDeclaration);
+}
+
+namespace {
+
+// Each local as "name @line:column+length ...", the declaration first, so that
+// a wrong answer says which place it got wrong.
+QStringList describeLocals(const QList<CxxFrontendDocument::Local> &locals)
+{
+    QStringList result;
+    for (const CxxFrontendDocument::Local &local : locals) {
+        QStringList places;
+        for (const CxxFrontendDocument::Occurrence &place : local.places) {
+            places.append(QString("@%1:%2+%3")
+                              .arg(place.line).arg(place.column).arg(place.length));
+        }
+        result.append(local.name + ' ' + places.join(' '));
+    }
+    return result;
+}
+
+} // namespace
+
+// The parameters and the variables of a function, each with every place it is
+// written. Nothing outside the file can be missing from this: a local cannot
+// be named anywhere else.
+void tst_cxxfrontenddocument::localsOfAFunction()
+{
+    const QByteArray source =
+        "int f(int a)\n"
+        "{\n"
+        "    int b = a;\n"
+        "    b = b + a;\n"
+        "    return b;\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    QCOMPARE(describeLocals(document.localsAt(3, 9)),
+             QStringList({"a @1:11+1 @3:13+1 @4:13+1",
+                          "b @3:9+1 @4:5+1 @4:9+1 @5:12+1"}));
+}
+
+// A name declared again in an inner block is a different local, and its uses
+// are its own -- which is the whole reason to answer per local rather than per
+// name.
+void tst_cxxfrontenddocument::localsOfNestedBlocksAreTheirOwn()
+{
+    const QByteArray source =
+        "void f()\n"
+        "{\n"
+        "    int x = 1;\n"
+        "    {\n"
+        "        int x = 2;\n"
+        "        x = x + 1;\n"
+        "    }\n"
+        "    x = 3;\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    QCOMPARE(describeLocals(document.localsAt(3, 9)),
+             QStringList({"x @3:9+1 @8:5+1", "x @5:13+1 @6:9+1 @6:13+1"}));
+}
+
+// A lambda's parameter is written inside the function that holds it, and is
+// highlighted with that function's own locals, so it is one of them here.
+void tst_cxxfrontenddocument::localsOfALambdaBelongToItsFunction()
+{
+    const QByteArray source =
+        "void f()\n"
+        "{\n"
+        "    auto func = [](int arg) { return arg; };\n"
+        "    func(1);\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    QCOMPARE(describeLocals(document.localsAt(4, 5)),
+             QStringList({"func @3:10+4 @4:5+4", "arg @3:24+3 @3:38+3"}));
+}
+
+void tst_cxxfrontenddocument::noLocalsOutsideAFunction()
+{
+    const CxxFrontendDocument document("int g;\nvoid f() { int a = g; }\n", "<stdin>");
+
+    QVERIFY(document.localsAt(1, 5).isEmpty());
+    // And a global used inside a function is not a local of it.
+    QCOMPARE(describeLocals(document.localsAt(2, 16)), QStringList("a @2:16+1"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

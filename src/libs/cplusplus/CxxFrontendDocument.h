@@ -209,6 +209,25 @@ public:
     };
     QList<Occurrence> occurrencesOf(const QString &name) const;
 
+    // The locals of the function written around a position -- its parameters
+    // and the variables of its blocks -- each with every place it is written,
+    // its declaration first and its uses after, in the order they appear.
+    //
+    // This is the one question a single file answers completely: a parameter
+    // or a block variable cannot be named anywhere else, so nothing outside
+    // this document can be missing from the answer. It is what the editor
+    // highlights when the cursor is on a local, and what a rename confined to
+    // one function works from.
+    //
+    // Two locals of the same name in nested blocks are two entries with their
+    // own places, since that is what they are.
+    struct Local
+    {
+        QString name;
+        QList<Occurrence> places;
+    };
+    QList<Local> localsAt(int line, int column) const;
+
     // The type of the expression written at a position, and whether it is an
     // lvalue. What a tooltip shows, and what completion needs before it can
     // offer the members of something.
