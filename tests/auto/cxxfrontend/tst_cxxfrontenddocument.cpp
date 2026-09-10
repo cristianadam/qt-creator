@@ -172,6 +172,7 @@ private slots:
     void localsOfAFunction();
     void localsOfNestedBlocksAreTheirOwn();
     void localsOfALambdaBelongToItsFunction();
+    void localsSayWhatTheyWereDeclaredAs();
     void noLocalsOutsideAFunction();
 };
 
@@ -642,6 +643,20 @@ QStringList describeLocals(const QList<CxxFrontendDocument::Local> &locals)
     return result;
 }
 
+// Each local as "name kind class", the two things a caller has to know about
+// it besides where it is written.
+QStringList describeDeclarations(const QList<CxxFrontendDocument::Local> &locals)
+{
+    QStringList result;
+    for (const CxxFrontendDocument::Local &local : locals) {
+        result.append(QString("%1 %2 %3")
+                          .arg(local.name,
+                               local.isParameter ? "parameter" : "variable",
+                               local.className.isEmpty() ? QString("-") : local.className));
+    }
+    return result;
+}
+
 } // namespace
 
 // The parameters and the variables of a function, each with every place it is
@@ -698,6 +713,43 @@ void tst_cxxfrontenddocument::localsOfALambdaBelongToItsFunction()
 
     QCOMPARE(describeLocals(document.localsAt(4, 5)),
              QStringList({"func @3:10+4 @4:5+4", "arg @3:24+3 @3:38+3"}));
+}
+
+// Besides where a local is written, two things about it decide what the
+// editor does with it: only a parameter can be named in the function's
+// documentation, and a local whose type is a class may be doing its work by
+// existing -- a lock, a scoped pointer -- so that never naming it again is
+// not a mistake.
+void tst_cxxfrontenddocument::localsSayWhatTheyWereDeclaredAs()
+{
+    const QByteArray source =
+        "class QMutexLocker { public: QMutexLocker(int *m); };\n"
+        "void f(int a)\n"
+        "{\n"
+        "    QMutexLocker locker(&a);\n"
+        "    const QMutexLocker guard(&a);\n"
+        "    QMutexLocker *handle = &locker;\n"
+        "    QMutexLocker &alias = locker;\n"
+        "    int plain = 0;\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // Const is not part of what the type names, and a pointer or a reference
+    // to a lock is not a lock.
+    QCOMPARE(describeDeclarations(document.localsAt(4, 18)),
+             QStringList({"a parameter -",
+                          "locker variable QMutexLocker",
+                          "guard variable QMutexLocker",
+                          "handle variable -",
+                          "alias variable -",
+                          "plain variable -"}));
+
+    // A lambda's parameter reaches this twice, as the parameter and as the
+    // variable standing for it in the body, and it is a parameter either way.
+    const CxxFrontendDocument lambda("void f() { auto g = [](int p) { return p; }; }\n",
+                                     "<stdin>");
+    QCOMPARE(describeDeclarations(lambda.localsAt(1, 17)),
+             QStringList({"g variable -", "p parameter -"}));
 }
 
 void tst_cxxfrontenddocument::noLocalsOutsideAFunction()

@@ -131,6 +131,21 @@ cxx::ScopeSymbol *classScopeOf(const cxx::Type *type)
     return nullptr;
 }
 
+// The class a type names, and only where it names one directly: a pointer or
+// a reference to a class names a way to reach one, not a class, and something
+// declared as a handle is not doing the work the class does. Const and
+// volatile are not part of what is named.
+QString classNamedBy(const cxx::Type *type)
+{
+    auto *cls = cxx::unqualified_cast<cxx::ClassType>(type);
+    if (!cls || !cls->symbol() || !cls->symbol()->name())
+        return {};
+    // A closure has a class too, and the front end gives it a name of its own
+    // making -- __lambda_0. Nobody wrote it, so nobody can mean it.
+    const QString name = fromStd(cxx::to_string(cls->symbol()->name()));
+    return name.startsWith("__") ? QString() : name;
+}
+
 // Where to point for a name, and whether that place defines the thing.
 //
 // A class or a function can be declared in one place and defined in another,
@@ -1122,12 +1137,18 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
                 if (const auto known = localByDeclaration.constFind(key);
                     known != localByDeclaration.cend()) {
                     symbolToLocal.insert(member, *known);
+                    // Whichever of the two arrived first, a name written
+                    // between the parentheses of a lambda is a parameter.
+                    if (dynamic_cast<cxx::ParameterSymbol *>(member))
+                        locals[*known].isParameter = true;
                     continue;
                 }
 
                 symbolToLocal.insert(member, int(locals.size()));
                 localByDeclaration.insert(key, int(locals.size()));
-                locals.append(Local{name, {place}});
+                locals.append(Local{name, {place},
+                                    dynamic_cast<cxx::ParameterSymbol *>(member) != nullptr,
+                                    classNamedBy(member->type())});
                 continue;
             }
 

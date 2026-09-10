@@ -225,6 +225,20 @@ public:
     {
         QString name;
         QList<Occurrence> places;
+
+        // A parameter of the function rather than a variable of one of its
+        // blocks. The two are written in the same places and highlighted
+        // alike, but only a parameter is documented: a caller looking for a
+        // name in the function's comment has to know which locals can be
+        // there.
+        bool isParameter = false;
+
+        // The class this local's type names, without the scopes it is in, or
+        // empty where the type does not name one -- an int, or a pointer or a
+        // reference to a class, since a handle to a thing is not the thing.
+        // What tells a local that is doing its work by existing, a lock or a
+        // scoped pointer, from one that is declared and forgotten.
+        QString className;
     };
     QList<Local> localsAt(int line, int column) const;
 
