@@ -33,51 +33,64 @@ ASTCursor::ASTCursor(AST* root, std::string_view name) {
 ASTCursor::~ASTCursor() {}
 
 void ASTCursor::step() {
+  if (stack_.empty()) return;
+
+  // Exactly one node is expanded per step: the one the cursor is on. An empty
+  // slot expands to nothing, and the ones after it are still to be visited --
+  // expanding the next one here as well would hand back its children without
+  // ever having handed back the node itself.
+  expand();
+
+  // And nothing empty is ever handed back, so that dereferencing the cursor
+  // always yields a node.
+  while (!stack_.empty()) {
+    const auto& node = stack_.back().node;
+    if (auto ast = std::get_if<AST*>(&node); ast && *ast) break;
+    if (auto list = std::get_if<List<AST*>*>(&node); list && *list) break;
+    stack_.pop_back();
+  }
+}
+
+void ASTCursor::expand() {
   ASTSlot slotInfo;
 
-  while (!stack_.empty()) {
-    auto [node, kind] = stack_.back();
-    stack_.pop_back();
+  auto [node, kind] = stack_.back();
+  stack_.pop_back();
 
-    if (auto ast = std::get_if<AST*>(&node)) {
-      if (!*ast) continue;
+  if (auto ast = std::get_if<AST*>(&node)) {
+    if (!*ast) return;
 
-      const auto slotCount = slotInfo(*ast, 0).slotCount;
+    const auto slotCount = slotInfo(*ast, 0).slotCount;
 
-      std::vector<ASTSlot::SlotInfo> slots;
-      slots.reserve(slotCount);
+    std::vector<ASTSlot::SlotInfo> slots;
+    slots.reserve(slotCount);
 
-      for (int i = 0; i < slotCount; ++i) {
-        auto childInfo = slotInfo(*ast, i);
-        slots.push_back(childInfo);
+    for (int i = 0; i < slotCount; ++i) {
+      auto childInfo = slotInfo(*ast, i);
+      slots.push_back(childInfo);
+    }
+
+    for (const auto& slot : slots | std::views::reverse) {
+      auto name = to_string(slot.nameIndex);
+      if (slot.kind == ASTSlotKind::kNode) {
+        auto node = reinterpret_cast<AST*>(slot.handle);
+        stack_.push_back(Node{node, name});
+      } else if (slot.kind == ASTSlotKind::kNodeList) {
+        auto list = reinterpret_cast<List<AST*>*>(slot.handle);
+        stack_.push_back(Node{list, name});
       }
+    }
+  } else if (auto list = std::get_if<List<AST*>*>(&node)) {
+    if (!*list) return;
 
-      for (const auto& slot : slots | std::views::reverse) {
-        auto name = to_string(slot.nameIndex);
-        if (slot.kind == ASTSlotKind::kNode) {
-          auto node = reinterpret_cast<AST*>(slot.handle);
-          stack_.push_back(Node{node, name});
-        } else if (slot.kind == ASTSlotKind::kNodeList) {
-          auto list = reinterpret_cast<List<AST*>*>(slot.handle);
-          stack_.push_back(Node{list, name});
-        }
-      }
+    std::vector<AST*> children;
 
-      break;
-    } else if (auto list = std::get_if<List<AST*>*>(&node)) {
-      if (!*list) continue;
+    for (auto ast : ListView{*list}) {
+      if (ast) children.push_back(ast);
+    }
 
-      std::vector<AST*> children;
-
-      for (auto ast : ListView{*list}) {
-        if (ast) children.push_back(ast);
-      }
-
-      for (const auto& ast : children | std::views::reverse) {
-        stack_.push_back(Node{ast, kind});
-      }
-
-      break;
+    for (const auto& ast : children | std::views::reverse) {
+      stack_.push_back(Node{ast, kind});
     }
   }
 }

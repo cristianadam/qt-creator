@@ -60,6 +60,9 @@ class ASTCursor {
   }
 
  private:
+  // Replaces the node the cursor is on with its children.
+  void expand();
+
   std::deque<Node> stack_;
 };
 
