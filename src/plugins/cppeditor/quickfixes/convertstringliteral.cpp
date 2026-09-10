@@ -19,6 +19,7 @@
 
 #include <cxx/ast.h>
 #include <cxx/literals.h>
+#include <cxx/names.h>
 #endif
 
 #ifdef WITH_TESTS
@@ -344,12 +345,40 @@ private:
     const bool m_escape;
 };
 
+// A literal these fixes wrap, as they need it: where it stands, the
+// characters between its quotes as they are written, and the three things the
+// decision rests on -- which kind of literal it is, whether it is written
+// plainly or with a prefix in front of the quote, and whether an operator
+// suffix already follows it. Plus the name of the function it is written
+// inside, since a literal already inside tr() or QLatin1String() is left
+// alone.
+//
+// Which node a literal is depends on which front end read the file; none of
+// the above does.
+class WrappableLiteral
+{
+public:
+    enum Kind { NotALiteral, String, ObjectiveCString, Char };
+
+    Kind kind = NotALiteral;
+    int start = -1;
+    int end = -1;
+    QByteArray contents;
+    bool isPlainString = false; // "..." with nothing written before the quote
+    bool isUtf16String = false; // u"..."
+    bool hasOperatorSuffix = false;
+    QByteArray enclosingFunction;
+
+    operator bool() const { return kind != NotALiteral; }
+};
+
 /// Operation performs the operations of type ActionFlags passed in as actions.
 class WrapStringLiteralOp : public CppQuickFixOperation
 {
 public:
     WrapStringLiteralOp(const CppQuickFixInterface &interface, int priority,
-                        unsigned actions, const QString &description, ExpressionAST *literal,
+                        unsigned actions, const QString &description,
+                        const WrappableLiteral &literal,
                         const QString &translationContext = QString())
         : CppQuickFixOperation(interface, priority), m_actions(actions), m_literal(literal),
         m_translationContext(translationContext)
@@ -361,8 +390,8 @@ public:
     {
         ChangeSet changes;
 
-        const int startPos = currentFile()->startOf(m_literal);
-        const int endPos = currentFile()->endOf(m_literal);
+        const int startPos = m_literal.start;
+        const int endPos = m_literal.end;
 
         // kill leading '@'. No need to adapt endPos, that is done by ChangeSet
         if (m_actions & RemoveObjectiveCAction)
@@ -380,32 +409,22 @@ public:
         if (m_actions & ConvertToOperatorActionMask) {
             changes.insert(endPos, stringLiteralOperatorPostfix(m_actions));
 
-            StringLiteralAST *stringLiteral = m_literal->asStringLiteral();
             const QString prefix = stringLiteralOperatorPrefix(m_actions);
             // Only prepend prefix if one is required
-            if (!prefix.isEmpty() && stringLiteral
-                && currentFile()->tokenAt(stringLiteral->literal_token).is(T_STRING_LITERAL)) {
+            if (!prefix.isEmpty() && m_literal.isPlainString)
                 changes.insert(startPos, prefix);
-            }
         }
 
-        // Convert single character strings into character constants
-        if (m_actions & ConvertEscapeSequencesToCharAction) {
-            StringLiteralAST *stringLiteral = m_literal->asStringLiteral();
-            QTC_ASSERT(stringLiteral, return ;);
-            const QByteArray oldContents(currentFile()->tokenAt(stringLiteral->literal_token).identifier->chars());
-            const QByteArray newContents = stringToCharEscapeSequences(oldContents);
-            QTC_ASSERT(!newContents.isEmpty(), return ;);
-            if (oldContents != newContents)
-                changes.replace(startPos + 1, endPos -1, QString::fromLatin1(newContents));
-        }
-
-        // Convert character constants into strings constants
-        if (m_actions & ConvertEscapeSequencesToStringAction) {
-            NumericLiteralAST *charLiteral = m_literal->asNumericLiteral(); // char 'c' constants are numerical.
-            QTC_ASSERT(charLiteral, return ;);
-            const QByteArray oldContents(currentFile()->tokenAt(charLiteral->literal_token).identifier->chars());
-            const QByteArray newContents = charToStringEscapeSequences(oldContents);
+        // Convert single character strings into character constants, and
+        // character constants into string constants. Both are only offered
+        // for a literal written with one quote character on either side,
+        // which is why what is between them is counted from the ends.
+        if (m_actions & (ConvertEscapeSequencesToCharAction | ConvertEscapeSequencesToStringAction)) {
+            const QByteArray &oldContents = m_literal.contents;
+            const QByteArray newContents
+                = m_actions & ConvertEscapeSequencesToCharAction
+                      ? stringToCharEscapeSequences(oldContents)
+                      : charToStringEscapeSequences(oldContents);
             QTC_ASSERT(!newContents.isEmpty(), return ;);
             if (oldContents != newContents)
                 changes.replace(startPos + 1, endPos -1, QString::fromLatin1(newContents));
@@ -430,9 +449,44 @@ public:
 
 private:
     const unsigned m_actions;
-    ExpressionAST *m_literal;
+    const WrappableLiteral m_literal;
     const QString m_translationContext;
 };
+
+// The literal at the cursor, read off the built-in tree.
+static WrappableLiteral builtinWrappableLiteralAt(const CppQuickFixInterface &interface)
+{
+    StringLiteralType type = TypeNone;
+    QByteArray enclosingFunction;
+    bool isStringLiteralOperator = false;
+    const CppRefactoringFilePtr file = interface.currentFile();
+    ExpressionAST * const literal = analyzeStringLiteral(interface.path(), file, &type,
+                                                         &enclosingFunction, nullptr,
+                                                         &isStringLiteralOperator);
+    if (!literal || type == TypeNone)
+        return {};
+
+    WrappableLiteral written;
+    written.kind = type == TypeChar ? WrappableLiteral::Char
+                   : type == TypeObjCString ? WrappableLiteral::ObjectiveCString
+                                            : WrappableLiteral::String;
+    written.start = file->startOf(literal);
+    written.end = file->endOf(literal);
+    written.hasOperatorSuffix = isStringLiteralOperator;
+    written.enclosingFunction = enclosingFunction;
+
+    if (StringLiteralAST * const string = literal->asStringLiteral()) {
+        const Token token = file->tokenAt(string->literal_token);
+        written.contents = QByteArray(token.identifier->chars());
+        written.isPlainString = token.is(T_STRING_LITERAL);
+        written.isUtf16String = token.is(T_UTF16_STRING_LITERAL);
+    } else if (NumericLiteralAST * const character = literal->asNumericLiteral()) {
+        // A character constant is a numeric literal to this front end.
+        written.contents = QByteArray(file->tokenAt(character->literal_token).identifier->chars());
+    }
+
+    return written;
+}
 
 class ConvertCStringToNSStringOp: public CppQuickFixOperation
 {
@@ -523,23 +577,16 @@ private:
 */
 class TranslateStringLiteral: public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         // Initialize
-        StringLiteralType type = TypeNone;
-        QByteArray enclosingFunction;
         const QList<AST *> &path = interface.path();
-        CppRefactoringFilePtr file = interface.currentFile();
-        ExpressionAST *literal = analyzeStringLiteral(path, file, &type, &enclosingFunction);
-        if (!literal || type != TypeString
-            || isQtStringLiteral(enclosingFunction) || isQtStringTranslation(enclosingFunction))
+        const WrappableLiteral literal = builtinWrappableLiteralAt(interface);
+        if (literal.kind != WrappableLiteral::String
+            || isQtStringLiteral(literal.enclosingFunction)
+            || isQtStringTranslation(literal.enclosingFunction)) {
             return;
+        }
 
         QString trContext;
 
@@ -613,23 +660,33 @@ class WrapStringLiteral: public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        StringLiteralType type = TypeNone;
-        QByteArray enclosingFunction;
-        const QList<AST *> &path = interface.path();
-        CppRefactoringFilePtr file = interface.currentFile();
-        bool isStringLiteralOperator = false;
-        ExpressionAST *literal = analyzeStringLiteral(path, file, &type, &enclosingFunction,
-                                                      nullptr, &isStringLiteralOperator);
-        if (!literal || type == TypeNone)
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
             return;
-        if ((type == TypeChar && enclosingFunction == "QLatin1Char")
-            || isQtStringLiteral(enclosingFunction)
-            || isQtStringTranslation(enclosingFunction)
-            || isStringLiteralOperator)
+#endif
+
+        // very high priority
+        addOperations(interface, interface.path().size() - 1,
+                      builtinWrappableLiteralAt(interface), result);
+    }
+
+    static void addOperations(const CppQuickFixInterface &interface, int priority,
+                              const WrappableLiteral &literal, QuickFixOperations &result)
+    {
+        if (!literal)
             return;
 
-        const int priority = path.size() - 1; // very high priority
-        if (type == TypeChar) {
+        // Already written as what this would write, or already inside
+        // something that says the same.
+        if ((literal.kind == WrappableLiteral::Char
+             && literal.enclosingFunction == "QLatin1Char")
+            || isQtStringLiteral(literal.enclosingFunction)
+            || isQtStringTranslation(literal.enclosingFunction)
+            || literal.hasOperatorSuffix) {
+            return;
+        }
+
+        if (literal.kind == WrappableLiteral::Char) {
             unsigned actions = EncloseInQLatin1CharAction;
             QString description = msgQtStringLiteralDescription(stringLiteralReplacement(actions));
             result << new WrapStringLiteralOp(interface, priority, actions, description, literal);
@@ -638,25 +695,22 @@ class WrapStringLiteral: public CppQuickFixFactory
             description = msgQtStringLiteralOperatorDescription(stringLiteralReplacement(actions));
             result << new WrapStringLiteralOp(interface, priority, actions, description, literal);
 
-            if (NumericLiteralAST *charLiteral = literal->asNumericLiteral()) {
-                const QByteArray contents(file->tokenAt(charLiteral->literal_token).identifier->chars());
-                if (!charToStringEscapeSequences(contents).isEmpty()) {
-                    actions = DoubleQuoteAction | ConvertEscapeSequencesToStringAction;
-                    description = Tr::tr("Convert to String Literal");
-                    result << new WrapStringLiteralOp(interface, priority, actions,
-                                                      description, literal);
-                }
+            if (!charToStringEscapeSequences(literal.contents).isEmpty()) {
+                actions = DoubleQuoteAction | ConvertEscapeSequencesToStringAction;
+                description = Tr::tr("Convert to String Literal");
+                result << new WrapStringLiteralOp(interface, priority, actions,
+                                                  description, literal);
             }
         } else {
-            const unsigned objectiveCActions = type == TypeObjCString ?
-                                                   unsigned(RemoveObjectiveCAction) : 0u;
+            const unsigned objectiveCActions
+                = literal.kind == WrappableLiteral::ObjectiveCString
+                      ? unsigned(RemoveObjectiveCAction) : 0u;
             unsigned actions = 0;
-            if (StringLiteralAST *stringLiteral = literal->asStringLiteral()) {
-                const bool isSimpleStringLiteral
-                    = file->tokenAt(stringLiteral->literal_token).is(T_STRING_LITERAL);
+            {
+                const bool isSimpleStringLiteral = literal.isPlainString;
 
-                const QByteArray contents(file->tokenAt(stringLiteral->literal_token).identifier->chars());
-                if (!stringToCharEscapeSequences(contents).isEmpty() && isSimpleStringLiteral) {
+                if (!stringToCharEscapeSequences(literal.contents).isEmpty()
+                    && isSimpleStringLiteral) {
                     actions = EncloseInQLatin1CharAction | SingleQuoteAction
                               | ConvertEscapeSequencesToCharAction | objectiveCActions;
                     QString description =
@@ -702,8 +756,7 @@ class WrapStringLiteral: public CppQuickFixFactory
                         literal);
                 }
 
-                if (file->tokenAt(stringLiteral->literal_token).is(T_UTF16_STRING_LITERAL)
-                    && !isStringLiteralOperator) {
+                if (literal.isUtf16String) {
                     actions = ConvertToStringLiteralOperatorAction;
                     result << new WrapStringLiteralOp(
                         interface,
@@ -727,6 +780,128 @@ class WrapStringLiteral: public CppQuickFixFactory
                                               msgQtStringLiteralDescription(stringLiteralReplacement(actions)), literal);
         }
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree. What a literal is written as
+    // -- a prefix in front of the quote, a suffix after it -- is read off the
+    // text, which is where that front end's token kinds come from as well.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CppRefactoringFilePtr file = interface.currentFile();
+
+        // Objective-C is not something this front end reads at all, and
+        // @"..." is one of the literals this fix is offered on.
+        if (ProjectFile::isObjC(file->filePath()))
+            return false;
+
+        const std::shared_ptr<const CxxFrontendSnapshot> model
+            = cxxFrontendModel(file->filePath());
+        if (!model)
+            return false;
+        const CxxFrontendDocument * const document
+            = model->document(file->filePath().toFSPathString());
+        if (!document)
+            return false;
+
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+        if (path.isEmpty())
+            return true;
+
+        WrappableLiteral literal;
+        cxx::SourceLocation location;
+        if (auto * const string
+            = dynamic_cast<cxx::StringLiteralExpressionAST *>(path.last())) {
+            if (!string->literal)
+                return true;
+            literal.kind = WrappableLiteral::String;
+            location = string->literalLoc;
+        } else if (auto * const character
+                   = dynamic_cast<cxx::CharLiteralExpressionAST *>(path.last())) {
+            if (!character->literal)
+                return true;
+            literal.kind = WrappableLiteral::Char;
+            location = character->literalLoc;
+        } else {
+            return true;
+        }
+
+        const CxxAstRange range = cxxTokenRangeAt(*document, location);
+        if (!range.isValid())
+            return false; // A macro wrote it: no text of this file's to rewrite.
+
+        literal.start = file->position(range.startLine, range.startColumn);
+        literal.end = file->position(range.endLine, range.endColumn);
+
+        const QString spelling = file->textOf(literal.start, literal.end);
+        const QChar quote = literal.kind == WrappableLiteral::Char ? u'\'' : u'"';
+        const qsizetype firstQuote = spelling.indexOf(quote);
+        const qsizetype lastQuote = spelling.lastIndexOf(quote);
+        if (firstQuote < 0 || lastQuote <= firstQuote)
+            return true;
+
+        // The literals written next to each other that the preprocessor made
+        // one: the text here is one piece of what it read, and wrapping that
+        // would leave the rest outside. See EscapeStringLiteral.
+        if (literal.kind == WrappableLiteral::String
+            && spelling.toUtf8()
+                   != QByteArray::fromStdString(
+                       static_cast<cxx::StringLiteralExpressionAST *>(path.last())
+                           ->literal->value())) {
+            return false;
+        }
+
+        literal.contents = spelling.mid(firstQuote + 1, lastQuote - firstQuote - 1).toUtf8();
+        literal.isPlainString = literal.kind == WrappableLiteral::String && firstQuote == 0;
+        literal.isUtf16String = spelling.startsWith(u"u\"");
+        literal.hasOperatorSuffix = lastQuote != spelling.size() - 1;
+        literal.enclosingFunction = cxxEnclosingNameOf(path);
+
+        addOperations(interface, path.size() - 1, literal, result);
+        return true;
+    }
+
+    static QByteArray plainNameOf(cxx::UnqualifiedIdAST *id)
+    {
+        auto * const name = dynamic_cast<cxx::NameIdAST *>(id);
+        if (!name || !name->identifier)
+            return {};
+        return QByteArray::fromStdString(name->identifier->name());
+    }
+
+    // The name written in front of the parentheses the literal is inside, or
+    // nothing where it is not written directly inside any. What the built-in
+    // tree calls a call is two things here: calling a function, and making a
+    // value of a type -- QLatin1String("x") is the second, and one of the
+    // names this fix leaves alone.
+    //
+    // cxx also records the conversions an argument asks for, so the walk
+    // outwards steps over those.
+    static QByteArray cxxEnclosingNameOf(const QList<cxx::AST *> &path)
+    {
+        for (int index = path.size() - 2; index >= 0; --index) {
+            cxx::AST * const node = path.at(index);
+            if (dynamic_cast<cxx::ImplicitCastExpressionAST *>(node))
+                continue;
+
+            if (auto * const call = dynamic_cast<cxx::CallExpressionAST *>(node)) {
+                auto * const base = dynamic_cast<cxx::IdExpressionAST *>(call->baseExpression);
+                return base ? plainNameOf(base->unqualifiedId) : QByteArray();
+            }
+
+            if (auto * const construction = dynamic_cast<cxx::TypeConstructionAST *>(node)) {
+                auto * const named
+                    = dynamic_cast<cxx::NamedTypeSpecifierAST *>(construction->typeSpecifier);
+                return named ? plainNameOf(named->unqualifiedId) : QByteArray();
+            }
+
+            return {};
+        }
+        return {};
+    }
+#endif
 };
 
 /*!
@@ -878,6 +1053,12 @@ class WrapStringLiteralTest : public Tests::CppQuickFixTestObject
 public:
     using CppQuickFixTestObject::CppQuickFixTestObject;
 };
+class TranslateStringLiteralTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
 #endif
 
 } // namespace
@@ -887,7 +1068,7 @@ void registerConvertStringLiteralQuickfixes()
     REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(EscapeStringLiteral);
     REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(WrapStringLiteral);
     CppQuickFixFactory::registerFactory<ConvertCStringToNSString>();
-    CppQuickFixFactory::registerFactory<TranslateStringLiteral>();
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(TranslateStringLiteral);
 }
 
 } // namespace CppEditor::Internal
