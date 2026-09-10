@@ -21,11 +21,13 @@ namespace {
 class ConvertToCamelCaseOp: public CppQuickFixOperation
 {
 public:
+    // \a place is where the name stands, which is what a test rewrites; the
+    // editor renames every use of it instead and needs no place at all.
     ConvertToCamelCaseOp(const CppQuickFixInterface &interface, const QString &name,
-                         const AST *nameAst, bool test)
+                         const ChangeSet::Range &place, bool test)
         : CppQuickFixOperation(interface, -1)
         , m_name(name)
-        , m_nameAst(nameAst)
+        , m_place(place)
         , m_isAllUpper(name.isUpper())
         , m_test(test)
     {
@@ -52,16 +54,71 @@ private:
             }
         }
         if (m_test)
-            currentFile()->apply(ChangeSet::makeReplace(currentFile()->range(m_nameAst), newName));
+            currentFile()->apply(ChangeSet::makeReplace(m_place, newName));
         else
             editor()->renameUsages(newName);
     }
 
     const QString m_name;
-    const AST * const m_nameAst;
+    const ChangeSet::Range m_place;
     const bool m_isAllUpper;
     const bool m_test;
 };
+
+// A name the cursor is on: what it says and where it stands. Which node a
+// name is depends on which front end read the file; what is written does not.
+class WrittenName
+{
+public:
+    QString name;
+    ChangeSet::Range place;
+
+    operator bool() const { return !name.isEmpty(); }
+};
+
+// Whether there is anything to convert: a name of at least three characters
+// with an underscore in it that a letter follows, "m_" at the front not
+// counting.
+bool isConvertible(const QString &name)
+{
+    if (name.size() < 3)
+        return false;
+    for (int i = 1; i < name.size() - 1; ++i) {
+        if (ConvertToCamelCaseOp::isConvertibleUnderscore(name, i))
+            return true;
+    }
+    return false;
+}
+
+// The name the cursor is on, read off the built-in tree.
+WrittenName builtinNameAt(const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    if (path.isEmpty())
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    AST * const ast = path.last();
+
+    if (const NameAST * const nameAst = ast->asName()) {
+        if (!nameAst->name || !nameAst->name->asNameId())
+            return {};
+        return {QString::fromUtf8(nameAst->name->identifier()->chars()), file->range(nameAst)};
+    }
+
+    if (const NamespaceAST * const namespaceAst = ast->asNamespace()) {
+        const Name * const name = namespaceAst->symbol ? namespaceAst->symbol->name() : nullptr;
+        if (!name || !name->identifier())
+            return {};
+
+        // The name alone: this node is the whole namespace, body and all, and
+        // what is being renamed is what stands after the keyword.
+        return {QString::fromUtf8(name->identifier()->chars()),
+                file->range(namespaceAst->identifier_token)};
+    }
+
+    return {};
+}
 
 /*!
   Turns "an_example_symbol" into "anExampleSymbol" and
@@ -73,37 +130,16 @@ class ConvertToCamelCase : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
-
-        if (path.isEmpty())
-            return;
-
-        AST * const ast = path.last();
-        const Name *name = nullptr;
-        const AST *astForName = nullptr;
-        if (const NameAST * const nameAst = ast->asName()) {
-            if (nameAst->name && nameAst->name->asNameId()) {
-                astForName = nameAst;
-                name = nameAst->name;
-            }
-        } else if (const NamespaceAST * const namespaceAst = ast->asNamespace()) {
-            astForName = namespaceAst;
-            name = namespaceAst->symbol->name();
-        }
-
-        if (!name)
-            return;
-
-        QString nameString = QString::fromUtf8(name->identifier()->chars());
-        if (nameString.size() < 3)
-            return;
-        for (int i = 1; i < nameString.size() - 1; ++i) {
-            if (ConvertToCamelCaseOp::isConvertibleUnderscore(nameString, i)) {
-                result << new ConvertToCamelCaseOp(interface, nameString, astForName, testMode());
-                return;
-            }
-        }
+        addOperation(interface, builtinNameAt(interface), result);
     }
+
+    void addOperation(const CppQuickFixInterface &interface, const WrittenName &name,
+                      QuickFixOperations &result)
+    {
+        if (name && isConvertible(name.name))
+            result << new ConvertToCamelCaseOp(interface, name.name, name.place, testMode());
+    }
+
 };
 
 #ifdef WITH_TESTS
