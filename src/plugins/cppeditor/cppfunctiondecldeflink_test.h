@@ -17,6 +17,8 @@ private slots:
 
     void testSyncsTheDeclaration();
     void testNoChangesWhereTheSignaturesAgree();
+    void testWritesATypeAsTheOtherSideMustSpellIt();
+    void testWritesATypeShortWhereTheScopeReachesIt();
     void testNoLinkOffAFunction();
 };
 

@@ -208,6 +208,100 @@ void DeclDefLinkTest::testSyncsTheOtherSide_data()
                       " * @param renamed what it is for\n"
                       " */\n"
                       "void C::f(int renamed) {}");
+
+    QTest::newRow("a removed parameter")
+        << QByteArray("void f@(int a, int b);")
+        << QByteArray("void C::f(int a, int b) {}")
+        << "int a, int b" << "int a"
+        << QByteArray("void C::f(int a) {}");
+
+    // Two parameters that only changed places, which is the one case the
+    // whole list is not written out for: the two are swapped where they
+    // stand, so whatever spacing somebody wrote around them stays.
+    QTest::newRow("two switched parameters")
+        << QByteArray("void f@(int a, double b);")
+        << QByteArray("void C::f(int a, double b) {}")
+        << "int a, double b" << "double b, int a"
+        << QByteArray("void C::f(double b, int a) {}");
+
+    QTest::newRow("a name given to an unnamed parameter")
+        << QByteArray("void f@(int);")
+        << QByteArray("void C::f(int) {}")
+        << "int" << "int a"
+        << QByteArray("void C::f(int a) {}");
+
+    QTest::newRow("a name taken away")
+        << QByteArray("void f@(int a);")
+        << QByteArray("void C::f(int a) {}")
+        << "int a" << "int"
+        << QByteArray("void C::f(int) {}");
+
+    // A name written in a comment is not a name: the front end never saw one,
+    // so renaming would put a second one beside it.
+    QTest::newRow("a name written in a comment is left alone")
+        << QByteArray("void f@(int a);")
+        << QByteArray("void C::f(int /*a*/) {}")
+        << "int a" << "int b"
+        << QByteArray("void C::f(int /*a*/) {}");
+
+    // Naming a parameter that has a default argument: the name goes in front
+    // of the '=', not at the end of what is written there.
+    QTest::newRow("a name given in front of a default argument")
+        << QByteArray("void f@(int a);")
+        << QByteArray("void C::f(int = 1) {}")
+        << "int a" << "int count"
+        << QByteArray("void C::f(int count = 1) {}");
+
+    // Renaming a parameter renames it in the body as well, which is the one
+    // place a definition writes it that is not in the signature.
+    QTest::newRow("a parameter renamed in the body")
+        << QByteArray("void f@(int original);")
+        << QByteArray("void C::f(int original)\n"
+                      "{\n"
+                      "    int x = original + original;\n"
+                      "}")
+        << "original" << "renamed"
+        << QByteArray("void C::f(int renamed)\n"
+                      "{\n"
+                      "    int x = renamed + renamed;\n"
+                      "}");
+
+    // What follows the parentheses is written with something after it in
+    // every case here, because the link stops where the declaration stops and
+    // keeps its position when text is inserted there: what somebody types at
+    // the very end is outside the link, and only an interior edit is the
+    // link's business at all.
+    QTest::newRow("a changed cv qualifier")
+        << QByteArray("void f@(int a) const noexcept;")
+        << QByteArray("void C::f(int a) const noexcept {}")
+        << "const" << "volatile"
+        << QByteArray("void C::f(int a) volatile noexcept {}");
+
+    QTest::newRow("an added cv qualifier")
+        << QByteArray("void f@(int a) const noexcept;")
+        << QByteArray("void C::f(int a) const noexcept {}")
+        << "const" << "const volatile"
+        << QByteArray("void C::f(int a) const volatile noexcept {}");
+
+    QTest::newRow("a removed cv qualifier")
+        << QByteArray("void f@(int a) const noexcept;")
+        << QByteArray("void C::f(int a) const noexcept {}")
+        << "const" << ""
+        << QByteArray("void C::f(int a) noexcept {}");
+
+    QTest::newRow("an added exception specification")
+        << QByteArray("auto f@(int a) const -> void;")
+        << QByteArray("auto C::f(int a) const -> void {}")
+        << "const" << "const noexcept"
+        << QByteArray("auto C::f(int a) const noexcept -> void {}");
+
+    // Taking one away leaves the space it was written after, which nothing
+    // reads and nobody removed.
+    QTest::newRow("a removed exception specification")
+        << QByteArray("auto f@(int a) const noexcept -> void;")
+        << QByteArray("auto C::f(int a) const noexcept -> void {}")
+        << "noexcept" << ""
+        << QByteArray("auto C::f(int a) const  -> void {}");
 }
 
 void DeclDefLinkTest::testSyncsTheOtherSide()
@@ -244,6 +338,54 @@ void DeclDefLinkTest::testNoChangesWhereTheSignaturesAgree()
     Driver driver(headerWith("void f@(int a);"), sourceWith("void C::f(int a) {}"), true);
     QVERIFY(driver.isValid());
     QCOMPARE(driver.applied(), QString::fromUtf8(sourceWith("void C::f(int a) {}")));
+}
+
+// A type is read where it was typed and written where the other side stands,
+// and the two are not the same scope. Which is why the types go through the
+// front end at all instead of the text going straight over: how much of a
+// name has to be written depends on where it is being written.
+//
+// Here the definition can call it T, because the file it is in says
+// using namespace N. The declaration cannot -- its class is not in N -- so
+// what arrives there is N::T.
+void DeclDefLinkTest::testWritesATypeAsTheOtherSideMustSpellIt()
+{
+    Driver driver("namespace N { struct T {}; }\n"
+                  "struct C {\n"
+                  "    void f(int a);\n"
+                  "};\n",
+                  "#include \"header.h\"\n"
+                  "\n"
+                  "using namespace N;\n"
+                  "\n"
+                  "void C::f@(int a) {}\n",
+                  false);
+    QVERIFY(driver.isValid());
+    driver.type("int a", "T a");
+    QCOMPARE(driver.applied(), QString("namespace N { struct T {}; }\n"
+                                       "struct C {\n"
+                                       "    void f(N::T a);\n"
+                                       "};\n"));
+}
+
+// And the other way about: where the other side's own scope reaches the type,
+// nothing is written in front of it. The definition of N::C::f is in N::C as
+// far as a name is concerned, so N::T is spelled T there.
+void DeclDefLinkTest::testWritesATypeShortWhereTheScopeReachesIt()
+{
+    Driver driver("namespace N {\n"
+                  "struct T {};\n"
+                  "struct C { void f@(int a); };\n"
+                  "} // namespace N\n",
+                  "#include \"header.h\"\n"
+                  "\n"
+                  "void N::C::f(int a) {}\n",
+                  true);
+    QVERIFY(driver.isValid());
+    driver.type("int a", "T a");
+    QCOMPARE(driver.applied(), QString("#include \"header.h\"\n"
+                                       "\n"
+                                       "void N::C::f(T a) {}\n"));
 }
 
 void DeclDefLinkTest::testNoLinkOffAFunction()
