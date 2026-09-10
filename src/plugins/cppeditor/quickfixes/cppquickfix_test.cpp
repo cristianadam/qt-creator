@@ -11,6 +11,10 @@
 #include "cppquickfix.h"
 #include "cppquickfixassistant.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
+
 #include <projectexplorer/kitmanager.h>
 #include <texteditor/textdocument.h>
 
@@ -33,6 +37,17 @@ using CppEditor::Tests::TemporaryDir;
 using namespace CppEditor::Tests::Internal;
 
 namespace CppEditor::Internal::Tests {
+
+// Whether the fixes are being matched on the cxx-frontend model, which reads
+// one of the cases below better than the built-in tree does.
+static bool onTheCxxFrontendModel()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return cxxFrontendModelRequested();
+#else
+    return false;
+#endif
+}
 
 QList<TestDocumentPtr> singleDocument(
     const QByteArray &original, const QByteArray &expected, const QByteArray fileName)
@@ -216,7 +231,12 @@ QuickFixOperationTest::QuickFixOperationTest(const QList<TestDocumentPtr> &testD
         // Check
         QString result = testDocument->m_editorWidget->document()->toPlainText();
         removeTrailingWhitespace(result);
-        QEXPECT_FAIL("escape-raw-string", "FIXME", Continue);
+        // A raw string's delimiter was taken to be one character on either
+        // side of its contents, so escaping one rewrote the delimiter along
+        // with them. The cxx-frontend model says which part of a literal is
+        // punctuation, and there this comes out right.
+        if (!onTheCxxFrontendModel())
+            QEXPECT_FAIL("escape-raw-string", "FIXME", Continue);
         QEXPECT_FAIL("unescape-adjacent-literals", "FIXME", Continue);
         if (!expectedFailMessage.isEmpty())
             QEXPECT_FAIL("", expectedFailMessage.data(), Continue);

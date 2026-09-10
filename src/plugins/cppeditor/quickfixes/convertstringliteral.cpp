@@ -11,6 +11,16 @@
 
 #include <cplusplus/Overview.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#include <cxx/literals.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
@@ -186,11 +196,26 @@ static ExpressionAST *analyzeStringLiteral(const QList<AST *> &path,
     return literal;
 }
 
+// What escaping a literal needs of it: the characters between its quotes as
+// they are written, escapes and all, the place those characters stand, and
+// where the literal itself ends -- a literal that has to be split writes the
+// rest after it. Which node a literal is depends on which front end read the
+// file; what is written does not.
+class WrittenLiteral
+{
+public:
+    QByteArray contents;
+    ChangeSet::Range place;
+    int endOfLiteral = -1;
+
+    operator bool() const { return endOfLiteral >= 0; }
+};
+
 class EscapeStringLiteralOperation: public CppQuickFixOperation
 {
 public:
     EscapeStringLiteralOperation(const CppQuickFixInterface &interface,
-                                 ExpressionAST *literal, bool escape)
+                                 const WrittenLiteral &literal, bool escape)
         : CppQuickFixOperation(interface)
         , m_literal(literal)
         , m_escape(escape)
@@ -285,13 +310,7 @@ private:
 public:
     void perform() override
     {
-        const int startPos = currentFile()->startOf(m_literal);
-        const int endPos = currentFile()->endOf(m_literal);
-
-        StringLiteralAST *stringLiteral = m_literal->asStringLiteral();
-        QTC_ASSERT(stringLiteral, return);
-        const QByteArray oldContents(currentFile()->tokenAt(stringLiteral->literal_token).
-                                     identifier->chars());
+        const QByteArray &oldContents = m_literal.contents;
         QByteArrayList newContents;
         if (m_escape)
             newContents = escapeString(oldContents);
@@ -312,17 +331,17 @@ public:
             if (chunk != utf8buf)
                 return;
             if (replace)
-                changes.replace(startPos + 1, endPos - 1, str);
+                changes.replace(m_literal.place, str);
             else
-                changes.insert(endPos, "\"" + str + "\"");
+                changes.insert(m_literal.endOfLiteral, "\"" + str + "\"");
             replace = false;
         }
         currentFile()->apply(changes);
     }
 
 private:
-    ExpressionAST *m_literal;
-    bool m_escape;
+    const WrittenLiteral m_literal;
+    const bool m_escape;
 };
 
 /// Operation performs the operations of type ActionFlags passed in as actions.
@@ -721,19 +740,25 @@ class EscapeStringLiteral : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, TextEditor::QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
-        if (path.isEmpty())
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
             return;
+#endif
 
-        AST * const lastAst = path.last();
-        ExpressionAST *literal = lastAst->asStringLiteral();
+        addOperations(interface, builtinLiteralAt(interface), result);
+    }
+
+    // What the literal at the cursor allows: escaping where it holds a
+    // character that has to be written as an escape sequence, unescaping
+    // where it holds one that does not.
+    static void addOperations(const CppQuickFixInterface &interface,
+                              const WrittenLiteral &literal,
+                              TextEditor::QuickFixOperations &result)
+    {
         if (!literal)
             return;
 
-        StringLiteralAST *stringLiteral = literal->asStringLiteral();
-        CppRefactoringFilePtr file = interface.currentFile();
-        const QByteArray contents(file->tokenAt(stringLiteral->literal_token).identifier->chars());
-
+        const QByteArray &contents = literal.contents;
         bool canEscape = false;
         bool canUnescape = false;
         for (int i = 0; i < contents.length(); ++i) {
@@ -753,6 +778,91 @@ class EscapeStringLiteral : public CppQuickFixFactory
         if (canUnescape)
             result << new EscapeStringLiteralOperation(interface, literal, false);
     }
+
+    // The literal at the cursor, read off the built-in tree: the contents as
+    // that front end recorded them, and the place taken to be one character
+    // in from either end of the node.
+    static WrittenLiteral builtinLiteralAt(const CppQuickFixInterface &interface)
+    {
+        const QList<AST *> &path = interface.path();
+        if (path.isEmpty())
+            return {};
+
+        StringLiteralAST * const literal = path.last()->asStringLiteral();
+        if (!literal)
+            return {};
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const int start = file->startOf(literal);
+        const int end = file->endOf(literal);
+        return {QByteArray(file->tokenAt(literal->literal_token).identifier->chars()),
+                ChangeSet::Range(start + 1, end - 1), end};
+    }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree, which says which part of a
+    // literal is punctuation rather than leaving it to be counted from the
+    // ends: a prefix before the quote, and a raw string's own delimiter
+    // inside it.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    TextEditor::QuickFixOperations &result)
+    {
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const std::shared_ptr<const CxxFrontendSnapshot> model
+            = cxxFrontendModel(file->filePath());
+        if (!model)
+            return false;
+        const CxxFrontendDocument * const document
+            = model->document(file->filePath().toFSPathString());
+        if (!document)
+            return false;
+
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+        if (path.isEmpty())
+            return true;
+
+        auto * const literal = dynamic_cast<cxx::StringLiteralExpressionAST *>(path.last());
+        if (!literal || !literal->literal)
+            return true;
+
+        const CxxAstRange range = cxxTokenRangeAt(*document, literal->literalLoc);
+        if (!range.isValid())
+            return false; // A macro wrote it: no text of this file's to rewrite.
+
+        const int start = file->position(range.startLine, range.startColumn);
+        const int end = file->position(range.endLine, range.endColumn);
+        const QString spelling = file->textOf(start, end);
+
+        // Literals written next to each other are one literal, and the
+        // preprocessor makes them one: what it recorded then holds every
+        // piece while the token stands on the first alone, so the text at
+        // this place is not the literal it read. Nothing here can rewrite
+        // that, and it hands back rather than rewrite the wrong text.
+        if (spelling.toUtf8() != QByteArray::fromStdString(literal->literal->value()))
+            return false;
+
+        // Where the characters of the literal begin and end. A prefix stands
+        // in front of the quote, and a raw string carries its own delimiter
+        // inside the quotes, which is why this is asked of the front end
+        // rather than counted one character in from either end.
+        const qsizetype firstQuote = spelling.indexOf(u'"');
+        if (firstQuote < 0)
+            return true;
+        const bool isRaw = firstQuote > 0 && spelling.at(firstQuote - 1) == u'R';
+        const qsizetype open = isRaw ? spelling.indexOf(u'(', firstQuote) : firstQuote;
+        const qsizetype close = isRaw ? spelling.lastIndexOf(u')') : spelling.lastIndexOf(u'"');
+        if (open < 0 || close <= open)
+            return true;
+
+        const ChangeSet::Range place(start + int(open) + 1, start + int(close));
+        addOperations(interface,
+                      {spelling.mid(open + 1, close - open - 1).toUtf8(), place, end},
+                      result);
+        return true;
+    }
+#endif
 };
 
 #ifdef WITH_TESTS
