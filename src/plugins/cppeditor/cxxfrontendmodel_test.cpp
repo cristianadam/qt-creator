@@ -314,6 +314,58 @@ void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
     QVERIFY(cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
 }
 
+// The other side of a function, and the case the model cannot answer alone:
+// the declaration is in a header and the definition in a source file that
+// the file being edited never read. The files to look in come from the
+// built-in snapshot, in SymbolFinder's order, and each is read by this model
+// until one of them defines it.
+void CxxFrontendModelTest::testFindsTheDefinitionInAnotherFile()
+{
+    const Parsed parsed({{"h.h", "struct C {\n    void f(int a);\n};\n"},
+                         {"other.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\n"},
+                         {"main.cpp", "#include \"h.h\"\n\nvoid g() {}\n"}},
+                        "h.h");
+    QVERIFY(parsed.isValid());
+
+    // Asked on the declaration in the header, which the model ran over: its
+    // own translation unit has no definition, so the search finds the one in
+    // other.cpp.
+    const std::optional<Link> definition = cxxFrontendCounterpart(
+        CppEditor::Tests::TestCase::globalSnapshot(), parsed.mainFilePath(), 2, 10);
+    QVERIFY(definition.has_value());
+    QCOMPARE(definition->targetFilePath, parsed.path("other.cpp"));
+    QCOMPARE(definition->target.line, 3);
+}
+
+// And the other direction needs no search at all: a file being edited beside
+// its header holds both sides.
+void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()
+{
+    const Parsed parsed({{"h.h", "struct C {\n    void f(int a);\n};\n"},
+                         {"main.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const std::optional<Link> declaration = cxxFrontendCounterpart(
+        CppEditor::Tests::TestCase::globalSnapshot(), parsed.mainFilePath(), 3, 9);
+    QVERIFY(declaration.has_value());
+    QCOMPARE(declaration->targetFilePath, parsed.path("h.h"));
+    QCOMPARE(declaration->target.line, 2);
+}
+
+// Nothing where no file defines it, and nothing off a function.
+void CxxFrontendModelTest::testNoCounterpartWhereThereIsNone()
+{
+    const Parsed parsed({{"h.h", "struct C {\n    void f(int a);\n};\n"},
+                         {"main.cpp", "#include \"h.h\"\n\nvoid g() {}\n"}},
+                        "h.h");
+    QVERIFY(parsed.isValid());
+
+    const Snapshot snapshot = CppEditor::Tests::TestCase::globalSnapshot();
+    QVERIFY(!cxxFrontendCounterpart(snapshot, parsed.mainFilePath(), 2, 10).has_value());
+    QVERIFY(!cxxFrontendCounterpart(snapshot, parsed.mainFilePath(), 1, 8).has_value());
+}
+
 // A name a using declaration brought in: the built-in model answers with the
 // using declaration, and that is the answer to keep, so this declines.
 void CxxFrontendModelTest::testDeclinesANameFromAUsingDeclaration()

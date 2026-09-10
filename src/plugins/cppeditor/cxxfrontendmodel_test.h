@@ -20,6 +20,9 @@ private slots:
     void testFollowsANameToItsDeclaration();
     void testFollowsNothingItCannotAnswerFor();
     void testDeclinesAForwardDeclaration();
+    void testFindsTheDefinitionInAnotherFile();
+    void testFindsTheDeclarationOfADefinition();
+    void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();
     void testLocalUses_data();
     void testLocalUses();

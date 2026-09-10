@@ -292,6 +292,11 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // direction that is reachable -- from a definition to the
         // declaration it was written for -- and declines this one.
         "the definition of a declaration outside the translation unit",
+        // And which of several definitions of one name is the one, where
+        // they differ in their parameter types rather than in how many
+        // there are: definitionOf() tells them apart by the count, and
+        // matching the types is what a lookup would have to do.
+        "which overload a definition in another file belongs to",
         // Finding a definition that is in a file this one does not include.
         // Within a file the definition is preferred and a declaration on its
         // own is reported as one -- Declaration::isDefinition -- so a caller

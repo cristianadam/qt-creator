@@ -3,10 +3,14 @@
 
 #include "cxxfrontendmodel.h"
 
+#include "cppfileiterationorder.h"
 #include "cppmodelmanager.h"
+#include "projectpart.h"
 #include "cppprojectfile.h"
 
+#include <cplusplus/Control.h>
 #include <cplusplus/CppDocument.h>
+#include <cplusplus/Literals.h>
 #include <cplusplus/CxxFrontendDocument.h>
 #include <cplusplus/CxxFrontendAst.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
@@ -285,6 +289,106 @@ void useCxxFrontendComments(bool enabled)
         return commentBlockAbove(commentsAbove(*document, textDoc, declarationStart),
                                  declarationStart, symbolName, isParameter, textDoc);
     });
+}
+
+namespace {
+
+// The files to look in and the order to look in them, which is
+// SymbolFinder's order: nearest to \a referenceFile first, by how much of
+// the path and of the project part they have in common.
+FilePaths filesToSearch(const Snapshot &builtinSnapshot, const FilePath &referenceFile)
+{
+    const auto projectPartIdOf = [](const FilePath &filePath) {
+        const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+        return parts.isEmpty() ? QString() : parts.first()->id();
+    };
+
+    FileIterationOrder order(referenceFile, projectPartIdOf(referenceFile));
+    for (const Document::Ptr &document : builtinSnapshot)
+        order.insert(document->filePath(), projectPartIdOf(document->filePath()));
+    return order.toFilePaths();
+}
+
+// Whether \a filePath is worth reading at all when looking for \a name: the
+// built-in parse of it holds every identifier the file wrote, so a file that
+// never wrote this one cannot define it. The same rejection SymbolFinder
+// makes, and what keeps this from reading the project.
+bool mayWrite(const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &name)
+{
+    const Document::Ptr document = builtinSnapshot.document(filePath);
+    if (!document || !document->control())
+        return false;
+    const QByteArray identifier = name.mid(name.lastIndexOf("::") + 2).toUtf8();
+    return document->control()->findIdentifier(identifier.constData(), identifier.size());
+}
+
+// What \a filePath defines, as this model reads it. A document of its own
+// rather than the kept one: this is a file somebody is not editing, and what
+// is wanted of it is one answer, not a model to hold on to.
+std::optional<CxxFrontendDocument::Counterpart> definitionIn(
+    const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &name,
+    int parameterCount)
+{
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents)
+        return std::nullopt;
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(resolverFor(builtinSnapshot, {}));
+    snapshot.setPredefinedMacros(definesIn(configurationFileIn(builtinSnapshot)));
+
+    const CxxFrontendDocument * const document
+        = snapshot.process(filePath.toFSPathString(), QString::fromUtf8(*contents));
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Counterpart definition
+        = document->definitionOf(name, parameterCount);
+    if (!definition.isValid())
+        return std::nullopt;
+    return definition;
+}
+
+Link linkTo(const CxxFrontendDocument::Counterpart &counterpart)
+{
+    // A link counts columns from zero, the way Symbol::toLink() does it.
+    return Link(FilePath::fromUserInput(counterpart.filePath), counterpart.line,
+                counterpart.column - 1);
+}
+
+} // namespace
+
+std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
+                                           const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Counterpart counterpart = document->counterpartAt(line, column);
+    if (counterpart.isValid())
+        return linkTo(counterpart);
+    if (!counterpart.namesAFunction())
+        return std::nullopt;
+
+    // A declaration whose definition this translation unit does not hold.
+    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+        if (candidate == filePath)
+            continue;
+        if (!mayWrite(builtinSnapshot, candidate, counterpart.name))
+            continue;
+
+        if (const std::optional<CxxFrontendDocument::Counterpart> definition
+            = definitionIn(builtinSnapshot, candidate, counterpart.name,
+                           counterpart.parameterCount)) {
+            return linkTo(*definition);
+        }
+    }
+
+    return std::nullopt;
 }
 
 Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,

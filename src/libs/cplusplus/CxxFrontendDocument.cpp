@@ -546,6 +546,9 @@ public:
     // where no declarator stands there.
     [[nodiscard]] cxx::FunctionSymbol *declaredFunctionAt(cxx::SourceLocation location) const;
 
+    // How many parameters \a function takes, as its type says.
+    [[nodiscard]] std::size_t parameterCountOf(cxx::FunctionSymbol *function) const;
+
     // The parameters and block variables of \a function, each with every
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
@@ -844,6 +847,12 @@ cxx::FunctionSymbol *CxxFrontendDocument::Private::declaredFunctionAt(
             return dynamic_cast<cxx::FunctionSymbol *>(declarator->symbol);
     }
     return nullptr;
+}
+
+std::size_t CxxFrontendDocument::Private::parameterCountOf(cxx::FunctionSymbol *function) const
+{
+    auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
+    return type ? type->parameterTypes().size() : 0;
 }
 
 bool CxxFrontendDocument::Private::isThroughUsingDeclaration(cxx::Symbol *symbol) const
@@ -1463,34 +1472,76 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
     if (!location)
         return {};
 
-    const auto place = [this](cxx::Symbol *symbol, bool isDefinition) -> Counterpart {
-        const cxx::SourceLocation location = symbol->location();
-        if (!location)
-            return {};
-        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
-        return {d->fileOf(location), int(position.line), int(position.column), isDefinition};
-    };
-
     // A definition is written here: the declaration is the place the function
-    // was first written, which is the header where there is one.
-    if (cxx::FunctionSymbol * const definition = d->definitionAround(location)) {
-        cxx::Symbol * const declared = definition->canonical();
-        if (!declared || declared == definition)
-            return {}; // Declared nowhere else: this is the only place.
-        return place(declared, false);
+    // was first written, which is the header where there is one. Otherwise a
+    // declaration may be, and then the definition is wanted -- reachable
+    // where this translation unit has it, which for a file being edited
+    // beside its header it is.
+    cxx::FunctionSymbol *function = d->definitionAround(location);
+    cxx::Symbol *other = nullptr;
+    bool otherIsDefinition = false;
+    if (function) {
+        other = function->canonical();
+    } else if ((function = d->declaredFunctionAt(location))) {
+        other = function->definition();
+        otherIsDefinition = true;
+    }
+    if (!function)
+        return {};
+
+    Counterpart counterpart;
+    counterpart.name = qualifiedNameOf(function);
+    counterpart.parameterCount = int(d->parameterCountOf(function));
+
+    // Written in one place only, as far as this translation unit goes.
+    if (!other || other == function)
+        return counterpart;
+
+    const cxx::SourceLocation otherLocation = other->location();
+    if (!otherLocation)
+        return counterpart;
+
+    const cxx::SourcePosition position = d->unit.tokenStartPosition(otherLocation);
+    counterpart.filePath = d->fileOf(otherLocation);
+    counterpart.line = int(position.line);
+    counterpart.column = int(position.column);
+    counterpart.isDefinition = otherIsDefinition;
+    return counterpart;
+}
+
+CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString &name,
+                                                                  int parameterCount) const
+{
+    if (name.isEmpty() || !d->unit.ast())
+        return {};
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+        if (!definition || !definition->symbol)
+            continue;
+
+        cxx::FunctionSymbol * const function = definition->symbol;
+        if (qualifiedNameOf(function) != name
+            || int(d->parameterCountOf(function)) != parameterCount) {
+            continue;
+        }
+
+        // Where this file writes it, which is what the definition's own
+        // location says -- a definition read out of a header belongs to the
+        // header, and a caller asking each file in turn would be told the
+        // same thing twice.
+        const cxx::SourceLocation location = function->location();
+        if (!location)
+            continue;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        return {d->fileOf(location), int(position.line), int(position.column), true,
+                name, parameterCount};
     }
 
-    // Otherwise a declaration may be, and then the definition is wanted --
-    // reachable only where this translation unit has it, which for a header
-    // read into the file being edited it is.
-    cxx::FunctionSymbol * const declared = d->declaredFunctionAt(location);
-    if (!declared)
-        return {};
-
-    cxx::FunctionSymbol * const defined = declared->definition();
-    if (!defined || defined == declared)
-        return {};
-    return place(defined, true);
+    return {};
 }
 
 CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,

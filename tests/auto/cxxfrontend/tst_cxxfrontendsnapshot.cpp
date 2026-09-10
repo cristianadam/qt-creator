@@ -78,6 +78,7 @@ private slots:
     void theDeclarationOfADefinition();
     void theDefinitionOfADeclarationInTheSameFile();
     void noDefinitionOutsideTheTranslationUnit();
+    void whichFileDefinesAFunction();
     void noCounterpartOffAFunction();
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
@@ -993,17 +994,51 @@ void tst_cxxfrontendsnapshot::theDefinitionOfADeclarationInTheSameFile()
     QVERIFY(definition.isDefinition);
 }
 
-// What is out of reach, and why it is on the list rather than guessed at: a
-// declaration in a header whose definition is in some source file this
-// document never read. A document holds one file and what it includes, not
-// the project, so there is nowhere here to look.
+// What is out of reach, and what comes back instead: a declaration in a
+// header whose definition is in some source file this document never read.
+// A document holds one file and what it includes, not the project -- so
+// there is no place to give, but the function is named, and whoever knows
+// the project's files can ask each of them.
 void tst_cxxfrontendsnapshot::noDefinitionOutsideTheTranslationUnit()
 {
     const CxxFrontendDocument header("struct C {\n    void f(int a);\n};\n", "h.h");
 
-    QVERIFY(!header.counterpartAt(2, 10).isValid());
+    const CxxFrontendDocument::Counterpart declaration = header.counterpartAt(2, 10);
+    QVERIFY(!declaration.isValid());
+    QVERIFY(declaration.namesAFunction());
+    QCOMPARE(declaration.name, QString("C::f"));
+    QCOMPARE(declaration.parameterCount, 1);
+
     QVERIFY(CxxFrontendSnapshot::unsupportedLookups().contains(
         "the definition of a declaration outside the translation unit"));
+}
+
+// And that is the question each file is asked: does this one define it. The
+// answer is where the file itself writes it, so a source file that reads the
+// declaration out of a header does not report the header's line as its own.
+void tst_cxxfrontendsnapshot::whichFileDefinesAFunction()
+{
+    Files files;
+    files.add("h.h", "struct C {\n    void f(int a);\n    void g();\n};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\n");
+    QVERIFY(document);
+
+    const CxxFrontendDocument::Counterpart definition = document->definitionOf("C::f", 1);
+    QVERIFY(definition.isValid());
+    QCOMPARE(definition.filePath, QString("a.cpp"));
+    QCOMPARE(definition.line, 3);
+    QVERIFY(definition.isDefinition);
+
+    // The one it does not define, and a name it never heard of.
+    QVERIFY(!document->definitionOf("C::g", 0).isValid());
+    QVERIFY(!document->definitionOf("C::nothing", 0).isValid());
+    // The parameters have to match, since that is as far as this tells two
+    // functions of one name apart.
+    QVERIFY(!document->definitionOf("C::f", 2).isValid());
 }
 
 // Neither side of a function is a function at all here.

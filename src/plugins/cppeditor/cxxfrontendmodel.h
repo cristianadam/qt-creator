@@ -106,6 +106,26 @@ Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, i
 // which its own token stream is what would say.
 void useCxxFrontendComments(bool enabled);
 
+// The other side of the function at a position: the definition where a
+// declaration is there, the declaration where a definition is, as a link the
+// editor can follow. What "Switch Between Function Declaration/Definition"
+// asks, and what the decl/def link starts from.
+//
+// Inside one translation unit the model answers on its own -- a file being
+// edited beside its header has both sides in reach. Where it does not, this
+// looks for the definition the way SymbolFinder does: the project's files in
+// the order the built-in snapshot puts them, nearest to this one first,
+// skipping the ones whose parse never saw the name, each read by this model
+// until one of them defines it. The files and the order are what the project
+// knows and this model does not; what each file says is this model's answer.
+//
+// Nothing where the model has not read the file, where the position is on no
+// function, or where no file in the project defines it.
+std::optional<Utils::Link> cxxFrontendCounterpart(const CPlusPlus::Snapshot &builtinSnapshot,
+                                                  const Utils::FilePath &filePath,
+                                                  int line,
+                                                  int column);
+
 // A local variable of a function: its name, whether it is one of the
 // function's parameters, the class its type names where it names one, and
 // every place the file writes it -- the declaration first, the uses after.

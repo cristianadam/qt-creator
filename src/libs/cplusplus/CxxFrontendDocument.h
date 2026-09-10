@@ -216,11 +216,12 @@ public:
     // parser resolves it to nothing. What answers is the definition itself --
     // the function it declares carries the place it was first declared.
     //
-    // Nothing where the position is on no function, and nothing where the
-    // other place is not in this translation unit: a declaration in a header
-    // whose definition is in some .cpp is not reachable from here, since a
-    // document holds one file and what it includes, not the project. That
-    // one is on unsupportedQueries().
+    // Nothing where the position is on no function. Where there is one but
+    // the other place is not in this translation unit -- a declaration in a
+    // header defined in some source file this document never read -- the
+    // name and the parameter count come back without a place: which file
+    // that is, is a question about the project, and whoever knows the
+    // project's files can go on from there with definitionOf().
     struct Counterpart
     {
         QString filePath;
@@ -231,9 +232,29 @@ public:
         // what it asked from.
         bool isDefinition = false;
 
+        // The function the position is on, whether or not its other place
+        // was found: the name as it would be written out in full, and how
+        // many parameters it takes.
+        QString name;
+        int parameterCount = 0;
+
         bool isValid() const { return line > 0; }
+        bool namesAFunction() const { return !name.isEmpty(); }
     };
     Counterpart counterpartAt(int line, int column) const;
+
+    // Where this file defines \a name -- written out in full, as
+    // Counterpart::name is -- taking \a parameterCount parameters, or
+    // nothing where it does not define it.
+    //
+    // For whoever is looking for the definition of a declaration across
+    // files: the files to read and the order to read them in is what the
+    // project knows, and this is the question to ask of each.
+    //
+    // Which of several overloads is not settled here beyond the number of
+    // parameters, so two that differ only in their types are not told
+    // apart. On unsupportedLookups() with the rest.
+    Counterpart definitionOf(const QString &name, int parameterCount) const;
 
     // The fully qualified name of the function enclosing the position, or an
     // empty string if it is not inside one. What Document::functionAt answers,
