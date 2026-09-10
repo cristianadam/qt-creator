@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cxx/ast_fwd.h>
+#include <cxx/source_location.h>
 
 #include <QList>
 
@@ -52,5 +53,12 @@ struct CxxAstRange
     bool isValid() const { return startLine > 0 && endLine > 0; }
 };
 CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node);
+
+// The extent of one token, by the same rule. A node is not the only thing a
+// reader rewrites: an operator, a keyword or a brace is a token the tree
+// points at rather than a node of its own, and a fix that replaces one needs
+// to know where it stands. Zero lines where the token is not this file's --
+// what a macro wrote has no place here to rewrite.
+CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location);
 
 } // namespace CPlusPlus

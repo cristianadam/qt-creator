@@ -160,4 +160,20 @@ CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node)
     return {int(start.line), int(start.column), int(end.line), int(end.column)};
 }
 
+CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location)
+{
+    cxx::TranslationUnit *unit = document.translationUnit();
+    if (!unit || !location)
+        return {};
+
+    if (unit->tokenAt(location).macroGenerated()
+        || !isFromThisFile(unit, document.fileName(), location)) {
+        return {};
+    }
+
+    const cxx::SourcePosition start = unit->tokenStartPosition(location);
+    const cxx::SourcePosition end = unit->tokenEndPosition(location);
+    return {int(start.line), int(start.column), int(end.line), int(end.column)};
+}
+
 } // namespace CPlusPlus

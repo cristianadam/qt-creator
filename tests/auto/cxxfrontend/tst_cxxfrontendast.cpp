@@ -129,6 +129,7 @@ private slots:
     void aPositionAtTheEdgeOfANodeIsInIt();
     void nothingOutsideEveryNode();
     void whatAMacroWroteIsNotOnThePath();
+    void whereOneTokenStands();
 
     void theEnclosingDeclaration_data();
     void theEnclosingDeclaration();
@@ -296,6 +297,57 @@ void tst_cxxfrontendast::whatAMacroWroteIsNotOnThePath()
     // file was read at all.
     const QStringList atTheNextLine = kindsOf(cxxAstPathAt(document, 3, 6));
     QVERIFY2(atTheNextLine.contains("simple-declaration"), qPrintable(atTheNextLine.join(", ")));
+}
+
+// An operator is a token the tree points at, not a node, and the fixes that
+// rewrite a condition replace exactly that token. So where it stands has to
+// be askable on its own -- and unanswerable where a macro wrote it, since
+// there is nothing in the file to replace.
+void tst_cxxfrontendast::whereOneTokenStands()
+{
+    const QByteArray source = "#define LESS <\n"
+                              "#define A a\n"
+                              "void f(int a, int b)\n"
+                              "{\n"
+                              "    if (a < b) {}\n"
+                              "    if (a LESS b) {}\n"
+                              "    if (A < b) {}\n"
+                              "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const auto binaryAt = [&](int line, int column) -> cxx::BinaryExpressionAST * {
+        const QList<cxx::AST *> path = cxxAstPathAt(document, line, column);
+        for (auto it = path.rbegin(); it != path.rend(); ++it) {
+            if (auto *binary = dynamic_cast<cxx::BinaryExpressionAST *>(*it))
+                return binary;
+        }
+        return nullptr;
+    };
+
+    // The operator as it is written: one character, on the line it is on.
+    cxx::BinaryExpressionAST * const written = binaryAt(5, 11);
+    QVERIFY(written);
+    const CxxAstRange lessThan = cxxTokenRangeAt(document, written->opLoc);
+    QCOMPARE(lessThan.startLine, 5);
+    QCOMPARE(lessThan.startColumn, 11);
+    QCOMPARE(lessThan.endLine, 5);
+    QCOMPARE(lessThan.endColumn, 12);
+
+    // The same operator, written by a macro: the token is the macro's, so
+    // there is no place in this file that holds it.
+    cxx::BinaryExpressionAST * const fromAMacro = binaryAt(6, 11);
+    QVERIFY(fromAMacro);
+    QCOMPARE(fromAMacro->op, cxx::TokenKind::T_LESS);
+    QVERIFY(!cxxTokenRangeAt(document, fromAMacro->opLoc).isValid());
+
+    // And an operand a macro wrote, which is the same limit one node up:
+    // the operator is here, the left-hand side is not, so a fix that swaps
+    // the two operands has nothing to swap.
+    cxx::BinaryExpressionAST * const macroOperand = binaryAt(7, 11);
+    QVERIFY(macroOperand);
+    QVERIFY(cxxTokenRangeAt(document, macroOperand->opLoc).isValid());
+    QVERIFY(!cxxAstRangeOf(document, macroOperand->leftExpression).isValid());
+    QVERIFY(cxxAstRangeOf(document, macroOperand->rightExpression).isValid());
 }
 
 void tst_cxxfrontendast::theEnclosingDeclaration_data()
