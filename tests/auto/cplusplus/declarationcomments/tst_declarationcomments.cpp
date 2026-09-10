@@ -155,16 +155,14 @@ void TestDeclarationComments::commentsForDecl()
     const Symbol * const symbol = finder.find();
     QVERIFY(symbol);
 
-    const QList<Token> commentTokens = commentsForDeclaration(symbol, m_textDoc, m_cppDoc);
+    const QList<CommentRange> comments = commentsForDeclaration(symbol, m_textDoc, m_cppDoc);
     if (expectedCommentPrefix.isEmpty()) {
-        QVERIFY(commentTokens.isEmpty());
+        QVERIFY(comments.isEmpty());
         return;
     }
-    QVERIFY(!commentTokens.isEmpty());
+    QVERIFY(!comments.isEmpty());
 
-    const int firstCommentPos = m_cppDoc->translationUnit()->getTokenPositionInDocument(
-        commentTokens.first(), &m_textDoc);
-    const QString actualCommentPrefix = m_textDoc.toPlainText().mid(firstCommentPos,
+    const QString actualCommentPrefix = m_textDoc.toPlainText().mid(comments.first().start,
                                                                     expectedCommentPrefix.size());
     QCOMPARE(actualCommentPrefix, expectedCommentPrefix);
 }
