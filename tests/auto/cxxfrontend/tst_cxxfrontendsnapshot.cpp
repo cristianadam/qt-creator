@@ -77,8 +77,10 @@ class tst_cxxfrontendsnapshot : public QObject
 private slots:
     void theDeclarationOfADefinition();
     void theDefinitionOfADeclarationInTheSameFile();
+    void theNameIsWhereAReaderIsSent();
     void noDefinitionOutsideTheTranslationUnit();
     void whichFileDefinesAFunction();
+    void twoOverloadsOfOneCountAreNotToldApart();
     void noCounterpartOffAFunction();
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
@@ -991,7 +993,27 @@ void tst_cxxfrontendsnapshot::theDefinitionOfADeclarationInTheSameFile()
     QVERIFY(definition.isValid());
     QCOMPARE(definition.filePath, QString("a.cpp"));
     QCOMPARE(definition.line, 3);
+    QCOMPARE(definition.column, 6);
     QVERIFY(definition.isDefinition);
+}
+
+// A destructor is recorded where its tilde is written and a definition where
+// its declaration starts, and neither is where a reader is sent: the name is.
+void tst_cxxfrontendsnapshot::theNameIsWhereAReaderIsSent()
+{
+    const CxxFrontendDocument document("struct C {\n    ~C();\n};\n\nC::~C() {}\n", "a.cpp");
+
+    // From the declaration to the definition: past "C::" and past the tilde.
+    const CxxFrontendDocument::Counterpart definition = document.counterpartAt(2, 6);
+    QVERIFY(definition.isValid());
+    QCOMPARE(definition.line, 5);
+    QCOMPARE(definition.column, 5);
+
+    // And back, to the name in the class rather than to the tilde.
+    const CxxFrontendDocument::Counterpart declaration = document.counterpartAt(5, 5);
+    QVERIFY(declaration.isValid());
+    QCOMPARE(declaration.line, 2);
+    QCOMPARE(declaration.column, 6);
 }
 
 // What is out of reach, and what comes back instead: a declaration in a
@@ -1027,10 +1049,13 @@ void tst_cxxfrontendsnapshot::whichFileDefinesAFunction()
         = snapshot.process("a.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\n");
     QVERIFY(document);
 
+    // The place is the name, not the line it starts on: that is where a
+    // reader sent to a function is put.
     const CxxFrontendDocument::Counterpart definition = document->definitionOf("C::f", 1);
     QVERIFY(definition.isValid());
     QCOMPARE(definition.filePath, QString("a.cpp"));
     QCOMPARE(definition.line, 3);
+    QCOMPARE(definition.column, 9);
     QVERIFY(definition.isDefinition);
 
     // The one it does not define, and a name it never heard of.
@@ -1039,6 +1064,25 @@ void tst_cxxfrontendsnapshot::whichFileDefinesAFunction()
     // The parameters have to match, since that is as far as this tells two
     // functions of one name apart.
     QVERIFY(!document->definitionOf("C::f", 2).isValid());
+}
+
+// And where that is not far enough -- two definitions of one name taking the
+// same number of parameters -- nothing is said at all. Either answer would
+// send a reader to a function they did not ask about.
+void tst_cxxfrontendsnapshot::twoOverloadsOfOneCountAreNotToldApart()
+{
+    Files files;
+    files.add("h.h", "struct C {\n    void f(int a);\n    void f(double a);\n};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document = snapshot.process(
+        "a.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\nvoid C::f(double a) {}\n");
+    QVERIFY(document);
+
+    QVERIFY(!document->definitionOf("C::f", 1).isValid());
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups().contains(
+        "which overload a definition in another file belongs to"));
 }
 
 // Neither side of a function is a function at all here.

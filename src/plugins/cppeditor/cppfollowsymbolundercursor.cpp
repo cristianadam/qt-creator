@@ -976,6 +976,22 @@ void FollowSymbolUnderCursor::switchDeclDef(
         return;
     }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The other model, where it has read this file. It answers for the two
+    // sides of a function -- from a definition off its own tree, and from a
+    // declaration by asking the project's files the way the lookup below
+    // does -- and says nothing about a variable, or about which of two
+    // overloads that differ only in their parameter types is meant. Then the
+    // built-in lookup answers as it always has, so this can only add
+    // answers.
+    if (const std::optional<Utils::Link> link = Internal::cxxFrontendCounterpart(
+            snapshot, data.filePath(), data.cursor().blockNumber() + 1,
+            data.cursor().positionInBlock() + 1)) {
+        processLinkCallback(*link);
+        return;
+    }
+#endif
+
     const Declarations decls = declsFromCursor(documentFromSemanticInfo, data.cursor());
 
     Utils::Link symbolLink;

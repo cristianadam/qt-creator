@@ -549,6 +549,15 @@ public:
     // How many parameters \a function takes, as its type says.
     [[nodiscard]] std::size_t parameterCountOf(cxx::FunctionSymbol *function) const;
 
+    // Where the name of \a function is written, which for a definition is
+    // not where the symbol says it stands: a reader sent to a function is
+    // sent to its name.
+    [[nodiscard]] cxx::SourceLocation nameLocationOf(cxx::FunctionSymbol *function) const;
+
+    // The name a declarator is written under, past the scope in front of it.
+    [[nodiscard]] static cxx::SourceLocation nameLocationOfDeclarator(
+        cxx::DeclaratorAST *declarator);
+
     // The parameters and block variables of \a function, each with every
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
@@ -847,6 +856,58 @@ cxx::FunctionSymbol *CxxFrontendDocument::Private::declaredFunctionAt(
             return dynamic_cast<cxx::FunctionSymbol *>(declarator->symbol);
     }
     return nullptr;
+}
+
+cxx::SourceLocation CxxFrontendDocument::Private::nameLocationOfDeclarator(
+    cxx::DeclaratorAST *declarator)
+{
+    if (!declarator)
+        return {};
+    auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator);
+    if (!id || !id->unqualifiedId)
+        return {};
+
+    // A destructor is written under the name of its class with a tilde in
+    // front, and the name is the class's: that is where an editor puts the
+    // cursor, and where the built-in front end points too.
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id->unqualifiedId)) {
+        if (destructor->id)
+            return destructor->id->firstSourceLocation();
+    }
+
+    return id->unqualifiedId->firstSourceLocation();
+}
+
+cxx::SourceLocation CxxFrontendDocument::Private::nameLocationOf(
+    cxx::FunctionSymbol *function) const
+{
+    // Where a function is recorded is not always where its name is written:
+    // a definition is recorded where the declaration starts, and a
+    // destructor where its tilde is. The declarator says it exactly, so it
+    // is read off the node that declares this function -- either the
+    // definition or the declaration, whichever this unit holds.
+    if (unit.ast()) {
+        for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+            if (!slot)
+                continue;
+
+            cxx::DeclaratorAST *declarator = nullptr;
+            if (auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+                definition && definition->symbol == function) {
+                declarator = definition->declarator;
+            } else if (auto *declared = dynamic_cast<cxx::InitDeclaratorAST *>(*slot);
+                       declared && declared->symbol == function) {
+                declarator = declared->declarator;
+            }
+            if (!declarator)
+                continue;
+
+            if (const cxx::SourceLocation location = nameLocationOfDeclarator(declarator))
+                return location;
+        }
+    }
+    return function->location();
 }
 
 std::size_t CxxFrontendDocument::Private::parameterCountOf(cxx::FunctionSymbol *function) const
@@ -1497,7 +1558,9 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
     if (!other || other == function)
         return counterpart;
 
-    const cxx::SourceLocation otherLocation = other->location();
+    auto * const otherFunction = dynamic_cast<cxx::FunctionSymbol *>(other);
+    const cxx::SourceLocation otherLocation = otherFunction ? d->nameLocationOf(otherFunction)
+                                                            : other->location();
     if (!otherLocation)
         return counterpart;
 
@@ -1515,6 +1578,7 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString
     if (name.isEmpty() || !d->unit.ast())
         return {};
 
+    Counterpart found;
     for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot)
@@ -1533,15 +1597,26 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString
         // location says -- a definition read out of a header belongs to the
         // header, and a caller asking each file in turn would be told the
         // same thing twice.
-        const cxx::SourceLocation location = function->location();
+        const cxx::SourceLocation location
+            = d->nameLocationOfDeclarator(definition->declarator) ? d->nameLocationOfDeclarator(
+                  definition->declarator)
+                                                                  : function->location();
         if (!location)
             continue;
+
+        // Two of them, and nothing here tells them apart: overloads that
+        // differ in their parameter types. Answering with either would send
+        // a reader to a function they did not ask about, so this says
+        // nothing and leaves the question to whoever can match the types.
+        if (found.isValid())
+            return {};
+
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
-        return {d->fileOf(location), int(position.line), int(position.column), true,
-                name, parameterCount};
+        found = {d->fileOf(location), int(position.line), int(position.column), true,
+                 name, parameterCount};
     }
 
-    return {};
+    return found;
 }
 
 CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
