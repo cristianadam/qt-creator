@@ -369,6 +369,13 @@ public:
         // What is being looked into, for a member or scope completion.
         QString objectType;
 
+        // How it is being looked into, for a member completion: whether it
+        // is a pointer, and whether a dot or an arrow was written. An
+        // editor offers the members either way and puts the right operator
+        // there afterwards, so it has to be told which was written.
+        bool objectIsPointer = false;
+        bool dotWasWritten = false;
+
         // One of the things that could be written: its name, the
         // declaration it stands for as Overview would print it, and the
         // icon that says what it is -- which is what a proposal shows.

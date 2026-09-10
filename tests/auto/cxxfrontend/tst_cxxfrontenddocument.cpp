@@ -172,6 +172,7 @@ private slots:
     void completeAnUnqualifiedName();
     void completeOffersInheritedMembers();
     void completionSaysWhatItInserts();
+    void completeAfterADotOnAPointer();
     void argumentHints();
     void noCompletionWhereNoneWasAsked();
 
@@ -509,6 +510,32 @@ void tst_cxxfrontenddocument::completionSaysWhatItInserts()
     // proposal shows them in.
     QVERIFY(candidate("m_value").isPublic);
     QVERIFY(!candidate("m_hidden").isPublic);
+}
+
+// A dot written where an arrow belongs. The members are offered anyway --
+// which is what an editor wants, since it puts the arrow there itself --
+// and how the object was written is reported so that it can.
+void tst_cxxfrontenddocument::completeAfterADotOnAPointer()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct S { int m; };\nvoid f(S *s) { s.$ }\n");
+
+    QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
+    QVERIFY(namesOf(completion.candidates).contains("m"));
+    QVERIFY(completion.objectIsPointer);
+    QVERIFY(completion.dotWasWritten);
+
+    // And an arrow written where one belongs is not a dot.
+    const CxxFrontendDocument::Completion throughAnArrow
+        = completeAt("struct S { int m; };\nvoid f(S *s) { s->$ }\n");
+    QVERIFY(throughAnArrow.objectIsPointer);
+    QVERIFY(!throughAnArrow.dotWasWritten);
+
+    // Nor is a member of something that is not a pointer at all.
+    const CxxFrontendDocument::Completion onAValue
+        = completeAt("struct S { int m; };\nvoid f(S s) { s.$ }\n");
+    QVERIFY(!onAValue.objectIsPointer);
+    QVERIFY(onAValue.dotWasWritten);
 }
 
 void tst_cxxfrontenddocument::argumentHints()

@@ -1082,8 +1082,11 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
                 if (what.objectType) {
                     completion.objectType = fromStd(
                         cxx::to_string(what.objectType, "", {.omitEnclosingScope = true}));
+                    completion.objectIsPointer
+                        = cxx::type_cast<cxx::PointerType>(what.objectType) != nullptr;
                     completion.candidates = visibleMembersIn(classScopeOf(what.objectType));
                 }
+                completion.dotWasWritten = what.accessOp == cxx::TokenKind::T_DOT;
             } else if constexpr (std::is_same_v<T, cxx::ArgumentHintsContext>) {
                 completion.activeParameter = what.activeParameter;
                 for (cxx::FunctionSymbol *candidate : what.candidates) {
