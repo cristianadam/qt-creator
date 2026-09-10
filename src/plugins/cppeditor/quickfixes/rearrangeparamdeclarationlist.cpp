@@ -8,7 +8,7 @@
 #include "cppquickfix.h"
 
 #ifdef WITH_TESTS
-#include <QObject>
+#include "cppquickfix_test.h"
 #endif
 
 using namespace CPlusPlus;
@@ -60,11 +60,6 @@ private:
 */
 class RearrangeParamDeclarationList : public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         const QList<AST *> path = interface.path();
@@ -111,11 +106,24 @@ public:
     }
 };
 
+#ifdef WITH_TESTS
+class RearrangeParamDeclarationListTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
+#endif
+
 } // namespace
 
 void registerRearrangeParamDeclarationListQuickfix()
 {
-    CppQuickFixFactory::registerFactory<RearrangeParamDeclarationList>();
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(RearrangeParamDeclarationList);
 }
 
 } // namespace CppEditor::Internal
+
+#ifdef WITH_TESTS
+#include <rearrangeparamdeclarationlist.moc>
+#endif
