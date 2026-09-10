@@ -3,7 +3,10 @@
 
 #include "cxxfrontendmodel.h"
 
+#include "cppprojectfile.h"
+
 #include <cplusplus/CppDocument.h>
+#include <cplusplus/CxxFrontendDocument.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
 
 #include <utils/environment.h>
@@ -198,6 +201,30 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     link.linkTextStart = linkTextStart;
     link.linkTextEnd = linkTextEnd;
     return link;
+}
+
+std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const FilePath &filePath)
+{
+    // Objective-C is not a language this front end reads. What it makes of a
+    // file written in it is not a smaller answer but a wrong one, so there
+    // is no answer here and the built-in model draws the outline.
+    if (ProjectFile::isObjC(filePath))
+        return std::nullopt;
+
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument *document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    QList<CxxFrontendOutlineEntry> outline;
+    for (const CxxFrontendDocument::Symbol &symbol : document->symbols()) {
+        outline.append({symbol.name, symbol.signature, symbol.valueType, symbol.line,
+                        symbol.column, symbol.parent, symbol.icon, symbol.isGenerated,
+                        symbol.isForwardDeclaration});
+    }
+    return outline;
 }
 
 std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const FilePath &filePath,

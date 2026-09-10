@@ -15,6 +15,7 @@
 
 #include "cpplocalsymbols.h"
 #include "cppmodelmanager.h"
+#include "cppoutlinemodel.h"
 #include "cpptoolstestcase.h"
 #include "cxxfrontendmodel.h"
 
@@ -24,6 +25,7 @@
 #include <cplusplus/CxxFrontendSnapshot.h>
 #include <cplusplus/TranslationUnit.h>
 
+#include <QSignalSpy>
 #include <QTest>
 
 using namespace CPlusPlus;
@@ -414,6 +416,137 @@ static const char *knownDivergence(const QString &row)
         return "the built-in model is one column short on the first line";
 
     return nullptr;
+}
+
+namespace {
+
+// The tree an outline draws, one line per entry: how deep it sits, what it
+// says, and which line it takes the reader to. Everything the pane shows
+// except the icon, which is a picture and is compared where it is a number,
+// in tests/auto/cxxfrontend.
+QStringList drawnBy(OutlineModel &model, const QModelIndex &parent = {}, int depth = 0)
+{
+    QStringList lines;
+    for (int row = 0, rows = model.rowCount(parent); row < rows; ++row) {
+        const QModelIndex index = model.index(row, 0, parent);
+        // The first row of the tree is the "<Select Symbol>" placeholder,
+        // which stands for no symbol and has no position.
+        if (depth == 0 && row == 0)
+            continue;
+        const Utils::Link link = model.linkFromIndex(index);
+        lines.append(QString("%1%2 @%3 ->%4:%5%6")
+                         .arg(QString(depth * 2, ' '),
+                              index.data(Qt::DisplayRole).toString())
+                         .arg(model.positionFromIndex(index).line)
+                         .arg(link.targetFilePath.fileName())
+                         .arg(link.target.line)
+                         .arg(model.isGenerated(index) ? " generated" : ""));
+        lines.append(drawnBy(model, index, depth + 1));
+    }
+    return lines;
+}
+
+// The same tree, waited for rather than slept on: update() rebuilds after a
+// pause, and the reset it ends with is what says it is done.
+QStringList outlineOf(const Document::Ptr &document)
+{
+    OutlineModel model;
+    QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
+    model.update(document);
+    if (!reset.wait(5000))
+        return QStringList("the outline was never rebuilt");
+    return drawnBy(model);
+}
+
+} // namespace
+
+// The outline of one file from both models. A file's own structure is the
+// question a single document settles, so the two have no excuse to differ,
+// and what is compared is what the pane shows: the tree, the text of every
+// row, and the line each row jumps to.
+void CxxFrontendModelTest::testOutline_data()
+{
+    QTest::addColumn<QByteArray>("source");
+
+    QTest::newRow("a class and its members")
+        << QByteArray("class C {\n"
+                      "public:\n"
+                      "    C();\n"
+                      "    int value() const;\n"
+                      "private:\n"
+                      "    static int s_count;\n"
+                      "    int m_value;\n"
+                      "};\n");
+    QTest::newRow("namespaces") << QByteArray("namespace A {\n"
+                                              "namespace B {\n"
+                                              "int x;\n"
+                                              "void f();\n"
+                                              "}\n"
+                                              "}\n");
+    QTest::newRow("an enum and a typedef") << QByteArray("enum E { First, Second };\n"
+                                                         "typedef int Integer;\n"
+                                                         "struct S { E kind; };\n");
+    QTest::newRow("a forward declaration") << QByteArray("class Later;\n"
+                                                          "Later *p;\n"
+                                                          "class Later { int m; };\n");
+    QTest::newRow("members a macro declared")
+        << QByteArray("#define DECLARE_THINGS int fromMacro;\n"
+                      "class C { DECLARE_THINGS int written; };\n");
+    QTest::newRow("a function with a body") << QByteArray("int f(int arg)\n"
+                                                           "{\n"
+                                                           "    int local = arg;\n"
+                                                           "    return local;\n"
+                                                           "}\n");
+}
+
+// Why the two trees are allowed to differ on a row, or nullptr if they are
+// not. Both entries are about what the models are, not about what an outline
+// should draw.
+static const char *knownOutlineDivergence(const QString &row)
+{
+    // An unscoped enumerator has the type of its enum. The built-in front end
+    // gives it int, the other gives it the enum, and the other is right --
+    // the same disagreement tst_cxxfrontendoverview holds open.
+    if (row == "an enum and a typedef")
+        return "the two disagree about the type of an enumerator";
+
+    // One symbol stands for every declaration of a class, recorded where the
+    // class was first named. So a class declared above and defined below is
+    // one row rather than two, and the row is at the declaration while its
+    // members are under it.
+    if (row == "a forward declaration")
+        return "a class declared twice is one symbol to this model";
+
+    // Both models mark what a macro declared, and disagree about where it
+    // stands: this one says where the macro was written, the built-in one
+    // says a line past the end of the file. Neither is ever seen, since the
+    // outline filters those rows out -- see OutlineProxyModel.
+    if (row == "members a macro declared")
+        return "the two put a macro's declaration in different places";
+
+    return nullptr;
+}
+
+void CxxFrontendModelTest::testOutline()
+{
+    QFETCH(QByteArray, source);
+
+    const Parsed parsed({{"main.cpp", source}}, "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const Document::Ptr document
+        = CppEditor::Tests::TestCase::globalSnapshot().document(parsed.mainFilePath());
+    QVERIFY(document);
+
+    // With the model, and then without it: forgetting what was kept for the
+    // file is what leaves the built-in walk to draw the tree.
+    const QStringList fromModel = outlineOf(document);
+    forgetCxxFrontendModel(parsed.mainFilePath());
+    const QStringList fromBuiltin = outlineOf(document);
+
+    if (const char *reason = knownOutlineDivergence(QString::fromUtf8(QTest::currentDataTag())))
+        QEXPECT_FAIL("", reason, Abort);
+    QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));
 }
 
 void CxxFrontendModelTest::testLocalUses()

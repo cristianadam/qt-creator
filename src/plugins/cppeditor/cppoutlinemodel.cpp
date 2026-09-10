@@ -3,6 +3,8 @@
 
 #include "cppoutlinemodel.h"
 
+#include "cxxfrontendmodel.h"
+
 #include <cplusplus/Icons.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Scope.h>
@@ -17,11 +19,31 @@
 using namespace CPlusPlus;
 namespace CppEditor::Internal {
 
-class SymbolItem : public Utils::TreeItem
+// What the model asks of an entry whatever built it. The built-in front end
+// hands out symbols and the cxx-frontend model hands out a description, and
+// the three questions below are all the outline asks besides what to draw.
+class OutlineItem : public Utils::TreeItem
+{
+public:
+    virtual bool isGenerated() const { return false; }
+    virtual Utils::Link link() const { return {}; }
+    virtual Utils::Text::Position position() const { return {}; }
+};
+
+class SymbolItem : public OutlineItem
 {
 public:
     SymbolItem() = default;
     explicit SymbolItem(CPlusPlus::Symbol *symbol) : symbol(symbol) {}
+
+    bool isGenerated() const override { return symbol && symbol->isGenerated(); }
+    Utils::Link link() const override { return symbol ? symbol->toLink() : Utils::Link(); }
+    Utils::Text::Position position() const override
+    {
+        if (!symbol)
+            return {};
+        return {int(symbol->line()), int(symbol->column()) - 1};
+    }
 
     QVariant data(int column, int role) const override
     {
@@ -138,6 +160,60 @@ public:
     CPlusPlus::Symbol *symbol = nullptr; // not owned
 };
 
+// The same item over what the cxx-frontend model says about a declaration.
+// It says it in pieces -- the name, a function's parameter list, the type
+// after the colon, the icon -- so drawing it is putting them together, and
+// the composing above is the same rule read the other way round.
+class CxxFrontendSymbolItem : public OutlineItem
+{
+public:
+    CxxFrontendSymbolItem(const CxxFrontendOutlineEntry &entry, const Utils::FilePath &filePath)
+        : m_entry(entry)
+        , m_filePath(filePath)
+    {}
+
+    bool isGenerated() const override { return m_entry.isGenerated; }
+    Utils::Link link() const override
+    {
+        return Utils::Link(m_filePath, m_entry.line, m_entry.column - 1);
+    }
+    Utils::Text::Position position() const override
+    {
+        return {m_entry.line, m_entry.column - 1};
+    }
+
+    QVariant data(int column, int role) const override
+    {
+        switch (role) {
+        case Qt::DisplayRole: {
+            QString name = m_entry.name.isEmpty() ? QLatin1String("anonymous") : m_entry.name;
+            name += m_entry.signature;
+            if (!m_entry.valueType.isEmpty())
+                name += QLatin1String(": ") + m_entry.valueType;
+            return name;
+        }
+        case Qt::EditRole:
+            return m_entry.name.isEmpty() ? QLatin1String("anonymous") : m_entry.name;
+        case Qt::ForegroundRole:
+            if (m_entry.isForwardDeclaration)
+                return Utils::creatorColor(Utils::Theme::TextColorDisabled);
+            return TreeItem::data(column, role);
+        case Qt::DecorationRole:
+            return Utils::CodeModelIcon::iconForType(m_entry.icon);
+        case OutlineModel::FileNameRole:
+            return m_filePath.toUrlishString();
+        case OutlineModel::LineNumberRole:
+            return unsigned(m_entry.line);
+        default:
+            return QVariant();
+        }
+    }
+
+private:
+    const CxxFrontendOutlineEntry m_entry;
+    const Utils::FilePath m_filePath;
+};
+
 int OutlineModel::globalSymbolCount() const
 {
     int count = 0;
@@ -217,36 +293,60 @@ void OutlineModel::rebuild()
     m_cppDocument = m_candidate;
     m_candidate.reset();
     auto root = new SymbolItem;
-    if (m_cppDocument)
+    if (m_cppDocument && !buildTreeFromCxxFrontend(root))
         buildTree(root, true);
     setRootItemInternal(root);
     endResetModel();
 }
 
+// The tree as the cxx-frontend model describes it, where it has this file.
+// False otherwise, and the built-in walk draws it as before. A file's own
+// structure is what one document settles, so this is the whole of the
+// question rather than a part of it -- see cxxfrontendmodel.h.
+bool OutlineModel::buildTreeFromCxxFrontend(SymbolItem *root)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const std::optional<QList<CxxFrontendOutlineEntry>> outline
+        = cxxFrontendOutline(m_cppDocument->filePath());
+    if (!outline)
+        return false;
+
+    // An entry always follows the one it is inside, so the item to hang each
+    // one on has been made by the time it is read.
+    QList<Utils::TreeItem *> items;
+    items.reserve(outline->size());
+    for (const CxxFrontendOutlineEntry &entry : *outline) {
+        auto item = new CxxFrontendSymbolItem(entry, m_cppDocument->filePath());
+        items.append(item);
+        if (entry.parent >= 0 && entry.parent < items.size() - 1)
+            items.at(entry.parent)->appendChild(item);
+        else
+            root->appendChild(item);
+    }
+    root->prependChild(new SymbolItem); // account for no symbol item
+    return true;
+#else
+    Q_UNUSED(root)
+    return false;
+#endif
+}
+
 bool OutlineModel::isGenerated(const QModelIndex &sourceIndex) const
 {
-    CPlusPlus::Symbol *symbol = symbolFromIndex(sourceIndex);
-    return symbol && symbol->isGenerated();
+    const auto item = static_cast<const OutlineItem *>(itemForIndex(sourceIndex));
+    return item && item->isGenerated();
 }
 
 Utils::Link OutlineModel::linkFromIndex(const QModelIndex &sourceIndex) const
 {
-    CPlusPlus::Symbol *symbol = symbolFromIndex(sourceIndex);
-    if (!symbol)
-        return {};
-
-    return symbol->toLink();
+    const auto item = static_cast<const OutlineItem *>(itemForIndex(sourceIndex));
+    return item ? item->link() : Utils::Link();
 }
 
 Utils::Text::Position OutlineModel::positionFromIndex(const QModelIndex &sourceIndex) const
 {
-    Utils::Text::Position lineColumn;
-    CPlusPlus::Symbol *symbol = symbolFromIndex(sourceIndex);
-    if (!symbol)
-        return lineColumn;
-    lineColumn.line = symbol->line();
-    lineColumn.column = symbol->column() - 1;
-    return lineColumn;
+    const auto item = static_cast<const OutlineItem *>(itemForIndex(sourceIndex));
+    return item ? item->position() : Utils::Text::Position();
 }
 
 Utils::Text::Range OutlineModel::rangeFromIndex(const QModelIndex &sourceIndex) const

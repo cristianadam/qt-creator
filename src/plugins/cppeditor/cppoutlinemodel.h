@@ -51,6 +51,7 @@ public:
 
 private:
     void rebuild();
+    bool buildTreeFromCxxFrontend(SymbolItem *root);
     CPlusPlus::Symbol *symbolFromIndex(const QModelIndex &index) const;
     int globalSymbolCount() const;
     CPlusPlus::Symbol *globalSymbolAt(int index) const;

@@ -9,6 +9,7 @@
 
 #include <utils/filepath.h>
 #include <utils/link.h>
+#include <utils/utilsicons.h>
 
 #include <memory>
 #include <optional>
@@ -114,5 +115,31 @@ struct CxxFrontendLocal
 // at all.
 std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const Utils::FilePath &filePath,
                                                            int line, int column);
+
+// One entry of what an outline draws: what to write, which icon to write it
+// with, where it takes the reader, and where it sits in the tree.
+struct CxxFrontendOutlineEntry
+{
+    QString name;
+    QString signature; // a function's parameter list, empty otherwise
+    QString valueType; // what follows the colon, empty for a scope
+    int line = 0;      // one-based
+    int column = 0;    // one-based
+    // The entry this one is inside, as an index into the list, or -1 at file
+    // scope. An entry always follows the one it is inside.
+    int parent = -1;
+    Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Unknown;
+    bool isGenerated = false;
+    bool isForwardDeclaration = false;
+};
+
+// What \a filePath declares, in the order it declares it, or nothing where
+// the model has no such file to read.
+//
+// A file's own structure is what a single document settles, so this is the
+// one question the model answers whole. What it cannot read at all is
+// Objective-C, so a file written in it is declined rather than answered with
+// the little that parsed.
+std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::FilePath &filePath);
 
 } // namespace CppEditor::Internal

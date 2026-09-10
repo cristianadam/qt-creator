@@ -23,6 +23,8 @@ private slots:
     void testDeclinesANameFromAUsingDeclaration();
     void testLocalUses_data();
     void testLocalUses();
+    void testOutline_data();
+    void testOutline();
 };
 
 } // namespace CppEditor::Internal
