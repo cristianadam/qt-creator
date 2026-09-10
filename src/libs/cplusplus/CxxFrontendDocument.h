@@ -272,6 +272,50 @@ public:
     };
     QList<Local> localsAt(int line, int column) const;
 
+    // What every name in the file stands for, which is what the editor
+    // colours it by. The distinctions are CheckSymbols': what the name
+    // means, who it belongs to, and whether it is being declared here or
+    // used.
+    //
+    // A name whose meaning does not change how it is written is not here at
+    // all -- a global variable is left plain by the built-in model too, so
+    // there is no entry for one.
+    enum class NameKind {
+        Type,
+        Namespace,
+        Local,
+        Field,
+        StaticField,
+        Enumeration,
+        Function,
+        VirtualMethod,
+        StaticMethod,
+        FunctionDeclaration,
+        VirtualFunctionDeclaration,
+        StaticMethodDeclaration,
+    };
+
+    struct Name
+    {
+        int line = 0;
+        int column = 0;
+        int length = 0;
+        NameKind kind = NameKind::Type;
+    };
+
+    // Every name the file writes that stands for something, in the order
+    // they are written.
+    //
+    // The parser resolved most of them on its way past, so this reads its
+    // answers rather than looking anything up: a name it did not resolve has
+    // no entry, the same way an unresolved name is left plain today.
+    //
+    // Not here, and not for this to answer: a macro, which the preprocessor
+    // reports and the caller already merges in; and the punctuation the
+    // editor also colours -- the angle brackets of a template argument list
+    // and the two halves of a ternary -- which are not names.
+    QList<Name> namesIn() const;
+
     // The type of the expression written at a position, and whether it is an
     // lvalue. What a tooltip shows, and what completion needs before it can
     // offer the members of something.

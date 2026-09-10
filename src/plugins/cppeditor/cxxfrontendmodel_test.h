@@ -25,6 +25,8 @@ private slots:
     void testLocalUses();
     void testOutline_data();
     void testOutline();
+    void testNames_data();
+    void testNames();
 };
 
 } // namespace CppEditor::Internal

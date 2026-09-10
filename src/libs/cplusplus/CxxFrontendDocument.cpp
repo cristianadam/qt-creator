@@ -461,6 +461,10 @@ public:
     // opens.
     [[nodiscard]] cxx::FunctionSymbol *definitionAround(cxx::SourceLocation location) const;
 
+    // The parameters and block variables of \a function, each with every
+    // place it is written.
+    [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
+
     // Whether a using declaration in this file names \a symbol, or brought in
     // the function \a symbol is.
     [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
@@ -1291,6 +1295,12 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
     if (!function)
         return {};
 
+    return d->localsOf(function);
+}
+
+QList<CxxFrontendDocument::Local> CxxFrontendDocument::Private::localsOf(
+    cxx::FunctionSymbol *function) const
+{
     QList<Local> locals;
     // Which local each symbol belongs to. A lambda's parameter arrives twice,
     // as the parameter and as the variable standing for it in the body, and
@@ -1317,9 +1327,9 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
                 const cxx::SourceLocation declaration = member->location();
                 if (!declaration)
                     continue;
-                const cxx::SourcePosition position = d->unit.tokenStartPosition(declaration);
+                const cxx::SourcePosition position = unit.tokenStartPosition(declaration);
                 const Occurrence place{int(position.line), int(position.column),
-                                       int(d->unit.tokenAt(declaration).length())};
+                                       int(unit.tokenAt(declaration).length())};
 
                 const QString key = QString("%1 %2:%3")
                                         .arg(name).arg(place.line).arg(place.column);
@@ -1360,7 +1370,7 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
     // One walk of the tree rather than a lookup for each place: every name the
     // parser resolved to one of these locals is a use of it, and the parser
     // wrote that on the node while reading the file.
-    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot || !*slot)
             continue;
@@ -1373,9 +1383,9 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
             continue;
 
         const cxx::SourceLocation used = idExpression->unqualifiedId->firstSourceLocation();
-        const cxx::SourcePosition position = d->unit.tokenStartPosition(used);
+        const cxx::SourcePosition position = unit.tokenStartPosition(used);
         const Occurrence place{int(position.line), int(position.column),
-                               int(d->unit.tokenAt(used).length())};
+                               int(unit.tokenAt(used).length())};
 
         QList<Occurrence> &places = locals[*at].places;
         // The same place can be reached twice, once for the parameter and once
@@ -1387,6 +1397,283 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
             places.append(place);
     }
     return locals;
+}
+
+namespace {
+
+// What colouring a name gets from what it stands for, as CheckSymbols
+// decides it. \a isDeclaration says whether the name is being introduced
+// here rather than used, which only tells functions apart.
+std::optional<CxxFrontendDocument::NameKind> nameKindOf(cxx::Symbol *symbol,
+                                                        bool isDeclaration)
+{
+    using NameKind = CxxFrontendDocument::NameKind;
+
+    if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol)) {
+        // A constructor or a destructor is written as the name of its class
+        // and is coloured as that name, which is what CheckSymbols decides
+        // with highlightCtorDtorAsType.
+        if (function->isConstructor() || function->isDestructor())
+            return NameKind::Type;
+
+        // A method of a class, told from a free function by what it is
+        // written inside, since only a method can be virtual or belong to
+        // the class rather than to an object.
+        const bool isMember = function->parent()
+                              && dynamic_cast<cxx::ClassSymbol *>(function->parent());
+        if (isMember && function->isVirtual()) {
+            return isDeclaration ? NameKind::VirtualFunctionDeclaration
+                                 : NameKind::VirtualMethod;
+        }
+        if (isMember && function->isStatic()) {
+            return isDeclaration ? NameKind::StaticMethodDeclaration
+                                 : NameKind::StaticMethod;
+        }
+        return isDeclaration ? NameKind::FunctionDeclaration : NameKind::Function;
+    }
+
+    if (dynamic_cast<cxx::EnumeratorSymbol *>(symbol))
+        return NameKind::Enumeration;
+    if (dynamic_cast<cxx::NamespaceSymbol *>(symbol)
+        || dynamic_cast<cxx::NamespaceAliasSymbol *>(symbol)) {
+        return NameKind::Namespace;
+    }
+    if (dynamic_cast<cxx::ClassSymbol *>(symbol) || dynamic_cast<cxx::EnumSymbol *>(symbol)
+        || dynamic_cast<cxx::ScopedEnumSymbol *>(symbol)
+        || dynamic_cast<cxx::TypeAliasSymbol *>(symbol)
+        || dynamic_cast<cxx::TypeParameterSymbol *>(symbol)
+        || dynamic_cast<cxx::TemplateTypeParameterSymbol *>(symbol)) {
+        return NameKind::Type;
+    }
+    if (auto *field = dynamic_cast<cxx::FieldSymbol *>(symbol)) {
+        // What a lambda captures becomes a member of the closure the front
+        // end invents. Nobody wrote that class, and what the name means to
+        // whoever reads it is still the local it copies.
+        if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(field->parent());
+            cls && cls->name() && fromStd(cxx::to_string(cls->name())).startsWith("__")) {
+            return NameKind::Local;
+        }
+        return field->isStatic() ? NameKind::StaticField : NameKind::Field;
+    }
+    if (auto *variable = dynamic_cast<cxx::VariableSymbol *>(symbol)) {
+        // A variable declared in a class is a field, however it is written:
+        // a static member defined outside its class, as S::s, is still the
+        // member.
+        if (dynamic_cast<cxx::ClassSymbol *>(variable->parent()))
+            return variable->isStatic() ? NameKind::StaticField : NameKind::Field;
+
+        // A variable inside a function is a local, and one outside is a
+        // global -- which is written plainly, unless it is static, which the
+        // built-in model colours as a field.
+        for (cxx::Symbol *scope = variable->parent(); scope; scope = scope->parent()) {
+            if (dynamic_cast<cxx::FunctionSymbol *>(scope)
+                || dynamic_cast<cxx::LambdaSymbol *>(scope)) {
+                return NameKind::Local;
+            }
+        }
+        // Outside a function it is a global, which is written plainly --
+        // the built-in model colours none of them, static or not.
+        return std::nullopt;
+    }
+    if (dynamic_cast<cxx::ParameterSymbol *>(symbol))
+        return NameKind::Local;
+
+    return std::nullopt;
+}
+
+} // namespace
+
+QList<CxxFrontendDocument::Name> CxxFrontendDocument::namesIn() const
+{
+    QList<Name> names;
+    if (!d->unit.ast())
+        return names;
+
+    QList<cxx::FunctionSymbol *> functions;
+
+    const auto mainFileId = std::uint32_t(d->unit.preprocessor()->mainSourceFileId());
+    const auto record = [&](cxx::SourceLocation location, cxx::Symbol *symbol,
+                            bool isDeclaration) {
+        if (!location || !symbol)
+            return;
+        // A destructor is recorded at its tilde, and what is coloured is
+        // the name after it.
+        if (d->unit.tokenAt(location).kind() == cxx::TokenKind::T_TILDE)
+            location = cxx::SourceLocation{location.index() + 1};
+        const cxx::Token &token = d->unit.tokenAt(location);
+        // Written by a macro's replacement, so there is no text of its own
+        // to colour -- which is the rule CheckSymbols follows as well.
+        if (token.fileId() != mainFileId || token.macroGenerated())
+            return;
+        const std::optional<NameKind> kind = nameKindOf(symbol, isDeclaration);
+        if (!kind)
+            return;
+
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        names.append(Name{int(position.line), int(position.column), int(token.length()),
+                          *kind});
+    };
+
+    // A place whose meaning is plain from where it is written rather than
+    // from a symbol: what a lambda captures is a local, a base class is a
+    // type, a template parameter is a type.
+    const auto recordAs = [&](cxx::SourceLocation location, NameKind kind) {
+        if (!location)
+            return;
+        const cxx::Token &token = d->unit.tokenAt(location);
+        if (token.fileId() != mainFileId || token.macroGenerated())
+            return;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        names.append(Name{int(position.line), int(position.column), int(token.length()),
+                          kind});
+    };
+
+    // Where a name is used, the parser wrote down what it resolved to: a
+    // value or a function through an id-expression, a member through the
+    // access that reaches it, a type where one is named.
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+
+        // Every function, so that its locals can be asked for below: a
+        // local is written in places no lookup reaches, and the answer for
+        // one function is the answer for all of them together.
+        //
+        // And the name the definition is written under, which is a
+        // declaration of the function wherever it stands -- inside the
+        // class or, as S::f, outside it.
+        if (auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot)) {
+            if (definition->symbol) {
+                functions.append(definition->symbol);
+                if (definition->declarator) {
+                    if (auto *id = dynamic_cast<cxx::IdDeclaratorAST *>(
+                            definition->declarator->coreDeclarator);
+                        id && id->unqualifiedId) {
+                        // A constructor written outside its class is the
+                        // one place its name is not read as the class: what
+                        // stands before the :: is the type, and this is the
+                        // function being defined.
+                        const bool isQualified = id->nestedNameSpecifier != nullptr;
+                        if (isQualified
+                            && (definition->symbol->isConstructor()
+                                || definition->symbol->isDestructor())) {
+                            recordAs(id->unqualifiedId->firstSourceLocation(),
+                                     NameKind::FunctionDeclaration);
+                        } else {
+                            record(id->unqualifiedId->firstSourceLocation(),
+                                   definition->symbol, true);
+                        }
+                    }
+                }
+            }
+            // and on into the body
+        }
+
+        // The name a variable is declared under, which for a member
+        // defined outside its class -- int S::s = 0; -- is the only place
+        // the walk over the file's declarations does not reach.
+        if (auto *initDeclarator = dynamic_cast<cxx::InitDeclaratorAST *>(*slot)) {
+            if (initDeclarator->symbol && initDeclarator->declarator) {
+                if (auto *id = dynamic_cast<cxx::IdDeclaratorAST *>(
+                        initDeclarator->declarator->coreDeclarator);
+                    id && id->unqualifiedId) {
+                    record(id->unqualifiedId->firstSourceLocation(), initDeclarator->symbol,
+                           true);
+                }
+            }
+            continue;
+        }
+
+        // A base class is a type, named where the class that inherits it
+        // is written.
+        if (auto *base = dynamic_cast<cxx::BaseSpecifierAST *>(*slot)) {
+            if (base->unqualifiedId)
+                recordAs(base->unqualifiedId->firstSourceLocation(), NameKind::Type);
+            continue;
+        }
+
+        // A template's parameter is a type wherever it is written, and the
+        // place it is introduced carries no symbol of its own.
+        if (auto *parameter = dynamic_cast<cxx::TypenameTypeParameterAST *>(*slot)) {
+            recordAs(parameter->identifierLoc, NameKind::Type);
+            continue;
+        }
+
+        if (auto *idExpression = dynamic_cast<cxx::IdExpressionAST *>(*slot)) {
+            if (idExpression->unqualifiedId) {
+                record(idExpression->unqualifiedId->firstSourceLocation(),
+                       idExpression->symbol, false);
+            }
+            continue;
+        }
+        if (auto *member = dynamic_cast<cxx::MemberExpressionAST *>(*slot)) {
+            if (member->unqualifiedId)
+                record(member->unqualifiedId->firstSourceLocation(), member->symbol, false);
+            continue;
+        }
+        if (auto *named = dynamic_cast<cxx::NamedTypeSpecifierAST *>(*slot)) {
+            if (named->unqualifiedId)
+                record(named->unqualifiedId->firstSourceLocation(), named->symbol, false);
+            continue;
+        }
+        // What a qualified name is written after -- the N of N::f and the B
+        // of B::help -- which stands for something of its own and is
+        // coloured for what it is.
+        if (auto *nested = dynamic_cast<cxx::SimpleNestedNameSpecifierAST *>(*slot)) {
+            record(nested->identifierLoc, nested->symbol, false);
+            continue;
+        }
+
+        // What a lambda captures is a local of the function around it --
+        // that is the only thing it can be -- and the capture carries no
+        // symbol of its own to say so.
+        if (auto *capture = dynamic_cast<cxx::SimpleLambdaCaptureAST *>(*slot)) {
+            recordAs(capture->identifierLoc, NameKind::Local);
+            continue;
+        }
+        if (auto *capture = dynamic_cast<cxx::RefLambdaCaptureAST *>(*slot)) {
+            recordAs(capture->identifierLoc, NameKind::Local);
+            continue;
+        }
+    }
+
+    // A local is written where nothing else can see it, so it is asked of
+    // the function that holds it rather than looked up: every place, its
+    // declaration included, which is what the built-in model's LocalSymbols
+    // hands the highlighter as well.
+    for (cxx::FunctionSymbol *function : std::as_const(functions)) {
+        for (const Local &local : d->localsOf(function)) {
+            for (const Occurrence &place : local.places) {
+                // A symbol the front end invented stands nowhere.
+                if (place.line <= 0)
+                    continue;
+                names.append(Name{place.line, place.column, place.length, NameKind::Local});
+            }
+        }
+    }
+
+    // And where a name is introduced, which the walk over the file's
+    // declarations already knows: symbols() has one entry per place the file
+    // declares something, in the order it declares them.
+    for (std::size_t i = 0; i < d->cxxSymbols.size(); ++i) {
+        cxx::Symbol *symbol = d->cxxSymbols[i];
+        record(symbol->location(), symbol, true);
+    }
+
+    std::stable_sort(names.begin(), names.end(), [](const Name &left, const Name &right) {
+        return std::tie(left.line, left.column) < std::tie(right.line, right.column);
+    });
+
+    // One entry per place. A local reached both as a name the parser
+    // resolved and as one of its function's own is written down once, and
+    // the first answer is kept -- they agree, or the function's own is the
+    // one that knows it is a local.
+    const auto samePlace = [](const Name &left, const Name &right) {
+        return left.line == right.line && left.column == right.column;
+    };
+    names.erase(std::unique(names.begin(), names.end(), samePlace), names.end());
+    return names;
 }
 
 QString CxxFrontendDocument::identifierAt(int line, int column) const
@@ -1619,6 +1906,11 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // an ordinary member function and an outline gives it an ordinary
         // icon.
         "whether a member function is a signal or a slot",
+        // What the editor colours besides names: a label, a Qt keyword,
+        // the angle brackets of a template argument list and the two
+        // halves of a ternary. namesIn() answers for names, and those are
+        // punctuation or macros.
+        "where the labels and the angle brackets are",
     };
 }
 

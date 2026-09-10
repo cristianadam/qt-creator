@@ -13,6 +13,7 @@
 
 #include "cxxfrontendmodel_test.h"
 
+#include "cppchecksymbols.h"
 #include "cpplocalsymbols.h"
 #include "cppmodelmanager.h"
 #include "cppoutlinemodel.h"
@@ -23,6 +24,7 @@
 #include <cplusplus/AST.h>
 #include <cplusplus/CxxFrontendDocument.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
+#include <cplusplus/LookupContext.h>
 #include <cplusplus/TranslationUnit.h>
 
 #include <QSignalSpy>
@@ -420,6 +422,81 @@ static const char *knownDivergence(const QString &row)
 
 namespace {
 
+// The kinds the other model claims to answer for. What is left out is not a
+// name -- a macro, which the preprocessor reports and the processor merges
+// in; the angle brackets of a template argument list and the two halves of
+// a ternary, which are punctuation; a label; and the Qt keywords, which are
+// macros before the parser sees them.
+QString nameOf(SemanticHighlighter::Kind kind)
+{
+    switch (kind) {
+    case SemanticHighlighter::TypeUse: return "Type";
+    case SemanticHighlighter::NamespaceUse: return "Namespace";
+    case SemanticHighlighter::LocalUse: return "Local";
+    case SemanticHighlighter::FieldUse: return "Field";
+    case SemanticHighlighter::StaticFieldUse: return "StaticField";
+    case SemanticHighlighter::EnumerationUse: return "Enumeration";
+    case SemanticHighlighter::FunctionUse: return "Function";
+    case SemanticHighlighter::VirtualMethodUse: return "VirtualMethod";
+    case SemanticHighlighter::StaticMethodUse: return "StaticMethod";
+    case SemanticHighlighter::FunctionDeclarationUse: return "FunctionDeclaration";
+    case SemanticHighlighter::VirtualFunctionDeclarationUse:
+        return "VirtualFunctionDeclaration";
+    case SemanticHighlighter::StaticMethodDeclarationUse: return "StaticMethodDeclaration";
+    default: return {};
+    }
+}
+
+QString nameOf(CxxFrontendDocument::NameKind kind)
+{
+    using NameKind = CxxFrontendDocument::NameKind;
+    switch (kind) {
+    case NameKind::Type: return "Type";
+    case NameKind::Namespace: return "Namespace";
+    case NameKind::Local: return "Local";
+    case NameKind::Field: return "Field";
+    case NameKind::StaticField: return "StaticField";
+    case NameKind::Enumeration: return "Enumeration";
+    case NameKind::Function: return "Function";
+    case NameKind::VirtualMethod: return "VirtualMethod";
+    case NameKind::StaticMethod: return "StaticMethod";
+    case NameKind::FunctionDeclaration: return "FunctionDeclaration";
+    case NameKind::VirtualFunctionDeclaration: return "VirtualFunctionDeclaration";
+    case NameKind::StaticMethodDeclaration: return "StaticMethodDeclaration";
+    }
+    return {};
+}
+
+// One line per name, "line:column+length Kind", so that the two models can
+// be compared as text and a difference says where it is.
+QStringList colouredBy(const QList<CheckSymbols::Result> &results)
+{
+    QStringList lines;
+    for (const CheckSymbols::Result &result : results) {
+        const QString kind = nameOf(SemanticHighlighter::Kind(result.kind));
+        if (kind.isEmpty())
+            continue;
+        lines.append(QString("%1:%2+%3 %4")
+                         .arg(result.line).arg(result.column).arg(result.length).arg(kind));
+    }
+    lines.sort();
+    return lines;
+}
+
+QStringList colouredBy(const QList<CxxFrontendDocument::Name> &names)
+{
+    QStringList lines;
+    for (const CxxFrontendDocument::Name &name : names) {
+        // A HighlightingResult counts lines from zero; this model counts
+        // them from one.
+        lines.append(QString("%1:%2+%3 %4")
+                         .arg(name.line - 1).arg(name.column).arg(name.length)
+                         .arg(nameOf(name.kind)));
+    }
+    lines.sort();
+    return lines;
+}
+
 // The tree an outline draws, one line per entry: how deep it sits, what it
 // says, and which line it takes the reader to. Everything the pane shows
 // except the icon, which is a picture and is compared where it is a number,
@@ -547,6 +624,125 @@ void CxxFrontendModelTest::testOutline()
     if (const char *reason = knownOutlineDivergence(QString::fromUtf8(QTest::currentDataTag())))
         QEXPECT_FAIL("", reason, Abort);
     QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));
+}
+
+// What every name in a file stands for, from both models. This is what the
+// editor colours, and the largest thing the built-in model is still asked:
+// CheckSymbols resolves every name in the file to decide it.
+void CxxFrontendModelTest::testNames_data()
+{
+    QTest::addColumn<QByteArray>("source");
+
+    QTest::newRow("locals and parameters") << QByteArray("\n"
+                                                          "int f(int arg)\n"
+                                                          "{\n"
+                                                          "    int local = arg;\n"
+                                                          "    return local + arg;\n"
+                                                          "}\n");
+    QTest::newRow("fields") << QByteArray("\n"
+                                          "struct S {\n"
+                                          "    int m_value;\n"
+                                          "    static int s_count;\n"
+                                          "    int value() const { return m_value; }\n"
+                                          "};\n");
+    QTest::newRow("types") << QByteArray("\n"
+                                          "class C {};\n"
+                                          "enum E { First };\n"
+                                          "typedef int Integer;\n"
+                                          "C *makeOne(Integer size, E kind);\n");
+    QTest::newRow("namespaces") << QByteArray("\n"
+                                               "namespace N { int x; void f(); }\n"
+                                               "void g() { N::f(); }\n");
+    QTest::newRow("virtual and static methods")
+        << QByteArray("\n"
+                      "struct B {\n"
+                      "    virtual void run();\n"
+                      "    static void help();\n"
+                      "};\n"
+                      "void use(B *b) { b->run(); B::help(); }\n");
+    QTest::newRow("a method defined outside its class")
+        << QByteArray("\n"
+                      "struct S { int f(int a); static int s; };\n"
+                      "int S::s = 0;\n"
+                      "int S::f(int a) { return a + s; }\n");
+    QTest::newRow("inheritance") << QByteArray("\n"
+                                                "struct Base { virtual void run(); };\n"
+                                                "struct Derived : Base { void run() override; };\n"
+                                                "void call(Derived *d) { d->run(); }\n");
+    QTest::newRow("a constructor and a destructor")
+        << QByteArray("\n"
+                      "class C {\n"
+                      "public:\n"
+                      "    C();\n"
+                      "    ~C();\n"
+                      "};\n"
+                      "C::C() {}\n");
+    QTest::newRow("a template and its use")
+        << QByteArray("\n"
+                      "template <class T> struct Holder { T value; };\n"
+                      "int read(Holder<int> *h) { return h->value; }\n");
+    QTest::newRow("a lambda") << QByteArray("\n"
+                                             "void f(int outer)\n"
+                                             "{\n"
+                                             "    auto g = [outer](int inner) { return outer + inner; };\n"
+                                             "    g(1);\n"
+                                             "}\n");
+    QTest::newRow("a static at file scope") << QByteArray("\n"
+                                                           "static int s_counter;\n"
+                                                           "int plain;\n"
+                                                           "int f() { return s_counter + plain; }\n");
+    QTest::newRow("enumerators") << QByteArray("\n"
+                                                "enum E { First, Second };\n"
+                                                "E pick() { return Second; }\n");
+}
+
+// Why the two colour a name differently, or nullptr if they may not. Both
+// entries are places where the built-in model contradicts itself.
+static const char *knownNameDivergence(const QString &row)
+{
+    // A static member is a static field where it is declared and a plain
+    // field where it is defined, because CheckSymbols reaches the two
+    // through different paths -- maybeAddField sees that it is static and
+    // maybeAddTypeOrStatic does not care. This model says the same thing in
+    // both places.
+    if (row == "a method defined outside its class")
+        return "the built-in model calls a static member a field where it is defined";
+
+    // A destructor is written down twice, once for the tilde and once for
+    // the name, both at the name. The editor paints the same place twice.
+    if (row == "a constructor and a destructor")
+        return "the built-in model writes a destructor down twice";
+
+    return nullptr;
+}
+
+void CxxFrontendModelTest::testNames()
+{
+    QFETCH(QByteArray, source);
+
+    // Parsed here rather than through the model manager: CheckSymbols reads
+    // the tree, and a document in the global snapshot has let go of it.
+    const Document::Ptr builtinDocument = Document::create(FilePath::fromPathPart(u"test.cpp"));
+    builtinDocument->setUtf8Source(source);
+    builtinDocument->check();
+    QVERIFY(builtinDocument->translationUnit() && builtinDocument->translationUnit()->ast());
+
+    Snapshot snapshot;
+    snapshot.insert(builtinDocument);
+    const LookupContext context(builtinDocument, snapshot);
+    QFuture<CheckSymbols::Result> future
+        = CheckSymbols::go(builtinDocument, QString::fromUtf8(source), context, {});
+    future.waitForFinished();
+
+    QList<CheckSymbols::Result> results;
+    for (int i = 0; i < future.resultCount(); ++i)
+        results.append(future.resultAt(i));
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "test.cpp");
+
+    if (const char *reason = knownNameDivergence(QString::fromUtf8(QTest::currentDataTag())))
+        QEXPECT_FAIL("", reason, Abort);
+    QCOMPARE(colouredBy(document.namesIn()).join('\n'), colouredBy(results).join('\n'));
 }
 
 void CxxFrontendModelTest::testLocalUses()
