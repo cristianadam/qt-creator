@@ -17,6 +17,7 @@
 #include <cxx/memory_layout.h>
 #include <cxx/name_lookup.h>
 #include <cxx/names.h>
+#include <cxx/literals.h>
 #include <cxx/preprocessor.h>
 #include <cxx/preprocessor_delegate.h>
 #include <cxx/symbols.h>
@@ -274,6 +275,75 @@ public:
 
     // Collects the macros the file defines, written the way the #define was,
     // so that an includer can be given them verbatim.
+    // Every comment the file writes. The preprocessor reads them and hands
+    // each one over before dropping it, which is the only place they appear
+    // at all -- by the time there is a syntax tree they are gone.
+    class CommentCollector : public cxx::CommentHandler
+    {
+    public:
+        CommentCollector(QList<CxxFrontendDocument::Comment> &comments, const QString &fileName)
+            : m_comments(comments)
+            , m_fileName(fileName)
+        {}
+
+    private:
+        void handleComment(cxx::Preprocessor *preprocessor, const cxx::Token &token) override
+        {
+            // A header's comments are the header's own. Asked by name rather
+            // than by the main file's id: a file's comments are read while it
+            // is being read, and which file is the main one is settled once
+            // that is done.
+            if (QString::fromStdString(preprocessor->sourceFileName(token.fileId()))
+                != m_fileName) {
+                return;
+            }
+
+            const cxx::Literal * const text = token.value().literalValue;
+            if (!text)
+                return;
+
+            const cxx::SourcePosition start = preprocessor->tokenStartPosition(token);
+            const cxx::SourcePosition end = preprocessor->tokenEndPosition(token);
+            m_comments.append({int(start.line), int(start.column), int(end.line),
+                               int(end.column), kindOf(text->value())});
+        }
+
+        // The same rules the built-in lexer applies, so that a reader that
+        // told the four kinds apart there tells them apart here: a // comment
+        // is written for a documentation tool when a third slash or a bang
+        // follows, and a /* one when a star or a bang follows and then, past
+        // an optional <, the line has nothing or a space -- with /**/ being
+        // an empty comment rather than a documented anything.
+        static CxxFrontendDocument::CommentKind kindOf(std::string_view text)
+        {
+            if (text.starts_with("//")) {
+                const bool isDoxygen = text.size() > 2
+                                       && (text[2] == '/' || text[2] == '!');
+                return isDoxygen ? CxxFrontendDocument::CommentKind::CppStyleDoxygen
+                                 : CxxFrontendDocument::CommentKind::CppStyle;
+            }
+
+            const auto plain = CxxFrontendDocument::CommentKind::CStyle;
+            if (!text.starts_with("/*") || text.size() <= 2)
+                return plain;
+            if (text[2] != '*' && text[2] != '!')
+                return plain;
+            if (text[2] == '*' && text.size() > 3 && text[3] == '/')
+                return plain; // "/**/", which says nothing
+
+            std::size_t rest = 3;
+            if (rest < text.size() && text[rest] == '<')
+                ++rest;
+            if (rest < text.size() && !std::isspace(static_cast<unsigned char>(text[rest])))
+                return plain;
+
+            return CxxFrontendDocument::CommentKind::CStyleDoxygen;
+        }
+
+        QList<CxxFrontendDocument::Comment> &m_comments;
+        const QString m_fileName;
+    };
+
     class MacroCollector : public cxx::PreprocessorDelegate
     {
     public:
@@ -498,6 +568,9 @@ public:
     QStringList definedMacros;
     QStringList includedHeaders;
     MacroCollector macroCollector{definedMacros};
+
+    QList<CxxFrontendDocument::Comment> comments;
+    CommentCollector commentCollector{comments, fileName};
 
     QList<CxxFrontendDocument::Diagnostic> diagnostics;
     Diagnostics diagnosticsClient{diagnostics};
@@ -1209,6 +1282,7 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
     cxx::Preprocessor *preprocessor = unit.preprocessor();
     preprocessor->setCanResolveFiles(false);
     preprocessor->setPreprocessorDelegate(&macroCollector);
+    preprocessor->setCommentHandler(&commentCollector);
 
     // What the includers established, before the first line of this file.
     {
@@ -1335,6 +1409,11 @@ cxx::TranslationUnit *CxxFrontendDocument::translationUnit() const
 const QList<CxxFrontendDocument::Diagnostic> &CxxFrontendDocument::diagnostics() const
 {
     return d->diagnostics;
+}
+
+const QList<CxxFrontendDocument::Comment> &CxxFrontendDocument::comments() const
+{
+    return d->comments;
 }
 
 QString CxxFrontendDocument::lastVisibleSymbolAt(int line, int column) const

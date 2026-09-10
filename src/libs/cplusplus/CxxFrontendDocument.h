@@ -170,6 +170,42 @@ public:
     };
     const QList<Diagnostic> &diagnostics() const;
 
+    // Which of the two ways a comment is written, and whether it is written
+    // for a documentation tool. One enum rather than two flags because that
+    // is the question a reader asks: two comments belong to one block only if
+    // they are of the same kind, and these four are the built-in front end's
+    // four comment tokens.
+    enum class CommentKind {
+        CStyle,         // /* ... */
+        CppStyle,       // // ...
+        CStyleDoxygen,  // /** ... */ or /*! ... */
+        CppStyleDoxygen // /// ... or //! ...
+    };
+
+    struct Comment
+    {
+        int line = 0; // one-based, as everything here counts
+        int column = 0;
+        int endLine = 0;
+        int endColumn = 0;
+        CommentKind kind = CommentKind::CStyle;
+    };
+
+    // Every comment this file writes, in the order they are written.
+    //
+    // Comments are not code, and the parser never sees one: this is the
+    // preprocessor's own account, which reads each comment and hands it over
+    // before dropping it. What a header writes is not here -- a comment is
+    // read where it is written, and what is asked of a document is about the
+    // file in hand.
+    //
+    // Why a document holds them at all: a declaration's documentation is
+    // written above it, and the editor answers for the two together --
+    // renaming a parameter renames it in the comment, moving a function takes
+    // its comment along, and a parameter named in the comment is highlighted
+    // with it.
+    const QList<Comment> &comments() const;
+
     // The fully qualified name of the function enclosing the position, or an
     // empty string if it is not inside one. What Document::functionAt answers,
     // and what the editor puts above the text.

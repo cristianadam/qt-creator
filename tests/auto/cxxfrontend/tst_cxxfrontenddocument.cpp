@@ -21,6 +21,7 @@
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Scope.h>
+#include <cplusplus/SimpleLexer.h>
 #include <cplusplus/Symbols.h>
 #include <cplusplus/TranslationUnit.h>
 
@@ -148,7 +149,6 @@ QStringList namesOf(const QList<CxxFrontendDocument::Completion::Candidate> &can
     return names;
 }
 
-} // namespace
 
 class tst_cxxfrontenddocument : public QObject
 {
@@ -191,6 +191,11 @@ private slots:
     void localsFromTheParameterList();
     void localsUsedThroughAMacro();
     void noLocalsOutsideAFunction();
+
+    void commentsOfAFile();
+    void commentKinds_data();
+    void commentKinds();
+    void commentsOfAHeaderAreItsOwn();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -955,6 +960,116 @@ void tst_cxxfrontenddocument::noLocalsOutsideAFunction()
     QVERIFY(document.localsAt(1, 5).isEmpty());
     // And a global used inside a function is not a local of it.
     QCOMPARE(describeLocals(document.localsAt(2, 16)), QStringList("a @2:16+1"));
+}
+
+// What the built-in front end calls each comment, so that the two agree on
+// the four kinds -- a reader that tells them apart there tells them apart
+// here. The built-in lexer is asked directly: it is the only thing that
+// classifies a comment, and it does so while scanning tokens.
+QString builtinKindOf(const QByteArray &source)
+{
+    SimpleLexer lexer;
+    const Tokens tokens = lexer(QString::fromUtf8(source));
+    for (const Token &token : tokens) {
+        switch (token.kind()) {
+        case T_COMMENT: return "c-style";
+        case T_CPP_COMMENT: return "cpp-style";
+        case T_DOXY_COMMENT: return "c-style-doxygen";
+        case T_CPP_DOXY_COMMENT: return "cpp-style-doxygen";
+        default: break;
+        }
+    }
+    return {};
+}
+
+QString kindOf(CxxFrontendDocument::CommentKind kind)
+{
+    switch (kind) {
+    case CxxFrontendDocument::CommentKind::CStyle: return "c-style";
+    case CxxFrontendDocument::CommentKind::CppStyle: return "cpp-style";
+    case CxxFrontendDocument::CommentKind::CStyleDoxygen: return "c-style-doxygen";
+    case CxxFrontendDocument::CommentKind::CppStyleDoxygen: return "cpp-style-doxygen";
+    }
+    return {};
+}
+
+QStringList describeComments(const QList<CxxFrontendDocument::Comment> &comments)
+{
+    QStringList described;
+    for (const CxxFrontendDocument::Comment &comment : comments) {
+        described.append(QString("%1 @%2:%3-%4:%5")
+                             .arg(kindOf(comment.kind))
+                             .arg(comment.line).arg(comment.column)
+                             .arg(comment.endLine).arg(comment.endColumn));
+    }
+    return described;
+}
+
+} // namespace
+
+// A comment is not code, so nothing in the tree points at one: what a
+// document knows about its comments is where each stands and how it is
+// written. Which is what a reader needs -- the documentation of a
+// declaration is the comment block directly above it.
+void tst_cxxfrontenddocument::commentsOfAFile()
+{
+    const CxxFrontendDocument document("// what f does\n"
+                                       "void f();\n"
+                                       "\n"
+                                       "/* and g */ void g(); // in passing\n",
+                                       "<stdin>");
+
+    QCOMPARE(describeComments(document.comments()),
+             QStringList({"cpp-style @1:1-1:15",
+                          "c-style @4:1-4:12",
+                          "cpp-style @4:23-4:36"}));
+}
+
+void tst_cxxfrontenddocument::commentKinds_data()
+{
+    QTest::addColumn<QByteArray>("source");
+
+    QTest::newRow("a line comment") << QByteArray("// text\n");
+    QTest::newRow("a documented line") << QByteArray("/// text\n");
+    QTest::newRow("a documented line with a bang") << QByteArray("//! text\n");
+    QTest::newRow("four slashes") << QByteArray("//// text\n");
+    QTest::newRow("a block comment") << QByteArray("/* text */\n");
+    QTest::newRow("a documented block") << QByteArray("/** text */\n");
+    QTest::newRow("a documented block with a bang") << QByteArray("/*! text */\n");
+    QTest::newRow("a documented block pointing back") << QByteArray("/**< text */\n");
+    QTest::newRow("a block of stars") << QByteArray("/*** text */\n");
+    QTest::newRow("an empty block") << QByteArray("/**/\n");
+    QTest::newRow("a block with no space after the stars") << QByteArray("/**text */\n");
+}
+
+// The same rules on both, case by case, because which kind a comment is
+// decides whether two of them are one block.
+void tst_cxxfrontenddocument::commentKinds()
+{
+    QFETCH(QByteArray, source);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.comments().size(), 1);
+    QCOMPARE(kindOf(document.comments().first().kind), builtinKindOf(source));
+}
+
+// A header is read into whoever includes it, and its comments are read with
+// it -- but they are written in the header, so they are the header's own and
+// no answer about this file.
+void tst_cxxfrontenddocument::commentsOfAHeaderAreItsOwn()
+{
+    CxxFrontendDocument::Config config;
+    config.onInclude = [](const QString &name, bool, const QString &)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
+        if (name != "h.h")
+            return std::nullopt;
+        return CxxFrontendDocument::Config::Include{"h.h", "// in the header\nint fromHeader;\n"};
+    };
+
+    const CxxFrontendDocument document("#include \"h.h\"\n// here\nint here;\n",
+                                       "<stdin>", config);
+
+    QCOMPARE(describeComments(document.comments()), QStringList("cpp-style @2:1-2:8"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)
