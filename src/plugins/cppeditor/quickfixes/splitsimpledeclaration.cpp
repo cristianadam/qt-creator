@@ -7,6 +7,10 @@
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
 
+#ifdef WITH_TESTS
+#include "cppquickfix_test.h"
+#endif
+
 using namespace CPlusPlus;
 using namespace Utils;
 
@@ -86,12 +90,6 @@ private:
 */
 class SplitSimpleDeclaration : public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         CoreDeclaratorAST *core_declarator = nullptr;
@@ -130,11 +128,24 @@ private:
     }
 };
 
+#ifdef WITH_TESTS
+class SplitSimpleDeclarationTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
+#endif
+
 } // namespace
 
 void registerSplitSimpleDeclarationQuickfix()
 {
-    CppQuickFixFactory::registerFactory<SplitSimpleDeclaration>();
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(SplitSimpleDeclaration);
 }
 
 } // namespace CppEditor::Internal
+
+#ifdef WITH_TESTS
+#include <splitsimpledeclaration.moc>
+#endif
