@@ -376,6 +376,14 @@ public:
         bool objectIsPointer = false;
         bool dotWasWritten = false;
 
+        // The front end could not see everything that is being looked
+        // into: a base class it could not work out, a class whose body
+        // this file never saw. What comes back is then a part of the
+        // answer, and a part of a list of what can be written here is
+        // worse than none -- the name somebody wants may be the one
+        // missing.
+        bool membersMayBeMissing = false;
+
         // One of the things that could be written: its name, the
         // declaration it stands for as Overview would print it, and the
         // icon that says what it is -- which is what a proposal shows.

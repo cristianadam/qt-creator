@@ -172,6 +172,8 @@ private slots:
     void completeAnUnqualifiedName();
     void completeOffersInheritedMembers();
     void completionSaysWhatItInserts();
+    void completeOffersWhatAnAnonymousUnionHolds();
+    void completionSaysWhenItCannotSeeEverything();
     void completeAfterADotOnAPointer();
     void argumentHints();
     void noCompletionWhereNoneWasAsked();
@@ -538,6 +540,46 @@ void tst_cxxfrontenddocument::completeAfterADotOnAPointer()
     QVERIFY(onAValue.dotWasWritten);
 }
 
+// An anonymous union or struct is written inside the class and named
+// without it, so what it holds is offered where the class's own members
+// are.
+void tst_cxxfrontenddocument::completeOffersWhatAnAnonymousUnionHolds()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct S { union { int i; char c; }; int named; };\n"
+                     "void f(S s) { s.$ }\n");
+
+    QVERIFY2(namesOf(completion.candidates).contains("i"),
+             qPrintable(namesOf(completion.candidates).join(", ")));
+    QVERIFY(namesOf(completion.candidates).contains("c"));
+    QVERIFY(namesOf(completion.candidates).contains("named"));
+    QVERIFY(!completion.membersMayBeMissing);
+}
+
+// And where it could not see everything the object has, it says so, because
+// a part of a list of what can be written is worse than no list: the name
+// somebody wants may be the missing one.
+void tst_cxxfrontenddocument::completionSaysWhenItCannotSeeEverything()
+{
+    // A base this file does not have. Its members are inherited all the
+    // same, and none of them are here.
+    const CxxFrontendDocument::Completion fromAMissingBase
+        = completeAt("struct D : Elsewhere { int own; };\nvoid f(D d) { d.$ }\n");
+    QVERIFY(namesOf(fromAMissingBase.candidates).contains("own"));
+    QVERIFY(fromAMissingBase.membersMayBeMissing);
+
+    // A class this file only declares, whose members are all elsewhere.
+    const CxxFrontendDocument::Completion fromADeclaration
+        = completeAt("struct Later;\nvoid f(Later *l) { l->$ }\n");
+    QVERIFY(fromADeclaration.membersMayBeMissing);
+
+    // And a class it has whole says nothing of the kind.
+    const CxxFrontendDocument::Completion whole
+        = completeAt("struct B { int inherited; };\nstruct D : B { int own; };\n"
+                     "void f(D d) { d.$ }\n");
+    QVERIFY(!whole.membersMayBeMissing);
+}
+
 void tst_cxxfrontenddocument::argumentHints()
 {
     const CxxFrontendDocument::Completion completion
@@ -577,6 +619,28 @@ void tst_cxxfrontenddocument::unsupportedQueries()
     QVERIFY(!unsupported.contains("scopeAt"));
     QVERIFY(!unsupported.contains("Snapshot"));
     QVERIFY(unsupported.contains("the line each include is on"));
+
+    // The entry, and both halves of the answer it is about. A partial
+    // specialization written with a type the file declares is the one
+    // instantiated...
+    QVERIFY(unsupported.contains("which specialization of a template an object is, in a file "
+                                 "that does not declare the types the specialization names"));
+    const CxxFrontendDocument::Completion matched
+        = completeAt("template <typename T> struct S {};\n"
+                     "template <typename T, int N> struct S<T[N]> { int fromTheArrayOne; };\n"
+                     "void f(S<int[3]> s) { s.$ }\n");
+    QVERIFY2(namesOf(matched.candidates).contains("fromTheArrayOne"),
+             qPrintable(namesOf(matched.candidates).join(", ")));
+
+    // ...and written with one it does not, it is not, so what comes back is
+    // the primary template's members. Nothing about them says so, which is
+    // why the list has to.
+    const CxxFrontendDocument::Completion notMatched
+        = completeAt("template <typename T> struct S {};\n"
+                     "template <typename T, size_t N> struct S<T[N]> { int fromTheArrayOne; };\n"
+                     "void f(S<int[3]> s) { s.$ }\n");
+    QVERIFY(!namesOf(notMatched.candidates).contains("fromTheArrayOne"));
+    QVERIFY(!notMatched.membersMayBeMissing);
 
     // A slot is written with a macro that expands to an access specifier, so
     // the parser is handed a member function and nothing says otherwise --

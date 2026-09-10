@@ -510,8 +510,10 @@ public:
     // Turns what the parser found at the completion point into the names a
     // caller can offer.
     void recordCompletion(const cxx::CodeCompletionContext &context);
+    // Everything that could be named in \a scope, its bases included. Sets
+    // \a membersMayBeMissing where it could not see all of them.
     [[nodiscard]] QList<CxxFrontendDocument::Completion::Candidate> visibleMembersIn(
-        cxx::ScopeSymbol *scope) const;
+        cxx::ScopeSymbol *scope, bool *membersMayBeMissing = nullptr) const;
 
     // The keyword a class was written with, which the symbol does not
     // record: the token before its name.
@@ -985,7 +987,8 @@ CxxFrontendDocument::Completion::Candidate CxxFrontendDocument::Private::describ
 }
 
 QList<CxxFrontendDocument::Completion::Candidate>
-CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope) const
+CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope,
+                                               bool *membersMayBeMissing) const
 {
     QList<Completion::Candidate> candidates;
     if (!scope)
@@ -1031,15 +1034,48 @@ CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope) const
                     continue;
                 if (dynamic_cast<cxx::BaseClassSymbol *>(member))
                     continue;
-                if (member->name())
-                    candidates.append(describeCandidate(member));
+
+                // An anonymous union or struct. What it holds is written
+                // where it stands, and is named without it, so its members
+                // are members here.
+                if (!member->name()) {
+                    if (cxx::ScopeSymbol *nested = member->asScopeSymbol())
+                        collect(nested, seen);
+                    continue;
+                }
+                candidates.append(describeCandidate(member));
             }
 
             if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(current)) {
+                // A class whose body this file never saw has members that
+                // are not here to list.
+                if (!cls->isComplete() && membersMayBeMissing)
+                    *membersMayBeMissing = true;
+
+                // A base that was written and not worked out is not in the
+                // list below at all -- a name this file does not have, or
+                // one the front end could not settle -- so the bases are
+                // counted where they are written. Its members are
+                // inherited whether or not it was understood.
+                if (membersMayBeMissing) {
+                    std::size_t written = 0;
+                    if (auto *specifier
+                        = dynamic_cast<cxx::ClassSpecifierAST *>(cls->declaration())) {
+                        for (auto *it = specifier->baseSpecifierList; it; it = it->next)
+                            ++written;
+                    }
+                    if (written > cls->baseClasses().size())
+                        *membersMayBeMissing = true;
+                }
+
                 for (cxx::BaseClassSymbol *base : cls->baseClasses()) {
                     if (auto *baseScope = base->symbol() ? base->symbol()->asScopeSymbol()
                                                          : nullptr) {
                         collect(baseScope, seen);
+                    } else if (membersMayBeMissing) {
+                        // A base the front end could not work out, whose
+                        // members are inherited all the same.
+                        *membersMayBeMissing = true;
                     }
                 }
             }
@@ -1073,10 +1109,12 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
 
             if constexpr (std::is_same_v<T, cxx::UnqualifiedCompletionContext>) {
                 completion.kind = Kind::Unqualified;
-                completion.candidates = visibleMembersIn(what.scope);
+                completion.candidates = visibleMembersIn(what.scope,
+                                                         &completion.membersMayBeMissing);
             } else if constexpr (std::is_same_v<T, cxx::ScopeCompletionContext>) {
                 completion.kind = Kind::Scope;
-                completion.candidates = visibleMembersIn(what.scope);
+                completion.candidates = visibleMembersIn(what.scope,
+                                                         &completion.membersMayBeMissing);
             } else if constexpr (std::is_same_v<T, cxx::MemberCompletionContext>) {
                 completion.kind = Kind::Member;
                 if (what.objectType) {
@@ -1084,7 +1122,8 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
                         cxx::to_string(what.objectType, "", {.omitEnclosingScope = true}));
                     completion.objectIsPointer
                         = cxx::type_cast<cxx::PointerType>(what.objectType) != nullptr;
-                    completion.candidates = visibleMembersIn(classScopeOf(what.objectType));
+                    completion.candidates = visibleMembersIn(classScopeOf(what.objectType),
+                                                             &completion.membersMayBeMissing);
                 }
                 completion.dotWasWritten = what.accessOp == cxx::TokenKind::T_DOT;
             } else if constexpr (std::is_same_v<T, cxx::ArgumentHintsContext>) {
@@ -2071,6 +2110,15 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // an ordinary member function and an outline gives it an ordinary
         // icon.
         "whether a member function is a signal or a slot",
+        // Which specialization of a template an object is, where the
+        // specialization is written with a type the file does not declare.
+        // "template <typename T, size_t N> struct S<T[N]>" in a file with
+        // no size_t in it does not match S<int[3]>, so the members offered
+        // are the primary template's; written with int it matches. The
+        // built-in front end matches it either way, and whoever asks
+        // cannot tell -- the class that comes back is a complete one.
+        "which specialization of a template an object is, in a file that "
+        "does not declare the types the specialization names",
         // What the editor colours besides names: a label, a Qt keyword,
         // the angle brackets of a template argument list and the two
         // halves of a ternary. namesIn() answers for names, and those are
