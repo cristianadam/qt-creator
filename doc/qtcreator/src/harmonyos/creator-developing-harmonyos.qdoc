@@ -27,9 +27,11 @@
         \li The HarmonyOS command-line tools, version 6.1 or newer, or an
             installation of DevEco Studio. The directory to point \QC at is the
             one that has both \c sdk and \c bin in it. The public OpenHarmony
-            SDK is not a substitute: it carries neither \c hvigor nor the
-            signing tools.
+            SDK is not a substitute: it carries no \c hvigor, which packaging
+            an application needs.
         \li A Qt for HarmonyOS. \QC recognizes it by its \c ohos-clang mkspec.
+            The \c {scripts/harmonyos/build_qt.py} script in the \QC sources
+            cross-builds one, with the modules that \QC uses.
         \li A Java runtime. The SDK signs the package with
             \c hap-sign-tool.jar, which needs one.
         \li The third-party libraries Qt links against that the device does not
@@ -77,6 +79,11 @@
     \preferences > \uicontrol Kits > \uicontrol Compilers, and a device that
     \c hdc reports appears in \preferences > \uicontrol Devices >
     \uicontrol Devices, without any further configuration.
+
+    To install a public OpenHarmony SDK, which covers the compilers, the
+    sysroot, and \c hdc, run the \c {scripts/harmonyos/install_sdk.py} script
+    in the \QC sources. Packaging an application still needs \c hvigor from
+    Huawei's command-line tools.
 
     \sa {Developing for HarmonyOS devices}, {HarmonyOS}{How to: Develop for
     HarmonyOS}, {Sign HarmonyOS packages}
