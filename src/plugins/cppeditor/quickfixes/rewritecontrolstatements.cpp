@@ -402,82 +402,107 @@ std::optional<int> endOfNode(const CxxFrontendDocument &document,
         return {};
     return file->position(range.endLine, range.endColumn);
 }
+
+std::optional<int> startOfNode(const CxxFrontendDocument &document,
+                               const CppRefactoringFilePtr &file, cxx::AST *node)
+{
+    const CxxAstRange range = cxxAstRangeOf(document, node);
+    if (!range.isValid())
+        return {};
+    return file->position(range.startLine, range.startColumn);
+}
+
+std::optional<ChangeSet::Range> rangeOfNode(const CxxFrontendDocument &document,
+                                            const CppRefactoringFilePtr &file, cxx::AST *node)
+{
+    const CxxAstRange range = cxxAstRangeOf(document, node);
+    if (!range.isValid())
+        return {};
+    return ChangeSet::Range(file->position(range.startLine, range.startColumn),
+                            file->position(range.endLine, range.endColumn));
+}
+
+// The declaration written in a condition, past the conversions cxx records
+// around it: "if (Foo *foo = g())" reads as a cast of a cast of the
+// declaration, because what the statement wants there is a bool. Null where
+// the condition is an ordinary expression.
+cxx::ConditionExpressionAST *cxxConditionDeclaration(cxx::ExpressionAST *condition)
+{
+    while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(condition))
+        condition = cast->expression;
+    return dynamic_cast<cxx::ConditionExpressionAST *>(condition);
+}
 #endif
+
+// Both operations below take the three stretches of text they work on -- the
+// name that is declared, the condition it is declared in, and where the
+// statement begins -- rather than the nodes those were read off.
 
 class MoveDeclarationOutOfIfOp: public CppQuickFixOperation
 {
 public:
-    MoveDeclarationOutOfIfOp(const CppQuickFixInterface &interface)
-        : CppQuickFixOperation(interface)
+    MoveDeclarationOutOfIfOp(const CppQuickFixInterface &interface, int priority,
+                             const ChangeSet::Range &name, const ChangeSet::Range &condition,
+                             int statementStart)
+        : CppQuickFixOperation(interface, priority)
+        , m_name(name)
+        , m_condition(condition)
+        , m_statementStart(statementStart)
     {
         setDescription(Tr::tr("Move Declaration out of Condition"));
-
-        reset();
-    }
-
-    void reset()
-    {
-        condition = mk.Condition();
-        pattern = mk.IfStatement(condition);
     }
 
     void perform() override
     {
         ChangeSet changes;
 
-        changes.copy(currentFile()->range(core), currentFile()->startOf(condition));
-
-        int insertPos = currentFile()->startOf(pattern);
-        changes.move(currentFile()->range(condition), insertPos);
-        changes.insert(insertPos, QLatin1String(";\n"));
+        changes.copy(m_name, m_condition.start);
+        changes.move(m_condition, m_statementStart);
+        changes.insert(m_statementStart, QLatin1String(";\n"));
 
         currentFile()->apply(changes);
     }
 
-    ASTMatcher matcher;
-    ASTPatternBuilder mk;
-    ConditionAST *condition = nullptr;
-    IfStatementAST *pattern = nullptr;
-    CoreDeclaratorAST *core = nullptr;
+private:
+    const ChangeSet::Range m_name;
+    const ChangeSet::Range m_condition;
+    const int m_statementStart;
 };
 
 class MoveDeclarationOutOfWhileOp: public CppQuickFixOperation
 {
 public:
-    MoveDeclarationOutOfWhileOp(const CppQuickFixInterface &interface)
-        : CppQuickFixOperation(interface)
+    MoveDeclarationOutOfWhileOp(const CppQuickFixInterface &interface, int priority,
+                                const ChangeSet::Range &name, const ChangeSet::Range &condition,
+                                int statementStart)
+        : CppQuickFixOperation(interface, priority)
+        , m_name(name)
+        , m_condition(condition)
+        , m_statementStart(statementStart)
     {
         setDescription(Tr::tr("Move Declaration out of Condition"));
-        reset();
-    }
-
-    void reset()
-    {
-        condition = mk.Condition();
-        pattern = mk.WhileStatement(condition);
     }
 
     void perform() override
     {
         ChangeSet changes;
 
-        changes.insert(currentFile()->startOf(condition), QLatin1String("("));
-        changes.insert(currentFile()->endOf(condition), QLatin1String(") != 0"));
+        changes.insert(m_condition.start, QLatin1String("("));
+        changes.insert(m_condition.end, QLatin1String(") != 0"));
 
-        int insertPos = currentFile()->startOf(pattern);
-        const int conditionStart = currentFile()->startOf(condition);
-        changes.move(conditionStart, currentFile()->startOf(core), insertPos);
-        changes.copy(currentFile()->range(core), insertPos);
-        changes.insert(insertPos, QLatin1String(";\n"));
+        // The type goes out with the declaration and the name stays behind in
+        // the condition, which is now an assignment.
+        changes.move(m_condition.start, m_name.start, m_statementStart);
+        changes.copy(m_name, m_statementStart);
+        changes.insert(m_statementStart, QLatin1String(";\n"));
 
         currentFile()->apply(changes);
     }
 
-    ASTMatcher matcher;
-    ASTPatternBuilder mk;
-    ConditionAST *condition = nullptr;
-    WhileStatementAST *pattern = nullptr;
-    CoreDeclaratorAST *core = nullptr;
+private:
+    const ChangeSet::Range m_name;
+    const ChangeSet::Range m_condition;
+    const int m_statementStart;
 };
 
 class SplitIfStatementOp: public CppQuickFixOperation
@@ -658,30 +683,91 @@ class MoveDeclarationOutOfIf: public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         const QList<AST *> &path = interface.path();
-        using Ptr = QSharedPointer<MoveDeclarationOutOfIfOp>;
-        Ptr op(new MoveDeclarationOutOfIfOp(interface));
+        const CppRefactoringFilePtr file = interface.currentFile();
+        ASTMatcher matcher;
+        ASTPatternBuilder mk;
+        ConditionAST *condition = mk.Condition();
+        IfStatementAST *pattern = mk.IfStatement(condition);
 
         int index = path.size() - 1;
         for (; index != -1; --index) {
             if (IfStatementAST *statement = path.at(index)->asIfStatement()) {
-                if (statement->match(op->pattern, &op->matcher) && op->condition->declarator) {
-                    DeclaratorAST *declarator = op->condition->declarator;
-                    op->core = declarator->core_declarator;
-                    if (!op->core)
+                if (statement->match(pattern, &matcher) && condition->declarator) {
+                    DeclaratorAST *declarator = condition->declarator;
+                    CoreDeclaratorAST * const core = declarator->core_declarator;
+                    if (!core)
                         return;
 
-                    if (interface.isCursorOn(op->core)) {
-                        op->setPriority(index);
-                        result.append(op);
+                    if (interface.isCursorOn(core)) {
+                        result << new MoveDeclarationOutOfIfOp(interface, index,
+                                                               file->range(core),
+                                                               file->range(condition),
+                                                               file->startOf(pattern));
                         return;
                     }
 
-                    op->reset();
+                    condition = mk.Condition();
+                    pattern = mk.IfStatement(condition);
                 }
             }
         }
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree. No question is asked here
+    // about whether the front end read the statement cleanly, as the brace
+    // fixes do: what this one needs is a declaration with an initializer
+    // written inside a condition, and error recovery does not invent that
+    // shape -- a file whose types it cannot resolve still reads the
+    // declaration as one, which the existing cases are made of.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+        if (!document)
+            return false;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+
+        for (int index = path.size() - 1; index >= 0; --index) {
+            auto * const statement = dynamic_cast<cxx::IfStatementAST *>(path.at(index));
+            if (!statement)
+                continue;
+            cxx::ConditionExpressionAST * const condition
+                = cxxConditionDeclaration(statement->condition);
+            if (!condition || !condition->declarator)
+                continue;
+            cxx::CoreDeclaratorAST * const core = condition->declarator->coreDeclarator;
+            if (!core)
+                return false;
+
+            const std::optional<ChangeSet::Range> name = rangeOfNode(*document, file, core);
+            const std::optional<ChangeSet::Range> conditionRange
+                = rangeOfNode(*document, file, condition);
+            const std::optional<int> start = startOfNode(*document, file, statement);
+            if (!name || !conditionRange || !start)
+                return false;
+
+            const int position = cursor.selectionStart();
+            if (position < name->start || position > name->end)
+                continue;
+
+            result << new MoveDeclarationOutOfIfOp(interface, index, *name, *conditionRange,
+                                                   *start);
+            return true;
+        }
+        return false;
+    }
+#endif
 };
 
 /*!
@@ -698,17 +784,26 @@ class MoveDeclarationOutOfWhile: public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         const QList<AST *> &path = interface.path();
-        QSharedPointer<MoveDeclarationOutOfWhileOp> op(new MoveDeclarationOutOfWhileOp(interface));
+        const CppRefactoringFilePtr file = interface.currentFile();
+        ASTMatcher matcher;
+        ASTPatternBuilder mk;
+        ConditionAST *condition = mk.Condition();
+        WhileStatementAST *pattern = mk.WhileStatement(condition);
 
         int index = path.size() - 1;
         for (; index != -1; --index) {
             if (WhileStatementAST *statement = path.at(index)->asWhileStatement()) {
-                if (statement->match(op->pattern, &op->matcher) && op->condition->declarator) {
-                    DeclaratorAST *declarator = op->condition->declarator;
-                    op->core = declarator->core_declarator;
+                if (statement->match(pattern, &matcher) && condition->declarator) {
+                    DeclaratorAST *declarator = condition->declarator;
+                    CoreDeclaratorAST * const core = declarator->core_declarator;
 
-                    if (!op->core)
+                    if (!core)
                         return;
 
                     if (!declarator->equal_token)
@@ -717,17 +812,73 @@ class MoveDeclarationOutOfWhile: public CppQuickFixFactory
                     if (!declarator->initializer)
                         return;
 
-                    if (interface.isCursorOn(op->core)) {
-                        op->setPriority(index);
-                        result.append(op);
+                    if (interface.isCursorOn(core)) {
+                        result << new MoveDeclarationOutOfWhileOp(interface, index,
+                                                                  file->range(core),
+                                                                  file->range(condition),
+                                                                  file->startOf(pattern));
                         return;
                     }
 
-                    op->reset();
+                    condition = mk.Condition();
+                    pattern = mk.WhileStatement(condition);
                 }
             }
         }
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree, and the same demand: the
+    // name must be given something with an "=", since what is left behind in
+    // the condition is an assignment. cxx keeps that initializer on the
+    // condition rather than on the declarator.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+        if (!document)
+            return false;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+
+        for (int index = path.size() - 1; index >= 0; --index) {
+            auto * const statement = dynamic_cast<cxx::WhileStatementAST *>(path.at(index));
+            if (!statement)
+                continue;
+            cxx::ConditionExpressionAST * const condition
+                = cxxConditionDeclaration(statement->condition);
+            if (!condition || !condition->declarator)
+                continue;
+            cxx::CoreDeclaratorAST * const core = condition->declarator->coreDeclarator;
+            if (!core)
+                return false;
+
+            auto * const initializer
+                = dynamic_cast<cxx::EqualInitializerAST *>(condition->initializer);
+            if (!initializer || !initializer->expression)
+                return false;
+
+            const std::optional<ChangeSet::Range> name = rangeOfNode(*document, file, core);
+            const std::optional<ChangeSet::Range> conditionRange
+                = rangeOfNode(*document, file, condition);
+            const std::optional<int> start = startOfNode(*document, file, statement);
+            if (!name || !conditionRange || !start)
+                return false;
+
+            const int position = cursor.selectionStart();
+            if (position < name->start || position > name->end)
+                continue;
+
+            result << new MoveDeclarationOutOfWhileOp(interface, index, *name, *conditionRange,
+                                                      *start);
+            return true;
+        }
+        return false;
+    }
+#endif
 };
 
 /*!
