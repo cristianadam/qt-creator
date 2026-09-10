@@ -776,6 +776,48 @@ void CxxFrontendModelTest::testNames()
 //
 // Which model answered depends on QTC_CXX_FRONTEND_MODEL, as everywhere
 // else: the file has a model only where the parser was asked to keep one.
+// A file that uses what a header declares, which is every real file. The
+// model keeps one translation unit per file, so a name a header declared is
+// not in this one -- and what that costs the colours is what this measures.
+// What a file that uses its headers gets, which is what every real file is.
+//
+// The model keeps one translation unit per file and lets only a header's
+// macros cross into its includer, so a type a header declares is not a type
+// here -- and the parser cannot read a declaration whose type it does not
+// know. This says how much is lost, so that the day headers do cross, these
+// numbers go up and the test says so.
+void CxxFrontendModelTest::testNamesAcrossFiles()
+{
+    const auto found = [](const QByteArray &body) {
+        const Parsed parsed({{"h.h", "struct FromHeader { int value; };\n"},
+                             {"main.cpp", QByteArray("#include \"h.h\"\n") + body}},
+                            "main.cpp");
+        if (!parsed.isValid() || !parsed.mainDocument())
+            return QStringList();
+        QStringList names;
+        for (const CxxFrontendDocument::Name &name : parsed.mainDocument()->namesIn())
+            names.append(QString("%1:%2 %3").arg(name.line).arg(name.column).arg(nameOf(name.kind)));
+        return names;
+    };
+
+    // Nothing from the header: everything is found, as in a file of its own.
+    QCOMPARE(found("int f(int a)\n{\n    return a;\n}\n"),
+             QStringList({"2:5 FunctionDeclaration", "2:11 Local", "4:12 Local"}));
+
+    // A header's type in the signature, and the whole function goes: the
+    // parser has no such type, so there is no declaration to read.
+    QCOMPARE(found("int f(FromHeader h)\n{\n    return h.value;\n}\n"), QStringList());
+
+    // In the body, and the locals go with it.
+    QCOMPARE(found("int f()\n{\n    FromHeader h;\n    return h.value;\n}\n"),
+             QStringList({"2:5 FunctionDeclaration"}));
+
+    // A base is read where it is written rather than resolved, so it keeps
+    // its colour.
+    QCOMPARE(found("struct Derived : FromHeader { int own; };\n"),
+             QStringList({"2:8 Type", "2:18 Type", "2:35 Field"}));
+}
+
 void CxxFrontendModelTest::testHighlightingReachesTheEditor()
 {
     CppEditor::Tests::TestCase testCase;
