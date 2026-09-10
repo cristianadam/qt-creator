@@ -8,6 +8,7 @@
 #include <cplusplus/Overview.h>
 
 #include <utils/algorithm.h>
+#include <utils/filepath.h>
 #include <utils/textutils.h>
 
 #include <QRegularExpression>
@@ -16,6 +17,17 @@
 #include <QTextDocument>
 
 namespace CPlusPlus {
+
+static CommentFinder &commentFinder()
+{
+    static CommentFinder finder;
+    return finder;
+}
+
+void setCommentFinder(const CommentFinder &finder)
+{
+    commentFinder() = finder;
+}
 
 static QString nameFromSymbol(const Symbol *symbol)
 {
@@ -162,6 +174,13 @@ QList<CommentRange> commentsForDeclaration(const QString &symbolName,
 {
     if (symbolName.isEmpty())
         return {};
+
+    if (const CommentFinder &finder = commentFinder()) {
+        if (const std::optional<QList<CommentRange>> found
+            = finder(symbolName, pos, textDoc, cppDoc->filePath())) {
+            return *found;
+        }
+    }
 
     // Find the symbol declaration's AST node.
     // We stop at the last declaration node that precedes the symbol, except:

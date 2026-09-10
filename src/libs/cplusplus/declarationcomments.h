@@ -7,11 +7,17 @@
 
 #include <QList>
 
+#include <functional>
+#include <optional>
+
 QT_BEGIN_NAMESPACE
 class QTextDocument;
 QT_END_NAMESPACE
 
-namespace Utils { namespace Text { class Position; } }
+namespace Utils {
+class FilePath;
+namespace Text { class Position; }
+} // namespace Utils
 
 namespace CPlusPlus {
 class AST;
@@ -67,6 +73,17 @@ QList<CommentRange> CPLUSPLUS_EXPORT commentBlockAbove(const QList<PrecedingComm
                                                        const QString &symbolName,
                                                        bool isParameter,
                                                        const QTextDocument &textDoc);
+
+// Answers the question below off another front end's reading of the file,
+// where it has read it, and declines otherwise. Installed by whoever runs
+// that model, the same way SimpleLexer::setScanner() is and for the same
+// reason: the model lives in a library this one cannot depend on. Nothing
+// installs one by default, and then the built-in front end answers, which is
+// what shipping Qt Creator does.
+using CommentFinder = std::function<std::optional<QList<CommentRange>>(
+    const QString &symbolName, const Utils::Text::Position &position,
+    const QTextDocument &textDoc, const Utils::FilePath &filePath)>;
+void CPLUSPLUS_EXPORT setCommentFinder(const CommentFinder &finder);
 
 QList<CommentRange> CPLUSPLUS_EXPORT commentsForDeclaration(const Symbol *symbol,
                                                             const QTextDocument &textDoc,

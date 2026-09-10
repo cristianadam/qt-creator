@@ -8,11 +8,17 @@
 
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/CxxFrontendDocument.h>
+#include <cplusplus/CxxFrontendAst.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
+#include <cplusplus/declarationcomments.h>
+
+#include <cxx/ast.h>
 
 #include <utils/environment.h>
 
 #include <QHash>
+#include <QTextBlock>
+#include <QTextDocument>
 #include <QMutex>
 #include <QMutexLocker>
 
@@ -167,6 +173,118 @@ std::shared_ptr<const CxxFrontendSnapshot> cxxFrontendModel(const FilePath &file
 void forgetCxxFrontendModel(const FilePath &filePath)
 {
     models().forget(filePath);
+}
+
+namespace {
+
+// Where a line and a column, both counted from one, stand in the document.
+int positionOf(const QTextDocument &textDoc, int line, int column)
+{
+    return textDoc.findBlockByNumber(line - 1).position() + column - 1;
+}
+
+// The declaration the position is in, and whether the position is a parameter
+// of it -- the same rule the built-in path applies: the outermost of the
+// declarations that enclose the position directly, with a parameter looking
+// past itself to the function it belongs to.
+cxx::AST *declarationAround(const QList<cxx::AST *> &path, bool *isParameter)
+{
+    cxx::AST *declaration = nullptr;
+    for (int index = path.size() - 2; index >= 0; --index) {
+        cxx::AST * const node = path.at(index);
+        if (dynamic_cast<cxx::ParameterDeclarationAST *>(node)) {
+            *isParameter = true;
+            continue;
+        }
+        if (dynamic_cast<cxx::DeclarationAST *>(node)) {
+            declaration = node;
+            continue;
+        }
+        if (declaration)
+            break;
+    }
+    return declaration;
+}
+
+// The comments written directly above \a declarationStart, with nothing but
+// comments and space in between, nearest last.
+//
+// What stands between them is read from the text rather than from a token
+// stream, which this model does not hand out: anything that is not space is
+// something other than a comment, and then the block above it is not this
+// declaration's.
+QList<PrecedingComment> commentsAbove(const CxxFrontendDocument &document,
+                                      const QTextDocument &textDoc, int declarationStart)
+{
+    const auto styleOf = [](CxxFrontendDocument::CommentKind kind) {
+        switch (kind) {
+        case CxxFrontendDocument::CommentKind::CppStyle: return CommentStyle::CppStyle;
+        case CxxFrontendDocument::CommentKind::CStyleDoxygen: return CommentStyle::CStyleDoxygen;
+        case CxxFrontendDocument::CommentKind::CppStyleDoxygen:
+            return CommentStyle::CppStyleDoxygen;
+        case CxxFrontendDocument::CommentKind::CStyle: break;
+        }
+        return CommentStyle::CStyle;
+    };
+
+    QList<PrecedingComment> above;
+    int reachesBackTo = declarationStart;
+    const QList<CxxFrontendDocument::Comment> comments = document.comments();
+    for (auto it = comments.crbegin(); it != comments.crend(); ++it) {
+        const CommentRange range{positionOf(textDoc, it->line, it->column),
+                                 positionOf(textDoc, it->endLine, it->endColumn)};
+        if (range.end > reachesBackTo)
+            continue;
+
+        bool onlySpaceBetween = true;
+        for (int i = range.end; i < reachesBackTo && onlySpaceBetween; ++i)
+            onlySpaceBetween = textDoc.characterAt(i).isSpace();
+        if (!onlySpaceBetween)
+            break;
+
+        above.prepend({range, styleOf(it->kind)});
+        reachesBackTo = range.start;
+    }
+
+    return above;
+}
+
+} // namespace
+
+void useCxxFrontendComments(bool enabled)
+{
+    if (!enabled) {
+        CPlusPlus::setCommentFinder({});
+        return;
+    }
+
+    CPlusPlus::setCommentFinder([](const QString &symbolName, const Utils::Text::Position &position,
+                                   const QTextDocument &textDoc, const FilePath &filePath)
+                                    -> std::optional<QList<CommentRange>> {
+        const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+        if (!model)
+            return std::nullopt;
+        const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+        if (!document)
+            return std::nullopt;
+
+        const QList<cxx::AST *> path = cxxAstPathAt(*document, position.line, position.column + 1);
+        if (path.isEmpty())
+            return std::nullopt;
+
+        bool isParameter = false;
+        cxx::AST * const declaration = declarationAround(path, &isParameter);
+        if (!declaration)
+            return std::nullopt;
+
+        const CxxAstRange range = cxxAstRangeOf(*document, declaration);
+        if (!range.isValid())
+            return std::nullopt;
+
+        const int declarationStart = positionOf(textDoc, range.startLine, range.startColumn);
+        return commentBlockAbove(commentsAbove(*document, textDoc, declarationStart),
+                                 declarationStart, symbolName, isParameter, textDoc);
+    });
 }
 
 Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,

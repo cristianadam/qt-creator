@@ -94,6 +94,18 @@ void forgetCxxFrontendModel(const Utils::FilePath &filePath);
 Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
                                     int linkTextStart, int linkTextEnd);
 
+// Answers CPlusPlus::commentsForDeclaration() off this model, for as long as
+// \a enabled: which comments are the documentation of the declaration at a
+// position. Installed rather than called, the way the replacement lexer is,
+// because the facility lives in a library that cannot depend on this one --
+// and because its six readers ask it by position and should not each have to
+// know which model answered.
+//
+// It declines the files this model has not read, and those where something
+// other than comments stands between the comment block and the declaration,
+// which its own token stream is what would say.
+void useCxxFrontendComments(bool enabled);
+
 // A local variable of a function: its name, whether it is one of the
 // function's parameters, the class its type names where it names one, and
 // every place the file writes it -- the declaration first, the uses after.

@@ -66,6 +66,8 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
 #include <cplusplus/CxxFrontendLexer.h>
 #endif
 
@@ -204,6 +206,7 @@ public:
         // from being a question about who is unloaded first.
 #ifdef QTC_WITH_CXX_FRONTEND
         useCxxFrontendLexer(false);
+        useCxxFrontendComments(false);
 #endif
 
         destroyCppQuickFixFactories();
@@ -271,6 +274,15 @@ void CppEditorPlugin::initialize()
     if (qtcEnvironmentVariableIsSet("QTC_CXX_FRONTEND_LEXER")) {
         useCxxFrontendLexer(true);
         qCInfo(cxxFrontendLog) << "scanning C++ with the cxx-frontend lexer";
+    }
+
+    // And which model says where a declaration's documentation is. Installed
+    // once for the same reason: its readers ask by position and none of them
+    // should have to know which model answered. It answers only for the files
+    // the model has read, which are none unless it was asked for.
+    if (cxxFrontendModelRequested()) {
+        useCxxFrontendComments(true);
+        qCInfo(cxxFrontendLog) << "reading C++ comment blocks off the cxx-frontend model";
     }
 #endif
 
