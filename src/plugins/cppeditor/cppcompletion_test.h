@@ -31,6 +31,9 @@ private slots:
 
     void testCompletionPrefixFirstQTCREATORBUG_8737();
     void testCompletionPrefixFirstQTCREATORBUG_9236();
+
+    void testCxxFrontendCompletion_data();
+    void testCxxFrontendCompletion();
 };
 
 } // namespace CppEditor::Internal

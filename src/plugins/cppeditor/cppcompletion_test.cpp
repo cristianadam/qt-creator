@@ -8,6 +8,8 @@
 #include "cppmodelmanager.h"
 #include "cpptoolstestcase.h"
 
+#include <cplusplus/CxxFrontendDocument.h>
+
 #include <coreplugin/editormanager/editormanager.h>
 #include <texteditor/codeassist/iassistproposal.h>
 #include <texteditor/syntaxhighlighter.h>
@@ -2984,5 +2986,109 @@ void CompletionTest::testCompletionMemberAccessOperator_data()
         << false
         << false;
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// What the cxx-frontend model would offer at the same position, beside what
+// the built-in one offers. The proposal carries more than names -- snippets,
+// keywords, the Qt extras -- so what is compared is the names both models
+// are answering with: the members of a type, the contents of a scope.
+//
+// This is the measurement the completion consumer cannot be moved without.
+void CompletionTest::testCxxFrontendCompletion_data()
+{
+    QTest::addColumn<QByteArray>("code");
+    QTest::addColumn<QByteArray>("prefix");
+
+    QTest::newRow("members of a struct") << _(
+            "struct S { int m_value; void run(); };\n"
+            "void f(S s) {\n"
+            "@\n"
+            "}\n") << _("s.");
+    QTest::newRow("members through a pointer") << _(
+            "struct S { int m_value; void run(); };\n"
+            "void f(S *s) {\n"
+            "@\n"
+            "}\n") << _("s->");
+    QTest::newRow("inherited members") << _(
+            "struct B { int base; };\n"
+            "struct D : B { int derived; };\n"
+            "void f(D d) {\n"
+            "@\n"
+            "}\n") << _("d.");
+    QTest::newRow("what a scope holds") << _(
+            "namespace N { int x; void f(); struct S {}; }\n"
+            "void g() {\n"
+            "@\n"
+            "}\n") << _("N::");
+    QTest::newRow("what a class can see of itself") << _(
+            "struct S {\n"
+            "    int m_value;\n"
+            "    void run() {\n"
+            "@\n"
+            "    }\n"
+            "private:\n"
+            "    int m_hidden;\n"
+            "};\n") << _("this->");
+    QTest::newRow("private members from outside") << _(
+            "class C { public: int shown; private: int hidden; };\n"
+            "void f(C c) {\n"
+            "@\n"
+            "}\n") << _("c.");
+    QTest::newRow("an instance of a template") << _(
+            "template <typename T> struct Holder { T value; void set(T t); };\n"
+            "void f(Holder<int> h) {\n"
+            "@\n"
+            "}\n") << _("h.");
+    QTest::newRow("what an enum holds") << _(
+            "enum class E { First, Second };\n"
+            "void f() {\n"
+            "@\n"
+            "}\n") << _("E::");
+    QTest::newRow("a static member through the class") << _(
+            "struct S { static int count; static void reset(); int m; };\n"
+            "void f() {\n"
+            "@\n"
+            "}\n") << _("S::");
+    QTest::newRow("members of a nested type") << _(
+            "struct Outer { struct Inner { int deep; }; Inner inner; };\n"
+            "void f(Outer o) {\n"
+            "@\n"
+            "}\n") << _("o.inner.");
+}
+
+void CompletionTest::testCxxFrontendCompletion()
+{
+    QFETCH(QByteArray, code);
+    QFETCH(QByteArray, prefix);
+
+    CompletionTestCase test(code);
+    QVERIFY(test.succeededSoFar());
+    test.insertText(prefix);
+    QStringList fromBuiltin = test.getCompletions();
+    fromBuiltin.sort();
+
+    // The same text, with the marker gone and the prefix typed, and the
+    // position the marker stood at.
+    QByteArray source = code;
+    const int marker = source.indexOf('@');
+    QVERIFY(marker != -1);
+    source.replace(marker, 1, prefix);
+    const int position = marker + prefix.size();
+    const QByteArray before = source.left(position);
+    const int line = int(before.count('\n')) + 1;
+    const int column = int(position - before.lastIndexOf('\n'));
+
+    const CPlusPlus::CxxFrontendDocument document(QString::fromUtf8(source), "file.h",
+                                                  {.completionLine = line,
+                                                   .completionColumn = column});
+    QStringList fromModel = document.completion().candidates;
+    fromModel.sort();
+
+    QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));
+}
+#else
+void CompletionTest::testCxxFrontendCompletion_data() {}
+void CompletionTest::testCxxFrontendCompletion() {}
+#endif
 
 } // namespace CppEditor::Internal

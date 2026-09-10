@@ -911,16 +911,35 @@ QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope
                 return;
             seen.insert(current);
 
+            // Nothing the compiler declared for itself. Every class has a
+            // copy assignment and a destructor whether or not anybody wrote
+            // one, and a list of what can be written here is a list of what
+            // somebody wrote -- which is what the built-in model offers too.
+            // Written or not is read off the place: what nobody wrote is
+            // recorded where the class is named, since that is the only
+            // place there is for it.
+            //
+            // Except the class's own name, which stands there for a reader
+            // as much as for the front end: the built-in model offers it
+            // too.
+            const auto isWritten = [current](cxx::Symbol *symbol) {
+                if (dynamic_cast<cxx::InjectedClassNameSymbol *>(symbol))
+                    return true;
+                return symbol->location() && symbol->location() != current->location();
+            };
+
             for (cxx::Symbol *member : current->members()) {
                 if (member->isHidden())
                     continue;
                 if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
                     for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
-                        if (function->name())
+                        if (function->name() && isWritten(function))
                             names.append(fromStd(cxx::to_string(function->name())));
                     }
                     continue;
                 }
+                if (!isWritten(member))
+                    continue;
                 if (dynamic_cast<cxx::BaseClassSymbol *>(member))
                     continue;
                 if (member->name())
