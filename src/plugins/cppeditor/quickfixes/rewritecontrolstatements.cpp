@@ -403,6 +403,17 @@ std::optional<int> endOfNode(const CxxFrontendDocument &document,
     return file->position(range.endLine, range.endColumn);
 }
 
+std::optional<ChangeSet::Range> rangeAtToken(const CxxFrontendDocument &document,
+                                             const CppRefactoringFilePtr &file,
+                                             cxx::SourceLocation location)
+{
+    const CxxAstRange range = cxxTokenRangeAt(document, location);
+    if (!range.isValid())
+        return {};
+    return ChangeSet::Range(file->position(range.startLine, range.startColumn),
+                            file->position(range.endLine, range.endColumn));
+}
+
 std::optional<int> startOfNode(const CxxFrontendDocument &document,
                                const CppRefactoringFilePtr &file, cxx::AST *node)
 {
@@ -508,71 +519,75 @@ private:
 class SplitIfStatementOp: public CppQuickFixOperation
 {
 public:
-    SplitIfStatementOp(const CppQuickFixInterface &interface, int priority,
-                       IfStatementAST *pattern, BinaryExpressionAST *condition)
+    // Everything the two rewrites need to know about where the statement and
+    // its condition stand, rather than the nodes those were read off.
+    struct Places
+    {
+        int statementStart = 0;
+        int statementEnd = 0;
+        ChangeSet::Range left;
+        int rightStart = 0;
+        int bodyEnd = 0;
+        bool bodyIsCompound = false;
+        int rparenStart = 0;
+        int rparenEnd = 0;
+    };
+
+    SplitIfStatementOp(const CppQuickFixInterface &interface, int priority, bool splitAnd,
+                       const Places &places)
         : CppQuickFixOperation(interface, priority)
-        , pattern(pattern)
-        , condition(condition)
+        , m_splitAnd(splitAnd)
+        , m_places(places)
     {
         setDescription(Tr::tr("Split if Statement"));
     }
 
     void perform() override
     {
-        const Token binaryToken = currentFile()->tokenAt(condition->binary_op_token);
-
-        if (binaryToken.is(T_AMPER_AMPER))
+        if (m_splitAnd)
             splitAndCondition();
         else
             splitOrCondition();
     }
 
+    // An && becomes an if inside an if.
     void splitAndCondition() const
     {
         ChangeSet changes;
 
-        int startPos = currentFile()->startOf(pattern);
-        changes.insert(startPos, QLatin1String("if ("));
-        changes.move(currentFile()->range(condition->left_expression), startPos);
-        changes.insert(startPos, QLatin1String(") {\n"));
+        changes.insert(m_places.statementStart, QLatin1String("if ("));
+        changes.move(m_places.left, m_places.statementStart);
+        changes.insert(m_places.statementStart, QLatin1String(") {\n"));
 
-        const int lExprEnd = currentFile()->endOf(condition->left_expression);
-        changes.remove(lExprEnd, currentFile()->startOf(condition->right_expression));
-        changes.insert(currentFile()->endOf(pattern), QLatin1String("\n}"));
+        changes.remove(m_places.left.end, m_places.rightStart);
+        changes.insert(m_places.statementEnd, QLatin1String("\n}"));
 
         currentFile()->apply(changes);
     }
 
+    // An || becomes an else-if with the same statement written again.
     void splitOrCondition() const
     {
         ChangeSet changes;
 
-        StatementAST *ifTrueStatement = pattern->statement;
-        CompoundStatementAST *compoundStatement = ifTrueStatement->asCompoundStatement();
-
-        int insertPos = currentFile()->endOf(ifTrueStatement);
-        if (compoundStatement)
-            changes.insert(insertPos, QLatin1String(" "));
-        else
-            changes.insert(insertPos, QLatin1String("\n"));
+        const int insertPos = m_places.bodyEnd;
+        changes.insert(insertPos, m_places.bodyIsCompound ? QLatin1String(" ")
+                                                          : QLatin1String("\n"));
         changes.insert(insertPos, QLatin1String("else if ("));
 
-        const int rExprStart = currentFile()->startOf(condition->right_expression);
-        changes.move(rExprStart, currentFile()->startOf(pattern->rparen_token), insertPos);
+        changes.move(m_places.rightStart, m_places.rparenStart, insertPos);
         changes.insert(insertPos, QLatin1String(")"));
 
-        const int rParenEnd = currentFile()->endOf(pattern->rparen_token);
-        changes.copy(rParenEnd, currentFile()->endOf(pattern->statement), insertPos);
+        changes.copy(m_places.rparenEnd, m_places.bodyEnd, insertPos);
 
-        const int lExprEnd = currentFile()->endOf(condition->left_expression);
-        changes.remove(lExprEnd, currentFile()->startOf(condition->right_expression));
+        changes.remove(m_places.left.end, m_places.rightStart);
 
         currentFile()->apply(changes);
     }
 
 private:
-    IfStatementAST *pattern;
-    BinaryExpressionAST *condition;
+    const bool m_splitAnd;
+    const Places m_places;
 };
 
 class OptimizeForLoopOperation: public CppQuickFixOperation
@@ -908,6 +923,11 @@ class SplitIfStatement: public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         IfStatementAST *pattern = nullptr;
         const QList<AST *> &path = interface.path();
 
@@ -945,11 +965,102 @@ class SplitIfStatement: public CppQuickFixFactory
             }
 
             if (interface.isCursorOn(condition->binary_op_token)) {
-                result << new SplitIfStatementOp(interface, index, pattern, condition);
+                const CppRefactoringFilePtr file = interface.currentFile();
+                StatementAST * const body = pattern->statement;
+                result << new SplitIfStatementOp(
+                    interface, index, splitKind == T_AMPER_AMPER,
+                    {file->startOf(pattern), file->endOf(pattern),
+                     file->range(condition->left_expression),
+                     file->startOf(condition->right_expression), file->endOf(body),
+                     body->asCompoundStatement() != nullptr,
+                     file->startOf(pattern->rparen_token), file->endOf(pattern->rparen_token)});
                 return;
             }
         }
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree, with the same three rules:
+    // the operator has to be one of the two, a chain may not mix them, and an
+    // && cannot be split where there is an else branch to answer for.
+    //
+    // cxx keeps the operator on the node, and it records the conversions a
+    // condition asks for, so the walk down to the cursor steps over those:
+    // "a && b" on ints is a binary expression of two casts.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+        if (!document)
+            return false;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+
+        int index = path.size() - 1;
+        cxx::IfStatementAST *statement = nullptr;
+        for (; index >= 0; --index) {
+            if ((statement = dynamic_cast<cxx::IfStatementAST *>(path.at(index))))
+                break;
+        }
+        if (!statement || !statement->statement)
+            return false;
+
+        cxx::TokenKind splitKind = cxx::TokenKind::T_EOF_SYMBOL;
+        for (++index; index < path.size(); ++index) {
+            if (dynamic_cast<cxx::ImplicitCastExpressionAST *>(path.at(index)))
+                continue;
+            auto * const condition = dynamic_cast<cxx::BinaryExpressionAST *>(path.at(index));
+            if (!condition)
+                return false;
+
+            if (splitKind == cxx::TokenKind::T_EOF_SYMBOL) {
+                splitKind = condition->op;
+                if (splitKind != cxx::TokenKind::T_AMP_AMP
+                    && splitKind != cxx::TokenKind::T_BAR_BAR) {
+                    return false;
+                }
+                if (splitKind == cxx::TokenKind::T_AMP_AMP && statement->elseStatement)
+                    return false;
+            } else if (splitKind != condition->op) {
+                return false;
+            }
+
+            const std::optional<ChangeSet::Range> op = rangeAtToken(*document, file,
+                                                                    condition->opLoc);
+            if (!op)
+                return false;
+            const int position = cursor.selectionStart();
+            if (position < op->start || position > op->end)
+                continue;
+
+            const std::optional<ChangeSet::Range> left
+                = rangeOfNode(*document, file, condition->leftExpression);
+            const std::optional<int> rightStart
+                = startOfNode(*document, file, condition->rightExpression);
+            const std::optional<int> statementStart = startOfNode(*document, file, statement);
+            const std::optional<int> statementEnd = endOfNode(*document, file, statement);
+            const std::optional<int> bodyEnd = endOfNode(*document, file, statement->statement);
+            const std::optional<int> rparenStart
+                = startOfToken(*document, file, statement->rparenLoc);
+            const std::optional<int> rparenEnd = endOfToken(*document, file, statement->rparenLoc);
+            if (!left || !rightStart || !statementStart || !statementEnd || !bodyEnd
+                || !rparenStart || !rparenEnd) {
+                return false;
+            }
+
+            result << new SplitIfStatementOp(
+                interface, index, splitKind == cxx::TokenKind::T_AMP_AMP,
+                {*statementStart, *statementEnd, *left, *rightStart, *bodyEnd,
+                 dynamic_cast<cxx::CompoundStatementAST *>(statement->statement) != nullptr,
+                 *rparenStart, *rparenEnd});
+            return true;
+        }
+        return false;
+    }
+#endif
 };
 
 /*!
