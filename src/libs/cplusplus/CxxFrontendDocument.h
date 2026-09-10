@@ -377,6 +377,26 @@ public:
             QString name;
             QString detail;
             Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Unknown;
+
+            // What choosing it writes. An editor does not put the name in
+            // and stop: a function is written with its parentheses, one
+            // that takes nothing has them closed, and one that returns
+            // nothing ends the statement as well.
+            //
+            // These are here because that decision is about the
+            // declaration, and this is what knows the declaration. A
+            // consumer that had to work them out again would be reading
+            // the code model a second way.
+            bool isFunction = false;
+            bool takesArguments = false;
+            bool returnsNothing = false;
+
+            // Where it sits in the list. A proposal offers what a class
+            // says anybody may use ahead of the rest, and the class's own
+            // name -- which stands for the type, and is the reason a
+            // constructor is never offered here -- behind them.
+            bool isPublic = false;
+            bool isInjectedClassName = false;
         };
         QList<Candidate> candidates;
 

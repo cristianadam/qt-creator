@@ -171,6 +171,7 @@ private slots:
     void completeAfterADot();
     void completeAnUnqualifiedName();
     void completeOffersInheritedMembers();
+    void completionSaysWhatItInserts();
     void argumentHints();
     void noCompletionWhereNoneWasAsked();
 
@@ -452,6 +453,62 @@ void tst_cxxfrontenddocument::completeOffersInheritedMembers()
     QVERIFY(namesOf(completion.candidates).contains("own"));
     QVERIFY2(namesOf(completion.candidates).contains("inherited"),
              qPrintable(namesOf(completion.candidates).join(", ")));
+}
+
+// What a proposal has to know before it can write a chosen candidate down.
+// Each of these is a different thing to type after the name, which is why
+// they are answered here rather than guessed from the printed detail.
+void tst_cxxfrontenddocument::completionSaysWhatItInserts()
+{
+    const CxxFrontendDocument::Completion completion
+        = completeAt("struct S {\n"
+                     "    S();\n"
+                     "    ~S();\n"
+                     "    void run();\n"
+                     "    int count(int from);\n"
+                     "    int m_value;\n"
+                     "private:\n"
+                     "    int m_hidden;\n"
+                     "};\n"
+                     "void f(S s) { s.$ }\n");
+
+    const auto candidate = [&](const QString &name) {
+        for (const CxxFrontendDocument::Completion::Candidate &each : completion.candidates) {
+            if (each.name == name)
+                return each;
+        }
+        return CxxFrontendDocument::Completion::Candidate{};
+    };
+
+    // A function that takes nothing and returns nothing: the whole call can
+    // be written, semicolon included.
+    const auto run = candidate("run");
+    QVERIFY2(run.isFunction, qPrintable(namesOf(completion.candidates).join(", ")));
+    QVERIFY(!run.takesArguments);
+    QVERIFY(run.returnsNothing);
+
+    // One that takes something is written up to the open parenthesis, and
+    // one that returns something does not end the statement.
+    const auto count = candidate("count");
+    QVERIFY(count.isFunction);
+    QVERIFY(count.takesArguments);
+    QVERIFY(!count.returnsNothing);
+
+    // A destructor is called like any other function. A constructor is
+    // never offered at all: what stands here for the class is its own
+    // name, which is a type and not a call.
+    QVERIFY(candidate("~S").isFunction);
+    QVERIFY(candidate("S").isInjectedClassName);
+    QVERIFY(!candidate("S").isFunction);
+
+    // Not a function at all.
+    QVERIFY(!candidate("m_value").isFunction);
+    QVERIFY(!candidate("m_value").takesArguments);
+
+    // And what the class says about who may write it, which is the order a
+    // proposal shows them in.
+    QVERIFY(candidate("m_value").isPublic);
+    QVERIFY(!candidate("m_hidden").isPublic);
 }
 
 void tst_cxxfrontenddocument::argumentHints()

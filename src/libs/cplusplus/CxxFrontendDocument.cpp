@@ -956,6 +956,19 @@ CxxFrontendDocument::Completion::Candidate CxxFrontendDocument::Private::describ
     Completion::Candidate candidate;
     candidate.name = symbol->name() ? fromStd(cxx::to_string(symbol->name())) : QString();
     candidate.icon = iconTypeOf(symbol, classKeyOf(symbol));
+    candidate.isPublic = symbol->accessSpecifier() == cxx::AccessSpecifier::kPublic;
+    candidate.isInjectedClassName = dynamic_cast<cxx::InjectedClassNameSymbol *>(symbol) != nullptr;
+
+    // What writing it down amounts to. A destructor counts as a function
+    // here, because ~S() is called and so is written with its parentheses.
+    if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol)) {
+        candidate.isFunction = true;
+        candidate.takesArguments = !function->parameters().empty();
+        if (auto *functionType = cxx::type_cast<cxx::FunctionType>(function->type())) {
+            candidate.returnsNothing = cxx::type_cast<cxx::VoidType>(functionType->returnType())
+                                       != nullptr;
+        }
+    }
 
     const cxx::TypePrintOptions options{
         .omitFunctionReturnType = !config.settings.showReturnTypes,
