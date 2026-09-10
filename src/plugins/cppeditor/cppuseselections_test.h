@@ -15,6 +15,8 @@ private slots:
     void testUseSelections_data();
     void testUseSelections();
 
+    void testUnusedVariableSelections();
+
     void testSelectionFiltering_data();
     void testSelectionFiltering();
 };

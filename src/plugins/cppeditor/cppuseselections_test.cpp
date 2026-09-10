@@ -46,8 +46,11 @@ namespace CppEditor::Internal::Tests {
 class UseSelectionsTestCase : public CppEditor::Tests::TestCase
 {
 public:
+    // \a kind is which highlight to wait for: the occurrences of what the
+    // cursor is on, or the local variables that are never used.
     UseSelectionsTestCase(CppTestDocument &testDocument,
-                          const SelectionList &expectedSelections);
+                          const SelectionList &expectedSelections,
+                          Utils::Id kind = TextEditor::TextEditorWidget::CodeSemanticsSelection);
 
 private:
     SelectionList toSelectionList(const QList<QTextEdit::ExtraSelection> &extraSelections) const;
@@ -56,10 +59,13 @@ private:
 
 private:
     CppEditorWidget *m_editorWidget = nullptr;
+    Utils::Id m_kind;
 };
 
 UseSelectionsTestCase::UseSelectionsTestCase(CppTestDocument &testFile,
-                                             const SelectionList &expectedSelections)
+                                             const SelectionList &expectedSelections,
+                                             Utils::Id kind)
+    : m_kind(kind)
 {
     QVERIFY(succeededSoFar());
 
@@ -117,8 +123,7 @@ SelectionList UseSelectionsTestCase::toSelectionList(
 
 QList<QTextEdit::ExtraSelection> UseSelectionsTestCase::getExtraSelections() const
 {
-    return m_editorWidget->extraSelections(
-        TextEditor::TextEditorWidget::CodeSemanticsSelection);
+    return m_editorWidget->extraSelections(m_kind);
 }
 
 SelectionList UseSelectionsTestCase::waitForUseSelections(bool *hasTimedOut) const
@@ -153,6 +158,18 @@ void SelectionsTest::testUseSelections_data()
             << (SelectionList()
                 << Selection(1, 10, 3)
                 << Selection(1, 24, 3)
+                );
+
+    // A parameter is highlighted where the comment above its function names
+    // it as well, which is a search through the comment rather than anything
+    // the code says, and comes after the places that are code.
+    QTest::newRow("local uses in the documentation")
+            << _("// Returns arg unchanged.\n"
+                 "int f(int @arg) { return arg; }\n")
+            << (SelectionList()
+                << Selection(2, 10, 3)
+                << Selection(2, 24, 3)
+                << Selection(1, 11, 3)
                 );
 
     QTest::newRow("local use as macro argument 1 - argument expanded")
@@ -241,6 +258,32 @@ void SelectionsTest::testUseSelections()
 
     Tests::CppTestDocument testDocument("file.cpp", source);
     Tests::UseSelectionsTestCase(testDocument, expectedSelections);
+}
+
+// The other half of what the cursor's function is asked for: the locals that
+// are written where they are declared and nowhere else.
+//
+// Both are in one source and come out of one pass, so waiting for the
+// forgotten one to be marked is also the moment at which the lock would have
+// been marked if it were going to be: a lock is doing its work by existing
+// and is not a variable anybody forgot.
+void SelectionsTest::testUnusedVariableSelections()
+{
+    if (CppModelManager::isClangCodeModelActive())
+        QSKIP("clangd marks unused variables itself; this is the built-in path");
+
+    Tests::CppTestDocument testDocument(
+        "file.cpp",
+        "class QMutexLocker { public: QMutexLocker(); };\n"
+        "void f()\n"
+        "{\n"
+        "    QMutexLocker locker;\n"
+        "    int forgotten;\n"
+        "    @\n"
+        "}\n");
+    Tests::UseSelectionsTestCase(testDocument,
+                                 SelectionList() << Selection(5, 8, 9),
+                                 TextEditor::TextEditorWidget::UnusedSymbolSelection);
 }
 
 void SelectionsTest::testSelectionFiltering_data()

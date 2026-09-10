@@ -9,17 +9,21 @@
 #include "cppmodelmanager.h"
 #include "cppsemanticinfo.h"
 #include "cpptoolsreuse.h"
+#include "cxxfrontendmodel.h"
 
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Macro.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/TranslationUnit.h>
+#include <cplusplus/declarationcomments.h>
 
+#include <utils/algorithm.h>
 #include <utils/async.h>
 #include <utils/qtcassert.h>
 #include <utils/textutils.h>
 
 #include <QTextBlock>
+#include <QTextDocument>
 
 using namespace CPlusPlus;
 
@@ -219,7 +223,14 @@ private:
         const SemanticInfo::LocalUseMap localUses
                 = BuiltinCursorInfo::findLocalUses(m_document, m_content, m_line, m_column - 1);
         result.localUses = localUses;
-        splitLocalUses(localUses, &result.useRanges, &result.unusedVariablesRanges);
+
+        // Which places to highlight is asked of the cxx-frontend model where
+        // it has this file, and answered as before where it does not. Only
+        // the places: localUses above is a map keyed by the built-in model's
+        // symbols, which the quick fixes read, so that is a consumer of its
+        // own and moves on its own.
+        if (!splitLocalUsesFromCxxFrontend(&result))
+            splitLocalUses(localUses, &result.useRanges, &result.unusedVariablesRanges);
 
         if (!result.useRanges.isEmpty()) {
             result.areUseRangesForLocalVariable = true;
@@ -260,6 +271,81 @@ private:
             }
         }
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The places a parameter's name is written in the function's
+    // documentation, which are highlighted along with the places the code
+    // writes it -- what LocalSymbols adds to a parameter's uses.
+    //
+    // Not something the cxx-frontend model can answer: comments are not in
+    // its token stream at all, the preprocessor having dropped them.
+    // commentsForDeclaration() asks the built-in document, and takes a name
+    // and a position rather than a symbol, so it can be asked about a local
+    // the other model found. It is a facility of its own, with five other
+    // callers, and moves when they do.
+    CursorInfo::Ranges commentPlacesOf(const QString &name,
+                                       const CursorInfo::Range &declaration,
+                                       const QTextDocument &textDoc) const
+    {
+        TranslationUnit * const unit = m_document->translationUnit();
+        const QList<Token> comments = commentsForDeclaration(
+            name, {declaration.line, declaration.column - 1}, textDoc, m_document);
+
+        CursorInfo::Ranges places;
+        const QStringView content(m_content);
+        for (const Token &comment : comments) {
+            const int begin = unit->getTokenPositionInDocument(comment, &textDoc);
+            const int end = unit->getTokenEndPositionInDocument(comment, &textDoc);
+            const QList<Utils::Text::Range> found
+                = symbolOccurrencesInText(textDoc, content.mid(begin, end - begin), begin, name);
+            for (const Utils::Text::Range &range : found)
+                places.append({range.begin.line, range.begin.column + 1, int(name.size())});
+        }
+        return places;
+    }
+
+    // The same split as splitLocalUses(), over the locals the cxx-frontend
+    // model reports instead of the built-in ones: the local the cursor is
+    // standing on, and the ones written nowhere but where they are declared.
+    // False where that model has nothing for this file.
+    bool splitLocalUsesFromCxxFrontend(CursorInfo *result) const
+    {
+        const std::optional<QList<Internal::CxxFrontendLocal>> locals
+            = Internal::cxxFrontendLocalsAt(m_document->filePath(), m_line, m_column);
+        if (!locals)
+            return false;
+
+        // Built once for all of them, and only where there is a parameter to
+        // look for: laying out the text of a file is not free.
+        const bool anyParameter = Utils::anyOf(*locals, &Internal::CxxFrontendLocal::isParameter);
+        const QTextDocument textDoc(anyParameter ? m_content : QString());
+
+        for (const Internal::CxxFrontendLocal &local : *locals) {
+            CursorInfo::Ranges places = local.places;
+            if (local.isParameter && !places.isEmpty())
+                places.append(commentPlacesOf(local.name, places.first(), textDoc));
+
+            if (places.size() == 1) {
+                // Declared and never named again. A lock or a scoped pointer
+                // is doing its work by existing, so it is not a mistake and
+                // is not marked as one.
+                if (!isOwnershipRAIIName(local.className))
+                    result->unusedVariablesRanges.append(places);
+                continue;
+            }
+
+            const auto isUnderCursor = [this](const CursorInfo::Range &place) {
+                return m_line == place.line && m_column >= place.column
+                       && m_column <= place.column + place.length;
+            };
+            if (result->useRanges.isEmpty() && Utils::anyOf(places, isUnderCursor))
+                result->useRanges = places;
+        }
+        return true;
+    }
+#else
+    bool splitLocalUsesFromCxxFrontend(CursorInfo *) const { return false; }
+#endif
 
     CursorInfo::Ranges findReferences() const
     {

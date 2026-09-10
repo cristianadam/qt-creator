@@ -200,4 +200,24 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     return link;
 }
 
+std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const FilePath &filePath,
+                                                           int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument *document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    QList<CxxFrontendLocal> locals;
+    for (const CxxFrontendDocument::Local &local : document->localsAt(line, column)) {
+        CxxFrontendLocal converted{local.name, local.isParameter, local.className, {}};
+        for (const CxxFrontendDocument::Occurrence &place : local.places)
+            converted.places.append({place.line, place.column, place.length});
+        locals.append(converted);
+    }
+    return locals;
+}
+
 } // namespace CppEditor::Internal

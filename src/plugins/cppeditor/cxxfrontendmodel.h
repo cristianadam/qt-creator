@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "cppcursorinfo.h"
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
 
@@ -10,6 +11,7 @@
 #include <utils/link.h>
 
 #include <memory>
+#include <optional>
 
 namespace CPlusPlus {
 class CxxFrontendSnapshot;
@@ -85,5 +87,32 @@ void forgetCxxFrontendModel(const Utils::FilePath &filePath);
 // answers, never change one.
 Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
                                     int linkTextStart, int linkTextEnd);
+
+// A local variable of a function: its name, whether it is one of the
+// function's parameters, the class its type names where it names one, and
+// every place the file writes it -- the declaration first, the uses after.
+struct CxxFrontendLocal
+{
+    QString name;
+    bool isParameter = false;
+    QString className;
+    CursorInfo::Ranges places;
+};
+
+// The locals of the function written around \a line and \a column, both
+// counted from one, as a CursorInfo::Range counts them.
+//
+// Nothing where the model was never run over this file, and the caller
+// answers the way it did before. An answer with no locals in it is an answer:
+// the position is outside any function, or the function has none.
+//
+// A local is the one question a single file settles completely -- a parameter
+// or a block variable cannot be named anywhere else -- so what comes back
+// here is the whole of what the code says. What it leaves out is what is
+// written about the code: a parameter named in the function's documentation
+// is highlighted with it, and comments are not in this model's token stream
+// at all.
+std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const Utils::FilePath &filePath,
+                                                           int line, int column);
 
 } // namespace CppEditor::Internal
