@@ -37,6 +37,7 @@
 #include "cppfollowsymbolundercursor.h"
 #include "cppincludehierarchy_test.h"
 #include "cpplocalsymbols_test.h"
+#include "cppselectionchanger_test.h"
 #include "cpplocatorfilter_test.h"
 #include "cppmcpsupport_test.h"
 #include "cppmodelmanager_test.h"
@@ -656,6 +657,7 @@ void CppEditorPlugin::registerTests()
     addTest<ProjectFileCategorizerTest>();
     addTest<ProjectInfoGeneratorTest>();
     addTest<ProjectPartChooserTest>();
+    addTest<SelectionChangerTest>();
     addTest<SourceProcessorTest>();
     addTest<SymbolSearcherTest>();
     addTest<TypeHierarchyBuilderTest>();
