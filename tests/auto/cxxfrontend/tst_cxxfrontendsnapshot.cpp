@@ -44,6 +44,11 @@ private:
     QHash<QString, QString> m_files;
 };
 
+bool unsupportedLookupsContains(const QString &entry)
+{
+    return CxxFrontendSnapshot::unsupportedLookups().contains(entry);
+}
+
 QStringList symbolNames(const CxxFrontendDocument *document)
 {
     QStringList result;
@@ -128,6 +133,7 @@ private slots:
     void aPositionThatNamesNothingHasNoUsages();
     void aMemberNamedThroughAnObjectAcrossFilesIsNotFound();
 
+    void completionAtAPosition();
     void unsupportedLookups();
 };
 
@@ -906,6 +912,62 @@ void tst_cxxfrontendsnapshot::aMemberNamedThroughAnObjectAcrossFilesIsNotFound()
 // What this lookup does not do. Each is a rule about which declaration a name
 // means, and answering one of them wrongly is worse than saying nothing, so
 // they are written down rather than approximated.
+// What could be written at a position, asked of the snapshot rather than of
+// a document: a document answers this only if it was asked before it was
+// preprocessed, so the file itself is read again while the documents of
+// everything it includes stay as they are.
+void tst_cxxfrontendsnapshot::completionAtAPosition()
+{
+    Files files;
+    files.add("h.h", "struct FromHeader { int fromHeader; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    const auto namesIn = [&](const QString &source, int line, int column) {
+        QStringList names;
+        const CxxFrontendDocument *document
+            = snapshot.processForCompletion("main.cpp", source, line, column);
+        if (!document)
+            return names;
+        for (const CxxFrontendDocument::Completion::Candidate &candidate :
+             document->completion().candidates) {
+            names.append(candidate.name);
+        }
+        return names;
+    };
+
+    const QString own = "#include \"h.h\"\n"
+                        "struct Own { int fromHere; };\n"
+                        "void f(Own own)\n"
+                        "{\n"
+                        "    own.\n"
+                        "}\n";
+    snapshot.process("main.cpp", own);
+    const CxxFrontendDocument *headerBefore = snapshot.document("h.h");
+    QVERIFY(headerBefore);
+
+    // A type this file declares, just after the dot.
+    const QStringList offered = namesIn(own, 5, 9);
+    QVERIFY2(offered.contains("fromHere"), qPrintable(offered.join(", ")));
+
+    // The header was not read again: one file was reparsed, and it is the
+    // one that was asked about.
+    QCOMPARE(snapshot.document("h.h"), headerBefore);
+
+    // A type a header declares is not in this file's translation unit at
+    // all, so the parser has nothing to offer for it -- the same limit as
+    // "members named through an object across files", which is what this
+    // would take to answer.
+    const QString fromHeader = "#include \"h.h\"\n"
+                               "void f(FromHeader other)\n"
+                               "{\n"
+                               "    other.\n"
+                               "}\n";
+    QVERIFY(unsupportedLookupsContains("members named through an object across files"));
+    QVERIFY(namesIn(fromHeader, 4, 11).isEmpty());
+}
+
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();

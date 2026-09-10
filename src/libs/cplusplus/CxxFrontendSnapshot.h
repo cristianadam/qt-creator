@@ -56,6 +56,17 @@ public:
     // Returns the document for the file itself.
     const CxxFrontendDocument *process(const QString &filePath, const QString &source);
 
+    // The same, and asks what could be written at \a line and \a column of
+    // \a filePath, both counted from one.
+    //
+    // Where the question is asked has to be settled before the file is
+    // preprocessed, so a document that was not asked cannot answer and the
+    // file is read again. Everything it includes is reused as it stands,
+    // which is what makes asking this on every keystroke affordable.
+    const CxxFrontendDocument *processForCompletion(const QString &filePath,
+                                                    const QString &source,
+                                                    int line, int column);
+
     [[nodiscard]] const CxxFrontendDocument *document(const QString &filePath) const;
     [[nodiscard]] bool contains(const QString &filePath) const;
     [[nodiscard]] QStringList files() const;

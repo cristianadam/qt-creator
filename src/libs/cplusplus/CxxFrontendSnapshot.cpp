@@ -24,6 +24,14 @@ public:
     QHash<QString, QStringList> establishedMacros;
     QHash<QString, QStringList> includedFiles;
 
+    // Where to ask what could be written, and in which file. A document
+    // answers that only if it was asked before it was preprocessed, so the
+    // file it applies to is processed again while everything it includes is
+    // reused.
+    QString completionFile;
+    int completionLine = 0;
+    int completionColumn = 0;
+
     // The files being processed right now. A header that includes something
     // which includes it back must not be processed a second time on the way
     // down, or the recursion has no end.
@@ -50,7 +58,8 @@ QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
     // reads an #ifdef gives a different answer to two includers that disagree
     // about it, and handing the first answer to the second is how a code
     // model quietly describes code that is not there.
-    if (const auto it = documents.constFind(filePath); it != documents.cend()) {
+    if (const auto it = documents.constFind(filePath);
+        it != documents.cend() && filePath != completionFile) {
         if ((*it)->isValidFor(environment))
             return establishedMacros.value(filePath);
     }
@@ -66,6 +75,10 @@ QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
 
     CxxFrontendDocument::Config config;
     config.predefinedMacros = environment;
+    if (filePath == completionFile) {
+        config.completionLine = completionLine;
+        config.completionColumn = completionColumn;
+    }
     config.onInclude = [&](const QString &name, bool isSystem,
                            const QStringList &inForce) -> std::optional<QStringList> {
         if (!headerResolver)
@@ -160,6 +173,18 @@ const CxxFrontendDocument *CxxFrontendSnapshot::process(const QString &filePath,
                                                         const QString &source)
 {
     d->ensure(filePath, source, d->predefinedMacros);
+    return document(filePath);
+}
+
+const CxxFrontendDocument *CxxFrontendSnapshot::processForCompletion(const QString &filePath,
+                                                                     const QString &source,
+                                                                     int line, int column)
+{
+    d->completionFile = filePath;
+    d->completionLine = line;
+    d->completionColumn = column;
+    d->ensure(filePath, source, d->predefinedMacros);
+    d->completionFile.clear();
     return document(filePath);
 }
 
