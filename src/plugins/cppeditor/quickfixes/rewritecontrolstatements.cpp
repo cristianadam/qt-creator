@@ -40,38 +40,51 @@ template<typename Statement> Statement *asControlStatement(AST *node)
     return nullptr;
 }
 
-template<typename Statement>
-QList<int> triggerTokens(const Statement *statement)
+// The parts of a control statement the two brace fixes work on, whichever
+// front end read it: the keywords the fix is offered on, the body, the token
+// the "{" goes after, and the token the "}" goes before -- none, when it goes
+// after the body instead. \a spaceAfterCloseBrace is for the two statements
+// that continue on the same line, where "} " keeps "while" and "else" apart.
+struct ControlStatementParts
 {
-    if constexpr (std::is_same_v<Statement, IfStatementAST>)
-        return {statement->if_token, statement->else_token};
+    QList<int> triggers;
+    StatementAST *body = nullptr;
+    int openBraceAfter = 0;
+    int closeBraceBefore = 0;
+    bool spaceAfterCloseBrace = false;
+};
+
+template<typename Statement>
+ControlStatementParts partsOf(Statement *statement)
+{
+    if constexpr (std::is_same_v<Statement, IfStatementAST>) {
+        return {{statement->if_token, statement->else_token}, statement->statement,
+                statement->rparen_token,
+                statement->else_statement ? statement->else_token : 0, true};
+    }
+    if constexpr (std::is_same_v<Statement, DoStatementAST>) {
+        return {{statement->do_token}, statement->statement, statement->do_token,
+                statement->while_token, true};
+    }
     if constexpr (std::is_same_v<Statement, WhileStatementAST>)
-        return {statement->while_token};
-    if constexpr (std::is_same_v<Statement, DoStatementAST>)
-        return {statement->do_token};
+        return {{statement->while_token}, statement->statement, statement->rparen_token};
     if constexpr (std::is_same_v<Statement, ForStatementAST>
                   || std::is_same_v<Statement, RangeBasedForStatementAST>) {
-        return {statement->for_token};
+        return {{statement->for_token}, statement->statement, statement->rparen_token};
     }
 }
 
-template<typename Statement>
-int tokenToInsertOpeningBraceAfter(const Statement *statement)
-{
-    if constexpr (std::is_same_v<Statement, DoStatementAST>)
-        return statement->do_token;
-    return statement->rparen_token;
-}
+// Both operations below take the edits they make rather than the nodes those
+// were read off: which node a statement is depends on which front end read
+// the file, and where the braces go does not.
 
-template<typename Statement> class AddBracesToControlStatementOp : public CppQuickFixOperation
+class AddBracesToControlStatementOp : public CppQuickFixOperation
 {
 public:
     AddBracesToControlStatementOp(const CppQuickFixInterface &interface,
-                                  const QList<Statement *> &statements,
-                                  StatementAST *elseStatement,
-                                  int elseToken)
+                                  const QList<std::pair<int, QString>> &insertions)
         : CppQuickFixOperation(interface, 0)
-        , m_statements(statements), m_elseStatement(elseStatement), m_elseToken(elseToken)
+        , m_insertions(insertions)
     {
         setDescription(Tr::tr("Add Curly Braces"));
     }
@@ -79,52 +92,36 @@ public:
     void perform() override
     {
         ChangeSet changes;
-        for (Statement * const statement : m_statements) {
-            const int start = currentFile()->endOf(tokenToInsertOpeningBraceAfter(statement));
-            changes.insert(start, QLatin1String(" {"));
-            if constexpr (std::is_same_v<Statement, DoStatementAST>) {
-                const int end = currentFile()->startOf(statement->while_token);
-                changes.insert(end, QLatin1String("} "));
-            } else if constexpr (std::is_same_v<Statement, IfStatementAST>) {
-                if (statement->else_statement) {
-                    changes.insert(currentFile()->startOf(statement->else_token), "} ");
-                } else {
-                    changes.insert(currentFile()->endOf(statement->statement->lastToken() - 1),
-                                   "\n}");
-                }
-
-            } else {
-                const int end = currentFile()->endOf(statement->statement->lastToken() - 1);
-                changes.insert(end, QLatin1String("\n}"));
-            }
-        }
-        if (m_elseStatement) {
-            changes.insert(currentFile()->endOf(m_elseToken), " {");
-            changes.insert(currentFile()->endOf(m_elseStatement->lastToken() - 1), "\n}");
-        }
+        for (const auto &[position, text] : m_insertions)
+            changes.insert(position, text);
 
         currentFile()->setChangeSet(changes);
         currentFile()->apply();
     }
 
 private:
-    const QList<Statement *> m_statements;
-    StatementAST * const m_elseStatement;
-    const int m_elseToken;
+    const QList<std::pair<int, QString>> m_insertions;
 };
 
-template<typename Statement> class RemoveBracesFromControlStatementOp : public CppQuickFixOperation
+class RemoveBracesFromControlStatementOp : public CppQuickFixOperation
 {
 public:
-    RemoveBracesFromControlStatementOp(const CppQuickFixInterface &interface,
-                                       const QList<Statement *> &statements,
-                                       StatementAST *elseStatement,
-                                       int elseToken)
-        : CppQuickFixOperation(interface, 0)
-        , m_statements(statements), m_elseStatement(elseStatement)
+    // One braced body: where the two braces stand, whether what follows the
+    // closing one needs the space it sat on, and where a ";" goes when there
+    // is no statement left to stand for the body.
+    struct Braces
     {
-        Q_UNUSED(elseToken)
+        int lbrace = 0;
+        int rbrace = 0;
+        bool spaceAfterRbrace = false;
+        std::optional<int> semicolonAt;
+    };
 
+    RemoveBracesFromControlStatementOp(const CppQuickFixInterface &interface,
+                                       const QList<Braces> &braces)
+        : CppQuickFixOperation(interface, 0)
+        , m_braces(braces)
+    {
         setDescription(Tr::tr("Remove Curly Braces"));
     }
 
@@ -144,8 +141,7 @@ public:
                     ++*nextNonSpacePos;
             }
         };
-        const auto removeBraceAndPossiblyLine = [&](int braceToken, bool removeTrailingSpace) {
-            const int bracePos = currentFile()->startOf(braceToken);
+        const auto removeBraceAndPossiblyLine = [&](int bracePos, bool removeTrailingSpace) {
             int prevNewline = -1;
             int nextNewline = -1;
             int start = bracePos;
@@ -158,48 +154,53 @@ public:
             }
             changes.remove(start, end);
         };
-        const auto apply = [&](const CompoundStatementAST *stmt) {
-            QTC_ASSERT(stmt, return);
-            removeBraceAndPossiblyLine(stmt->lbrace_token, false);
-            removeBraceAndPossiblyLine(stmt->rbrace_token,
-                                       std::is_same_v<Statement, DoStatementAST>
-                                       || std::is_same_v<Statement, IfStatementAST>);
-            if (!stmt->statement_list)
-                changes.insert(currentFile()->endOf(stmt), "\n;");
-
-        };
-        for (Statement * const statement : m_statements)
-            apply(statement->statement->asCompoundStatement());
-        if (m_elseStatement)
-            apply(m_elseStatement->asCompoundStatement());
+        for (const Braces &braces : m_braces) {
+            removeBraceAndPossiblyLine(braces.lbrace, false);
+            removeBraceAndPossiblyLine(braces.rbrace, braces.spaceAfterRbrace);
+            if (braces.semicolonAt)
+                changes.insert(*braces.semicolonAt, "\n;");
+        }
 
         currentFile()->setChangeSet(changes);
         currentFile()->apply();
     }
 
 private:
-    const QList<Statement *> m_statements;
-    StatementAST * const m_elseStatement;
+    const QList<Braces> m_braces;
 };
 
+// Whether the fix applies to a body, and whether what is written there rules
+// it out for the whole statement rather than just for this body.
 using StmtConstraint = std::function<bool(AST *, bool &)>;
-template<template<typename> typename Op, typename Statement>
+
+// The bodies one of these fixes rewrites: the statement the cursor is on and,
+// down an else-if chain, every branch of it -- braces are added to and taken
+// from an if/else as a whole. \a makeOp is handed them, so that each fix
+// works out its own edits from the same walk.
+using MakeBraceOp = std::function<void(const QList<ControlStatementParts> &,
+                                       StatementAST *elseStatement, int elseToken)>;
+
+template<typename Statement>
 bool checkControlStatementsHelper(
     const CppQuickFixInterface &interface,
     const StmtConstraint &constraint,
-    QuickFixOperations &result)
+    const MakeBraceOp &makeOp)
 {
     Statement * const statement = asControlStatement<Statement>(interface.path().last());
     if (!statement)
         return false;
 
-    QList<Statement *> statements;
-    if (!Utils::anyOf(triggerTokens(statement), [&](int tok) { return interface.isCursorOn(tok); }))
+    const ControlStatementParts parts = partsOf(statement);
+    if (!Utils::anyOf(parts.triggers, [&](int tok) { return interface.isCursorOn(tok); }))
         return false;
 
+    // More than one, since braces are added to and taken from an if/else as
+    // a whole; every other statement kind stands alone.
+    QList<ControlStatementParts> statements;
+
     bool abort = false;
-    if (statement->statement && constraint(statement->statement, abort))
-        statements << statement;
+    if (parts.body && constraint(parts.body, abort))
+        statements << parts;
     if (abort)
         return false;
 
@@ -211,7 +212,7 @@ bool checkControlStatementsHelper(
              elseStmt && (currentIfStmt = elseStmt->asIfStatement());
              elseStmt = currentIfStmt->else_statement, elseToken = currentIfStmt->else_token) {
             if (currentIfStmt->statement && constraint(currentIfStmt->statement, abort))
-                statements << currentIfStmt;
+                statements << partsOf(currentIfStmt);
             if (abort)
                 return false;
         }
@@ -224,19 +225,19 @@ bool checkControlStatementsHelper(
     }
 
     if (!statements.isEmpty() || elseStmt) {
-        result << new Op<Statement>(interface, statements, elseStmt, elseToken);
+        makeOp(statements, elseStmt, elseToken);
         return false;
     }
     return true;
 }
 
-template<template<typename> typename Op, typename... Statements>
+template<typename... Statements>
 void checkControlStatements(
     const CppQuickFixInterface &interface,
     const StmtConstraint &constraint,
-    QuickFixOperations &result)
+    const MakeBraceOp &makeOp)
 {
-    (... || checkControlStatementsHelper<Op, Statements>(interface, constraint, result));
+    (... || checkControlStatementsHelper<Statements>(interface, constraint, makeOp));
 }
 
 class MoveDeclarationOutOfIfOp: public CppQuickFixOperation
@@ -661,13 +662,35 @@ class AddBracesToControlStatement : public CppQuickFixFactory
     {
         if (interface.path().isEmpty())
             return;
+        const CppRefactoringFilePtr file = interface.currentFile();
         const auto constraint = [](AST *ast, bool &) { return !ast->asCompoundStatement(); };
-        checkControlStatements<AddBracesToControlStatementOp,
-                               IfStatementAST,
+        const auto makeOp = [&](const QList<ControlStatementParts> &statements,
+                                StatementAST *elseStatement, int elseToken) {
+            QList<std::pair<int, QString>> insertions;
+            const auto brace = [&](const ControlStatementParts &parts) {
+                insertions << std::make_pair(file->endOf(parts.openBraceAfter), QString(" {"));
+                if (parts.closeBraceBefore) {
+                    insertions << std::make_pair(file->startOf(parts.closeBraceBefore),
+                                                 QString("} "));
+                } else {
+                    insertions << std::make_pair(file->endOf(parts.body->lastToken() - 1),
+                                                 QString("\n}"));
+                }
+            };
+            for (const ControlStatementParts &parts : statements)
+                brace(parts);
+            if (elseStatement) {
+                insertions << std::make_pair(file->endOf(elseToken), QString(" {"));
+                insertions << std::make_pair(file->endOf(elseStatement->lastToken() - 1),
+                                             QString("\n}"));
+            }
+            result << new AddBracesToControlStatementOp(interface, insertions);
+        };
+        checkControlStatements<IfStatementAST,
                                WhileStatementAST,
                                ForStatementAST,
                                RangeBasedForStatementAST,
-                               DoStatementAST>(interface, constraint, result);
+                               DoStatementAST>(interface, constraint, makeOp);
     }
 };
 
@@ -702,12 +725,30 @@ class RemoveBracesFromControlStatement : public CppQuickFixFactory
             }
             return false;
         };
-        checkControlStatements<RemoveBracesFromControlStatementOp,
-                               IfStatementAST,
+        const auto makeOp = [&](const QList<ControlStatementParts> &statements,
+                                StatementAST *elseStatement, int) {
+            const CppRefactoringFilePtr file = interface.currentFile();
+            QList<RemoveBracesFromControlStatementOp::Braces> braces;
+            const auto unbrace = [&](StatementAST *body, bool spaceAfterRbrace) {
+                const CompoundStatementAST * const compound = body->asCompoundStatement();
+                QTC_ASSERT(compound, return);
+                braces << RemoveBracesFromControlStatementOp::Braces{
+                    file->startOf(compound->lbrace_token), file->startOf(compound->rbrace_token),
+                    spaceAfterRbrace,
+                    compound->statement_list ? std::nullopt
+                                             : std::make_optional(file->endOf(compound))};
+            };
+            for (const ControlStatementParts &parts : statements)
+                unbrace(parts.body, parts.spaceAfterCloseBrace);
+            if (elseStatement)
+                unbrace(elseStatement, true);
+            result << new RemoveBracesFromControlStatementOp(interface, braces);
+        };
+        checkControlStatements<IfStatementAST,
                                WhileStatementAST,
                                ForStatementAST,
                                RangeBasedForStatementAST,
-                               DoStatementAST>(interface, constraint, result);
+                               DoStatementAST>(interface, constraint, makeOp);
     }
 };
 
