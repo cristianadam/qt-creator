@@ -21,6 +21,8 @@ private slots:
     void testFollowsNothingItCannotAnswerFor();
     void testDeclinesAForwardDeclaration();
     void testDeclinesANameFromAUsingDeclaration();
+    void testLocalUses_data();
+    void testLocalUses();
 };
 
 } // namespace CppEditor::Internal

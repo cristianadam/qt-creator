@@ -13,11 +13,16 @@
 
 #include "cxxfrontendmodel_test.h"
 
+#include "cpplocalsymbols.h"
 #include "cppmodelmanager.h"
 #include "cpptoolstestcase.h"
 #include "cxxfrontendmodel.h"
 
+#include <cplusplus/ASTVisitor.h>
+#include <cplusplus/AST.h>
+#include <cplusplus/CxxFrontendDocument.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
+#include <cplusplus/TranslationUnit.h>
 
 #include <QTest>
 
@@ -29,6 +34,69 @@ namespace CppEditor::Internal {
 namespace {
 
 using CppEditor::Tests::TemporaryDir;
+
+// The first function definition of a file, which is the one the built-in
+// LocalSymbols is driven with.
+class FindFirstFunctionDefinition : protected ASTVisitor
+{
+public:
+    explicit FindFirstFunctionDefinition(TranslationUnit *unit)
+        : ASTVisitor(unit)
+    {}
+
+    FunctionDefinitionAST *operator()()
+    {
+        accept(translationUnit()->ast());
+        return m_definition;
+    }
+
+protected:
+    bool preVisit(AST *ast) override
+    {
+        if (FunctionDefinitionAST *definition = ast->asFunctionDefinition()) {
+            m_definition = definition;
+            return false;
+        }
+        return true;
+    }
+
+private:
+    FunctionDefinitionAST *m_definition = nullptr;
+};
+
+// Every use in one line each, "name@line:column+length" with line and column
+// counted from zero, so that the two models can be compared as text and a
+// difference says where it is.
+QStringList placesOf(const SemanticInfo::LocalUseMap &uses)
+{
+    QStringList result;
+    for (auto it = uses.cbegin(), end = uses.cend(); it != end; ++it) {
+        for (const SemanticInfo::Use &use : it.value()) {
+            result.append(QString("%1@%2:%3+%4")
+                              .arg(QString::fromUtf8(Overview().prettyName(it.key()->name())
+                                                         .toUtf8()))
+                              .arg(use.line).arg(use.column).arg(use.length));
+        }
+    }
+    result.sort();
+    return result;
+}
+
+QStringList placesOf(const QList<CxxFrontendDocument::Local> &locals)
+{
+    QStringList result;
+    for (const CxxFrontendDocument::Local &local : locals) {
+        for (const CxxFrontendDocument::Occurrence &place : local.places) {
+            // A HighlightingResult counts lines from zero and columns from
+            // one; this model counts both from one.
+            result.append(QString("%1@%2:%3+%4")
+                              .arg(local.name)
+                              .arg(place.line - 1).arg(place.column).arg(place.length));
+        }
+    }
+    result.sort();
+    return result;
+}
 
 // A directory of files, parsed by the built-in model and then by the other
 // one, the way the editor's parser does it.
@@ -260,6 +328,115 @@ void CxxFrontendModelTest::testDeclinesAForwardDeclaration()
     const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 4, 0, 0, 0);
     QVERIFY(link.hasValidTarget());
     QCOMPARE(link.target.line, 3);
+}
+
+// The locals of a function, from both models, over the same source. This is
+// the one question a single file answers completely -- a parameter or a block
+// variable cannot be named anywhere else -- so the two have no excuse to
+// differ, and what the editor highlights around the cursor comes from here.
+void CxxFrontendModelTest::testLocalUses_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<int>("line");
+    QTest::addColumn<int>("column");
+
+    // Each source starts a line down, so that nothing is declared on the
+    // first line: see knownDivergence() and the row that goes there on
+    // purpose. Line and column say where to ask, counted from one.
+    QTest::newRow("basic") << QByteArray("\n"
+                                         "int f(int arg)\n"
+                                         "{\n"
+                                         "    int local;\n"
+                                         "    g(&local);\n"
+                                         "    return local + arg;\n"
+                                         "}\n")
+                           << 4 << 9;
+    QTest::newRow("lambda") << QByteArray("\n"
+                                          "void f()\n"
+                                          "{\n"
+                                          "    auto func = [](int arg) { return arg; };\n"
+                                          "    func(1);\n"
+                                          "}\n")
+                            << 5 << 5;
+    QTest::newRow("nested blocks") << QByteArray("\n"
+                                                 "void f(int a)\n"
+                                                 "{\n"
+                                                 "    int b = a;\n"
+                                                 "    {\n"
+                                                 "        int b = 2;\n"
+                                                 "        b = b + a;\n"
+                                                 "    }\n"
+                                                 "    b = 3;\n"
+                                                 "}\n")
+                                   << 4 << 9;
+    QTest::newRow("loop and reference") << QByteArray("\n"
+                                                      "void f(int *p)\n"
+                                                      "{\n"
+                                                      "    for (int i = 0; i < 10; ++i)\n"
+                                                      "        p[i] = i;\n"
+                                                      "    int &r = *p;\n"
+                                                      "    r = 1;\n"
+                                                      "}\n")
+                                        << 4 << 14;
+    QTest::newRow("shadowing a parameter") << QByteArray("\n"
+                                                         "void f(int a)\n"
+                                                         "{\n"
+                                                         "    {\n"
+                                                         "        int a = 1;\n"
+                                                         "        a = a + 1;\n"
+                                                         "    }\n"
+                                                         "    a = 2;\n"
+                                                         "}\n")
+                                           << 5 << 13;
+    QTest::newRow("member function") << QByteArray("\n"
+                                                   "struct S {\n"
+                                                   "    int m;\n"
+                                                   "    void f(int a) { m = a; }\n"
+                                                   "};\n")
+                                     << 4 << 21;
+
+    // And one that does declare on the first line, to hold the difference in
+    // place rather than leave it to be found again.
+    QTest::newRow("declared on the first line")
+        << QByteArray("int f(int arg) { return arg; }\n") << 1 << 20;
+}
+
+// Why the two are allowed to differ on a row, or nullptr if they are not. The
+// one entry is a case where this model is in the right.
+static const char *knownDivergence(const QString &row)
+{
+    // TranslationUnit::findColumnNumber() subtracts the offset of the newline
+    // that begins the line, so its columns count from one -- except on the
+    // first line, which has no newline before it and comes out one short.
+    // Everything that reads a HighlightingResult takes column - 1, so the
+    // built-in model marks a declaration on line one a character to its left.
+    if (row == "declared on the first line")
+        return "the built-in model is one column short on the first line";
+
+    return nullptr;
+}
+
+void CxxFrontendModelTest::testLocalUses()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(int, line);
+    QFETCH(int, column);
+
+    const Document::Ptr document = Document::create(FilePath::fromPathPart(u"test.cpp"));
+    document->setUtf8Source(source);
+    document->check();
+    QVERIFY(document->diagnosticMessages().isEmpty());
+    QVERIFY(document->translationUnit() && document->translationUnit()->ast());
+    FindFirstFunctionDefinition findDefinition(document->translationUnit());
+    DeclarationAST * const definition = findDefinition();
+    QVERIFY(definition);
+
+    const LocalSymbols builtIn(document, QString::fromUtf8(source), definition);
+    const CxxFrontendDocument other(QString::fromUtf8(source), "test.cpp");
+
+    if (const char *reason = knownDivergence(QString::fromUtf8(QTest::currentDataTag())))
+        QEXPECT_FAIL("", reason, Abort);
+    QCOMPARE(placesOf(other.localsAt(line, column)), placesOf(builtIn.uses));
 }
 
 } // namespace CppEditor::Internal
