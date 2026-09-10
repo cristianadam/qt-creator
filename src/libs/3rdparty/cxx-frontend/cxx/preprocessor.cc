@@ -3312,6 +3312,10 @@ void Preprocessor::setCurrentPath(std::string currentPath) {
   d->currentPath_ = std::move(currentPath);
 }
 
+auto Preprocessor::currentFileName() const -> std::string {
+  return d->currentFileName_;
+}
+
 auto Preprocessor::omitLineMarkers() const -> bool {
   return d->omitLineMarkers_;
 }
@@ -3768,6 +3772,20 @@ void PendingInclude::resolveWith(std::optional<std::string> resolvedFileName,
     if (auto it = d->ifndefProtectedFiles_.find(fileName);
         it != d->ifndefProtectedFiles_.end() &&
         d->macros_.contains(it->second)) {
+      return std::nullopt;
+    }
+
+    // Every compiler stops somewhere, and a file that includes something
+    // which includes it back has no other end: guards stop it in code that
+    // has them, and code that has none would be read for ever.
+    constexpr int kMaxIncludeDepth = 200;
+    if (d->includeDepth_ + 1 > kMaxIncludeDepth) {
+      Token errorTok;
+      if (loc) {
+        auto tokPtr = static_cast<const Tok*>(loc);
+        errorTok = d->tokenForDiagnostic(*tokPtr);
+      }
+      d->error(errorTok, std::format("#include nested too deeply"));
       return std::nullopt;
     }
 

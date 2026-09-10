@@ -5,23 +5,21 @@
 
 #include <QSet>
 
+#include <algorithm>
+
 namespace CPlusPlus {
 
 class CxxFrontendSnapshot::Private
 {
 public:
-    // Processes a file under \a environment, unless the document already
-    // there would come out the same, and answers with the macros it
-    // establishes -- its own and those of everything it includes, since an
-    // includer sees all of them.
-    QStringList ensure(const QString &filePath, const QString &source,
-                       const QStringList &environment);
+    // Processes a file, reading everything it includes into its translation
+    // unit, and records which files that reached.
+    void ensure(const QString &filePath, const QString &source);
 
     HeaderResolver headerResolver;
     QStringList predefinedMacros;
 
     QHash<QString, std::shared_ptr<CxxFrontendDocument>> documents;
-    QHash<QString, QStringList> establishedMacros;
     QHash<QString, QStringList> includedFiles;
 
     // Where to ask what could be written, and in which file. A document
@@ -31,126 +29,39 @@ public:
     QString completionFile;
     int completionLine = 0;
     int completionColumn = 0;
-
-    // The files being processed right now. A header that includes something
-    // which includes it back must not be processed a second time on the way
-    // down, or the recursion has no end.
-    QSet<QString> inProgress;
-
-    // Looks for \a name in \a base and then in the bases of \a base, across
-    // however many files the chain runs through. \a visited stops a cycle in
-    // the inheritance, which is ill-formed but has to be survived.
-    [[nodiscard]] auto throughBases(const QStringList &closure, const QString &base,
-                                    const QString &name, QSet<QString> &visited) const
-        -> CxxFrontendDocument::Declaration;
-
-    // The documents in \a closure, nearest first.
-    [[nodiscard]] auto documentsIn(const QStringList &closure) const
-        -> QList<const CxxFrontendDocument *>;
-
 };
 
-QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
-                                                 const QString &source,
-                                                 const QStringList &environment)
+void CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString &source)
 {
-    // Reuse what is there only if it would come out the same. A header that
-    // reads an #ifdef gives a different answer to two includers that disagree
-    // about it, and handing the first answer to the second is how a code
-    // model quietly describes code that is not there.
-    if (const auto it = documents.constFind(filePath);
-        it != documents.cend() && filePath != completionFile) {
-        if ((*it)->isValidFor(environment))
-            return establishedMacros.value(filePath);
-    }
-
-    // A cycle: whatever this file establishes is not known yet, and asking
-    // again would not help.
-    if (inProgress.contains(filePath))
-        return {};
-    inProgress.insert(filePath);
-
-    QStringList fromIncludes;
     QStringList included;
 
     CxxFrontendDocument::Config config;
-    config.predefinedMacros = environment;
+    config.predefinedMacros = predefinedMacros;
     if (filePath == completionFile) {
         config.completionLine = completionLine;
         config.completionColumn = completionColumn;
     }
-    config.onInclude = [&](const QString &name, bool isSystem,
-                           const QStringList &inForce) -> std::optional<QStringList> {
+
+    // A header is read into this file's translation unit, the way a compiler
+    // reads it. What the resolver is asked is where the header is and what
+    // it says; the engine takes it from there, including whatever that
+    // header includes in turn.
+    config.onInclude = [&](const QString &name, bool isSystem, const QString &includedFrom)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
         if (!headerResolver)
             return std::nullopt;
-        const std::optional<Header> header = headerResolver(name, isSystem, filePath);
+        const std::optional<Header> header
+            = headerResolver(name, isSystem, includedFrom.isEmpty() ? filePath : includedFrom);
         if (!header)
             return std::nullopt;
 
-        included.append(header->filePath);
-        // The header is preprocessed where it is included, so it sees what is
-        // defined at that point, not just what the project defines.
-        const QStringList macros = ensure(header->filePath, header->source, inForce);
-        // What a header establishes is in force for the rest of this file,
-        // and for whatever includes it in turn.
-        fromIncludes.append(macros);
-        return macros;
+        if (!included.contains(header->filePath))
+            included.append(header->filePath);
+        return CxxFrontendDocument::Config::Include{header->filePath, header->source};
     };
 
-    auto document = std::make_shared<CxxFrontendDocument>(source, filePath, config);
-
-    inProgress.remove(filePath);
-
-    documents.insert(filePath, document);
+    documents.insert(filePath, std::make_shared<CxxFrontendDocument>(source, filePath, config));
     includedFiles.insert(filePath, included);
-
-    QStringList established = fromIncludes;
-    established.append(document->definedMacros());
-    establishedMacros.insert(filePath, established);
-    return established;
-}
-
-auto CxxFrontendSnapshot::Private::documentsIn(const QStringList &closure) const
-    -> QList<const CxxFrontendDocument *>
-{
-    QList<const CxxFrontendDocument *> result;
-    for (const QString &file : closure) {
-        if (const auto it = documents.constFind(file); it != documents.cend())
-            result.append(it->get());
-    }
-    return result;
-}
-
-auto CxxFrontendSnapshot::Private::throughBases(const QStringList &closure,
-                                                const QString &base, const QString &name,
-                                                QSet<QString> &visited) const
-    -> CxxFrontendDocument::Declaration
-{
-    if (base.isEmpty() || visited.contains(base))
-        return {};
-    visited.insert(base);
-
-    const QList<const CxxFrontendDocument *> candidates = documentsIn(closure);
-
-    // The base may declare it.
-    for (const CxxFrontendDocument *candidate : candidates) {
-        const CxxFrontendDocument::Declaration found
-            = candidate->lookup(QStringList(base), name);
-        if (found.isValid())
-            return found;
-    }
-
-    // Or a base of it may, in a file the one declaring this base could not
-    // see either.
-    for (const CxxFrontendDocument *candidate : candidates) {
-        for (const QString &next : candidate->basesOf(base)) {
-            const CxxFrontendDocument::Declaration found
-                = throughBases(closure, next, name, visited);
-            if (found.isValid())
-                return found;
-        }
-    }
-    return {};
 }
 
 CxxFrontendSnapshot::CxxFrontendSnapshot()
@@ -172,7 +83,7 @@ void CxxFrontendSnapshot::setPredefinedMacros(const QStringList &macros)
 const CxxFrontendDocument *CxxFrontendSnapshot::process(const QString &filePath,
                                                         const QString &source)
 {
-    d->ensure(filePath, source, d->predefinedMacros);
+    d->ensure(filePath, source);
     return document(filePath);
 }
 
@@ -183,7 +94,7 @@ const CxxFrontendDocument *CxxFrontendSnapshot::processForCompletion(const QStri
     d->completionFile = filePath;
     d->completionLine = line;
     d->completionColumn = column;
-    d->ensure(filePath, source, d->predefinedMacros);
+    d->ensure(filePath, source);
     d->completionFile.clear();
     return document(filePath);
 }
@@ -235,57 +146,11 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
     if (!from)
         return {};
 
-    // The parser resolved everything it could see, which is everything this
-    // file declares itself.
-    if (const CxxFrontendDocument::Declaration here = from->declarationAt(line, column);
-        here.isValid()) {
-        return here;
-    }
-
-    const QString identifier = from->identifierAt(line, column);
-    if (identifier.isEmpty())
-        return {};
-
-    // Two things about the surrounding code are written down where the name
-    // is used, and so survive the file boundary: the path in front of it, and
-    // the bases of the class it sits in. Everything past that is a rule about
-    // scopes, and each document applies those to itself.
-    const QStringList qualifier = from->qualifierAt(line, column);
-
-    QList<QStringList> paths{qualifier};
-    if (qualifier.isEmpty()) {
-        // Unqualified: it may be a member of a base declared elsewhere.
-        for (const QString &base : from->basesAt(line, column))
-            paths.append(QStringList(base));
-    }
-
-    const QStringList closure = allIncludesFor(filePath);
-
-    // Nearest first, which is the order allIncludesFor walks.
-    for (const QString &included : closure) {
-        const CxxFrontendDocument *candidate = document(included);
-        if (!candidate)
-            continue;
-        for (const QStringList &path : paths) {
-            const CxxFrontendDocument::Declaration found = candidate->lookup(path, identifier);
-            if (found.isValid())
-                return found;
-        }
-    }
-
-    // A base whose own base is in a third file. Each document can only follow
-    // the bases it can see, so where one stops the search picks the chain up
-    // and carries it into the file that declares the next one.
-    if (qualifier.isEmpty()) {
-        QSet<QString> visited;
-        for (const QString &base : from->basesAt(line, column)) {
-            const CxxFrontendDocument::Declaration found
-                = d->throughBases(closure, base, identifier, visited);
-            if (found.isValid())
-                return found;
-        }
-    }
-    return {};
+    // A file's headers are read into it, so the parser resolved everything
+    // the file can see and the document has the answer. There is nowhere
+    // else in this snapshot to look: what a file cannot see, it does not
+    // include.
+    return from->declarationAt(line, column);
 }
 
 QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString &filePath,
@@ -318,8 +183,16 @@ QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString 
     const QString name = target.name.split("::").last();
 
     const auto isTarget = [&](const CxxFrontendDocument::Declaration &declaration) {
-        return declaration.filePath == target.filePath && declaration.line == target.line
-               && declaration.column == target.column;
+        if (declaration.filePath == target.filePath && declaration.line == target.line
+            && declaration.column == target.column) {
+            return true;
+        }
+        // Where each of them was first declared, which is the one place a
+        // declaration and a definition apart from it agree on.
+        return declaration.canonicalLine != 0 && target.canonicalLine != 0
+               && declaration.canonicalFilePath == target.canonicalFilePath
+               && declaration.canonicalLine == target.canonicalLine
+               && declaration.canonicalColumn == target.canonicalColumn;
     };
 
     QList<Usage> usages;
@@ -361,6 +234,24 @@ QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString 
             usages.append(usage);
         }
     }
+
+    // The place the thing was declared, when that file is not one of the
+    // ones searched: a header is read into whoever includes it rather than
+    // being a document of its own, and where it declares something is
+    // known from the declaration itself.
+    const auto isTheDeclaration = [&](const Usage &usage) {
+        return usage.filePath == target.filePath && usage.line == target.line
+               && usage.column == target.column;
+    };
+    if (std::none_of(usages.cbegin(), usages.cend(), isTheDeclaration)) {
+        Usage usage;
+        usage.filePath = target.filePath;
+        usage.line = target.line;
+        usage.column = target.column;
+        usage.length = int(name.size());
+        usage.isDeclaration = true;
+        usages.append(usage);
+    }
     return usages;
 }
 
@@ -388,10 +279,13 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // Which header wins when two declare the same name: this takes the
         // nearest include, which is not the language's rule.
         "shadowing between headers",
-        // b.m, where b's class is declared in a header. What crosses a file
-        // is what the using file writes down, and the type of an object is
-        // not written at the place it is used.
-        "members named through an object across files",
+        // A definition written apart from its declaration, as void B::f()
+        // {} is: the name there declares nothing new and resolves to
+        // nothing, so a search from the declaration in the header does not
+        // reach it. What it needs is the link between a declaration and
+        // the definition of the same thing, which is in the front end and
+        // not yet read out of it.
+        "a definition written apart from its declaration",
         // Finding a definition that is in a file this one does not include.
         // Within a file the definition is preferred and a declaration on its
         // own is reported as one -- Declaration::isDefinition -- so a caller

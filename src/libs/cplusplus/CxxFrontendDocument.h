@@ -46,18 +46,25 @@ public:
         // next.
         QStringList predefinedMacros;
 
-        // Called when the file includes a header, and answers with the macros
-        // that header established, or nothing if the header could not be
-        // found. The header's text is never taken into this document: Qt
-        // Creator keeps one translation unit per file, so the header gets a
-        // document of its own and only its macros cross over. Without a
-        // handler every include is treated as not found.
+        // Where a header is and what it says.
+        struct Include
+        {
+            QString filePath;
+            QString source;
+        };
+
+        // Called when the file includes a header -- with the name as it was
+        // written, whether it was written in angle brackets, and the file
+        // that wrote it -- and answers with the header, or nothing if it
+        // could not be found. Without a handler every include is treated as
+        // not found.
         //
-        // inForce is everything defined at the point of the include, which
-        // the header is entitled to see: it is preprocessed where it is
-        // included, not on its own.
-        std::function<std::optional<QStringList>(const QString &name, bool isSystem,
-                                                 const QStringList &inForce)>
+        // The header's text is read into this translation unit, the way a
+        // compiler reads it. It has to be: a declaration whose type comes
+        // from a header cannot be read at all without it, and a file that
+        // uses its headers is what every file is.
+        std::function<std::optional<Include>(const QString &name, bool isSystem,
+                                             const QString &includedFrom)>
             onInclude;
 
         // Ask what could be written at this position, one-based, zero for
@@ -202,6 +209,15 @@ public:
         // QTCREATORBUG7903 asked for; a caller that has to agree with it can
         // tell from here that it must answer this one itself.
         bool throughUsingDeclaration = false;
+
+        // Where the thing was first declared, which is what tells one
+        // entity from another. A function declared in a header and defined
+        // in a source file is one thing written in two places, and this is
+        // the place both of them agree on; a search compares this rather
+        // than where it happens to be pointing.
+        QString canonicalFilePath;
+        int canonicalLine = 0;
+        int canonicalColumn = 0;
 
         bool isValid() const { return line != 0; }
     };

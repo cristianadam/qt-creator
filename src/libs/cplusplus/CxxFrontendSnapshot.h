@@ -14,18 +14,16 @@
 
 namespace CPlusPlus {
 
-// The documents a file and its includes make, one per file.
+// The documents made of the files asked about, one per file.
 //
-// The cxx-frontend preprocessor would happily read an entire include closure
-// into a single translation unit, which is what a compiler wants. Qt Creator
-// wants the opposite: a document per file, so that a header parsed once can
-// be reused by everything that includes it, and so that editing one file does
-// not mean reparsing everything around it. CPlusPlus::Snapshot is that
-// collection, and this is the same arrangement on the other model.
-//
-// So a header is never taken into its includer's translation unit. It is
-// processed on its own, and only the macros it established cross over, which
-// is what CppSourceProcessor has always done through Client::sourceNeeded.
+// Each document is a translation unit: the file with its headers read into
+// it, the way a compiler reads them. So a header is not a document here --
+// it is part of every document that includes it -- and a file is searched or
+// edited only once process() has been called for it. CPlusPlus::Snapshot
+// holds a document per file reached instead, and its headers are reused
+// between them; this trades that reuse for a file being readable at all,
+// since a declaration whose type came from a header is only a declaration
+// where that header has been read.
 //
 // Deliberately no cxx/ header is included here: those need C++23, and only
 // the implementation should have to.
@@ -52,8 +50,8 @@ public:
     // written the way a #define is: "FOO 1", "ADD(a, b) a + b".
     void setPredefinedMacros(const QStringList &macros);
 
-    // Processes \a filePath, and every header it reaches, into documents.
-    // Returns the document for the file itself.
+    // Processes \a filePath, reading every header it reaches into it.
+    // Returns its document, replacing the one it had.
     const CxxFrontendDocument *process(const QString &filePath, const QString &source);
 
     // The same, and asks what could be written at \a line and \a column of
@@ -61,8 +59,8 @@ public:
     //
     // Where the question is asked has to be settled before the file is
     // preprocessed, so a document that was not asked cannot answer and the
-    // file is read again. Everything it includes is reused as it stands,
-    // which is what makes asking this on every keystroke affordable.
+    // file is read again, headers and all. The other documents are left
+    // alone: only the file being typed in is read afresh.
     const CxxFrontendDocument *processForCompletion(const QString &filePath,
                                                     const QString &source,
                                                     int line, int column);
@@ -75,16 +73,12 @@ public:
     // excluded.
     [[nodiscard]] QStringList allIncludesFor(const QString &filePath) const;
 
-    // Where the name used at a position in \a filePath was declared, looking
-    // beyond that file when it has to.
+    // Where the name used at a position in \a filePath was declared, which
+    // may be in one of its headers.
     //
-    // A document holds one file, so a name a header declared is not in the
-    // includer's translation unit and the parser could not resolve it there.
-    // What crosses the gap is this: ask the file first, and if the name means
-    // nothing there, look through what it includes.
-    //
-    // This is the beginning of what LookupContext does over a snapshot and
-    // not the whole of it. unsupportedLookups() says what it does not do.
+    // The file's headers are in its translation unit, so the parser applied
+    // the language's rules to that name and this reads off the answer.
+    // unsupportedLookups() says what is left over.
     [[nodiscard]] CxxFrontendDocument::Declaration declarationAt(const QString &filePath,
                                                                  int line,
                                                                  int column) const;

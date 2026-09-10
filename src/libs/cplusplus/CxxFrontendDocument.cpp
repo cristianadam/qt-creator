@@ -38,56 +38,67 @@ QString fromStd(std::string_view text)
 // the handler returns.
 struct IncludeState
 {
+    using Include = CxxFrontendDocument::Config::Include;
+
     cxx::Preprocessor &preprocessor;
-    const std::function<std::optional<QStringList>(const QString &, bool,
-                                                   const QStringList &)> &onInclude;
+    const std::function<std::optional<Include>(const QString &, bool, const QString &)>
+        &onInclude;
     QStringList *includedHeaders = nullptr;
-    // What is defined at this moment, which is what a header included here
-    // is entitled to see.
-    const QStringList *inForce = nullptr;
+    // The text of each header that was resolved, until the engine asks for
+    // it.
+    QHash<QString, QString> pending;
     bool done = false;
 
     explicit operator bool() const { return !done; }
 
     void operator()(const cxx::ProcessingComplete &) { done = true; }
     void operator()(const cxx::CanContinuePreprocessing &) {}
+
+    // The engine reports neither of these; it says which file it is
+    // reading when asked.
     void operator()(const cxx::EnteringFile &) {}
     void operator()(const cxx::LeavingFile &) {}
-    // A header that was found contributes no tokens here, only its macros.
-    // Saying so with empty content rather than with no content is the
-    // difference between "included, and it added nothing" and "not found",
-    // which the engine would report.
-    void operator()(const cxx::PendingFileContent &state) { state.setContent(std::string{}); }
+
+    // The header's own text, which is read into this translation unit as a
+    // compiler would read it.
+    void operator()(const cxx::PendingFileContent &state)
+    {
+        const auto it = pending.constFind(QString::fromStdString(state.fileName));
+        if (it == pending.cend()) {
+            state.setContent(std::nullopt);
+            return;
+        }
+        state.setContent(it->toStdString());
+    }
 
     void operator()(const cxx::PendingInclude &state)
     {
         const auto [name, isSystem] = nameOf(state.include);
-        const std::optional<QStringList> macros
-            = onInclude ? onInclude(name, isSystem, *inForce) : std::nullopt;
-        if (!macros) {
+        const std::optional<Include> header = resolve(name, isSystem);
+        if (!header) {
             state.resolveWith(std::nullopt);
             return;
         }
 
         includedHeaders->append(name);
-
-        // defineMacro joins its two arguments with a space and parses the
-        // result as a #define, so handing it the whole line and an empty body
-        // defines exactly what the line says -- parameter list, spaces and
-        // all.
-        for (const QString &macro : *macros)
-            preprocessor.defineMacro(macro.toStdString(), {});
-
-        state.resolveWith(name.toStdString(), isSystem);
+        pending.insert(header->filePath, header->source);
+        state.resolveWith(header->filePath.toStdString(), isSystem);
     }
 
     void operator()(const cxx::PendingHasIncludes &state)
     {
         for (const auto &request : state.requests) {
             const auto [name, isSystem] = nameOf(request.include);
-            request.setExists(onInclude
-                              && onInclude(name, isSystem, *inForce).has_value());
+            request.setExists(resolve(name, isSystem).has_value());
         }
+    }
+
+    std::optional<Include> resolve(const QString &name, bool isSystem) const
+    {
+        if (!onInclude)
+            return std::nullopt;
+        return onInclude(name, isSystem,
+                         QString::fromStdString(preprocessor.currentFileName()));
     }
 
     static std::pair<QString, bool> nameOf(const cxx::Include &include)
@@ -506,6 +517,10 @@ public:
     // record: the token before its name.
     [[nodiscard]] cxx::TokenKind classKeyOf(cxx::Symbol *symbol) const;
 
+    // The file a token was written in, which since a header is read into
+    // this translation unit is not always this file.
+    [[nodiscard]] QString fileOf(cxx::SourceLocation location) const;
+
     // What a proposal or an outline shows for \a symbol.
     [[nodiscard]] CxxFrontendDocument::Completion::Candidate describeCandidate(
         cxx::Symbol *symbol) const;
@@ -541,8 +556,23 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
     }
 
     for (cxx::Symbol *member : members) {
-        if (member->isHidden() || !isFromMainFile(member))
+        if (member->isHidden())
             continue;
+
+        // Something a header declared, read into this file along with the
+        // header. It is not this file's, but this file may have written
+        // part of it -- a member function defined out of line lives inside
+        // a class the header declares -- so the walk goes in and records
+        // whatever stands here.
+        if (!isFromMainFile(member)) {
+            if (member->name()) {
+                if (cxx::ScopeSymbol *inner = member->asScopeSymbol()) {
+                    collect(inner, enclosing + QStringList(fromStd(cxx::to_string(member->name()))),
+                            parent);
+                }
+            }
+            continue;
+        }
 
         // A class contains its own name, so that C means C inside C. Nothing
         // declared it, and the built-in front end has no such member.
@@ -900,6 +930,15 @@ QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
     return found;
 }
 
+QString CxxFrontendDocument::Private::fileOf(cxx::SourceLocation location) const
+{
+    if (!location)
+        return fileName;
+    const std::string name
+        = unit.preprocessor()->sourceFileName(unit.tokenAt(location).fileId());
+    return name.empty() ? fileName : fromStd(name);
+}
+
 cxx::TokenKind CxxFrontendDocument::Private::classKeyOf(cxx::Symbol *symbol) const
 {
     // One written with something in between -- an attribute, an export
@@ -1130,9 +1169,9 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
                                               std::uint32_t(this->config.completionColumn));
     }
 
+    IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders, {}};
+
     unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
-    IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders,
-                       &macroCollector.inForce()};
     while (state)
         std::visit(state, unit.continuePreprocessing());
     unit.endPreprocessing();
@@ -1279,6 +1318,15 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
         declaration.line = int(position.line);
         declaration.column = int(position.column);
+        declaration.filePath = d->fileOf(location);
+    }
+
+    cxx::Symbol *first = symbol->canonical() ? symbol->canonical() : symbol;
+    if (const cxx::SourceLocation location = first->location()) {
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        declaration.canonicalFilePath = d->fileOf(location);
+        declaration.canonicalLine = int(position.line);
+        declaration.canonicalColumn = int(position.column);
     }
     return declaration;
 }

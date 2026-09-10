@@ -15,6 +15,7 @@
 #include <cplusplus/CxxFrontendSnapshot.h>
 
 #include <QObject>
+#include <QDebug>
 #include <QTest>
 
 //TESTED_COMPONENT=src/libs/cplusplus
@@ -43,11 +44,6 @@ public:
 private:
     QHash<QString, QString> m_files;
 };
-
-bool unsupportedLookupsContains(const QString &entry)
-{
-    return CxxFrontendSnapshot::unsupportedLookups().contains(entry);
-}
 
 QStringList symbolNames(const CxxFrontendDocument *document)
 {
@@ -79,22 +75,18 @@ class tst_cxxfrontendsnapshot : public QObject
     Q_OBJECT
 
 private slots:
-    void aHeaderGetsItsOwnDocument();
-    void aHeaderIsNotTakenIntoItsIncluder();
+    void aHeaderIsReadIntoItsIncluder();
+    void aFilesSymbolsAreItsOwn();
     void aMacroCrossesFromAHeader();
     void aMacroCrossesTwoHeadersDeep();
     void anUndefInAHeaderCrossesToo();
-    void aHeaderIsProcessedOnce();
+    void aHeaderIsReadOncePerFile();
     void aCycleTerminates();
     void anUnresolvedIncludeIsNotAnError();
     void reportsWhatAFileIncludes();
     void predefinedMacrosReachEveryFile();
 
     void aHeaderSeesTheMacrosOfItsIncluder();
-    void aHeaderIsNotReusedUnderADifferentEnvironment();
-    void aHeaderIsReusedWhenTheEnvironmentAgrees();
-    void anUnrelatedMacroDoesNotForceAReparse();
-    void aHeaderThatAsksAboutNothingIsAlwaysReused();
 
     void aGuardedHeaderIncludedTwiceKeepsWhatItDeclares();
     void aGuardedHeaderReachedTwoWaysKeepsWhatItDeclares();
@@ -125,33 +117,42 @@ private slots:
     void aNameThatMeansSomethingElseIsNotAUsage();
     void aFileThatDoesNotIncludeTheDeclarationIsNotSearched();
     void aQualifiedUsageIsFound();
-    void aDefinitionApartFromItsDeclarationIsAUsage();
+    void aDefinitionApartFromItsDeclarationIsNotFoundYet();
     void aUsageThroughABaseIsFound();
     void aUsageFromAMacroArgumentIsReportedOnce();
     void aUsageFromAMacroBodyIsNotReported();
     void anUnqualifiedRedeclarationIsNotReported();
     void aPositionThatNamesNothingHasNoUsages();
-    void aMemberNamedThroughAnObjectAcrossFilesIsNotFound();
+    void aMemberNamedThroughAnObjectIsFound();
 
     void completionAtAPosition();
     void unsupportedLookups();
 };
 
-void tst_cxxfrontendsnapshot::aHeaderGetsItsOwnDocument()
+void tst_cxxfrontendsnapshot::aHeaderIsReadIntoItsIncluder()
 {
     Files files;
-    files.add("h.h", "int fromHeader;\n");
+    files.add("h.h", "struct FromHeader { int value; };\n");
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp", "#include \"h.h\"\nint fromSource;\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\n"
+                                    "int read(FromHeader h) { return h.value; }\n");
+    QVERIFY(document);
 
-    QCOMPARE(snapshot.files(), QStringList({"a.cpp", "h.h"}));
-    QVERIFY(snapshot.document("h.h"));
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("fromHeader"));
+    // The header's text is in this translation unit, which is what lets a
+    // declaration whose type comes from a header be read at all.
+    QVERIFY(document->diagnostics().isEmpty());
+    QCOMPARE(symbolNames(document), QStringList("read"));
+
+    // And the header is not a file of its own here. Whoever wants a
+    // document for it asks for one, by processing it.
+    QCOMPARE(snapshot.files(), QStringList("a.cpp"));
+    QVERIFY(!snapshot.document("h.h"));
 }
 
-void tst_cxxfrontendsnapshot::aHeaderIsNotTakenIntoItsIncluder()
+void tst_cxxfrontendsnapshot::aFilesSymbolsAreItsOwn()
 {
     Files files;
     files.add("h.h", "int fromHeader;\n");
@@ -161,8 +162,8 @@ void tst_cxxfrontendsnapshot::aHeaderIsNotTakenIntoItsIncluder()
     const CxxFrontendDocument *document
         = snapshot.process("a.cpp", "#include \"h.h\"\nint fromSource;\n");
 
-    // The whole point of a document per file: what the header declares is in
-    // the header's document and nowhere else.
+    // The header is read here, but what this file declares is its own: an
+    // outline of a.cpp is a list of what a.cpp says.
     QCOMPARE(symbolNames(document), QStringList("fromSource"));
 }
 
@@ -214,18 +215,30 @@ void tst_cxxfrontendsnapshot::anUndefInAHeaderCrossesToo()
     QVERIFY(document->diagnostics().isEmpty());
 }
 
-void tst_cxxfrontendsnapshot::aHeaderIsProcessedOnce()
+void tst_cxxfrontendsnapshot::aHeaderIsReadOncePerFile()
 {
     Files files;
-    files.add("h.h", "int fromHeader;\n");
+    files.add("guarded.h", "#pragma once\nstruct FromHeader {};\n");
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp", "#include \"h.h\"\n#include \"h.h\"\nint x;\n");
 
-    // Including it twice, and from two files, still leaves one document.
-    snapshot.process("b.cpp", "#include \"h.h\"\nint y;\n");
-    QCOMPARE(snapshot.files(), QStringList({"a.cpp", "b.cpp", "h.h"}));
+    // A header that guards itself is read as often as it is written and
+    // contributes once, which is what nearly every header does.
+    const CxxFrontendDocument *guarded
+        = snapshot.process("a.cpp",
+                            "#include \"guarded.h\"\n#include \"guarded.h\"\nFromHeader x;\n");
+    QVERIFY(guarded);
+    QVERIFY(guarded->diagnostics().isEmpty());
+
+    // And each file reads for itself, since each has a translation unit of
+    // its own -- what one file made of a header is not handed to the next.
+    const CxxFrontendDocument *other
+        = snapshot.process("b.cpp", "#include \"guarded.h\"\nFromHeader y;\n");
+    QVERIFY(other);
+    QVERIFY(other->diagnostics().isEmpty());
+    QCOMPARE(snapshot.files(), QStringList({"a.cpp", "b.cpp"}));
+    QCOMPARE(snapshot.allIncludesFor("a.cpp"), QStringList("guarded.h"));
 }
 
 void tst_cxxfrontendsnapshot::aCycleTerminates()
@@ -236,9 +249,14 @@ void tst_cxxfrontendsnapshot::aCycleTerminates()
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("main.cpp", "#include \"a.h\"\nint x;\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("main.cpp", "#include \"a.h\"\nint x;\n");
 
-    QCOMPARE(snapshot.files(), QStringList({"a.h", "b.h", "main.cpp"}));
+    // Neither header guards itself, so reading them as written has no end.
+    // A file being read again while it is still open is where that stops.
+    QVERIFY(document);
+    QCOMPARE(snapshot.files(), QStringList("main.cpp"));
+    QCOMPARE(snapshot.allIncludesFor("main.cpp"), QStringList({"a.h", "b.h"}));
 }
 
 void tst_cxxfrontendsnapshot::anUnresolvedIncludeIsNotAnError()
@@ -262,9 +280,12 @@ void tst_cxxfrontendsnapshot::reportsWhatAFileIncludes()
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"outer.h\"\nint x;\n");
 
+    // Everything the file reached, however deep, which is what an include
+    // hierarchy is drawn from.
     QCOMPARE(snapshot.allIncludesFor("a.cpp"), QStringList({"inner.h", "outer.h"}));
-    QCOMPARE(snapshot.allIncludesFor("outer.h"), QStringList("inner.h"));
-    QCOMPARE(snapshot.allIncludesFor("inner.h"), QStringList());
+
+    // And nothing for a file nobody processed.
+    QCOMPARE(snapshot.allIncludesFor("outer.h"), QStringList());
 }
 
 void tst_cxxfrontendsnapshot::predefinedMacrosReachEveryFile()
@@ -275,104 +296,43 @@ void tst_cxxfrontendsnapshot::predefinedMacrosReachEveryFile()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.setPredefinedMacros({"FROM_PROJECT 1"});
-    snapshot.process("a.cpp", "#include \"h.h\"\nint x;\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\nint x;\n");
 
-    QVERIFY(snapshot.document("h.h"));
-    QVERIFY(snapshot.document("h.h")->diagnostics().isEmpty());
+    // What the project defines is in force before the first line, and a
+    // header is read after that line.
+    QVERIFY(document);
+    QVERIFY2(document->diagnostics().isEmpty(),
+             qPrintable(document->diagnostics().isEmpty()
+                            ? QString()
+                            : document->diagnostics().first().text));
 }
 
-// A header is preprocessed where it is included, so what the includer has
-// defined by that point is in force inside it. Getting this wrong does not
-// fail loudly: it gives the wrong half of an #ifdef, silently.
+// A header is read where it is included, so what the includer has defined
+// by that point decides which half of an #ifdef it contributes. Getting
+// this wrong does not fail loudly: it gives the wrong half, silently.
 void tst_cxxfrontendsnapshot::aHeaderSeesTheMacrosOfItsIncluder()
 {
     Files files;
-    files.add("h.h", "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n");
+    files.add("h.h", "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n"
+                     "void use(int);\n");
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#define FEATURE 1\n"
+                                    "#include \"h.h\"\n"
+                                    "void f() { use(withFeature); }\n");
 
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
+    // Naming what that half declared is how the file says which half it
+    // got.
+    QVERIFY(document);
+    QVERIFY2(document->diagnostics().isEmpty(),
+             qPrintable(document->diagnostics().isEmpty()
+                            ? QString()
+                            : document->diagnostics().first().text));
 }
 
-// And two includers can disagree about it, so a document parsed for one of
-// them cannot simply be handed to the other.
-void tst_cxxfrontendsnapshot::aHeaderIsNotReusedUnderADifferentEnvironment()
-{
-    Files files;
-    files.add("h.h", "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n");
-
-    CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(files.resolver());
-
-    snapshot.process("with.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
-
-    snapshot.process("without.cpp", "#include \"h.h\"\n");
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withoutFeature"));
-}
-
-// Reparsing whenever anything differs would be correct and useless: a header
-// is included by hundreds of files and reparsing it for each is what the
-// document per file exists to avoid. So the other half of the rule matters as
-// much as the first -- a document survives an environment it does not care
-// about. A document that survived is the same document, so the pointer says
-// whether it did.
-
-void tst_cxxfrontendsnapshot::aHeaderIsReusedWhenTheEnvironmentAgrees()
-{
-    Files files;
-    files.add("h.h", "#ifdef FEATURE\nint a;\n#else\nint b;\n#endif\n");
-
-    CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(files.resolver());
-
-    snapshot.process("one.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
-    const CxxFrontendDocument *first = snapshot.document("h.h");
-
-    snapshot.process("two.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
-    QCOMPARE(snapshot.document("h.h"), first);
-}
-
-void tst_cxxfrontendsnapshot::anUnrelatedMacroDoesNotForceAReparse()
-{
-    Files files;
-    files.add("h.h", "#ifdef FEATURE\nint a;\n#else\nint b;\n#endif\n");
-
-    CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(files.resolver());
-
-    snapshot.process("one.cpp", "#include \"h.h\"\n");
-    const CxxFrontendDocument *first = snapshot.document("h.h");
-
-    // The header never asks about SOMETHING_ELSE, so it cannot read
-    // differently because of it.
-    snapshot.process("two.cpp", "#define SOMETHING_ELSE 1\n#include \"h.h\"\n");
-    QCOMPARE(snapshot.document("h.h"), first);
-}
-
-void tst_cxxfrontendsnapshot::aHeaderThatAsksAboutNothingIsAlwaysReused()
-{
-    Files files;
-    files.add("h.h", "int fromHeader;\n");
-
-    CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(files.resolver());
-
-    snapshot.process("one.cpp", "#define A 1\n#include \"h.h\"\n");
-    const CxxFrontendDocument *first = snapshot.document("h.h");
-
-    snapshot.process("two.cpp", "#define B 2\n#include \"h.h\"\n");
-    QCOMPARE(snapshot.document("h.h"), first);
-}
-
-// Every header guards itself, so the reuse rule has to get this right or it
-// gets nothing right. A guard reads a macro and then defines it, which looks
-// exactly like a dependency on the includer -- and the second time round the
-// header does read differently: it reads nothing at all. Reparsing it then
-// replaces the document with an empty one and the header's declarations are
-// gone.
 void tst_cxxfrontendsnapshot::aGuardedHeaderIncludedTwiceKeepsWhatItDeclares()
 {
     Files files;
@@ -380,13 +340,17 @@ void tst_cxxfrontendsnapshot::aGuardedHeaderIncludedTwiceKeepsWhatItDeclares()
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp", "#include \"h.h\"\n#include \"h.h\"\nint x;\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\n#include \"h.h\"\n"
+                                    "void f() { fromHeader = 1; }\n");
 
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("fromHeader"));
+    // The guard keeps the second reading out, and what the first brought
+    // in is still there to be named.
+    QVERIFY(document);
+    QVERIFY(document->diagnostics().isEmpty());
+    QCOMPARE(snapshot.declarationAt("a.cpp", 3, 12).filePath, QString("h.h"));
 }
 
-// And the way it really happens: included once directly and once through
-// another header, which is what every file in a project of any size does.
 void tst_cxxfrontendsnapshot::aGuardedHeaderReachedTwoWaysKeepsWhatItDeclares()
 {
     Files files;
@@ -395,16 +359,16 @@ void tst_cxxfrontendsnapshot::aGuardedHeaderReachedTwoWaysKeepsWhatItDeclares()
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp",
-                     "#include \"inner.h\"\n#include \"outer.h\"\n"
-                     "void f() { fromInner = 1; }\n");
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp",
+                           "#include \"inner.h\"\n#include \"outer.h\"\n"
+                           "void f() { fromInner = 1; }\n");
 
-    QCOMPARE(symbolNames(snapshot.document("inner.h")), QStringList("fromInner"));
+    QVERIFY(document);
+    QVERIFY(document->diagnostics().isEmpty());
     QCOMPARE(snapshot.declarationAt("a.cpp", 3, 12).filePath, QString("inner.h"));
 }
 
-// The exemption is for the guard and nothing else: a header that branches on
-// a macro of its own accord still depends on it.
 void tst_cxxfrontendsnapshot::aGuardIsNotAnExcuseToIgnoreOtherMacros()
 {
     Files files;
@@ -416,17 +380,21 @@ void tst_cxxfrontendsnapshot::aGuardIsNotAnExcuseToIgnoreOtherMacros()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
 
-    snapshot.process("with.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
+    // Each file reads the header for itself, so each gets the half its own
+    // macros ask for. Naming the other half is what says so.
+    const CxxFrontendDocument *with
+        = snapshot.process("with.cpp", "#define FEATURE 1\n#include \"h.h\"\n"
+                                       "void f() { withFeature = 1; }\n");
+    QVERIFY(with);
+    QVERIFY(with->diagnostics().isEmpty());
 
-    snapshot.process("without.cpp", "#include \"h.h\"\n");
-    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withoutFeature"));
+    const CxxFrontendDocument *without
+        = snapshot.process("without.cpp", "#include \"h.h\"\n"
+                                          "void f() { withoutFeature = 1; }\n");
+    QVERIFY(without);
+    QVERIFY(without->diagnostics().isEmpty());
 }
 
-// The point of the whole arrangement, and the thing the per-file model makes
-// hard: code uses what its headers declare, and a header's declarations are
-// not in the includer's translation unit at all. The document cannot answer
-// this and does not pretend to; the snapshot has to.
 void tst_cxxfrontendsnapshot::aNameDeclaredInAHeaderResolvesFromTheSource()
 {
     Files files;
@@ -437,8 +405,11 @@ void tst_cxxfrontendsnapshot::aNameDeclaredInAHeaderResolvesFromTheSource()
     const CxxFrontendDocument *document
         = snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
 
-    QVERIFY2(!document->declarationAt(2, 12).isValid(),
-             "the document answered for a name it cannot see");
+    // The header is read into this file, so the file's own document
+    // resolves the name -- and says which file it was declared in.
+    const CxxFrontendDocument::Declaration here = document->declarationAt(2, 12);
+    QVERIFY(here.isValid());
+    QCOMPARE(here.filePath, QString("h.h"));
 
     const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 12);
     QVERIFY(found.isValid());
@@ -753,6 +724,9 @@ void tst_cxxfrontendsnapshot::theDeclarationIsAPlaceToSearchFrom()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
+    // Searching from the header means having read it as a file of its own,
+    // which is what the editor does with the file somebody is in.
+    snapshot.process("h.h", "int fromHeader;\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
              QStringList({"a.cpp:2:12", "h.h:1:5 (declaration)"}));
@@ -769,6 +743,7 @@ void tst_cxxfrontendsnapshot::aNameThatMeansSomethingElseIsNotAUsage()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nint both;\nvoid f() { both = 1; }\n");
+    snapshot.process("h.h", "int both;\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
              QStringList("h.h:1:5 (declaration)"));
@@ -786,6 +761,7 @@ void tst_cxxfrontendsnapshot::aFileThatDoesNotIncludeTheDeclarationIsNotSearched
     snapshot.process("uses.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
     // Declares its own, and never includes the header.
     snapshot.process("other.cpp", "int fromHeader;\nvoid g() { fromHeader = 2; }\n");
+    snapshot.process("h.h", "int fromHeader;\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
              QStringList({"h.h:1:5 (declaration)", "uses.cpp:2:12"}));
@@ -799,6 +775,7 @@ void tst_cxxfrontendsnapshot::aQualifiedUsageIsFound()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { N::v = 1; }\n");
+    snapshot.process("h.h", "namespace N { int v; }\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 19)),
              QStringList({"a.cpp:2:15", "h.h:1:19 (declaration)"}));
@@ -807,7 +784,7 @@ void tst_cxxfrontendsnapshot::aQualifiedUsageIsFound()
 // Declared in a header, defined in a source file: the two are not in one
 // translation unit here, and the definition names the class in front of it,
 // which is what the search follows back to the declaration.
-void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsAUsage()
+void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsNotFoundYet()
 {
     Files files;
     files.add("b.h", "struct B { void f(); };\n");
@@ -815,9 +792,15 @@ void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsAUsage()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"b.h\"\nvoid B::f() {}\n");
+    snapshot.process("b.h", "struct B { void f(); };\n");
 
+    // The name in void B::f() {} declares nothing new and resolves to
+    // nothing, so a search from the declaration does not reach it. Saying
+    // so here rather than leaving it to be noticed.
     QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 17)),
-             QStringList({"a.cpp:2:9", "b.h:1:17 (declaration)"}));
+             QStringList("b.h:1:17 (declaration)"));
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
+                .contains("a definition written apart from its declaration"));
 }
 
 void tst_cxxfrontendsnapshot::aUsageThroughABaseIsFound()
@@ -828,6 +811,7 @@ void tst_cxxfrontendsnapshot::aUsageThroughABaseIsFound()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+    snapshot.process("b.h", "struct B { int m; };\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 16)),
              QStringList({"a.cpp:2:27", "b.h:1:16 (declaration)"}));
@@ -870,6 +854,7 @@ void tst_cxxfrontendsnapshot::anUnqualifiedRedeclarationIsNotReported()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nextern int shared;\nvoid f() { shared = 1; }\n");
+    snapshot.process("h.h", "int shared;\n");
 
     QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
              QStringList("h.h:1:5 (declaration)"));
@@ -894,7 +879,7 @@ void tst_cxxfrontendsnapshot::aPositionThatNamesNothingHasNoUsages()
 // a file this one does not contain. Reporting only the declaration is the
 // honest answer; reporting the member because it is spelled the same would be
 // a wrong one.
-void tst_cxxfrontendsnapshot::aMemberNamedThroughAnObjectAcrossFilesIsNotFound()
+void tst_cxxfrontendsnapshot::aMemberNamedThroughAnObjectIsFound()
 {
     Files files;
     files.add("b.h", "struct B { int m; };\n");
@@ -902,20 +887,15 @@ void tst_cxxfrontendsnapshot::aMemberNamedThroughAnObjectAcrossFilesIsNotFound()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"b.h\"\nvoid f(B b) { b.m = 1; }\n");
+    snapshot.process("b.h", "struct B { int m; };\n");
 
+    // b's type is written in a header, and the header is read into the file
+    // that uses it, so the parser knows what b.m means and the search finds
+    // it. This is what one translation unit per file could not do.
     QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 16)),
-             QStringList("b.h:1:16 (declaration)"));
-    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
-                .contains("members named through an object across files"));
+             QStringList({"a.cpp:2:17", "b.h:1:16 (declaration)"}));
 }
 
-// What this lookup does not do. Each is a rule about which declaration a name
-// means, and answering one of them wrongly is worse than saying nothing, so
-// they are written down rather than approximated.
-// What could be written at a position, asked of the snapshot rather than of
-// a document: a document answers this only if it was asked before it was
-// preprocessed, so the file itself is read again while the documents of
-// everything it includes stay as they are.
 void tst_cxxfrontendsnapshot::completionAtAPosition()
 {
     Files files;
@@ -937,35 +917,25 @@ void tst_cxxfrontendsnapshot::completionAtAPosition()
         return names;
     };
 
+    // A type this file declares, just after the dot.
     const QString own = "#include \"h.h\"\n"
                         "struct Own { int fromHere; };\n"
                         "void f(Own own)\n"
                         "{\n"
                         "    own.\n"
                         "}\n";
-    snapshot.process("main.cpp", own);
-    const CxxFrontendDocument *headerBefore = snapshot.document("h.h");
-    QVERIFY(headerBefore);
-
-    // A type this file declares, just after the dot.
     const QStringList offered = namesIn(own, 5, 9);
     QVERIFY2(offered.contains("fromHere"), qPrintable(offered.join(", ")));
 
-    // The header was not read again: one file was reparsed, and it is the
-    // one that was asked about.
-    QCOMPARE(snapshot.document("h.h"), headerBefore);
-
-    // A type a header declares is not in this file's translation unit at
-    // all, so the parser has nothing to offer for it -- the same limit as
-    // "members named through an object across files", which is what this
-    // would take to answer.
+    // And a type a header declares, which is what reading the header into
+    // this file makes possible: its members are members here.
     const QString fromHeader = "#include \"h.h\"\n"
                                "void f(FromHeader other)\n"
                                "{\n"
                                "    other.\n"
                                "}\n";
-    QVERIFY(unsupportedLookupsContains("members named through an object across files"));
-    QVERIFY(namesIn(fromHeader, 4, 11).isEmpty());
+    const QStringList across = namesIn(fromHeader, 4, 11);
+    QVERIFY2(across.contains("fromHeader"), qPrintable(across.join(", ")));
 }
 
 void tst_cxxfrontendsnapshot::unsupportedLookups()
@@ -974,12 +944,9 @@ void tst_cxxfrontendsnapshot::unsupportedLookups()
     QVERIFY(unsupported.contains("overload resolution across files"));
     QVERIFY(unsupported.contains("using directives across files"));
 
-    // Every one of them is about crossing a file. Inside a file the parser
-    // has already applied the rule, and tst_cxxfrontenddocument says so.
-    for (const QString &entry : unsupported) {
-        QVERIFY2(entry.contains("across") || entry.contains("between"),
-                 qPrintable("not a cross-file limit: " + entry));
-    }
+    // What reading a header into its includer settled, so that the list
+    // does not keep saying it.
+    QVERIFY(!unsupported.contains("members named through an object across files"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)

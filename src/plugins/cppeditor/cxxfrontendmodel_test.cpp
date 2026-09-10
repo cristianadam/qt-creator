@@ -781,11 +781,10 @@ void CxxFrontendModelTest::testNames()
 // not in this one -- and what that costs the colours is what this measures.
 // What a file that uses its headers gets, which is what every real file is.
 //
-// The model keeps one translation unit per file and lets only a header's
-// macros cross into its includer, so a type a header declares is not a type
-// here -- and the parser cannot read a declaration whose type it does not
-// know. This says how much is lost, so that the day headers do cross, these
-// numbers go up and the test says so.
+// A header is read into whoever includes it, so a type it declares is a type
+// here and everything written with it is read. This measured what one
+// translation unit per file used to lose -- a signature took the whole
+// function with it -- and now says there is nothing lost.
 void CxxFrontendModelTest::testNamesAcrossFiles()
 {
     const auto found = [](const QByteArray &body) {
@@ -804,13 +803,17 @@ void CxxFrontendModelTest::testNamesAcrossFiles()
     QCOMPARE(found("int f(int a)\n{\n    return a;\n}\n"),
              QStringList({"2:5 FunctionDeclaration", "2:11 Local", "4:12 Local"}));
 
-    // A header's type in the signature, and the whole function goes: the
-    // parser has no such type, so there is no declaration to read.
-    QCOMPARE(found("int f(FromHeader h)\n{\n    return h.value;\n}\n"), QStringList());
+    // A header's type in the signature, and everything is still read: the
+    // header is part of this translation unit, so FromHeader is a type
+    // here and h.value is a field of it.
+    QCOMPARE(found("int f(FromHeader h)\n{\n    return h.value;\n}\n"),
+             QStringList({"2:5 FunctionDeclaration", "2:7 Type", "2:18 Local",
+                          "4:12 Local", "4:14 Field"}));
 
-    // In the body, and the locals go with it.
+    // And in the body.
     QCOMPARE(found("int f()\n{\n    FromHeader h;\n    return h.value;\n}\n"),
-             QStringList({"2:5 FunctionDeclaration"}));
+             QStringList({"2:5 FunctionDeclaration", "4:5 Type", "4:16 Local",
+                          "5:12 Local", "5:14 Field"}));
 
     // A base is read where it is written rather than resolved, so it keeps
     // its colour.

@@ -79,6 +79,11 @@ class Preprocessor {
   [[nodiscard]] auto currentPath() const -> std::string;
   void setCurrentPath(std::string currentPath);
 
+  // The file being read at this moment, which for an include is the file
+  // that wrote it. A tool that resolves an include has to know where it
+  // was written: the same name means different files in different places.
+  [[nodiscard]] auto currentFileName() const -> std::string;
+
   [[nodiscard]] auto omitLineMarkers() const -> bool;
   void setOmitLineMarkers(bool omitLineMarkers);
 

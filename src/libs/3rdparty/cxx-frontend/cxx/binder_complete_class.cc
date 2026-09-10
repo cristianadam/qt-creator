@@ -2247,6 +2247,18 @@ void Binder::BuildRecordLayout::layoutVirtualBases() {
       if (!seenVirtualBases.insert(baseClass).second) continue;
       orderedVirtualBases.push_back(baseClass);
     }
+
+    // A class that inherits itself, however far around. That is
+    // ill-formed and is diagnosed elsewhere; walking it here would not
+    // end. Only the path is checked, so a class inherited twice by
+    // different paths -- which is a diamond, and legal -- is still walked
+    // twice.
+    const bool onPath =
+        std::ranges::any_of(frames, [baseClass](const InheritanceFrame& f) {
+          return f.classSymbol == baseClass;
+        });
+    if (onPath) continue;
+
     frames.push_back({baseClass});
   }
 
