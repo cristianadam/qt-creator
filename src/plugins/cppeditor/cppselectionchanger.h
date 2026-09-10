@@ -6,26 +6,39 @@
 #include "cppeditor_global.h"
 
 #include <cplusplus/CppDocument.h>
-#include <cplusplus/TranslationUnit.h>
 
+#include <QList>
 #include <QObject>
 #include <QTextCursor>
 
 namespace CppEditor {
 
-class ASTNodePositions {
+// One place a selection can stop, in the positions a QTextCursor counts.
+class SelectionStep
+{
 public:
-    ASTNodePositions() = default;
-    explicit ASTNodePositions(CPlusPlus::AST *_ast) : ast(_ast) {}
-    operator bool() const { return ast; }
+    SelectionStep() = default;
+    SelectionStep(int start, int end) : start(start), end(end) {}
+    operator bool() const { return start >= 0 && end >= 0; }
 
-    CPlusPlus::AST *ast = nullptr;
-    unsigned firstTokenIndex = 0;
-    unsigned lastTokenIndex = 0;
-    unsigned secondToLastTokenIndex = 0;
-    int astPosStart = -1;
-    int astPosEnd = -1;
+    int start = -1;
+    int end = -1;
 };
+
+// The places one node of the syntax tree offers, in expanding order: what a
+// step inside it selects before its own extent -- a scope without its braces,
+// a literal without its quotes, the head of a for statement before the
+// parentheses around it -- and then, usually, the extent itself.
+//
+// Which of them a node offers depends on where the cursor stood when the walk
+// began, and that is settled where the node is read rather than here. What
+// the parentheses of a for statement are is a question about a tree; the walk
+// below is the same whichever tree answered it.
+using SelectionSteps = QList<SelectionStep>;
+
+// The nodes the cursor is inside, outermost first -- what a selection grows
+// along.
+using SelectionPath = QList<SelectionSteps>;
 
 class CPPEDITOR_EXPORT CppSelectionChanger : public QObject
 {
@@ -52,47 +65,19 @@ public:
 public slots:
     void onCursorPositionChanged(const QTextCursor &newCursor);
 
-protected slots:
-    void fineTuneForStatementPositions(unsigned firstParensTokenIndex,
-                                       unsigned lastParensTokenIndex,
-                                       ASTNodePositions &positions) const;
-
 private:
     bool performSelectionChange(QTextCursor &cursorToModify);
-    ASTNodePositions getASTPositions(CPlusPlus::AST *ast, const QTextCursor &cursor) const;
-    void updateCursorSelection(QTextCursor &cursorToModify, ASTNodePositions positions);
+    void updateCursorSelection(QTextCursor &cursorToModify, SelectionStep step);
 
-    int possibleASTStepCount(CPlusPlus::AST *ast) const;
-    int currentASTStep() const;
-    ASTNodePositions findNextASTStepPositions(const QTextCursor &cursor);
-
-    void fineTuneASTNodePositions(ASTNodePositions &positions) const;
-    ASTNodePositions getFineTunedASTPositions(CPlusPlus::AST *ast, const QTextCursor &cursor) const;
-    int getFirstCurrentStepForASTNode(CPlusPlus::AST *ast) const;
-    bool isLastPossibleStepForASTNode(CPlusPlus::AST *ast) const;
-    ASTNodePositions findRelevantASTPositionsFromCursor(const QList<CPlusPlus::AST *> &astPath,
-                                              const QTextCursor &cursor,
-                                              int startingFromNodeIndex = -1);
-    ASTNodePositions findRelevantASTPositionsFromCursorWhenNodeIndexNotSet(
-            const QList<CPlusPlus::AST *> &astPath,
-            const QTextCursor &cursor);
-    ASTNodePositions findRelevantASTPositionsFromCursorWhenWholeDocumentSelected(
-            const QList<CPlusPlus::AST *> &astPath,
-            const QTextCursor &cursor);
-    ASTNodePositions findRelevantASTPositionsFromCursorFromPreviousNodeIndex(
-            const QList<CPlusPlus::AST *> &astPath,
-            const QTextCursor &cursor);
-    bool shouldSkipASTNodeBasedOnPosition(const ASTNodePositions &positions,
-                                          const QTextCursor &cursor) const;
+    SelectionStep findNextStep();
+    SelectionStep stepInNode(int nodeIndex);
+    SelectionStep stepInNextNodeOrStep();
+    bool shouldSkipStep(const SelectionStep &step, const QTextCursor &cursor) const;
     void setNodeIndexAndStep(NodeIndexAndStepState state);
-    int getTokenStartCursorPosition(unsigned tokenIndex, const QTextCursor &cursor) const;
-    int getTokenEndCursorPosition(unsigned tokenIndex, const QTextCursor &cursor) const;
-    void printTokenDebugInfo(unsigned tokenIndex, const QTextCursor &cursor, QString prefix) const;
 
     QTextCursor m_initialChangeSelectionCursor;
     QTextCursor m_workingCursor;
-    CPlusPlus::Document::Ptr m_doc;
-    CPlusPlus::TranslationUnit *m_unit = nullptr;
+    SelectionPath m_path;
     Direction m_direction = ExpandSelection;
     int m_changeSelectionNodeIndex = -1;
     int m_nodeCurrentStep = -1;

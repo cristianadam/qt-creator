@@ -11,7 +11,9 @@
 #include <QTextBlock>
 #include <QTextDocument>
 
+#include <cplusplus/AST.h>
 #include <cplusplus/ASTPath.h>
+#include <cplusplus/TranslationUnit.h>
 
 using namespace CPlusPlus;
 using namespace Utils::Text;
@@ -109,79 +111,350 @@ bool isWholeDocumentSelectedAndExpanding(
     return false;
 }
 
+// Reading the built-in syntax tree: what the nodes the cursor is in offer.
+//
+// One case per construct that has places inside it worth stopping at, and the
+// node's own extent for everything else. A node says up front what each of
+// its steps selects, so the walk itself has nothing to know about C++ -- and
+// where the answer depends on which part of the construct the cursor is in,
+// that is decided here, once, rather than again at every step.
+class BuiltinTree
+{
+public:
+    BuiltinTree(const Document::Ptr &doc, const QTextDocument *text, const QTextCursor &cursor)
+        : m_doc(doc)
+        , m_unit(doc->translationUnit())
+        , m_text(text)
+        , m_cursorAnchor(cursor.anchor())
+        , m_cursorPosition(cursor.position())
+        , m_cursor(cursor)
+    {}
+
+    SelectionPath path() const
+    {
+        SelectionPath path;
+        ASTPath astPathFinder(m_doc);
+        const QList<AST *> astPath = astPathFinder(m_cursor);
+        for (AST *ast : astPath)
+            path.append(stepsOf(ast));
+        return path;
+    }
+
+private:
+    int tokenStart(unsigned tokenIndex) const
+    {
+        int line, column;
+        m_unit->getTokenPosition(tokenIndex, &line, &column);
+        return m_text->findBlockByNumber(line - 1).position() + column - 1;
+    }
+
+    int tokenEnd(unsigned tokenIndex) const
+    {
+        int line, column;
+        m_unit->getTokenEndPosition(tokenIndex, &line, &column);
+        return m_text->findBlockByNumber(line - 1).position() + column - 1;
+    }
+
+    // An AST node's contents is bound by its first token start position
+    // inclusively, and its last token start position exclusively. So the
+    // second to last token is the last one actually included, and where there
+    // is more than one token its end is where the node ends.
+    SelectionStep extentOf(AST *ast) const
+    {
+        const unsigned firstTokenIndex = ast->firstToken();
+        const unsigned lastTokenIndex = ast->lastToken();
+
+        SelectionStep extent(tokenStart(firstTokenIndex), tokenStart(lastTokenIndex));
+        if (lastTokenIndex != firstTokenIndex)
+            extent.end = tokenEnd(lastTokenIndex - 1);
+        return extent;
+    }
+
+    bool isCursorIn(int start, int end) const
+    {
+        return m_cursorAnchor >= start && m_cursorPosition <= end;
+    }
+
+    // The contents of a scope, without its braces -- or, where there is
+    // nothing between them, the blank space itself.
+    SelectionStep contentsOfBraces(AST *ast) const
+    {
+        const unsigned firstTokenIndex = ast->firstToken();
+        const unsigned secondToLastTokenIndex = ast->lastToken() - 1;
+
+        // TODO: If the empty space has a new tab character, or spaces, and the document is
+        // not saved, the last semantic info is not updated, and the selection is not
+        // properly computed. Figure out how to work around this.
+        if (secondToLastTokenIndex - firstTokenIndex <= 1) {
+            return {tokenEnd(firstTokenIndex), tokenStart(secondToLastTokenIndex)};
+        }
+        return {tokenStart(firstTokenIndex + 1), tokenEnd(secondToLastTokenIndex - 1)};
+    }
+
+    // What a literal says, without the quotes around it.
+    SelectionStep contentsOfLiteral(const Token &token, const SelectionStep &extent) const
+    {
+        int end = extent.end - 1;
+        int start = 0;
+        if (token.isCharLiteral()) {
+            start = end - token.literal->size();
+        } else {
+            const bool isRawLiteral = token.isRawStringLiteral();
+            if (debug && isRawLiteral)
+                qDebug() << "Is raw literal.";
+
+            // A raw literal has a parenthesis inside each quote.
+            if (isRawLiteral)
+                --end;
+            start = end - QString::fromUtf8(token.string->chars()).size();
+            if (isRawLiteral)
+                start += 2;
+        }
+        return {start, end};
+    }
+
+    SelectionSteps stepsOf(AST *ast) const;
+
+    const Document::Ptr m_doc;
+    TranslationUnit * const m_unit;
+    const QTextDocument * const m_text;
+    const int m_cursorAnchor;
+    const int m_cursorPosition;
+    const QTextCursor m_cursor;
+};
+
+SelectionSteps BuiltinTree::stepsOf(AST *ast) const
+{
+    const SelectionStep extent = extentOf(ast);
+
+    if (ast->asCompoundStatement()) {
+        // First the contents of the scope, and then the contents together
+        // with the braces.
+        return {contentsOfBraces(ast), extent};
+    }
+
+    if (CallAST *callAST = ast->asCall()) {
+        const int lparen = tokenStart(callAST->lparen_token);
+        const int rparen = tokenEnd(callAST->rparen_token);
+
+        // With the cursor in the function name, the name is selected
+        // implicitly -- it is a node of its own -- and then the whole call.
+        if (m_cursorPosition <= lparen)
+            return {extent};
+
+        // With the cursor inside the parentheses: what is between them, then
+        // them as well, then the whole call.
+        return {{lparen + 1, rparen - 1}, {lparen, rparen}, extent};
+    }
+
+    if (StringLiteralAST *stringLiteralAST = ast->asStringLiteral()) {
+        const Token token = m_unit->tokenAt(stringLiteralAST->firstToken());
+        return {contentsOfLiteral(token, extent), extent};
+    }
+
+    if (NumericLiteralAST *numericLiteralAST = ast->asNumericLiteral()) {
+        const Token token = m_unit->tokenAt(numericLiteralAST->firstToken());
+        if (!token.isCharLiteral())
+            return {extent};
+        return {contentsOfLiteral(token, extent), extent};
+    }
+
+    if (ForStatementAST *forStatementAST = ast->asForStatement()) {
+        const int lparen = tokenStart(forStatementAST->lparen_token);
+        const int rparen = tokenEnd(forStatementAST->rparen_token);
+        if (m_cursorPosition <= lparen)
+            return {extent};
+        return {{lparen + 1, rparen - 1}, {lparen, rparen}, extent};
+    }
+
+    if (RangeBasedForStatementAST *rangeForStatementAST = ast->asRangeBasedForStatement()) {
+        const int lparen = tokenStart(rangeForStatementAST->lparen_token);
+        const int rparen = tokenEnd(rangeForStatementAST->rparen_token);
+        if (m_cursorPosition <= lparen)
+            return {extent};
+        return {{lparen + 1, rparen - 1}, {lparen, rparen}, extent};
+    }
+
+    if (ClassSpecifierAST *classSpecifierAST = ast->asClassSpecifier()) {
+        const int lbrace = tokenStart(classSpecifierAST->lbrace_token);
+        const int rbrace = tokenEnd(classSpecifierAST->rbrace_token);
+        const int keywordStart = tokenStart(classSpecifierAST->classkey_token);
+        const int keywordEnd = tokenEnd(classSpecifierAST->classkey_token);
+
+        // Where the class is named, the name is the second half of what the
+        // keyword step selects; where it is not, that step reaches to the end.
+        int nameEnd = rbrace;
+        bool isInClassName = false;
+        if (NameAST *nameAST = classSpecifierAST->name) {
+            if (SimpleNameAST *classNameAST = nameAST->asSimpleName()) {
+                const unsigned identifierTokenIndex = classNameAST->identifier_token;
+                nameEnd = tokenEnd(identifierTokenIndex);
+                isInClassName = isCursorIn(tokenStart(identifierTokenIndex), nameEnd);
+            }
+        }
+
+        if (m_cursorPosition > lbrace)
+            return {{lbrace + 1, rbrace - 1}, {lbrace, rbrace}, extent};
+        if (isCursorIn(keywordStart, keywordEnd))
+            return {{keywordStart, keywordEnd}, {keywordStart, nameEnd}, extent};
+        if (isInClassName)
+            return {{keywordStart, nameEnd}, extent};
+        return {extent};
+    }
+
+    if (NamespaceAST *namespaceAST = ast->asNamespace()) {
+        const int keywordStart = tokenStart(namespaceAST->namespace_token);
+        const int keywordEnd = tokenEnd(namespaceAST->namespace_token);
+        const int identifierStart = tokenStart(namespaceAST->identifier_token);
+        const int identifierEnd = tokenEnd(namespaceAST->identifier_token);
+
+        if (m_cursorPosition <= keywordEnd)
+            return {{keywordStart, keywordEnd}, {keywordStart, identifierEnd}, extent};
+        if (isCursorIn(identifierStart, identifierEnd))
+            return {{identifierStart, identifierEnd}, {keywordStart, identifierEnd}, extent};
+        return {extent};
+    }
+
+    if (ExpressionListParenAST *parenAST = ast->asExpressionListParen()) {
+        const int lparen = tokenStart(parenAST->lparen_token);
+        const int rparen = tokenEnd(parenAST->rparen_token);
+        return {{lparen + 1, rparen - 1}, {lparen, rparen}};
+    }
+
+    if (FunctionDeclaratorAST *functionDeclaratorAST = ast->asFunctionDeclarator()) {
+        // The parameters and the parentheses around them. What is written
+        // after them belongs to the declarator this is part of.
+        return {{tokenStart(functionDeclaratorAST->lparen_token),
+                 tokenEnd(functionDeclaratorAST->rparen_token)}};
+    }
+
+    if (FunctionDefinitionAST *functionDefinitionAST = ast->asFunctionDefinition()) {
+        // Everything to the left of the braces -- the return type, the name
+        // and the parameters -- before the definition as a whole, and only
+        // when the cursor is not in the body.
+        if (!functionDefinitionAST->function_body)
+            return {extent};
+
+        CompoundStatementAST *compoundStatementAST =
+                functionDefinitionAST->function_body->asCompoundStatement();
+        if (!compoundStatementAST)
+            return {extent};
+
+        if (!functionDefinitionAST->decl_specifier_list
+                || !functionDefinitionAST->decl_specifier_list->value) {
+            return {extent};
+        }
+
+        SimpleSpecifierAST *simpleSpecifierAST =
+                functionDefinitionAST->decl_specifier_list->value->asSimpleSpecifier();
+        if (!simpleSpecifierAST)
+            return {extent};
+
+        const int lbrace = tokenStart(compoundStatementAST->lbrace_token);
+        if (m_cursorPosition > lbrace)
+            return {extent};
+
+        return {{tokenStart(simpleSpecifierAST->firstToken()), lbrace - 1}, extent};
+    }
+
+    if (DeclaratorAST *declaratorAST = ast->asDeclarator()) {
+        // The declarator without its cv qualifiers, before the whole of it.
+        PostfixDeclaratorListAST *list = declaratorAST->postfix_declarator_list;
+        if (!list || !list->value)
+            return {extent};
+
+        FunctionDeclaratorAST *functionDeclarator = list->value->asFunctionDeclarator();
+        if (!functionDeclarator)
+            return {extent};
+
+        SpecifierListAST *cvList = functionDeclarator->cv_qualifier_list;
+        if (!cvList || !cvList->value)
+            return {extent};
+
+        const int cvStart = tokenStart(cvList->value->firstToken());
+        if (m_cursorPosition >= cvStart)
+            return {extent};
+
+        return {{extent.start, cvStart - 1}, extent};
+    }
+
+    if (TemplateIdAST *templateIdAST = ast->asTemplateId()) {
+        // The name a template is instantiated by, before the instantiation.
+        const int identifierStart = tokenStart(templateIdAST->identifier_token);
+        const int identifierEnd = tokenEnd(templateIdAST->identifier_token);
+        if (!isCursorIn(identifierStart, identifierEnd))
+            return {extent};
+        return {{identifierStart, identifierEnd}, extent};
+    }
+
+    if (TemplateDeclarationAST *templateDeclarationAST = ast->asTemplateDeclaration()) {
+        const int keywordStart = tokenStart(templateDeclarationAST->template_token);
+        const int keywordEnd = tokenEnd(templateDeclarationAST->template_token);
+        if (!isCursorIn(keywordStart, keywordEnd))
+            return {extent};
+
+        // The keyword, then the keyword with the parameters it introduces.
+        return {{keywordStart, keywordEnd},
+                {keywordStart, tokenEnd(templateDeclarationAST->greater_token)},
+                extent};
+    }
+
+    if (LambdaExpressionAST *lambdaExpressionAST = ast->asLambdaExpression()) {
+        // TODO: Fix more lambda cases.
+        LambdaDeclaratorAST *lambdaDeclaratorAST = lambdaExpressionAST->lambda_declarator;
+        if (!lambdaDeclaratorAST)
+            return {extent};
+
+        const int lbracket
+            = tokenStart(lambdaExpressionAST->lambda_introducer->lbracket_token);
+        const int rparen = tokenEnd(lambdaDeclaratorAST->rparen_token);
+        if (!isCursorIn(lbracket, rparen))
+            return {extent};
+
+        // The capture group with the arguments, then the prototype where
+        // there is a return type written after them, then the whole lambda.
+        SelectionSteps steps{{lbracket, rparen}};
+        if (TrailingReturnTypeAST *trailingReturnTypeAST
+            = lambdaDeclaratorAST->trailing_return_type) {
+            steps.append({lbracket, tokenEnd(trailingReturnTypeAST->lastToken()) - 2});
+        }
+        steps.append(extent);
+        return steps;
+    }
+
+    return {extent};
+}
+
+// The places to stop at around the cursor, read off the built-in tree.
+SelectionPath selectionPathAt(const Document::Ptr &doc, const QTextDocument *text,
+                              const QTextCursor &cursor)
+{
+    return BuiltinTree(doc, text, cursor).path();
+}
+
 } // end of anonymous namespace
 
-int CppSelectionChanger::getTokenStartCursorPosition(
-        unsigned tokenIndex,
-        const QTextCursor &cursor) const
-{
-    int startLine, startColumn;
-    m_unit->getTokenPosition(tokenIndex, &startLine, &startColumn);
-
-    const QTextDocument *document = cursor.document();
-    const int startPosition = document->findBlockByNumber(startLine - 1).position()
-                                    + startColumn - 1;
-
-    return startPosition;
-}
-
-int CppSelectionChanger::getTokenEndCursorPosition(
-        unsigned tokenIndex,
-        const QTextCursor &cursor) const
-{
-    int endLine, endColumn;
-    m_unit->getTokenEndPosition(tokenIndex, &endLine, &endColumn);
-
-    const QTextDocument *document = cursor.document();
-    const int endPosition = document->findBlockByNumber(endLine - 1).position()
-                                    + endColumn - 1;
-
-    return endPosition;
-}
-
-void CppSelectionChanger::printTokenDebugInfo(
-        unsigned tokenIndex,
-        const QTextCursor &cursor,
-        QString prefix) const
-{
-    int line, column;
-    const Token token = m_unit->tokenAt(tokenIndex);
-    m_unit->getTokenPosition(tokenIndex, &line, &column);
-    const int startPos = getTokenStartCursorPosition(tokenIndex, cursor);
-    const int endPos = getTokenEndCursorPosition(tokenIndex, cursor);
-
-    qDebug() << qSetFieldWidth(20) << prefix << qSetFieldWidth(0)
-             << token.spell() << tokenIndex
-             << " l, c:" << line << ":" << column
-             << " offset: " << token.utf16chars() << startPos << endPos;
-}
-
-bool CppSelectionChanger::shouldSkipASTNodeBasedOnPosition(
-        const ASTNodePositions &positions,
+bool CppSelectionChanger::shouldSkipStep(
+        const SelectionStep &step,
         const QTextCursor &cursor) const
 {
     bool shouldSkipNode = false;
 
-    bool isEqual = cursor.anchor() == positions.astPosStart
-                   && cursor.position() == positions.astPosEnd;
+    bool isEqual = cursor.anchor() == step.start && cursor.position() == step.end;
 
     // New selections should include initial selection.
     bool includesInitialSelection =
-            m_initialChangeSelectionCursor.anchor() >= positions.astPosStart &&
-            m_initialChangeSelectionCursor.position() <= positions.astPosEnd;
+            m_initialChangeSelectionCursor.anchor() >= step.start &&
+            m_initialChangeSelectionCursor.position() <= step.end;
 
     // Prefer new selections to start with initial cursor if anchor == position.
-    if (!m_initialChangeSelectionCursor.hasSelection()) {
-        includesInitialSelection =
-                m_initialChangeSelectionCursor.position() < positions.astPosEnd;
-    }
+    if (!m_initialChangeSelectionCursor.hasSelection())
+        includesInitialSelection = m_initialChangeSelectionCursor.position() < step.end;
 
     // When expanding: Skip if new selection is smaller than current cursor selection.
     // When shrinking: Skip if new selection is bigger than current cursor selection.
-    bool isNewSelectionSmaller = positions.astPosStart > cursor.anchor()
-                                 || positions.astPosEnd < cursor.position();
-    bool isNewSelectionBigger = positions.astPosStart < cursor.anchor()
-                                || positions.astPosEnd > cursor.position();
+    bool isNewSelectionSmaller = step.start > cursor.anchor() || step.end < cursor.position();
+    bool isNewSelectionBigger = step.start < cursor.anchor() || step.end > cursor.position();
 
     if (m_direction == CppSelectionChanger::ExpandSelection
         && (isNewSelectionSmaller || isEqual || !includesInitialSelection)) {
@@ -200,745 +473,108 @@ bool CppSelectionChanger::shouldSkipASTNodeBasedOnPosition(
     return shouldSkipNode;
 }
 
-ASTNodePositions CppSelectionChanger::getASTPositions(AST *ast, const QTextCursor &cursor) const
-{
-    ASTNodePositions positions(ast);
-
-    // An AST node's contents is bound by its first token start position inclusively,
-    // and its last token start position exclusively.
-    // So we are also interested in the second to last token, which is actually
-    // included in the bounds.
-    positions.firstTokenIndex = ast->firstToken();
-    positions.lastTokenIndex = ast->lastToken();
-    positions.secondToLastTokenIndex = positions.lastTokenIndex - 1;
-
-    // The AST position start is the start of the first token.
-    positions.astPosStart = getTokenStartCursorPosition(positions.firstTokenIndex, cursor);
-
-    // The end position depends on whether, there is only one token involved in the current AST
-    // node or multiple ones.
-    // Default we assume that there is only one token, so the end position of the AST node
-    // is the start of the last token.
-    // If there is more than one (second to last token will be different to the first token)
-    // use the second to last token end position as the AST node end position.
-    positions.astPosEnd = getTokenStartCursorPosition(positions.lastTokenIndex, cursor);
-    if (positions.lastTokenIndex != positions.firstTokenIndex)
-        positions.astPosEnd = getTokenEndCursorPosition(positions.secondToLastTokenIndex, cursor);
-
-    if (debug) {
-        qDebug() << "Token positions start and end:"
-                 << positions.astPosStart << positions.astPosEnd;
-    }
-
-    return positions;
-}
-
 void CppSelectionChanger::updateCursorSelection(
         QTextCursor &cursorToModify,
-        ASTNodePositions positions)
+        SelectionStep step)
 {
-    m_workingCursor.setPosition(positions.astPosStart, QTextCursor::MoveAnchor);
-    m_workingCursor.setPosition(positions.astPosEnd, QTextCursor::KeepAnchor);
+    m_workingCursor.setPosition(step.start, QTextCursor::MoveAnchor);
+    m_workingCursor.setPosition(step.end, QTextCursor::KeepAnchor);
     cursorToModify = m_workingCursor;
 
     if (debug) {
-        printTokenDebugInfo(positions.firstTokenIndex, m_workingCursor,
-                            QString::fromLatin1("First token:"));
-        printTokenDebugInfo(positions.lastTokenIndex, m_workingCursor,
-                            QString::fromLatin1("Last token:"));
-        printTokenDebugInfo(positions.secondToLastTokenIndex, m_workingCursor,
-                            QString::fromLatin1("Second to last:"));
-
         qDebug() << "Anchor is now: " << m_workingCursor.anchor();
         qDebug() << "Position is now: " << m_workingCursor.position();
     }
 }
 
-int CppSelectionChanger::getFirstCurrentStepForASTNode(AST *ast) const
+// The first step of the node at \a nodeIndex, and the walk is in that node
+// from now on. Nothing where the path does not reach that far.
+SelectionStep CppSelectionChanger::stepInNode(int nodeIndex)
 {
-    if (m_direction == ExpandSelection)
-        return 1;
-    else
-        return possibleASTStepCount(ast);
-}
-
-bool CppSelectionChanger::isLastPossibleStepForASTNode(AST *ast) const
-{
-    if (m_direction == ExpandSelection)
-        return currentASTStep() == possibleASTStepCount(ast);
-    else
-        return currentASTStep() == 1;
-}
-
-ASTNodePositions CppSelectionChanger::getFineTunedASTPositions(AST *ast,
-                                                               const QTextCursor &cursor) const
-{
-    ASTNodePositions positions = getASTPositions(ast, cursor);
-    fineTuneASTNodePositions(positions);
-    return positions;
-}
-
-ASTNodePositions CppSelectionChanger::findRelevantASTPositionsFromCursor(
-        const QList<AST *> &astPath,
-        const QTextCursor &cursor,
-        int startingFromNodeIndex)
-{
-    ASTNodePositions currentNodePositions;
-    const int size = astPath.size();
-    int currentAstIndex = m_direction == ExpandSelection ? size - 1 : 0;
-
-    // Adjust starting node index, if a valid value was passed.
-    if (startingFromNodeIndex != kChangeSelectionNodeIndexNotSet)
-        currentAstIndex = startingFromNodeIndex;
-
-    if (currentAstIndex < size && currentAstIndex >= 0) {
-        AST *ast = astPath.at(currentAstIndex);
-        m_changeSelectionNodeIndex = currentAstIndex;
-        m_nodeCurrentStep = getFirstCurrentStepForASTNode(ast);
-        currentNodePositions = getFineTunedASTPositions(ast, cursor);
-
-        if (debug && startingFromNodeIndex == kChangeSelectionNodeIndexNotSet)
-            qDebug() << "Setting AST index for the first time.";
+    if (nodeIndex < 0 || nodeIndex >= m_path.size() || m_path.at(nodeIndex).isEmpty()) {
+        setNodeIndexAndStep(NodeIndexAndStepNotSet);
+        return {};
     }
 
-    if (!currentNodePositions.ast)
-        setNodeIndexAndStep(NodeIndexAndStepNotSet);
+    const SelectionSteps &steps = m_path.at(nodeIndex);
+    m_changeSelectionNodeIndex = nodeIndex;
+    m_nodeCurrentStep = m_direction == ExpandSelection ? 1 : steps.size();
 
-    return currentNodePositions;
+    if (debug)
+        qDebug() << "Walking node" << nodeIndex << "of" << steps.size() << "steps.";
+
+    return steps.at(m_nodeCurrentStep - 1);
 }
 
-ASTNodePositions CppSelectionChanger::findRelevantASTPositionsFromCursorWhenNodeIndexNotSet(
-        const QList<AST *> &astPath,
-        const QTextCursor &cursor)
+// The next step of the node the walk is in, or the first step of the node
+// outside it -- inside it, when shrinking.
+SelectionStep CppSelectionChanger::stepInNextNodeOrStep()
 {
-    // Find relevant AST node from cursor, when the user expands for the first time.
-    return findRelevantASTPositionsFromCursor(astPath, cursor);
-}
-
-ASTNodePositions CppSelectionChanger::findRelevantASTPositionsFromCursorWhenWholeDocumentSelected(
-        const QList<AST *> &astPath,
-        const QTextCursor &cursor)
-{
-    // Can't expand more, because whole document is selected.
-    if (m_direction == ExpandSelection)
+    // The file may have been parsed again between two steps, and its tree no
+    // longer reach where the walk was.
+    if (m_changeSelectionNodeIndex >= m_path.size())
         return {};
 
-    // In case of shrink, select the next smaller selection.
-    return findRelevantASTPositionsFromCursor(astPath, cursor);
-}
+    const SelectionSteps &steps = m_path.at(m_changeSelectionNodeIndex);
+    if (m_nodeCurrentStep > steps.size())
+        return {};
 
-ASTNodePositions CppSelectionChanger::findRelevantASTPositionsFromCursorFromPreviousNodeIndex(const QList<AST *> &astPath,
-        const QTextCursor &cursor)
-{
-    ASTNodePositions nodePositions;
-
-    // This is not the first expansion, use the previous node index.
-    nodePositions.ast = astPath.at(m_changeSelectionNodeIndex);
-
-    // We reached the last possible step for the current AST node, so we move to the
-    // next / previous one depending on the direction.
-    if (isLastPossibleStepForASTNode(nodePositions.ast)) {
-        int newAstIndex = m_changeSelectionNodeIndex;
-        if (m_direction == ExpandSelection)
-            --newAstIndex;
-        else
-            ++newAstIndex;
-
-        if (newAstIndex < 0 || newAstIndex >= astPath.count()) {
+    const bool isLastStep = m_direction == ExpandSelection ? m_nodeCurrentStep == steps.size()
+                                                           : m_nodeCurrentStep == 1;
+    if (isLastStep) {
+        const int nextNodeIndex
+            = m_changeSelectionNodeIndex + (m_direction == ExpandSelection ? -1 : 1);
+        if (nextNodeIndex < 0 || nextNodeIndex >= m_path.size()) {
             if (debug)
                 qDebug() << "Skipping expansion because there is no available next AST node.";
             return {};
         }
-
-        // Switch to next AST and set the first step.
-        nodePositions = findRelevantASTPositionsFromCursor(astPath, cursor, newAstIndex);
-        if (!nodePositions)
-            return {};
-
-        if (debug)
-            qDebug() << "Moved to next AST node.";
-    } else {
-        // There are possible steps available for current node, so move to the next / previous
-        // step.
-        if (m_direction == ExpandSelection)
-            ++m_nodeCurrentStep;
-        else
-            --m_nodeCurrentStep;
-        nodePositions = getFineTunedASTPositions(nodePositions.ast, cursor);
-
-        if (debug)
-            qDebug() << "Moved to next AST step.";
+        return stepInNode(nextNodeIndex);
     }
 
-    return nodePositions;
+    m_nodeCurrentStep += m_direction == ExpandSelection ? 1 : -1;
+    if (debug)
+        qDebug() << "Moved to step" << m_nodeCurrentStep << "of the same node.";
+
+    return steps.at(m_nodeCurrentStep - 1);
 }
 
-ASTNodePositions CppSelectionChanger::findNextASTStepPositions(const QTextCursor &cursor)
+SelectionStep CppSelectionChanger::findNextStep()
 {
-    // Find AST node path starting from the initial change selection cursor.
-    // The ASTPath class, only takes into consideration the position of the cursor, but not the
-    // anchor. We make up for that later in the code.
-    QTextCursor cursorToStartFrom(m_initialChangeSelectionCursor);
-
-    ASTPath astPathFinder(m_doc);
-    const QList<AST *> astPath = astPathFinder(cursorToStartFrom);
-
-#ifdef WITH_AST_PATH_DUMP
-    if (debug)
-        ASTPath::dump(astPath);
-#endif
-
-    if (astPath.size() == 0)
+    if (m_path.isEmpty())
         return {};
 
-    ASTNodePositions currentNodePositions;
+    SelectionStep step;
     if (m_changeSelectionNodeIndex == kChangeSelectionNodeIndexNotSet) {
-        currentNodePositions = findRelevantASTPositionsFromCursorWhenNodeIndexNotSet(astPath,
-                                                                                     cursor);
+        // The first step of the walk: the innermost node when expanding, the
+        // outermost one when shrinking.
+        step = stepInNode(m_direction == ExpandSelection ? m_path.size() - 1 : 0);
     } else if (m_changeSelectionNodeIndex == kChangeSelectionNodeIndexWholeDocoument) {
-        currentNodePositions = findRelevantASTPositionsFromCursorWhenWholeDocumentSelected(astPath,
-                                                                                           cursor);
+        // Can't expand more, because whole document is selected. In case of
+        // shrink, select the next smaller selection.
+        if (m_direction == ExpandSelection)
+            return {};
+        step = stepInNode(0);
     } else {
-        currentNodePositions = findRelevantASTPositionsFromCursorFromPreviousNodeIndex(astPath,
-                                                                                       cursor);
+        step = stepInNextNodeOrStep();
     }
 
     if (debug) {
         qDebug() << "m_changeSelectionNodeIndex:" << m_changeSelectionNodeIndex
-                 << "possible step count:" << possibleASTStepCount(currentNodePositions.ast)
                  << "current step:" << m_nodeCurrentStep;
     }
 
     QTC_ASSERT(m_nodeCurrentStep >= 1, return {});
 
-    return currentNodePositions;
-}
-
-void CppSelectionChanger::fineTuneForStatementPositions(unsigned firstParenTokenIndex,
-                                                        unsigned lastParenTokenIndex,
-                                                        ASTNodePositions &positions) const
-{
-    Token firstParenToken = m_unit->tokenAt(firstParenTokenIndex);
-    Token lastParenToken = m_unit->tokenAt(lastParenTokenIndex);
-    if (debug) {
-        qDebug() << "firstParenToken:" << firstParenToken.spell();
-        qDebug() << "lastParenToken:" << lastParenToken.spell();
-    }
-
-    int newPosStart = getTokenStartCursorPosition(firstParenTokenIndex, m_workingCursor);
-    int newPosEnd = getTokenEndCursorPosition(lastParenTokenIndex, m_workingCursor);
-
-    bool isOutsideParen =
-            m_initialChangeSelectionCursor.position() <= newPosStart;
-
-    if (currentASTStep() == 1 && !isOutsideParen) {
-        if (debug)
-            qDebug() << "Selecting Paren contents of for statement.";
-        positions.astPosStart = newPosStart + 1;
-        positions.astPosEnd = newPosEnd - 1;
-    }
-    if (currentASTStep() == 2 && !isOutsideParen) {
-        if (debug)
-            qDebug() << "Selecting Paren of for statement together with contents.";
-        positions.astPosStart = newPosStart;
-        positions.astPosEnd = newPosEnd;
-    }
-}
-
-void CppSelectionChanger::fineTuneASTNodePositions(ASTNodePositions &positions) const
-{
-    AST *ast = positions.ast;
-
-    if (ast->asCompoundStatement()) {
-        // Allow first selecting the contents of the scope, without selecting the braces, and
-        // afterwards select the contents together with  braces.
-        if (currentASTStep() == 1) {
-            if (debug)
-                qDebug() << "Selecting inner contents of compound statement.";
-
-            unsigned firstInnerTokenIndex = positions.firstTokenIndex + 1;
-            unsigned lastInnerTokenIndex = positions.lastTokenIndex - 2;
-            Token firstInnerToken = m_unit->tokenAt(firstInnerTokenIndex);
-            Token lastInnerToken = m_unit->tokenAt(lastInnerTokenIndex);
-            if (debug) {
-                qDebug() << "LastInnerToken:" << lastInnerToken.spell();
-                qDebug() << "FirstInnerToken:" << firstInnerToken.spell();
-            }
-
-            // Check if compound statement is empty, then select just the blank space inside it.
-            int newPosStart, newPosEnd;
-            if (positions.secondToLastTokenIndex - positions.firstTokenIndex <= 1) {
-                // TODO: If the empty space has a new tab character, or spaces, and the document is
-                // not saved, the last semantic info is not updated, and the selection is not
-                // properly computed. Figure out how to work around this.
-                newPosStart = getTokenEndCursorPosition(positions.firstTokenIndex, m_workingCursor);
-                newPosEnd = getTokenStartCursorPosition(positions.secondToLastTokenIndex,
-                                                        m_workingCursor);
-                if (debug)
-                    qDebug() << "Selecting inner contents of compound statement which is empty.";
-            } else {
-                // Select the inner contents of the scope, without the braces.
-                newPosStart = getTokenStartCursorPosition(firstInnerTokenIndex, m_workingCursor);
-                newPosEnd = getTokenEndCursorPosition(lastInnerTokenIndex, m_workingCursor);
-            }
-
-            if (debug) {
-                qDebug() << "New" << newPosStart << newPosEnd
-                         << "Old" << m_workingCursor.anchor() << m_workingCursor.position();
-            }
-
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-        // Next time, we select the braces as well. Reverse for shrinking.
-        // The positions already have the correct selection, so no need to set them.
-    } else if (CallAST *callAST = ast->asCall()) {
-        unsigned firstParenTokenIndex = callAST->lparen_token;
-        unsigned lastParenTokenIndex = callAST->rparen_token;
-        Token firstParenToken = m_unit->tokenAt(firstParenTokenIndex);
-        Token lastParenToken = m_unit->tokenAt(lastParenTokenIndex);
-        if (debug) {
-            qDebug() << "firstParenToken:" << firstParenToken.spell();
-            qDebug() << "lastParenToken:" << lastParenToken.spell();
-        }
-
-        // Select the parenthesis of the call, and everything between.
-        int newPosStart = getTokenStartCursorPosition(firstParenTokenIndex, m_workingCursor);
-        int newPosEnd = getTokenEndCursorPosition(lastParenTokenIndex, m_workingCursor);
-
-        bool isInFunctionName =
-                m_initialChangeSelectionCursor.position() <= newPosStart;
-
-        // If cursor is inside the function name, select the name implicitly (because it's a
-        // different AST node), and then the whole call expression (so just one step).
-        // If cursor is inside parentheses, on first step select everything inside them,
-        // on second step select the everything inside parentheses including them,
-        // on third step select the whole call expression.
-        if (currentASTStep() == 1 && !isInFunctionName) {
-            if (debug)
-                qDebug() << "Selecting everything inside parentheses.";
-            positions.astPosStart = newPosStart + 1;
-            positions.astPosEnd = newPosEnd - 1;
-        }
-        if (currentASTStep() == 2 && !isInFunctionName) {
-            if (debug)
-                qDebug() << "Selecting everything inside and including "
-                            "the parentheses of the function call.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-    } else if (StringLiteralAST *stringLiteralAST = ast->asStringLiteral()) {
-        // Select literal without quotes on first step, and the whole literal on next step.
-        if (currentASTStep() == 1) {
-            Token firstToken = m_unit->tokenAt(stringLiteralAST->firstToken());
-            bool isRawLiteral = firstToken.isRawStringLiteral();
-            if (debug && isRawLiteral)
-                qDebug() << "Is raw literal.";
-
-            // Start from positions that include quotes.
-            int newPosEnd = positions.astPosEnd;
-
-            // Decrement last position to skip last quote.
-            --newPosEnd;
-
-            // If raw literal also skip parenthesis.
-            if (isRawLiteral)
-                --newPosEnd;
-
-            // Start position will be the end position minus the size of the actual contents of the
-            // literal.
-            int newPosStart = newPosEnd - QString::fromUtf8(firstToken.string->chars()).size();
-
-            // Skip raw literal parentheses.
-            if (isRawLiteral)
-                newPosStart += 2;
-
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-            if (debug)
-                qDebug() << "Selecting inner contents of string literal.";
-        }
-    } else if (NumericLiteralAST *numericLiteralAST = ast->asNumericLiteral()) {
-        Token firstToken = m_unit->tokenAt(numericLiteralAST->firstToken());
-        // If char literal, select it without quotes on first step.
-        if (firstToken.isCharLiteral()) {
-            if (currentASTStep() == 1) {
-                if (debug)
-                    qDebug() << "Selecting inner contents of char literal.";
-
-                positions.astPosEnd = positions.astPosEnd - 1;
-                positions.astPosStart = positions.astPosEnd - firstToken.literal->size();
-            }
-        }
-    } else if (ForStatementAST *forStatementAST = ast->asForStatement()) {
-        unsigned firstParenTokenIndex = forStatementAST->lparen_token;
-        unsigned lastParenTokenIndex = forStatementAST->rparen_token;
-        fineTuneForStatementPositions(firstParenTokenIndex, lastParenTokenIndex, positions);
-    } else if (RangeBasedForStatementAST *rangeForStatementAST = ast->asRangeBasedForStatement()) {
-        unsigned firstParenTokenIndex = rangeForStatementAST->lparen_token;
-        unsigned lastParenTokenIndex = rangeForStatementAST->rparen_token;
-        fineTuneForStatementPositions(firstParenTokenIndex, lastParenTokenIndex, positions);
-    } else if (ClassSpecifierAST *classSpecificerAST = ast->asClassSpecifier()) {
-
-        unsigned firstBraceTokenIndex = classSpecificerAST->lbrace_token;
-        unsigned lastBraceTokenIndex = classSpecificerAST->rbrace_token;
-        unsigned classKeywordTokenIndex = classSpecificerAST->classkey_token;
-
-        Token firstBraceToken = m_unit->tokenAt(firstBraceTokenIndex);
-        Token lastBraceToken = m_unit->tokenAt(lastBraceTokenIndex);
-        Token classKeywordToken = m_unit->tokenAt(classKeywordTokenIndex);
-
-        if (debug) {
-            qDebug() << "firstBraceToken:" << firstBraceToken.spell();
-            qDebug() << "lastBraceToken:" << lastBraceToken.spell();
-            qDebug() << "classKeywordToken:" << classKeywordToken.spell();
-
-        }
-
-        int newPosStart = getTokenStartCursorPosition(firstBraceTokenIndex, m_workingCursor);
-        int newPosEnd = getTokenEndCursorPosition(lastBraceTokenIndex, m_workingCursor);
-
-        bool isOutsideBraces =
-                m_initialChangeSelectionCursor.position() <= newPosStart;
-        bool isInsideBraces = !isOutsideBraces;
-
-        int classKeywordPosStart = getTokenStartCursorPosition(classKeywordTokenIndex,
-                                                               m_workingCursor);
-
-        int classKeywordPosEnd = getTokenEndCursorPosition(classKeywordTokenIndex, m_workingCursor);
-
-        bool isInClassKeyword = m_initialChangeSelectionCursor.anchor() >= classKeywordPosStart &&
-                                m_initialChangeSelectionCursor.position() <= classKeywordPosEnd;
-
-        bool isInClassName = false;
-        int classNamePosEnd = newPosEnd;
-        NameAST *nameAST = classSpecificerAST->name;
-        if (nameAST) {
-            SimpleNameAST *classNameAST = nameAST->asSimpleName();
-            if (classNameAST) {
-                unsigned identifierTokenIndex = classNameAST->identifier_token;
-                Token identifierToken = m_unit->tokenAt(identifierTokenIndex);
-                if (debug)
-                    qDebug() << "identifierToken:" << identifierToken.spell();
-
-                int classNamePosStart = getTokenStartCursorPosition(identifierTokenIndex,
-                                                                    m_workingCursor);
-                classNamePosEnd = getTokenEndCursorPosition(identifierTokenIndex,
-                                                            m_workingCursor);
-
-                isInClassName = m_initialChangeSelectionCursor.anchor() >= classNamePosStart &&
-                                m_initialChangeSelectionCursor.position() <= classNamePosEnd;
-            }
-        }
-
-        if (currentASTStep() == 1 && isInsideBraces) {
-            if (debug)
-                qDebug() << "Selecting everything inside braces of class statement.";
-            positions.astPosStart = newPosStart + 1;
-            positions.astPosEnd = newPosEnd - 1;
-        }
-        if (currentASTStep() == 2 && isInsideBraces) {
-            if (debug)
-                qDebug() << "Selecting braces of class statement.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-        if (currentASTStep() == 1 && isInClassKeyword) {
-            if (debug)
-                qDebug() << "Selecting class keyword.";
-            positions.astPosStart = classKeywordPosStart;
-            positions.astPosEnd = classKeywordPosEnd;
-        }
-        if (currentASTStep() == 2 && isInClassKeyword) {
-            if (debug)
-                qDebug() << "Selecting class keyword and name.";
-            positions.astPosStart = classKeywordPosStart;
-            positions.astPosEnd = classNamePosEnd;
-        }
-        if (currentASTStep() == 1 && isInClassName) {
-            if (debug)
-                qDebug() << "Selecting class keyword and name.";
-            positions.astPosStart = classKeywordPosStart;
-            positions.astPosEnd = classNamePosEnd;
-        }
-    } else if (NamespaceAST *namespaceAST = ast->asNamespace()) {
-        unsigned namespaceTokenIndex = namespaceAST->namespace_token;
-        unsigned identifierTokenIndex = namespaceAST->identifier_token;
-        Token namespaceToken = m_unit->tokenAt(namespaceTokenIndex);
-        Token identifierToken = m_unit->tokenAt(identifierTokenIndex);
-        if (debug) {
-            qDebug() << "namespace token:" << namespaceToken.spell();
-            qDebug() << "identifier token:" << identifierToken.spell();
-        }
-
-        int namespacePosStart = getTokenStartCursorPosition(namespaceTokenIndex, m_workingCursor);
-        int namespacePosEnd = getTokenEndCursorPosition(namespaceTokenIndex, m_workingCursor);
-
-        int identifierPosStart = getTokenStartCursorPosition(identifierTokenIndex, m_workingCursor);
-        int identifierPosEnd = getTokenEndCursorPosition(identifierTokenIndex, m_workingCursor);
-
-        bool isInNamespaceKeyword =
-                m_initialChangeSelectionCursor.position() <= namespacePosEnd;
-
-        bool isInNamespaceIdentifier =
-                m_initialChangeSelectionCursor.anchor() >= identifierPosStart &&
-                m_initialChangeSelectionCursor.position() <= identifierPosEnd;
-
-        if (currentASTStep() == 1) {
-            if (isInNamespaceKeyword) {
-                if (debug)
-                    qDebug() << "Selecting namespace keyword.";
-                positions.astPosStart = namespacePosStart;
-                positions.astPosEnd = namespacePosEnd;
-            }
-            else if (isInNamespaceIdentifier) {
-                if (debug)
-                    qDebug() << "Selecting namespace identifier.";
-                positions.astPosStart = identifierPosStart;
-                positions.astPosEnd = identifierPosEnd;
-            }
-        }
-        else if (currentASTStep() == 2) {
-            if (isInNamespaceKeyword || isInNamespaceIdentifier) {
-                if (debug)
-                    qDebug() << "Selecting namespace keyword and identifier.";
-                positions.astPosStart = namespacePosStart;
-                positions.astPosEnd = identifierPosEnd;
-
-            }
-        }
-    } else if (ExpressionListParenAST *parenAST = ast->asExpressionListParen()) {
-        unsigned firstParenTokenIndex = parenAST->lparen_token;
-        unsigned lastParenTokenIndex = parenAST->rparen_token;
-        Token firstParenToken = m_unit->tokenAt(firstParenTokenIndex);
-        Token lastParenToken = m_unit->tokenAt(lastParenTokenIndex);
-        if (debug) {
-            qDebug() << "firstParenToken:" << firstParenToken.spell();
-            qDebug() << "lastParenToken:" << lastParenToken.spell();
-        }
-
-        // Select the parentheses, and everything between.
-        int newPosStart = getTokenStartCursorPosition(firstParenTokenIndex, m_workingCursor);
-        int newPosEnd = getTokenEndCursorPosition(lastParenTokenIndex, m_workingCursor);
-
-        if (currentASTStep() == 1) {
-            if (debug)
-                qDebug() << "Selecting everything inside parentheses.";
-            positions.astPosStart = newPosStart + 1;
-            positions.astPosEnd = newPosEnd - 1;
-        }
-        if (currentASTStep() == 2) {
-            if (debug)
-                qDebug() << "Selecting everything inside including the parentheses.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-    } else if (FunctionDeclaratorAST* functionDeclaratorAST = ast->asFunctionDeclarator()) {
-        unsigned firstParenTokenIndex = functionDeclaratorAST->lparen_token;
-        unsigned lastParenTokenIndex = functionDeclaratorAST->rparen_token;
-        Token firstParenToken = m_unit->tokenAt(firstParenTokenIndex);
-        Token lastParenToken = m_unit->tokenAt(lastParenTokenIndex);
-        if (debug) {
-            qDebug() << "firstParenToken:" << firstParenToken.spell();
-            qDebug() << "lastParenToken:" << lastParenToken.spell();
-        }
-
-        int newPosStart = getTokenStartCursorPosition(firstParenTokenIndex, m_workingCursor);
-        int newPosEnd = getTokenEndCursorPosition(lastParenTokenIndex, m_workingCursor);
-
-        if (currentASTStep() == 1) {
-            if (debug)
-                qDebug() << "Selecting everything inside and including the parentheses.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-    } else if (FunctionDefinitionAST *functionDefinitionAST = ast->asFunctionDefinition()) {
-        if (!functionDefinitionAST->function_body)
-            return;
-
-        CompoundStatementAST *compoundStatementAST =
-                functionDefinitionAST->function_body->asCompoundStatement();
-        if (!compoundStatementAST)
-            return;
-
-        if (!functionDefinitionAST->decl_specifier_list
-                || !functionDefinitionAST->decl_specifier_list->value)
-            return;
-
-        SimpleSpecifierAST *simpleSpecifierAST =
-                functionDefinitionAST->decl_specifier_list->value->asSimpleSpecifier();
-        if (!simpleSpecifierAST)
-            return;
-
-        unsigned firstBraceTokenIndex = compoundStatementAST->lbrace_token;
-        unsigned specifierTokenIndex = simpleSpecifierAST->firstToken();
-        Token firstBraceToken = m_unit->tokenAt(firstBraceTokenIndex);
-        Token specifierToken = m_unit->tokenAt(specifierTokenIndex);
-        if (debug) {
-            qDebug() << "firstBraceToken:" << firstBraceToken.spell();
-            qDebug() << "specifierToken:" << specifierToken.spell();
-        }
-
-        int firstBracePosEnd = getTokenStartCursorPosition(firstBraceTokenIndex, m_workingCursor);
-
-        bool isOutsideBraces =
-                m_initialChangeSelectionCursor.position() <= firstBracePosEnd;
-
-        if (currentASTStep() == 1 && isOutsideBraces) {
-            int newPosStart = getTokenStartCursorPosition(specifierTokenIndex, m_workingCursor);
-
-            if (debug)
-                qDebug() << "Selecting everything to the left of the function braces.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = firstBracePosEnd - 1;
-        }
-    } else if (DeclaratorAST *declaratorAST = ast->asDeclarator()) {
-        PostfixDeclaratorListAST *list = declaratorAST->postfix_declarator_list;
-        if (!list)
-            return;
-
-        PostfixDeclaratorAST *postfixDeclarator = list->value;
-        if (!postfixDeclarator)
-            return;
-
-        FunctionDeclaratorAST *functionDeclarator = postfixDeclarator->asFunctionDeclarator();
-        if (!functionDeclarator)
-            return;
-
-        SpecifierListAST *cv_list = functionDeclarator->cv_qualifier_list;
-        if (!cv_list)
-            return;
-
-        SpecifierAST *first_cv = cv_list->value;
-        if (!first_cv)
-            return;
-
-        unsigned firstCVTokenIndex = first_cv->firstToken();
-        Token firstCVToken = m_unit->tokenAt(firstCVTokenIndex);
-        if (debug) {
-            qDebug() << "firstCVTokenIndex:" << firstCVToken.spell();
-        }
-
-        int cvPosStart = getTokenStartCursorPosition(firstCVTokenIndex, m_workingCursor);
-        bool isBeforeCVList = m_initialChangeSelectionCursor.position() < cvPosStart;
-
-        if (currentASTStep() == 1 && isBeforeCVList) {
-            if (debug)
-                qDebug() << "Selecting function declarator without CV qualifiers.";
-
-            int newPosEnd = cvPosStart;
-            positions.astPosEnd = newPosEnd - 1;
-        }
-
-    } else if (TemplateIdAST *templateIdAST = ast->asTemplateId()) {
-        unsigned identifierTokenIndex = templateIdAST->identifier_token;
-        Token identifierToken = m_unit->tokenAt(identifierTokenIndex);
-        if (debug) {
-            qDebug() << "identifierTokenIndex:" << identifierToken.spell();
-        }
-
-        int newPosStart = getTokenStartCursorPosition(identifierTokenIndex, m_workingCursor);
-        int newPosEnd = getTokenEndCursorPosition(identifierTokenIndex, m_workingCursor);
-
-        bool isInsideIdentifier = m_initialChangeSelectionCursor.anchor() >= newPosStart &&
-                                  m_initialChangeSelectionCursor.position() <= newPosEnd;
-
-        if (currentASTStep() == 1 && isInsideIdentifier) {
-            if (debug)
-                qDebug() << "Selecting just identifier before selecting template id.";
-            positions.astPosStart = newPosStart;
-            positions.astPosEnd = newPosEnd;
-        }
-    } else if (TemplateDeclarationAST *templateDeclarationAST = ast->asTemplateDeclaration()) {
-        unsigned templateKeywordTokenIndex = templateDeclarationAST->template_token;
-        unsigned greaterTokenIndex = templateDeclarationAST->greater_token;
-        Token templateKeywordToken = m_unit->tokenAt(templateKeywordTokenIndex);
-        Token greaterToken = m_unit->tokenAt(greaterTokenIndex);
-        if (debug) {
-            qDebug() << "templateKeywordTokenIndex:" << templateKeywordToken.spell();
-            qDebug() << "greaterTokenIndex:" << greaterToken.spell();
-        }
-
-        int templateKeywordPosStart = getTokenStartCursorPosition(templateKeywordTokenIndex,
-                                                                  m_workingCursor);
-        int templateKeywordPosEnd = getTokenEndCursorPosition(templateKeywordTokenIndex,
-                                                              m_workingCursor);
-
-        int templateParametersPosEnd = getTokenEndCursorPosition(greaterTokenIndex,
-                                                                 m_workingCursor);
-
-        bool isInsideTemplateKeyword =
-                m_initialChangeSelectionCursor.anchor() >= templateKeywordPosStart &&
-                m_initialChangeSelectionCursor.position() <= templateKeywordPosEnd;
-
-        if (currentASTStep() == 1 && isInsideTemplateKeyword) {
-            if (debug)
-                qDebug() << "Selecting template keyword.";
-            positions.astPosStart = templateKeywordPosStart;
-            positions.astPosEnd = templateKeywordPosEnd;
-        }
-        if (currentASTStep() == 2 && isInsideTemplateKeyword) {
-            if (debug)
-                qDebug() << "Selecting template keyword and parameters.";
-            positions.astPosStart = templateKeywordPosStart;
-            positions.astPosEnd = templateParametersPosEnd;
-        }
-    } else if (LambdaExpressionAST *lambdaExpressionAST = ast->asLambdaExpression()) {
-        // TODO: Fix more lambda cases.
-        LambdaIntroducerAST *lambdaIntroducerAST = lambdaExpressionAST->lambda_introducer;
-        LambdaDeclaratorAST *lambdaDeclaratorAST = lambdaExpressionAST->lambda_declarator;
-        if (!lambdaDeclaratorAST)
-            return;
-
-        TrailingReturnTypeAST *trailingReturnTypeAST = lambdaDeclaratorAST->trailing_return_type;
-        unsigned firstSquareBracketTokenIndex = lambdaIntroducerAST->lbracket_token;
-        unsigned lastParenTokenIndex = lambdaDeclaratorAST->rparen_token;
-
-        Token firstSquareBracketToken = m_unit->tokenAt(firstSquareBracketTokenIndex);
-        Token lastParenToken = m_unit->tokenAt(lastParenTokenIndex);
-        if (debug) {
-            qDebug() << "firstSquareBracketToken:" << firstSquareBracketToken.spell();
-            qDebug() << "lastParenToken:" << lastParenToken.spell();
-        }
-
-        int firstSquareBracketPosStart = getTokenStartCursorPosition(firstSquareBracketTokenIndex,
-                                                                     m_workingCursor);
-        int lastParenPosEnd = getTokenEndCursorPosition(lastParenTokenIndex, m_workingCursor);
-
-
-        bool isInsideDeclarator =
-                m_initialChangeSelectionCursor.anchor() >= firstSquareBracketPosStart &&
-                m_initialChangeSelectionCursor.position() <= lastParenPosEnd;
-
-        if (currentASTStep() == 1 && isInsideDeclarator) {
-            if (debug)
-                qDebug() << "Selecting lambda capture group and arguments.";
-            positions.astPosStart = firstSquareBracketPosStart;
-            positions.astPosEnd = lastParenPosEnd;
-        }
-        if (currentASTStep() == 2 && isInsideDeclarator && trailingReturnTypeAST) {
-            if (debug)
-                qDebug() << "Selecting lambda prototype.";
-
-            unsigned lastReturnTypeTokenIndex = trailingReturnTypeAST->lastToken();
-            Token lastReturnTypeToken = m_unit->tokenAt(lastReturnTypeTokenIndex);
-            if (debug)
-                qDebug() << "lastReturnTypeToken:" << lastReturnTypeToken.spell();
-            int lastReturnTypePosEnd = getTokenEndCursorPosition(lastReturnTypeTokenIndex,
-                                                                 m_workingCursor);
-
-            positions.astPosStart = firstSquareBracketPosStart;
-            positions.astPosEnd = lastReturnTypePosEnd - 2;
-        }
-    }
+    return step;
 }
 
 bool CppSelectionChanger::performSelectionChange(QTextCursor &cursorToModify)
 {
     forever {
-        if (ASTNodePositions positions = findNextASTStepPositions(m_workingCursor)) {
-            if (!shouldSkipASTNodeBasedOnPosition(positions, m_workingCursor)) {
-                updateCursorSelection(cursorToModify, positions);
+        if (const SelectionStep step = findNextStep()) {
+            if (!shouldSkipStep(step, m_workingCursor)) {
+                updateCursorSelection(cursorToModify, step);
                 return true;
             } else {
                 if (debug)
@@ -1006,9 +642,11 @@ bool CppSelectionChanger::changeSelection(
 
     ensureCursorSelectionIsNotFlipped(m_workingCursor);
 
-    m_doc = doc;
-    m_unit = m_doc->translationUnit();
     m_direction = direction;
+
+    // The path is read from the initial change selection cursor, the one the
+    // walk started at, rather than from the selection it has grown to.
+    m_path = selectionPathAt(doc, m_workingCursor.document(), m_initialChangeSelectionCursor);
 
     return performSelectionChange(cursorToModify);
 }
@@ -1024,56 +662,6 @@ void CppSelectionChanger::startChangeSelection()
 void CppSelectionChanger::stopChangeSelection()
 {
     m_inChangeSelection = false;
-}
-
-int CppSelectionChanger::possibleASTStepCount(CPlusPlus::AST *ast) const
-{
-    // Different AST nodes, have a different number of steps though which they can go.
-    // For example in a string literal, we first want to select the literal contents on the first
-    // step, and then the quotes + the literal content in the second step.
-    if (!ast)
-        return 1;
-    if (ast->asCompoundStatement())
-        return 2;
-    if (ast->asCall())
-        return 3;
-    if (ast->asStringLiteral())
-        return 2;
-    if (NumericLiteralAST* numericLiteralAST = ast->asNumericLiteral()) {
-        Token firstToken = m_unit->tokenAt(numericLiteralAST->firstToken());
-        if (firstToken.isCharLiteral())
-            return 2;
-        return 1;
-    }
-    if (ast->asForStatement())
-        return 3;
-    if (ast->asRangeBasedForStatement())
-        return 3;
-    if (ast->asClassSpecifier())
-        return 3;
-    if (ast->asNamespace())
-        return 3;
-    if (ast->asExpressionListParen())
-        return 2;
-    if (ast->asFunctionDeclarator())
-        return 1;
-    if (ast->asFunctionDefinition())
-        return 2;
-    if (ast->asTemplateId())
-        return 2;
-    if (ast->asDeclarator())
-        return 2;
-    if (ast->asTemplateDeclaration())
-        return 3;
-    if (ast->asLambdaExpression())
-        return 3;
-
-    return 1;
-}
-
-int CppSelectionChanger::currentASTStep() const
-{
-    return m_nodeCurrentStep;
 }
 
 } // namespace CppEditor
