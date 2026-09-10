@@ -286,7 +286,7 @@ class TypePrinter {
         break;
     }
 
-    if (type->isNoexcept()) {
+    if (type->isNoexcept() && !options_.omitExceptionSpecification) {
       signature.append(" noexcept");
     }
 

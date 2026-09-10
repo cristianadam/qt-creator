@@ -162,6 +162,12 @@ struct TypePrintOptions {
   // shown, which the printer cannot know; a tool showing a declaration in the
   // scope it was written in wants the short form.
   bool omitEnclosingScope = false;
+
+  // Leave out the exception specification. A tool showing a declaration in a
+  // list -- an outline, a completion popup -- has a line to fill and shows
+  // what tells one declaration from another, and whether a function throws
+  // is not part of that.
+  bool omitExceptionSpecification = false;
 };
 
 auto to_string(const Type* type, const std::string& id = "",

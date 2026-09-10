@@ -430,6 +430,10 @@ public:
     // \a parent is where in symbols the scope being walked was recorded, or
     // -1 for the file itself.
     void collect(cxx::ScopeSymbol *scope, const QStringList &enclosing, int parent = -1);
+
+    // Which places have an entry already, so that a name the front end
+    // records twice is written down once.
+    QSet<unsigned> described;
     void describe(cxx::Symbol *member, const QStringList &enclosing, int parent);
 
     [[nodiscard]] bool isFromMainFile(cxx::Symbol *symbol) const;
@@ -510,7 +514,20 @@ bool CxxFrontendDocument::Private::isFromMainFile(cxx::Symbol *symbol) const
 void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
                                            const QStringList &enclosing, int parent)
 {
-    for (cxx::Symbol *member : scope->members()) {
+    // A class keeps its constructors apart from the rest of its members, and
+    // what the file declared is all of them together, in the order it wrote
+    // them.
+    std::vector<cxx::Symbol *> members(scope->members().begin(), scope->members().end());
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(scope)) {
+        const std::vector<cxx::FunctionSymbol *> &constructors = cls->declaredConstructors();
+        members.insert(members.end(), constructors.begin(), constructors.end());
+        std::stable_sort(members.begin(), members.end(),
+                         [](cxx::Symbol *left, cxx::Symbol *right) {
+                             return left->location().index() < right->location().index();
+                         });
+    }
+
+    for (cxx::Symbol *member : members) {
         if (member->isHidden() || !isFromMainFile(member))
             continue;
 
@@ -518,6 +535,16 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
         // declared it, and the built-in front end has no such member.
         if (member->location() == scope->location())
             continue;
+
+        // One entry per place the file writes a name. An unscoped enumerator
+        // can be named without its enum, so the front end puts a second
+        // symbol for it in the enclosing scope, standing where the
+        // enumerator itself was written -- the same place, and not a second
+        // declaration.
+        if (const cxx::SourceLocation location = member->location();
+            location && described.contains(location.index())) {
+            continue;
+        }
 
         // A function lives in an overload set, which is a symbol of its own.
         // What the source declared are the functions in it.
@@ -543,11 +570,20 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     symbol.qualified = enclosing;
     symbol.parent = parent;
 
+    // A constructor or a destructor returns nothing, so nothing is written
+    // where a return type would be -- not even void, which is what the type
+    // carries.
+    auto *function = dynamic_cast<cxx::FunctionSymbol *>(member);
+    const bool returnsNothing = function
+                                && (function->isConstructor() || function->isDestructor());
+
     // Overview prints a declaration as it would be written in the scope it
-    // was written in, so the path to a name is not part of it.
+    // was written in, so the path to a name is not part of it, and it never
+    // writes an exception specification.
     const cxx::TypePrintOptions options{
-        .omitFunctionReturnType = !config.settings.showReturnTypes,
+        .omitFunctionReturnType = !config.settings.showReturnTypes || returnsNothing,
         .omitEnclosingScope = true,
+        .omitExceptionSpecification = true,
     };
     symbol.type = member->type() ? applyStarBinding(fromStd(cxx::to_string(member->type(),
                                                                           name.toStdString(),
@@ -564,9 +600,13 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
                                  : nullptr) {
         symbol.signature = fromStd(cxx::to_string(functionType, "",
                                                   {.omitFunctionReturnType = true,
-                                                   .omitEnclosingScope = true}));
-        symbol.valueType = applyStarBinding(
-            fromStd(cxx::to_string(functionType->returnType(), "", options)), config.settings);
+                                                   .omitEnclosingScope = true,
+                                                   .omitExceptionSpecification = true}));
+        if (!returnsNothing) {
+            symbol.valueType = applyStarBinding(
+                fromStd(cxx::to_string(functionType->returnType(), "", options)),
+                config.settings);
+        }
     } else if (member->type() && !member->asScopeSymbol()) {
         symbol.valueType = applyStarBinding(
             fromStd(cxx::to_string(member->type(), "", options)), config.settings);
@@ -594,6 +634,8 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         symbol.isForwardDeclaration = !cls->isComplete();
     symbol.icon = iconTypeOf(member, classKey);
 
+    if (const cxx::SourceLocation location = member->location())
+        described.insert(location.index());
     symbols.append(symbol);
     cxxSymbols.push_back(member);
 

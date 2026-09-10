@@ -241,6 +241,7 @@ private slots:
     void outline_data();
     void outline();
     void outlineMarksWhatIsNotThere();
+    void eachPlaceIsWrittenDownOnce();
 
     void starBinding();
     void unsupportedSettings();
@@ -268,6 +269,8 @@ void tst_cxxfrontendoverview::declarations_data()
     QTest::newRow("static member") << QByteArray("struct S { static int s; };");
     QTest::newRow("const member function") << QByteArray("struct S { int f() const; };");
     QTest::newRow("template") << QByteArray("template <class T> class C { T t; };");
+    QTest::newRow("constructor and destructor")
+        << QByteArray("struct S { S(); S(int a); ~S(); void f(); };");
     QTest::newRow("overloaded operator") << QByteArray("struct S { bool operator==(S) const; };");
 }
 
@@ -325,6 +328,24 @@ void tst_cxxfrontendoverview::outlineMarksWhatIsNotThere()
 
     QCOMPARE(marked, QStringList({"Forward forward", "Whole", "fromMacro generated",
                                   "written"}));
+}
+
+// One entry per place the file writes a name. An unscoped enumerator can be
+// named without its enum, so the front end records a second symbol for it in
+// the enclosing scope, standing where the enumerator itself was written --
+// which would show it twice.
+void tst_cxxfrontendoverview::eachPlaceIsWrittenDownOnce()
+{
+    const CxxFrontendDocument document("enum E { First, Second };\n"
+                                       "namespace N { enum F { Third }; }\n",
+                                       "<stdin>");
+
+    QStringList names;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols())
+        names.append(symbol.qualified.join("::") + (symbol.qualified.isEmpty() ? "" : "::")
+                     + symbol.name);
+
+    QCOMPARE(names, QStringList({"E", "E::First", "E::Second", "N", "N::F", "N::F::Third"}));
 }
 
 // The one Overview knob that is honoured, since it is the one that decides
