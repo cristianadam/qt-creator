@@ -3,6 +3,10 @@
 
 #include "cppcompletionassist.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include "builtineditordocumentparser.h"
 #include "cppdoxygen.h"
 #include "cppmodelmanager.h"
@@ -1168,6 +1172,37 @@ void InternalCppCompletionAssistProcessor::addCompletionItem(Symbol *symbol, int
         m_completions.append(item);
     }
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+void InternalCppCompletionAssistProcessor::addCompletionItem(
+    const CxxFrontendDocument::Completion::Candidate &candidate)
+{
+    if (isKnownCompletion(candidate.name))
+        return;
+
+    auto item = new CppAssistProposalItem;
+    item->setText(candidate.name);
+    // The declaration as it would be written, which is what the built-in
+    // items show beside the name -- and for a scope, whose printed type is
+    // its own name, the built-in shows nothing.
+    if (candidate.detail != candidate.name)
+        item->setDetail(candidate.detail);
+    item->setIcon(Utils::CodeModelIcon::iconForType(candidate.icon));
+    item->setOrder(candidate.isInjectedClassName ? InjectedClassNameOrder
+                   : candidate.isPublic          ? PublicClassMemberOrder
+                                                 : 0);
+
+    CppAssistProposalItem::Insertion insertion;
+    insertion.isValid = true;
+    insertion.isFunction = candidate.isFunction;
+    insertion.takesArguments = candidate.takesArguments;
+    insertion.returnsNothing = candidate.returnsNothing;
+    item->keepInsertion(insertion);
+
+    m_completions.append(item);
+}
+#endif
+
 bool InternalCppCompletionAssistProcessor::isKnownCompletion(const QString &text)
 {
     return !m_knownCompletions.insert(text).second;
@@ -1329,6 +1364,12 @@ int InternalCppCompletionAssistProcessor::startCompletionInternal(const Utils::F
         }
     }
 
+    // The other model first, where it answers about a place like this one;
+    // it declines everything else and the built-in lookup below then runs
+    // exactly as it did before. See cxxfrontendmodel.h.
+    if (completeFromCxxFrontendModel())
+        return m_positionForProposal;
+
     QByteArray utf8Exp = expression.toUtf8();
     QList<LookupItem> results =
             (*m_model->m_typeOfExpression)(utf8Exp, scope, TypeOfExpression::Preprocess);
@@ -1431,6 +1472,67 @@ int InternalCppCompletionAssistProcessor::startCompletionInternal(const Utils::F
 
     // nothing to do.
     return -1;
+}
+
+bool InternalCppCompletionAssistProcessor::completeFromCxxFrontendModel()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    // Only where the model is answering the same question the built-in
+    // lookup would: the members of something, or what a scope holds. The Qt
+    // triggers, the argument hints and the include and preprocessor paths
+    // are the consumer's own and stay where they are.
+    switch (m_model->m_completionOperator) {
+    case T_DOT:
+    case T_ARROW:
+    case T_COLON_COLON:
+        break;
+    default:
+        return false;
+    }
+
+    // Where the name being written starts, which is where the front end is
+    // asked what could stand there -- the same position the proposal is
+    // filtered from. The editor counts columns from zero and the model from
+    // one.
+    int line = 0, column = 0;
+    Utils::Text::convertPosition(interface()->textDocument(), m_positionForProposal,
+                                 &line, &column);
+    const std::optional<CxxFrontendDocument::Completion> completion
+        = cxxFrontendCompletion(cppInterface()->snapshot(),
+                                interface()->filePath(),
+                                interface()->textDocument()->toPlainText(),
+                                line,
+                                column + 1);
+    if (!completion || completion->candidates.isEmpty())
+        return false;
+
+    // A part of the list is worse than none: the name somebody is reaching
+    // for may be the one the model could not see.
+    if (completion->membersMayBeMissing)
+        return false;
+
+    // An arrow written on something that is not a pointer: the class has an
+    // operator -> and what belongs here is the members of whatever that
+    // returns. The model answers with the class's own members instead, so
+    // the built-in lookup, which follows the operator, answers this.
+    if (m_model->m_completionOperator == T_ARROW && !completion->objectIsPointer)
+        return false;
+
+    for (const CxxFrontendDocument::Completion::Candidate &candidate : completion->candidates)
+        addCompletionItem(candidate);
+
+    // A dot written where an arrow belongs. The members are offered either
+    // way and the editor puts the arrow there, which is what the built-in
+    // lookup reports through the same flag.
+    if (m_model->m_completionOperator == T_DOT && completion->objectIsPointer
+        && completion->dotWasWritten) {
+        m_model->m_replaceDotForArrow = true;
+    }
+
+    return !m_completions.isEmpty();
+#else
+    return false;
+#endif
 }
 
 bool InternalCppCompletionAssistProcessor::globalCompletion(Scope *currentScope)

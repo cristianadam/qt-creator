@@ -3,6 +3,7 @@
 
 #include "cxxfrontendmodel.h"
 
+#include "cppmodelmanager.h"
 #include "cppprojectfile.h"
 
 #include <cplusplus/CppDocument.h>
@@ -36,10 +37,10 @@ public:
         m_order.removeOne(filePath);
         m_order.append(filePath);
 
-        // A model holds a document for every file its file includes, which for
-        // one editor is a few thousand of them. Keeping one per file ever
-        // parsed is how a session runs out of memory, so only the last few
-        // stay -- the ones someone is working in.
+        // A document is the file with everything it includes read into it,
+        // which for one editor is a few thousand files' worth. Keeping one
+        // per file ever parsed is how a session runs out of memory, so only
+        // the last few stay -- the ones someone is working in.
         while (m_order.size() > 4)
             m_snapshots.remove(m_order.takeFirst());
     }
@@ -83,6 +84,15 @@ QStringList definesIn(const QByteArray &configFile)
         macros.append(QString::fromUtf8(trimmed.mid(int(strlen("#define ")))).trimmed());
     }
     return macros;
+}
+
+// The configuration file the project part contributes, which the built-in
+// model feeds in as a file of its own -- so it is in the snapshot, which is
+// where whoever was not handed it can read it.
+QByteArray configurationFileIn(const Snapshot &snapshot)
+{
+    const Document::Ptr document = snapshot.document(CppModelManager::configurationFileName());
+    return document ? document->utf8Source() : QByteArray();
 }
 
 // Answers with the file the built-in model resolved this include to, and its
@@ -292,6 +302,27 @@ std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const FilePath &fileP
         locals.append(converted);
     }
     return locals;
+}
+
+std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
+    const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &source,
+    int line, int column)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    // A snapshot of its own, and kept nowhere. The file has to be read with
+    // the question in it, which is of no use to anybody else, and the
+    // documents that are kept were read without one.
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(resolverFor(builtinSnapshot, CppModelManager::workingCopy()));
+    snapshot.setPredefinedMacros(definesIn(configurationFileIn(builtinSnapshot)));
+
+    const CxxFrontendDocument *document
+        = snapshot.processForCompletion(filePath.toFSPathString(), source, line, column);
+    if (!document)
+        return std::nullopt;
+    return document->completion();
 }
 
 } // namespace CppEditor::Internal

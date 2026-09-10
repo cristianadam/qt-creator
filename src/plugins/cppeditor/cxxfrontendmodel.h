@@ -8,6 +8,8 @@
 #include "cppworkingcopy.h"
 #include "semantichighlighter.h"
 
+#include <cplusplus/CxxFrontendDocument.h>
+
 #include <texteditor/semantichighlighter.h>
 
 #include <utils/filepath.h>
@@ -154,5 +156,28 @@ std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::Fi
 // this answers for the names and leaves that where it is.
 std::optional<QList<TextEditor::HighlightingResult>> cxxFrontendHighlighting(
     const Utils::FilePath &filePath);
+
+// What could be written at \a line and \a column of \a filePath -- both
+// counted from one -- with \a source as the text stands in the editor,
+// half-written expression and all.
+//
+// Not read off the last parse, as every other question here is: where the
+// question is asked has to be settled before the file is preprocessed, so
+// this reads \a source again, headers and all. That is affordable because
+// completion already runs on a worker thread, and it is why the answer is
+// not kept -- it belongs to one keystroke.
+//
+// \a builtinSnapshot is the snapshot the completion is running against, and
+// includes are resolved through it exactly as updateCxxFrontendModel does,
+// so both models read the same headers.
+//
+// Nothing unless the model was asked for, or where the file cannot be read;
+// then the caller answers the way it did before.
+std::optional<CPlusPlus::CxxFrontendDocument::Completion> cxxFrontendCompletion(
+    const CPlusPlus::Snapshot &builtinSnapshot,
+    const Utils::FilePath &filePath,
+    const QString &source,
+    int line,
+    int column);
 
 } // namespace CppEditor::Internal

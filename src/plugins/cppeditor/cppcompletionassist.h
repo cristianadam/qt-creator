@@ -9,6 +9,9 @@
 #include "cppmodelmanager.h"
 #include "cppworkingcopy.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
 #include <cplusplus/Icons.h>
 #include <cplusplus/Symbol.h>
 #include <cplusplus/TypeOfExpression.h>
@@ -113,6 +116,13 @@ private:
                                    CPlusPlus::Scope *cursorScope);
     bool globalCompletion(CPlusPlus::Scope *scope);
 
+    // What the cxx-frontend model would offer where the cursor is, for the
+    // places it answers about: after a dot, an arrow or a scope. False means
+    // it has nothing to say -- it was not asked for, this is not one of
+    // those places, or it found nothing there -- and the built-in lookup
+    // then answers as it always did. See cxxfrontendmodel.h.
+    bool completeFromCxxFrontendModel();
+
     void addKeywordCompletionItem(const QString &text);
     void addCompletionItem(const QString &text,
                            const QIcon &icon = QIcon(),
@@ -120,6 +130,9 @@ private:
                            const QVariant &data = QVariant());
     void addCompletionItem(CPlusPlus::Symbol *symbol,
                            int order = 0);
+#ifdef QTC_WITH_CXX_FRONTEND
+    void addCompletionItem(const CPlusPlus::CxxFrontendDocument::Completion::Candidate &candidate);
+#endif
     bool isKnownCompletion(const QString &text);
 
     void addKeywords();
