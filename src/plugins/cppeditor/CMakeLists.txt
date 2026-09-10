@@ -186,6 +186,13 @@ extend_qtc_plugin(CppEditor
     cxxfrontendmodel_test.cpp cxxfrontendmodel_test.h
 )
 
+# That dependency also makes every file here C++23, and the precompiled header
+# the other targets share is built as C++20 -- clang refuses to read it back
+# under a different standard -- so this plugin compiles without it.
+if (QTC_ENABLE_CXX_FRONTEND AND TARGET CppEditor)
+  set_property(TARGET CppEditor PROPERTY PRECOMPILE_HEADERS_REUSE_FROM)
+endif()
+
 qtc_add_resources(CppEditor "images"
   PREFIX "/cppeditor"
   BASE "."
