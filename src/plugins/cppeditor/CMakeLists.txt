@@ -142,6 +142,7 @@ extend_qtc_plugin(CppEditor
     cppcompletion_test.cpp cppcompletion_test.h
     cppdoxygen_test.cpp cppdoxygen_test.h
     cppincludehierarchy_test.cpp cppincludehierarchy_test.h
+    cppfunctiondecldeflink_test.cpp cppfunctiondecldeflink_test.h
     cpplocalsymbols_test.cpp cpplocalsymbols_test.h
     cpplocatorfilter_test.cpp cpplocatorfilter_test.h
     cppmcpsupport_test.cpp cppmcpsupport_test.h

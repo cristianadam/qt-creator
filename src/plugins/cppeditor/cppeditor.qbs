@@ -349,6 +349,8 @@ QtcPlugin {
             "cppdoxygen_test.h",
             "cppincludehierarchy_test.cpp",
             "cppincludehierarchy_test.h",
+            "cppfunctiondecldeflink_test.cpp",
+            "cppfunctiondecldeflink_test.h",
             "cpplocalsymbols_test.cpp",
             "cpplocalsymbols_test.h",
             "cpplocatorfilter_test.cpp",

@@ -36,6 +36,7 @@
 #include "cppdoxygen_test.h"
 #include "cppfollowsymbolundercursor.h"
 #include "cppincludehierarchy_test.h"
+#include "cppfunctiondecldeflink_test.h"
 #include "cpplocalsymbols_test.h"
 #include "cppselectionchanger_test.h"
 #include "cpplocatorfilter_test.h"
@@ -674,6 +675,7 @@ void CppEditorPlugin::registerTests()
     addTest<SymbolSearcherTest>();
     addTest<TypeHierarchyBuilderTest>();
     addTest<Tests::AutoCompleterTest>();
+    addTest<Tests::DeclDefLinkTest>();
     addTest<Tests::DoxygenTest>();
     addTest<Tests::FileAndTokenActionsTest>();
     addTest<Tests::FollowSymbolTest>();
