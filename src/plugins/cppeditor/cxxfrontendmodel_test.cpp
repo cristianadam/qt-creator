@@ -227,6 +227,20 @@ void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
     QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
 }
 
+// A name a using declaration brought in: the built-in model answers with the
+// using declaration, and that is the answer to keep, so this declines.
+void CxxFrontendModelTest::testDeclinesANameFromAUsingDeclaration()
+{
+    const Parsed parsed({{"main.cpp",
+                          "namespace NS { class Foo {}; }\n"
+                          "using NS::Foo;\n"
+                          "void f() { Foo brought; }\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 3, 11, 0, 0).hasValidTarget());
+}
+
 // The case that stopped follow symbol from using this: a class forward
 // declared in the file being edited and defined in another, where the answer
 // has to be the definition and this model does not have it. Offering the

@@ -9,6 +9,10 @@
 #include "cppmodelmanager.h"
 #include "cpptoolsreuse.h"
 #include "cppvirtualfunctionassistprovider.h"
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 #include "functionutils.h"
 #include "symbolfinder.h"
 
@@ -726,6 +730,33 @@ void FollowSymbolUnderCursor::findLink(
         processLinkCallback(link);
         return;
     }
+
+    // The cxx-frontend model, where it has this file and can say. Here rather
+    // than earlier, so that everything above -- a declaration to match with
+    // its definition, a Qt method inside SIGNAL(), an include, a macro -- is
+    // still answered as before; and before the lookup below, which is the
+    // part being migrated. It declines what it cannot answer for, and then
+    // the built-in lookup answers as it always did.
+    //
+    // Not for a call, though: which of several functions a call means takes
+    // the argument types, and the model resolves a member call without
+    // weighing them -- CxxFrontendDocument::unsupportedQueries() -- so for an
+    // overloaded one it would point at a function that is not the one called.
+#ifdef QTC_WITH_CXX_FRONTEND
+    const auto namesACall = [&] {
+        int pos = endOfToken;
+        while (document->characterAt(pos).isSpace())
+            ++pos;
+        return document->characterAt(pos) == '(';
+    };
+    if (!namesACall()) {
+        const Link fromCxxFrontend
+            = Internal::cxxFrontendFollowSymbol(data.filePath(), line, column, beginOfToken,
+                                                endOfToken);
+        if (fromCxxFrontend.hasValidTarget())
+            return processLinkCallback(fromCxxFrontend);
+    }
+#endif
 
     // Find the last symbol up to the cursor position
     Scope *scope = doc->scopeAt(line, column);

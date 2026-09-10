@@ -187,6 +187,12 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     if (!found.isDefinition)
         return {};
 
+    // Brought in by a using declaration, which the built-in model answers
+    // with the using declaration itself. That is the answer QTCREATORBUG7903
+    // asked for, so it stays the answer.
+    if (found.throughUsingDeclaration)
+        return {};
+
     // And a link counts from zero again, the way Symbol::toLink() does it.
     Link link(FilePath::fromUserInput(found.filePath), found.line, found.column - 1);
     link.linkTextStart = linkTextStart;

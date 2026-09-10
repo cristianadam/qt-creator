@@ -12,6 +12,10 @@
 #include "cppvirtualfunctionassistprovider.h"
 #include "cppvirtualfunctionproposalitem.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorer.h>
 
@@ -102,6 +106,17 @@ QT_END_NAMESPACE
 typedef QByteArray _;
 
 namespace CppEditor::Internal::Tests {
+
+// Whether follow symbol is consulting the cxx-frontend model, which answers
+// one of the cases below better than the built-in lookup does.
+static bool cxxFrontendConsulted()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return cxxFrontendModelRequested();
+#else
+    return false;
+#endif
+}
 
 /// A fake virtual functions assist provider that runs processor->perform() already in configure()
 class VirtualFunctionTestAssistProvider : public VirtualFunctionAssistProvider
@@ -430,8 +445,13 @@ F2TestCase::F2TestCase(CppEditorAction action,
         QEXPECT_FAIL("matchFunctionSignature_Follow_5", "foo(int) resolved as CallAST", Abort);
         if (tag.contains("SLOT") && tag.contains("no 2nd QObject"))
             QEXPECT_FAIL("", "FIXME", Abort);
-        QEXPECT_FAIL(
-            "baseClassViaDecltype", "we cannot properly evaluate decltype at bind time", Abort);
+        // The built-in lookup's limit, and not the other model's: with that
+        // one consulted this case is answered correctly, and expecting it to
+        // fail would then fail itself.
+        if (!cxxFrontendConsulted()) {
+            QEXPECT_FAIL("baseClassViaDecltype",
+                         "we cannot properly evaluate decltype at bind time", Abort);
+        }
     }
 
     QCOMPARE(currentTextEditor->currentLine(), expectedLine);

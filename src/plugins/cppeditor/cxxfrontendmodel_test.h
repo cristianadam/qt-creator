@@ -20,6 +20,7 @@ private slots:
     void testFollowsANameToItsDeclaration();
     void testFollowsNothingItCannotAnswerFor();
     void testDeclinesAForwardDeclaration();
+    void testDeclinesANameFromAUsingDeclaration();
 };
 
 } // namespace CppEditor::Internal
