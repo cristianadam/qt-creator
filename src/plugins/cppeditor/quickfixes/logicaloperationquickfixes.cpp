@@ -210,12 +210,6 @@ class FlipLogicalOperands : public CppQuickFixFactory
 */
 class InverseLogicalComparison : public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         CppRefactoringFilePtr file = interface.currentFile();
@@ -269,12 +263,6 @@ private:
 */
 class RewriteLogicalAnd : public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         BinaryExpressionAST *expression = nullptr;
@@ -316,6 +304,20 @@ class FlipLogicalOperandsTest : public Tests::CppQuickFixTestObject
 public:
     using CppQuickFixTestObject::CppQuickFixTestObject;
 };
+
+class InverseLogicalComparisonTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
+
+class RewriteLogicalAndTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
 #endif
 
 } // namespace
@@ -323,8 +325,8 @@ public:
 void registerLogicalOperationQuickfixes()
 {
     REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(FlipLogicalOperands);
-    CppQuickFixFactory::registerFactory<InverseLogicalComparison>();
-    CppQuickFixFactory::registerFactory<RewriteLogicalAnd>();
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(InverseLogicalComparison);
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(RewriteLogicalAnd);
 }
 
 } // namespace CppEditor::Internal
