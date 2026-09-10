@@ -11,7 +11,9 @@
 #include <cplusplus/CxxFrontendDocument.h>
 
 #include <coreplugin/editormanager/editormanager.h>
+#include <texteditor/codeassist/assistproposaliteminterface.h>
 #include <texteditor/codeassist/iassistproposal.h>
+#include <texteditor/completionsettings.h>
 #include <texteditor/syntaxhighlighter.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
@@ -87,9 +89,10 @@ public:
         m_succeededSoFar = true;
     }
 
-    QStringList getCompletions(bool *replaceAccessOperator = nullptr) const
+    // The proposal the editor would show where the marker was. The caller
+    // owns it.
+    IAssistProposal *proposalAtMarker() const
     {
-        QStringList completions;
         LanguageFeatures languageFeatures = LanguageFeatures::defaultFeatures();
         languageFeatures.objCEnabled = false;
         QTextCursor textCursor = m_editorWidget->textCursor();
@@ -107,7 +110,13 @@ public:
         InternalCppCompletionAssistProcessor processor;
         processor.setupAssistInterface(std::move(ai));
 
-        const QScopedPointer<IAssistProposal> proposal(processor.performAsync());
+        return processor.performAsync();
+    }
+
+    QStringList getCompletions(bool *replaceAccessOperator = nullptr) const
+    {
+        QStringList completions;
+        const QScopedPointer<IAssistProposal> proposal(proposalAtMarker());
         if (!proposal)
             return completions;
         ProposalModelPtr model = proposal->model();
@@ -132,6 +141,37 @@ public:
             *replaceAccessOperator = listmodel->m_replaceDotForArrow;
 
         return completions;
+    }
+
+    // Chooses what is offered under \a name and lets it write itself into
+    // the text, which is the other half of a completion: what is offered,
+    // and what choosing it puts there.
+    //
+    // Answers with the line the cursor ends up on and a | where it ends up,
+    // so that a case reads as the line somebody would see -- and says where
+    // they would go on typing, which is half of what writing a call means.
+    QString lineAfterChoosing(const QString &name) const
+    {
+        const QScopedPointer<IAssistProposal> proposal(proposalAtMarker());
+        if (!proposal)
+            return {};
+        ProposalModelPtr model = proposal->model();
+        if (!model)
+            return {};
+        CppAssistProposalModelPtr listmodel = model.staticCast<CppAssistProposalModel>();
+        if (!listmodel)
+            return {};
+
+        for (int i = 0; i < listmodel->size(); ++i) {
+            if (listmodel->text(i) != name)
+                continue;
+            listmodel->proposalItem(i)->apply(m_editorWidget, proposal->basePosition());
+            const QTextCursor cursor = m_editorWidget->textCursor();
+            QString line = cursor.block().text();
+            line.insert(cursor.positionInBlock(), '|');
+            return line.trimmed();
+        }
+        return {};
     }
 
     void insertText(const QByteArray &text)
@@ -2770,6 +2810,71 @@ void CompletionTest::testCompletionMemberAccessOperator()
 
     QCOMPARE(completions, expectedCompletions);
     QCOMPARE(replaceAccessOperator, expectedReplaceAccessOperator);
+}
+
+// What choosing a candidate writes, which is decided from the declaration
+// behind it: a call is written with its parentheses, a call that returns
+// nothing ends the statement, and anything that is not a call is written as
+// it stands.
+void CompletionTest::testCompletionWritesTheCall_data()
+{
+    QTest::addColumn<QByteArray>("code");
+    QTest::addColumn<QByteArray>("prefix");
+    QTest::addColumn<QString>("chosen");
+    QTest::addColumn<QString>("expectedLine");
+
+    QTest::newRow("a call that takes and returns nothing") << _(
+            "struct S { void run(); };\n"
+            "void f(S s)\n"
+            "{\n"
+            "    @\n"
+            "}\n") << _("s.") << QString("run") << QString("s.run();|");
+
+    QTest::newRow("a call whose value is wanted") << _(
+            "struct S { int count(); };\n"
+            "void f(S s)\n"
+            "{\n"
+            "    @\n"
+            "}\n") << _("s.") << QString("count") << QString("s.count()|");
+
+    QTest::newRow("a call something has to be passed to") << _(
+            "struct S { void run(int times); };\n"
+            "void f(S s)\n"
+            "{\n"
+            "    @\n"
+            "}\n") << _("s.") << QString("run") << QString("s.run(|);");
+
+    QTest::newRow("not a call at all") << _(
+            "struct S { int m_value; };\n"
+            "void f(S s)\n"
+            "{\n"
+            "    @\n"
+            "}\n") << _("s.") << QString("m_value") << QString("s.m_value|");
+}
+
+void CompletionTest::testCompletionWritesTheCall()
+{
+    QFETCH(QByteArray, code);
+    QFETCH(QByteArray, prefix);
+    QFETCH(QString, chosen);
+    QFETCH(QString, expectedLine);
+
+    // The two settings this is about, so that what the editor writes does
+    // not depend on what the person running the test prefers.
+    CompletionSettings &settings = globalCompletionSettings();
+    const bool wasInsertingBrackets = settings.autoInsertBrackets();
+    const bool wasSpacing = settings.spaceAfterFunctionName();
+    settings.autoInsertBrackets.setValue(true);
+    settings.spaceAfterFunctionName.setValue(false);
+    const QScopeGuard restore([&] {
+        settings.autoInsertBrackets.setValue(wasInsertingBrackets);
+        settings.spaceAfterFunctionName.setValue(wasSpacing);
+    });
+
+    CompletionTestCase test(code, prefix);
+    QVERIFY(test.succeededSoFar());
+
+    QCOMPARE(test.lineAfterChoosing(chosen), expectedLine);
 }
 
 void CompletionTest::testCompletionMemberAccessOperator_data()

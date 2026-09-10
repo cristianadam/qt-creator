@@ -56,9 +56,32 @@ struct CompleteFunctionDeclaration
 class CppAssistProposalItem final : public AssistProposalItem
 {
 public:
+    // What the declaration behind the item means for writing it into the
+    // text: a function is written with its parentheses, one that takes
+    // nothing has them closed again, one that returns nothing ends the
+    // statement, and a constructor is written like the type it makes --
+    // just the name.
+    //
+    // The insertion asks these rather than the Symbol it used to be given,
+    // so that a model which hands out no symbols can say the same things.
+    struct Insertion
+    {
+        bool isValid = false;
+        bool isFunction = false;
+        bool takesArguments = false;
+        bool returnsNothing = false;
+        bool isWrittenLikeAType = false;
+        // The front end could not settle which declaration this is, and
+        // writing a call for the wrong one is worse than writing the name.
+        bool isAmbiguous = false;
+    };
+
     ~CppAssistProposalItem() noexcept override = default;
     bool prematurelyApplies(const QChar &c) const override;
     void applyContextualContent(TextEditorWidget *editorWidget, int basePosition) const override;
+
+    void keepInsertion(const Insertion &insertion) { m_insertion = insertion; }
+    const Insertion &insertion() const { return m_insertion; }
 
     bool isOverloaded() const { return m_isOverloaded; }
     void markAsOverloaded() { m_isOverloaded = true; }
@@ -76,9 +99,35 @@ private:
     QSharedPointer<TypeOfExpression> m_typeOfExpression;
     unsigned m_completionOperator = T_EOF_SYMBOL;
     mutable QChar m_typedChar;
+    Insertion m_insertion;
     bool m_isOverloaded = false;
     bool m_isKeyword = false;
 };
+
+// The same, read off a symbol of the built-in model.
+static CppAssistProposalItem::Insertion insertionOf(Symbol *symbol)
+{
+    CppAssistProposalItem::Insertion insertion;
+    insertion.isValid = true;
+    if (!symbol || !symbol->type())
+        return insertion;
+
+    Function *function = symbol->type()->asFunctionType();
+    if (!function)
+        return insertion;
+
+    insertion.isFunction = true;
+    insertion.takesArguments = function->hasArguments();
+    insertion.returnsNothing = function->returnType()->asVoidType() != nullptr;
+    insertion.isAmbiguous = function->isAmbiguous();
+
+    // A constructor: nothing is written where a return type would be, and a
+    // destructor is not one of those even though it has no return type
+    // either -- ~S() is called like anything else.
+    insertion.isWrittenLikeAType = !function->hasReturnType() && function->unqualifiedName()
+                                   && !function->unqualifiedName()->asDestructorNameId();
+    return insertion;
+}
 
 } // CppEditor::Internal
 
@@ -118,7 +167,7 @@ bool CppAssistProposalItem::prematurelyApplies(const QChar &typedChar) const
             m_typedChar = typedChar;
             return true;
         }
-    } else if (data().value<Symbol *>()) {
+    } else if (m_insertion.isValid) {
         if (typedChar == QLatin1Char(':')
                 || typedChar == QLatin1Char(';')
                 || typedChar == QLatin1Char('.')
@@ -171,11 +220,6 @@ void CppAssistProposalItem::applyContextualContent(TextEditorWidget *editorWidge
 {
     QTC_ASSERT(editorWidget, return);
 
-    Symbol *symbol = nullptr;
-
-    if (data().isValid())
-        symbol = data().value<Symbol *>();
-
     QString toInsert;
     QString extraChars;
     int extraLength = 0;
@@ -203,68 +247,64 @@ void CppAssistProposalItem::applyContextualContent(TextEditorWidget *editorWidge
 
         const bool autoInsertBrackets = globalCompletionSettings().autoInsertBrackets();
 
-        if (autoInsertBrackets && symbol && symbol->type()) {
-            if (Function *function = symbol->type()->asFunctionType()) {
-                // If the member is a function, automatically place the opening parenthesis,
-                // except when it might take template parameters.
-                if (!function->hasReturnType()
-                    && (function->unqualifiedName()
-                    && !function->unqualifiedName()->asDestructorNameId())) {
-                    // Don't insert any magic, since the user might have just wanted to select the class
+        if (autoInsertBrackets && m_insertion.isFunction) {
+            // If the member is a function, automatically place the opening parenthesis,
+            // except when it might take template parameters.
+            if (m_insertion.isWrittenLikeAType) {
+                // Don't insert any magic, since the user might have just wanted to select the class
 
-                    /// ### port me
+                /// ### port me
 #if 0
-                } else if (function->templateParameterCount() != 0 && typedChar != QLatin1Char('(')) {
-                    // If there are no arguments, then we need the template specification
-                    if (function->argumentCount() == 0)
-                        extraChars += QLatin1Char('<');
+            } else if (function->templateParameterCount() != 0 && typedChar != QLatin1Char('(')) {
+                // If there are no arguments, then we need the template specification
+                if (function->argumentCount() == 0)
+                    extraChars += QLatin1Char('<');
 #endif
-                } else if (!isDereferenced(editorWidget, basePosition) && !function->isAmbiguous()) {
-                    // When the user typed the opening parenthesis, he'll likely also type the closing one,
-                    // in which case it would be annoying if we put the cursor after the already automatically
-                    // inserted closing parenthesis.
-                    const bool skipClosingParenthesis = m_typedChar != QLatin1Char('(');
+            } else if (!isDereferenced(editorWidget, basePosition) && !m_insertion.isAmbiguous) {
+                // When the user typed the opening parenthesis, he'll likely also type the closing one,
+                // in which case it would be annoying if we put the cursor after the already automatically
+                // inserted closing parenthesis.
+                const bool skipClosingParenthesis = m_typedChar != QLatin1Char('(');
 
-                    if (globalCompletionSettings().spaceAfterFunctionName())
-                        extraChars += QLatin1Char(' ');
-                    extraChars += QLatin1Char('(');
-                    if (m_typedChar == QLatin1Char('('))
-                        m_typedChar = QChar();
+                if (globalCompletionSettings().spaceAfterFunctionName())
+                    extraChars += QLatin1Char(' ');
+                extraChars += QLatin1Char('(');
+                if (m_typedChar == QLatin1Char('('))
+                    m_typedChar = QChar();
 
-                    // If the function doesn't return anything, automatically place the semicolon,
-                    // unless we're doing a scope completion (then it might be function definition).
-                    const QChar characterAtCursor = editorWidget->characterAt(editorWidget->position());
-                    bool endWithSemicolon = m_typedChar == QLatin1Char(';')
-                            || (function->returnType()->asVoidType() && m_completionOperator != T_COLON_COLON);
-                    const QChar semicolon = m_typedChar.isNull() ? QLatin1Char(';') : m_typedChar;
+                // If the function doesn't return anything, automatically place the semicolon,
+                // unless we're doing a scope completion (then it might be function definition).
+                const QChar characterAtCursor = editorWidget->characterAt(editorWidget->position());
+                bool endWithSemicolon = m_typedChar == QLatin1Char(';')
+                        || (m_insertion.returnsNothing && m_completionOperator != T_COLON_COLON);
+                const QChar semicolon = m_typedChar.isNull() ? QLatin1Char(';') : m_typedChar;
 
-                    if (endWithSemicolon && characterAtCursor == semicolon) {
-                        endWithSemicolon = false;
+                if (endWithSemicolon && characterAtCursor == semicolon) {
+                    endWithSemicolon = false;
+                    m_typedChar = QChar();
+                }
+
+                // If the function takes no arguments, automatically place the closing parenthesis
+                if (!isOverloaded() && !m_insertion.takesArguments && skipClosingParenthesis) {
+                    extraChars += QLatin1Char(')');
+                    if (endWithSemicolon) {
+                        extraChars += semicolon;
                         m_typedChar = QChar();
                     }
-
-                    // If the function takes no arguments, automatically place the closing parenthesis
-                    if (!isOverloaded() && !function->hasArguments() && skipClosingParenthesis) {
+                } else if (autoParenthesesEnabled) {
+                    const QChar lookAhead = editorWidget->characterAt(editorWidget->position() + 1);
+                    if (MatchingText::shouldInsertMatchingText(lookAhead)) {
                         extraChars += QLatin1Char(')');
+                        --cursorOffset;
+                        setAutoCompleteSkipPos = true;
                         if (endWithSemicolon) {
                             extraChars += semicolon;
+                            --cursorOffset;
                             m_typedChar = QChar();
                         }
-                    } else if (autoParenthesesEnabled) {
-                        const QChar lookAhead = editorWidget->characterAt(editorWidget->position() + 1);
-                        if (MatchingText::shouldInsertMatchingText(lookAhead)) {
-                            extraChars += QLatin1Char(')');
-                            --cursorOffset;
-                            setAutoCompleteSkipPos = true;
-                            if (endWithSemicolon) {
-                                extraChars += semicolon;
-                                --cursorOffset;
-                                m_typedChar = QChar();
-                            }
-                        }
-                        // TODO: When an opening parenthesis exists, the "semicolon" should really be
-                        // inserted after the matching closing parenthesis.
                     }
+                    // TODO: When an opening parenthesis exists, the "semicolon" should really be
+                    // inserted after the matching closing parenthesis.
                 }
             }
         }
@@ -457,8 +497,10 @@ public:
         AssistProposalItem *previousItem = switchCompletionItem(nullptr);
         Symbol *previousSymbol = switchSymbol(symbol);
         accept(symbol->unqualifiedName());
-        if (_item)
+        if (_item) {
             _item->setData(QVariant::fromValue(symbol));
+            static_cast<CppAssistProposalItem *>(_item)->keepInsertion(insertionOf(symbol));
+        }
         (void) switchSymbol(previousSymbol);
         return switchCompletionItem(previousItem);
     }
@@ -838,13 +880,9 @@ IAssistProposal *InternalCppCompletionAssistProcessor::createContentProposal()
     for (AssistProposalItemInterface * const it : std::as_const(m_completions)) {
         if (!it->isSnippet()) {
             const auto item = static_cast<CppAssistProposalItem *>(it);
-            if (!item->isOverloaded()) {
-                if (auto symbol = qvariant_cast<Symbol *>(item->data())) {
-                    if (Function *funTy = symbol->type()->asFunctionType()) {
-                        if (funTy->hasArguments())
-                            item->markAsOverloaded();
-                    }
-                }
+            if (!item->isOverloaded() && item->insertion().isFunction
+                && item->insertion().takesArguments) {
+                item->markAsOverloaded();
             }
         }
     }

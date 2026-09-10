@@ -26,6 +26,9 @@ private slots:
     void testDoxygenTagCompletion_data();
     void testDoxygenTagCompletion();
 
+    void testCompletionWritesTheCall_data();
+    void testCompletionWritesTheCall();
+
     void testCompletionMemberAccessOperator_data();
     void testCompletionMemberAccessOperator();
 
