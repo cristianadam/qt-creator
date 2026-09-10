@@ -109,6 +109,26 @@ QList<cxx::AST *> childrenOf(cxx::AST *node)
     return children;
 }
 
+// Down from \a node, into every child the position is in.
+//
+// Usually there is one, since what two children hold is written one after
+// another. But a position between two of them is in both -- at the end of the
+// first and at the start of the second -- and a cursor sitting there is in
+// both, which is not a corner case: the cursor after a name is exactly where
+// an editor leaves it. ASTPath hands back both as well, so both are here, in
+// the order they are written.
+void collect(cxx::TranslationUnit *unit, const QString &fileName, cxx::AST *node,
+             int line, int column, QList<cxx::AST *> &path)
+{
+    const WrittenTokens tokens = writtenTokensOf(unit, fileName, node);
+    if (!tokens || !contains(unit, tokens, line, column))
+        return;
+
+    path.append(node);
+    for (cxx::AST *child : childrenOf(node))
+        collect(unit, fileName, child, line, column, path);
+}
+
 } // namespace
 
 QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, int column)
@@ -116,32 +136,9 @@ QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, in
     cxx::TranslationUnit *unit = document.translationUnit();
     if (!unit || !unit->ast())
         return {};
-    const QString fileName = document.fileName();
 
     QList<cxx::AST *> path;
-
-    // Down from the root, into the one child the position is in. Two children
-    // cannot both contain it -- what they hold is written one after another --
-    // so the first that does is the way down.
-    cxx::AST *node = unit->ast();
-    while (node) {
-        const WrittenTokens tokens = writtenTokensOf(unit, fileName, node);
-        if (!tokens || !contains(unit, tokens, line, column))
-            break;
-
-        path.append(node);
-
-        cxx::AST *next = nullptr;
-        for (cxx::AST *child : childrenOf(node)) {
-            const WrittenTokens childTokens = writtenTokensOf(unit, fileName, child);
-            if (childTokens && contains(unit, childTokens, line, column)) {
-                next = child;
-                break;
-            }
-        }
-        node = next;
-    }
-
+    collect(unit, document.fileName(), unit->ast(), line, column, path);
     return path;
 }
 

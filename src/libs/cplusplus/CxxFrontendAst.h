@@ -35,6 +35,13 @@ class CxxFrontendDocument;
 // node it is still in it. Tokens a macro wrote are not counted as edges,
 // since a place nobody wrote is a place no cursor can be in.
 //
+// Which is why the path is a list and not a chain: a position between two
+// nodes is in both, and both are here, in the order they are written. So a
+// node's neighbour on the list is usually its child, and where the cursor sat
+// at a boundary it is a sibling of it instead -- the cursor after a name is
+// both in that name and at the start of whatever follows it. ASTPath, being a
+// visitor that keeps every node it finds the position in, answers the same way.
+//
 // Empty where the file did not parse into a tree at all, and where the
 // position is outside every node -- the blank line after the last
 // declaration, for instance.

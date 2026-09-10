@@ -169,6 +169,17 @@ void tst_cxxfrontendast::pathAtAPosition_data()
         << QStringList({"translation-unit", "simple-declaration", "class-specifier",
                         "simple-declaration", "init-declarator", "declarator",
                         "id-declarator", "name-id"});
+
+    // A cursor between two nodes is in both, so both are here: after the name
+    // of a function it stands at the end of that name and at the start of the
+    // parameter list following it. Which is the position an editor leaves a
+    // cursor at, so a reader handed only the first of them -- the name -- would
+    // never see the parameters somebody had their cursor on.
+    QTest::newRow("between a name and what follows it")
+        << QByteArray("int f$(int a);\n")
+        << QStringList({"translation-unit", "simple-declaration", "init-declarator",
+                        "declarator", "id-declarator", "name-id",
+                        "function-declarator-chunk"});
 }
 
 void tst_cxxfrontendast::pathAtAPosition()
@@ -230,15 +241,25 @@ void tst_cxxfrontendast::everyNodeOnThePathHoldsThePosition()
                              || (range.endLine == line && range.endColumn >= column),
                          qPrintable(where));
 
-                // And it is inside the one before it.
+                // And it is inside the one before it -- or, where the
+                // position is the boundary between two nodes, it begins
+                // exactly where the one before it ended, both holding the
+                // position and neither holding the other.
                 if (previous.isValid()) {
-                    QVERIFY2(previous.startLine < range.startLine
-                                 || (previous.startLine == range.startLine
-                                     && previous.startColumn <= range.startColumn),
-                             qPrintable(where));
-                    QVERIFY2(previous.endLine > range.endLine
-                                 || (previous.endLine == range.endLine
-                                     && previous.endColumn >= range.endColumn),
+                    const bool startsInsidePrevious
+                        = previous.startLine < range.startLine
+                          || (previous.startLine == range.startLine
+                              && previous.startColumn <= range.startColumn);
+                    const bool endsInsidePrevious
+                        = previous.endLine > range.endLine
+                          || (previous.endLine == range.endLine
+                              && previous.endColumn >= range.endColumn);
+                    const bool startsWherePreviousEnded
+                        = range.startLine == previous.endLine
+                          && range.startColumn == previous.endColumn;
+
+                    QVERIFY2((startsInsidePrevious && endsInsidePrevious)
+                                 || startsWherePreviousEnded,
                              qPrintable(where));
                 }
                 previous = range;
