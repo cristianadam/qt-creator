@@ -5,11 +5,11 @@
 
 #include <texteditor/commentssettings.h>
 
-#include <cplusplus/Overview.h>
+#include <QString>
+#include <QStringList>
 
 QT_FORWARD_DECLARE_CLASS(QTextCursor)
 
-namespace CPlusPlus { class DeclarationAST; }
 namespace CPlusPlus { class Snapshot; }
 namespace Utils { class FilePath; }
 
@@ -34,8 +34,29 @@ public:
                      const CPlusPlus::Snapshot &snapshot,
                      const Utils::FilePath &documentFilePath);
 
+    // What a comment says about the declaration under it: the name to write
+    // in the brief, the word that goes in front of that name where it is a
+    // type's, the parameters to list, and whether anything is returned.
+    // Which is the whole of what a syntax tree is asked for here, and none of
+    // it depends on which front end read the declaration.
+    class DeclarationFacts
+    {
+    public:
+        enum Kind {
+            Unnamed,    // nothing to say about it: only the comment itself
+            Declarator, // a function or a variable, written under a name
+            Aggregate   // a class, struct, union or enum, written under a name
+        };
+
+        Kind kind = Unnamed;
+        QString name;
+        QString aggregate; // "class", "struct", "union" or "enum"
+        QStringList parameters;
+        bool returnsSomething = false;
+    };
+
 private:
-    QString generate(QTextCursor cursor, CPlusPlus::DeclarationAST *decl);
+    QString write(QTextCursor cursor, const DeclarationFacts &facts);
     QChar styleMark() const;
 
     enum Command {
@@ -60,7 +81,6 @@ private:
     QString offsetString() const;
 
     TextEditor::CommentsSettings::Data m_settings;
-    CPlusPlus::Overview m_printer;
     QString m_commentOffset;
     DocumentationStyle m_style = QtStyle;
 };

@@ -4,7 +4,21 @@
 #include "doxygengenerator.h"
 
 #include <cplusplus/CppDocument.h>
+#include <cplusplus/Overview.h>
 #include <cplusplus/SimpleLexer.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/translation_unit.h>
+#include <cxx/types.h>
+#endif
 
 #include <utils/textutils.h>
 #include <utils/qtcassert.h>
@@ -20,6 +34,253 @@ using namespace CPlusPlus;
 namespace CppEditor::Internal {
 
 DoxygenGenerator::DoxygenGenerator() = default;
+
+namespace {
+
+// The declaration, read off the built-in tree.
+DoxygenGenerator::DeclarationFacts builtinFactsOf(DeclarationAST *decl)
+{
+    using Facts = DoxygenGenerator::DeclarationFacts;
+
+    if (const TemplateDeclarationAST * const templDecl = decl->asTemplateDeclaration();
+            templDecl && templDecl->declaration) {
+        decl = templDecl->declaration;
+    }
+
+    SpecifierAST *spec = nullptr;
+    DeclaratorAST *decltr = nullptr;
+    if (SimpleDeclarationAST *simpleDecl = decl->asSimpleDeclaration()) {
+        if (simpleDecl->declarator_list
+                && simpleDecl->declarator_list->value) {
+            decltr = simpleDecl->declarator_list->value;
+        } else if (simpleDecl->decl_specifier_list
+                   && simpleDecl->decl_specifier_list->value) {
+            spec = simpleDecl->decl_specifier_list->value;
+        }
+    } else if (FunctionDefinitionAST * defDecl = decl->asFunctionDefinition()) {
+        decltr = defDecl->declarator;
+    }
+
+    Overview printer;
+    Facts facts;
+
+    if (decltr
+            && decltr->core_declarator
+            && decltr->core_declarator->asDeclaratorId()
+            && decltr->core_declarator->asDeclaratorId()->name) {
+        NameAST * const nameAst = decltr->core_declarator->asDeclaratorId()->name;
+        facts.kind = Facts::Declarator;
+        facts.name = printer.prettyName(nameAst->name);
+
+        if (decltr->postfix_declarator_list
+                && decltr->postfix_declarator_list->value
+                && decltr->postfix_declarator_list->value->asFunctionDeclarator()) {
+            FunctionDeclaratorAST *funcDecltr =
+                    decltr->postfix_declarator_list->value->asFunctionDeclarator();
+            if (funcDecltr->parameter_declaration_clause
+                    && funcDecltr->parameter_declaration_clause->parameter_declaration_list) {
+                for (ParameterDeclarationListAST *it =
+                        funcDecltr->parameter_declaration_clause->parameter_declaration_list;
+                     it;
+                     it = it->next) {
+                    ParameterDeclarationAST *paramDecl = it->value;
+                    if (paramDecl->declarator
+                            && paramDecl->declarator->core_declarator
+                            && paramDecl->declarator->core_declarator->asDeclaratorId()
+                            && paramDecl->declarator->core_declarator->asDeclaratorId()->name) {
+                        DeclaratorIdAST *paramId =
+                                paramDecl->declarator->core_declarator->asDeclaratorId();
+                        facts.parameters.append(printer.prettyName(paramId->name->name));
+                    }
+                }
+            }
+            // A destructor returns nothing, whatever the front end made of
+            // the declaration on its own: read out of the class it belongs
+            // to, "~C();" is a declaration with no type written in it at all,
+            // and the implicit int of an old C rule is not something to
+            // document.
+            facts.returnsSomething = !nameAst->asDestructorName()
+                    && funcDecltr->symbol
+                    && funcDecltr->symbol->returnType().type()
+                    && !funcDecltr->symbol->returnType()->asVoidType()
+                    && !funcDecltr->symbol->returnType()->isUndefinedType();
+        }
+        return facts;
+    }
+
+    if (spec) {
+        if (ClassSpecifierAST *classSpec = spec->asClassSpecifier()) {
+            if (classSpec->name) {
+                facts.kind = Facts::Aggregate;
+                facts.name = printer.prettyName(classSpec->name->name);
+                if (classSpec->symbol->asClass())
+                    facts.aggregate = QLatin1String("class");
+                else if (classSpec->symbol->isStruct())
+                    facts.aggregate = QLatin1String("struct");
+                else
+                    facts.aggregate = QLatin1String("union");
+            }
+        } else if (EnumSpecifierAST *enumSpec = spec->asEnumSpecifier()) {
+            if (enumSpec->name) {
+                facts.kind = Facts::Aggregate;
+                facts.name = printer.prettyName(enumSpec->name->name);
+                facts.aggregate = QLatin1String("enum");
+            }
+        }
+    }
+
+    return facts;
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The name a declarator is written under, as it is written. Nothing for the
+// names this does not spell out -- an operator, a conversion function -- so
+// that the built-in front end answers for those rather than this guessing.
+std::optional<QString> cxxNameOf(cxx::UnqualifiedIdAST *id)
+{
+    if (auto * const name = dynamic_cast<cxx::NameIdAST *>(id)) {
+        if (!name->identifier)
+            return {};
+        return QString::fromStdString(name->identifier->name());
+    }
+
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id)) {
+        const std::optional<QString> name = cxxNameOf(destructor->id);
+        if (!name)
+            return {};
+        return QString('~') + *name;
+    }
+
+    return {};
+}
+
+bool returnsSomething(cxx::Symbol *symbol)
+{
+    if (!symbol)
+        return false;
+    auto * const function = cxx::type_cast<cxx::FunctionType>(symbol->type());
+    if (!function)
+        return false;
+
+    const cxx::Type * const returnType = function->returnType();
+    return returnType && !cxx::type_cast<cxx::VoidType>(returnType);
+}
+
+// The declaration, read off the cxx-frontend model's tree.
+//
+// The text handed in is a fragment of a file, and this front end reads a file
+// -- so what it makes of a fragment that is not one on its own is nothing to
+// go by. A macro standing in front of a declaration is such a fragment: the
+// name is one nothing declares here. Whatever it stumbled over, or wrote a
+// name this cannot spell out, is handed back for the built-in front end to
+// read, which preprocesses the fragment first.
+std::optional<DoxygenGenerator::DeclarationFacts> cxxFactsOf(const QString &declaration)
+{
+    using Facts = DoxygenGenerator::DeclarationFacts;
+
+    const CxxFrontendDocument document(declaration, "<doxygen>");
+    for (const CxxFrontendDocument::Diagnostic &diagnostic : document.diagnostics()) {
+        if (diagnostic.isError)
+            return {};
+    }
+
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    auto * const root = unit ? dynamic_cast<cxx::TranslationUnitAST *>(unit->ast()) : nullptr;
+    if (!root)
+        return {};
+
+    // The first declaration the text itself writes. A translation unit begins
+    // with the front end's own declarations -- __builtin_constant_p and the
+    // rest -- and those are written nowhere, which is what tells them apart.
+    cxx::DeclarationAST *declared = nullptr;
+    for (auto *it = root->declarationList; it && !declared; it = it->next) {
+        if (it->value && cxxAstRangeOf(document, it->value).isValid())
+            declared = it->value;
+    }
+    if (!declared)
+        return {};
+    if (auto * const templated = dynamic_cast<cxx::TemplateDeclarationAST *>(declared);
+        templated && templated->declaration) {
+        declared = templated->declaration;
+    }
+
+    cxx::DeclaratorAST *declarator = nullptr;
+    cxx::Symbol *symbol = nullptr;
+    cxx::List<cxx::SpecifierAST *> *specifiers = nullptr;
+    if (auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declared)) {
+        if (simple->initDeclaratorList && simple->initDeclaratorList->value) {
+            declarator = simple->initDeclaratorList->value->declarator;
+            symbol = simple->initDeclaratorList->value->symbol;
+        } else {
+            specifiers = simple->declSpecifierList;
+        }
+    } else if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(declared)) {
+        declarator = definition->declarator;
+        symbol = definition->symbol;
+    }
+
+    Facts facts;
+
+    if (declarator) {
+        auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator);
+        if (!id)
+            return {};
+        const std::optional<QString> name = cxxNameOf(id->unqualifiedId);
+        if (!name)
+            return {};
+
+        facts.kind = Facts::Declarator;
+        facts.name = *name;
+
+        // A function's parameters and whether it returns anything. The first
+        // chunk of the declarator is the one written directly under the name,
+        // as the built-in front end's first postfix declarator is.
+        if (declarator->declaratorChunkList) {
+            if (auto * const chunk = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(
+                    declarator->declaratorChunkList->value)) {
+                if (chunk->parameterDeclarationClause) {
+                    for (auto *it = chunk->parameterDeclarationClause->parameterDeclarationList;
+                         it; it = it->next) {
+                        if (it->value && it->value->identifier) {
+                            facts.parameters.append(
+                                QString::fromStdString(it->value->identifier->name()));
+                        }
+                    }
+                }
+                facts.returnsSomething = returnsSomething(symbol);
+            }
+        }
+
+        return facts;
+    }
+
+    if (specifiers && specifiers->value) {
+        if (auto * const classSpecifier
+            = dynamic_cast<cxx::ClassSpecifierAST *>(specifiers->value)) {
+            const std::optional<QString> name = cxxNameOf(classSpecifier->unqualifiedId);
+            if (name) {
+                facts.kind = Facts::Aggregate;
+                facts.name = *name;
+                facts.aggregate = QString::fromUtf8(cxx::Token::spell(classSpecifier->classKey));
+            }
+        } else if (auto * const enumSpecifier
+                   = dynamic_cast<cxx::EnumSpecifierAST *>(specifiers->value)) {
+            const std::optional<QString> name = cxxNameOf(enumSpecifier->unqualifiedId);
+            if (name) {
+                facts.kind = Facts::Aggregate;
+                facts.name = *name;
+                facts.aggregate = QLatin1String("enum");
+            }
+        }
+    }
+
+    return facts;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+} // namespace
 
 QString DoxygenGenerator::generate(QTextCursor cursor,
                                    const CPlusPlus::Snapshot &snapshot,
@@ -73,6 +334,13 @@ QString DoxygenGenerator::generate(QTextCursor cursor,
     if (declCandidate.endsWith(QLatin1Char('{')))
         declCandidate.append(QLatin1Char('}'));
 
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (cxxFrontendModelRequested()) {
+        if (const std::optional<DeclarationFacts> facts = cxxFactsOf(declCandidate))
+            return write(cursor, *facts);
+    }
+#endif
+
     Document::Ptr doc = snapshot.preprocessedDocument(declCandidate.toUtf8(),
                                                       documentFilePath,
                                                       true,
@@ -86,113 +354,35 @@ QString DoxygenGenerator::generate(QTextCursor cursor,
         return QString();
     }
 
-    return generate(cursor, doc->translationUnit()->ast()->asDeclaration());
+    return write(cursor, builtinFactsOf(doc->translationUnit()->ast()->asDeclaration()));
 }
 
-QString DoxygenGenerator::generate(QTextCursor cursor, DeclarationAST *decl)
+
+QString DoxygenGenerator::write(QTextCursor cursor, const DeclarationFacts &facts)
 {
-    if (const TemplateDeclarationAST * const templDecl = decl->asTemplateDeclaration();
-            templDecl && templDecl->declaration) {
-        decl = templDecl->declaration;
-    }
-
-    SpecifierAST *spec = nullptr;
-    DeclaratorAST *decltr = nullptr;
-    if (SimpleDeclarationAST *simpleDecl = decl->asSimpleDeclaration()) {
-        if (simpleDecl->declarator_list
-                && simpleDecl->declarator_list->value) {
-            decltr = simpleDecl->declarator_list->value;
-        } else if (simpleDecl->decl_specifier_list
-                   && simpleDecl->decl_specifier_list->value) {
-            spec = simpleDecl->decl_specifier_list->value;
-        }
-    } else if (FunctionDefinitionAST * defDecl = decl->asFunctionDefinition()) {
-        decltr = defDecl->declarator;
-    }
-
     assignCommentOffset(cursor);
 
     QString comment;
     writeNewLine(&comment);
     writeContinuation(&comment);
 
-    if (decltr
-            && decltr->core_declarator
-            && decltr->core_declarator->asDeclaratorId()
-            && decltr->core_declarator->asDeclaratorId()->name) {
-        CoreDeclaratorAST *coreDecl = decltr->core_declarator;
-        NameAST * const nameAst = coreDecl->asDeclaratorId()->name;
+    if (facts.kind == DeclarationFacts::Declarator) {
         if (m_settings.generateBrief)
-            writeBrief(&comment, m_printer.prettyName(nameAst->name));
+            writeBrief(&comment, facts.name);
         else
             writeNewLine(&comment);
 
-        if (decltr->postfix_declarator_list
-                && decltr->postfix_declarator_list->value
-                && decltr->postfix_declarator_list->value->asFunctionDeclarator()) {
-            FunctionDeclaratorAST *funcDecltr =
-                    decltr->postfix_declarator_list->value->asFunctionDeclarator();
-            if (funcDecltr->parameter_declaration_clause
-                    && funcDecltr->parameter_declaration_clause->parameter_declaration_list) {
-                for (ParameterDeclarationListAST *it =
-                        funcDecltr->parameter_declaration_clause->parameter_declaration_list;
-                     it;
-                     it = it->next) {
-                    ParameterDeclarationAST *paramDecl = it->value;
-                    if (paramDecl->declarator
-                            && paramDecl->declarator->core_declarator
-                            && paramDecl->declarator->core_declarator->asDeclaratorId()
-                            && paramDecl->declarator->core_declarator->asDeclaratorId()->name) {
-                        DeclaratorIdAST *paramId =
-                                paramDecl->declarator->core_declarator->asDeclaratorId();
-                        writeContinuation(&comment);
-                        writeCommand(&comment,
-                                     ParamCommand,
-                                     m_printer.prettyName(paramId->name->name));
-                    }
-                }
-            }
-            // A destructor returns nothing, whatever the front end made of
-            // the declaration on its own: read out of the class it belongs
-            // to, "~C();" has no type written in it at all, and the implicit
-            // int of an old C rule is not something to document.
-            if (!nameAst->asDestructorName()
-                    && funcDecltr->symbol
-                    && funcDecltr->symbol->returnType().type()
-                    && !funcDecltr->symbol->returnType()->asVoidType()
-                    && !funcDecltr->symbol->returnType()->isUndefinedType()) {
-                writeContinuation(&comment);
-                writeCommand(&comment, ReturnCommand);
-            }
+        for (const QString &parameter : facts.parameters) {
+            writeContinuation(&comment);
+            writeCommand(&comment, ParamCommand, parameter);
         }
-    } else if (spec && m_settings.generateBrief) {
-        bool briefWritten = false;
-        if (ClassSpecifierAST *classSpec = spec->asClassSpecifier()) {
-            if (classSpec->name) {
-                QString aggregate;
-                if (classSpec->symbol->asClass())
-                    aggregate = QLatin1String("class");
-                else if (classSpec->symbol->isStruct())
-                    aggregate = QLatin1String("struct");
-                else
-                    aggregate = QLatin1String("union");
-                writeBrief(&comment,
-                           m_printer.prettyName(classSpec->name->name),
-                           QLatin1String("The"),
-                           aggregate);
-                briefWritten = true;
-            }
-        } else if (EnumSpecifierAST *enumSpec = spec->asEnumSpecifier()) {
-            if (enumSpec->name) {
-                writeBrief(&comment,
-                           m_printer.prettyName(enumSpec->name->name),
-                           QLatin1String("The"),
-                           QLatin1String("enum"));
-                briefWritten = true;
-            }
+
+        if (facts.returnsSomething) {
+            writeContinuation(&comment);
+            writeCommand(&comment, ReturnCommand);
         }
-        if (!briefWritten)
-            writeNewLine(&comment);
+    } else if (facts.kind == DeclarationFacts::Aggregate && m_settings.generateBrief) {
+        writeBrief(&comment, facts.name, QLatin1String("The"), facts.aggregate);
     } else {
         writeNewLine(&comment);
     }
