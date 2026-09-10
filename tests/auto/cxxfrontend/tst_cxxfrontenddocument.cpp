@@ -173,6 +173,7 @@ private slots:
     void localsOfNestedBlocksAreTheirOwn();
     void localsOfALambdaBelongToItsFunction();
     void localsSayWhatTheyWereDeclaredAs();
+    void localsFromTheParameterList();
     void localsUsedThroughAMacro();
     void noLocalsOutsideAFunction();
 };
@@ -751,6 +752,16 @@ void tst_cxxfrontenddocument::localsSayWhatTheyWereDeclaredAs()
                                      "<stdin>");
     QCOMPARE(describeDeclarations(lambda.localsAt(1, 17)),
              QStringList({"g variable -", "p parameter -"}));
+}
+
+// A cursor on a parameter's own declaration is inside the function as much as
+// one in its body: what the editor asks about is the definition the cursor is
+// in, parameter list and all.
+void tst_cxxfrontenddocument::localsFromTheParameterList()
+{
+    const CxxFrontendDocument document("int f(int a) { return a; }\n", "<stdin>");
+
+    QCOMPARE(describeLocals(document.localsAt(1, 11)), QStringList("a @1:11+1 @1:23+1"));
 }
 
 // A local written as a macro's argument is used where it is written, the same

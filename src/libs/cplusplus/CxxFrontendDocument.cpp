@@ -378,6 +378,12 @@ public:
     // The innermost function written around \a location, or null.
     [[nodiscard]] cxx::FunctionSymbol *functionAround(cxx::SourceLocation location) const;
 
+    // The function whose definition \a location is written inside, which
+    // takes in what functionAround does not: the return type, the name and
+    // the parameter list, none of which are inside the scope the function
+    // opens.
+    [[nodiscard]] cxx::FunctionSymbol *definitionAround(cxx::SourceLocation location) const;
+
     // Whether a using declaration in this file names \a symbol, or brought in
     // the function \a symbol is.
     [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
@@ -523,6 +529,30 @@ cxx::FunctionSymbol *CxxFrontendDocument::Private::functionAround(
     };
     walk(global);
     return found;
+}
+
+cxx::FunctionSymbol *CxxFrontendDocument::Private::definitionAround(
+    cxx::SourceLocation location) const
+{
+    if (!location || !unit.ast())
+        return nullptr;
+
+    // Outermost wins here as well, and the walk reaches the outermost
+    // definition first.
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+        if (!definition || !definition->symbol)
+            continue;
+
+        const unsigned first = definition->firstSourceLocation().index();
+        const unsigned last = definition->lastSourceLocation().index();
+        if (location.index() >= first && location.index() < last)
+            return definition->symbol;
+    }
+    return nullptr;
 }
 
 bool CxxFrontendDocument::Private::isThroughUsingDeclaration(cxx::Symbol *symbol) const
@@ -1098,8 +1128,18 @@ QList<CxxFrontendDocument::Occurrence> CxxFrontendDocument::occurrencesOf(
 QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!d->unit.ast())
+        return {};
+
+    // A function reaches as far as its definition is written, which is more
+    // than the scope it opens: a cursor on a parameter's own declaration is
+    // in the function too, and asking about a parameter from where it is
+    // declared is how anyone reading a signature does it. The built-in model
+    // reads the definition the cursor is in for the same reason.
     cxx::FunctionSymbol *function = d->functionAround(location);
-    if (!function || !d->unit.ast())
+    if (!function)
+        function = d->definitionAround(location);
+    if (!function)
         return {};
 
     QList<Local> locals;
