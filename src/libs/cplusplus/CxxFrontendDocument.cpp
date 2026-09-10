@@ -499,7 +499,16 @@ public:
     // Turns what the parser found at the completion point into the names a
     // caller can offer.
     void recordCompletion(const cxx::CodeCompletionContext &context);
-    [[nodiscard]] QStringList visibleNamesIn(cxx::ScopeSymbol *scope) const;
+    [[nodiscard]] QList<CxxFrontendDocument::Completion::Candidate> visibleMembersIn(
+        cxx::ScopeSymbol *scope) const;
+
+    // The keyword a class was written with, which the symbol does not
+    // record: the token before its name.
+    [[nodiscard]] cxx::TokenKind classKeyOf(cxx::Symbol *symbol) const;
+
+    // What a proposal or an outline shows for \a symbol.
+    [[nodiscard]] CxxFrontendDocument::Completion::Candidate describeCandidate(
+        cxx::Symbol *symbol) const;
 
     QList<CxxFrontendDocument::Symbol> symbols;
     // Kept alongside symbols, same indices: the model behind each entry.
@@ -626,12 +635,7 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         // point at for them.
         symbol.isGenerated = unit.tokenAt(location).macroGenerated();
 
-        // Which keyword a class was written with is not on the symbol, and
-        // the token before its name is that keyword. One written with
-        // something in between -- an attribute, an export macro -- reads as
-        // a class, which is what it is called when nobody can tell.
-        if (location.index() > 0)
-            classKey = unit.tokenAt(cxx::SourceLocation{location.index() - 1}).kind();
+        classKey = classKeyOf(member);
     }
 
     if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member))
@@ -896,11 +900,44 @@ QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
     return found;
 }
 
-QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope) const
+cxx::TokenKind CxxFrontendDocument::Private::classKeyOf(cxx::Symbol *symbol) const
 {
-    QStringList names;
+    // One written with something in between -- an attribute, an export
+    // macro -- reads as a class, which is what it is called when nobody can
+    // tell.
+    const cxx::SourceLocation location = symbol->location();
+    if (!location || location.index() == 0)
+        return cxx::TokenKind::T_EOF_SYMBOL;
+    return unit.tokenAt(cxx::SourceLocation{location.index() - 1}).kind();
+}
+
+CxxFrontendDocument::Completion::Candidate CxxFrontendDocument::Private::describeCandidate(
+    cxx::Symbol *symbol) const
+{
+    Completion::Candidate candidate;
+    candidate.name = symbol->name() ? fromStd(cxx::to_string(symbol->name())) : QString();
+    candidate.icon = iconTypeOf(symbol, classKeyOf(symbol));
+
+    const cxx::TypePrintOptions options{
+        .omitFunctionReturnType = !config.settings.showReturnTypes,
+        .omitEnclosingScope = true,
+        .omitExceptionSpecification = true,
+    };
+    candidate.detail = symbol->type()
+                           ? applyStarBinding(fromStd(cxx::to_string(symbol->type(),
+                                                                     candidate.name.toStdString(),
+                                                                     options)),
+                                              config.settings)
+                           : candidate.name;
+    return candidate;
+}
+
+QList<CxxFrontendDocument::Completion::Candidate>
+CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope) const
+{
+    QList<Completion::Candidate> candidates;
     if (!scope)
-        return names;
+        return candidates;
 
     // What the scope itself declares, and what it inherits. Walking the bases
     // here rather than asking lookup, because lookup answers about one name
@@ -934,7 +971,7 @@ QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope
                 if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
                     for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
                         if (function->name() && isWritten(function))
-                            names.append(fromStd(cxx::to_string(function->name())));
+                            candidates.append(describeCandidate(function));
                     }
                     continue;
                 }
@@ -943,7 +980,7 @@ QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope
                 if (dynamic_cast<cxx::BaseClassSymbol *>(member))
                     continue;
                 if (member->name())
-                    names.append(fromStd(cxx::to_string(member->name())));
+                    candidates.append(describeCandidate(member));
             }
 
             if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(current)) {
@@ -958,9 +995,20 @@ QStringList CxxFrontendDocument::Private::visibleNamesIn(cxx::ScopeSymbol *scope
 
     QSet<cxx::ScopeSymbol *> seen;
     collect(scope, seen);
-    names.removeDuplicates();
-    names.sort();
-    return names;
+
+    // One entry per name, in the order a proposal shows them.
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const Completion::Candidate &left,
+                        const Completion::Candidate &right) {
+                         return left.name < right.name;
+                     });
+    candidates.erase(std::unique(candidates.begin(), candidates.end(),
+                                 [](const Completion::Candidate &left,
+                                    const Completion::Candidate &right) {
+                                     return left.name == right.name;
+                                 }),
+                     candidates.end());
+    return candidates;
 }
 
 void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionContext &context)
@@ -973,16 +1021,16 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
 
             if constexpr (std::is_same_v<T, cxx::UnqualifiedCompletionContext>) {
                 completion.kind = Kind::Unqualified;
-                completion.candidates = visibleNamesIn(what.scope);
+                completion.candidates = visibleMembersIn(what.scope);
             } else if constexpr (std::is_same_v<T, cxx::ScopeCompletionContext>) {
                 completion.kind = Kind::Scope;
-                completion.candidates = visibleNamesIn(what.scope);
+                completion.candidates = visibleMembersIn(what.scope);
             } else if constexpr (std::is_same_v<T, cxx::MemberCompletionContext>) {
                 completion.kind = Kind::Member;
                 if (what.objectType) {
                     completion.objectType = fromStd(
                         cxx::to_string(what.objectType, "", {.omitEnclosingScope = true}));
-                    completion.candidates = visibleNamesIn(classScopeOf(what.objectType));
+                    completion.candidates = visibleMembersIn(classScopeOf(what.objectType));
                 }
             } else if constexpr (std::is_same_v<T, cxx::ArgumentHintsContext>) {
                 completion.activeParameter = what.activeParameter;

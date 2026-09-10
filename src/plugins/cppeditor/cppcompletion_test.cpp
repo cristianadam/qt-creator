@@ -3081,7 +3081,9 @@ void CompletionTest::testCxxFrontendCompletion()
     const CPlusPlus::CxxFrontendDocument document(QString::fromUtf8(source), "file.h",
                                                   {.completionLine = line,
                                                    .completionColumn = column});
-    QStringList fromModel = document.completion().candidates;
+    QStringList fromModel;
+    for (const auto &candidate : document.completion().candidates)
+        fromModel.append(candidate.name);
     fromModel.sort();
 
     QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));

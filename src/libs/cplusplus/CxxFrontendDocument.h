@@ -352,8 +352,17 @@ public:
         Kind kind = Kind::None;
         // What is being looked into, for a member or scope completion.
         QString objectType;
-        // The names on offer.
-        QStringList candidates;
+
+        // One of the things that could be written: its name, the
+        // declaration it stands for as Overview would print it, and the
+        // icon that says what it is -- which is what a proposal shows.
+        struct Candidate
+        {
+            QString name;
+            QString detail;
+            Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Unknown;
+        };
+        QList<Candidate> candidates;
 
         // Inside the parentheses of a call both apply at once: a name can be
         // written there, and the call it belongs to has a signature worth

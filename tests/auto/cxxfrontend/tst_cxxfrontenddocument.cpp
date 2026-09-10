@@ -137,6 +137,17 @@ QStringList normalize(const QStringList &names)
     return result;
 }
 
+// The names a completion offers, which is what most of these cases are
+// about; the detail and the icon are compared against the built-in
+// proposal in the plugin's own test.
+QStringList namesOf(const QList<CxxFrontendDocument::Completion::Candidate> &candidates)
+{
+    QStringList names;
+    for (const CxxFrontendDocument::Completion::Candidate &candidate : candidates)
+        names.append(candidate.name);
+    return names;
+}
+
 } // namespace
 
 class tst_cxxfrontenddocument : public QObject
@@ -408,8 +419,8 @@ void tst_cxxfrontenddocument::completeAfterAnArrow()
 
     QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
     QCOMPARE(completion.objectType, QString("S*"));
-    QVERIFY(completion.candidates.contains("m"));
-    QVERIFY(completion.candidates.contains("g"));
+    QVERIFY(namesOf(completion.candidates).contains("m"));
+    QVERIFY(namesOf(completion.candidates).contains("g"));
 }
 
 void tst_cxxfrontenddocument::completeAfterADot()
@@ -419,7 +430,7 @@ void tst_cxxfrontenddocument::completeAfterADot()
 
     QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
     QCOMPARE(completion.objectType, QString("S"));
-    QVERIFY(completion.candidates.contains("m"));
+    QVERIFY(namesOf(completion.candidates).contains("m"));
 }
 
 void tst_cxxfrontenddocument::completeAnUnqualifiedName()
@@ -428,7 +439,7 @@ void tst_cxxfrontenddocument::completeAnUnqualifiedName()
         = completeAt("void f() { int local; $ }\n");
 
     QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Unqualified);
-    QVERIFY(completion.candidates.contains("local"));
+    QVERIFY(namesOf(completion.candidates).contains("local"));
 }
 
 void tst_cxxfrontenddocument::completeOffersInheritedMembers()
@@ -438,9 +449,9 @@ void tst_cxxfrontenddocument::completeOffersInheritedMembers()
                      "void f(D *d) { d->$ }\n");
 
     QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Member);
-    QVERIFY(completion.candidates.contains("own"));
-    QVERIFY2(completion.candidates.contains("inherited"),
-             qPrintable(completion.candidates.join(", ")));
+    QVERIFY(namesOf(completion.candidates).contains("own"));
+    QVERIFY2(namesOf(completion.candidates).contains("inherited"),
+             qPrintable(namesOf(completion.candidates).join(", ")));
 }
 
 void tst_cxxfrontenddocument::argumentHints()
