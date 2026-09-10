@@ -8,6 +8,15 @@
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
@@ -130,6 +139,11 @@ class ConvertToCamelCase : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         addOperation(interface, builtinNameAt(interface), result);
     }
 
@@ -140,6 +154,52 @@ class ConvertToCamelCase : public CppQuickFixFactory
             result << new ConvertToCamelCaseOp(interface, name.name, name.place, testMode());
     }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same on the cxx-frontend model's tree. The two kinds of node the
+    // built-in path takes a name off are here too: a name written on its own,
+    // and a namespace definition, whose name is a token of it rather than a
+    // node.
+    //
+    // Nothing asks whether the file parsed. What a name says and where it
+    // stands are the lexer's answers, and renaming it moves no construct.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const std::shared_ptr<const CxxFrontendSnapshot> model
+            = cxxFrontendModel(file->filePath());
+        if (!model)
+            return false;
+        const CxxFrontendDocument * const document
+            = model->document(file->filePath().toFSPathString());
+        if (!document)
+            return false;
+
+        const QTextCursor cursor = file->cursor();
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+        if (path.isEmpty())
+            return true;
+
+        cxx::SourceLocation identifier;
+        if (auto * const nameId = dynamic_cast<cxx::NameIdAST *>(path.last()))
+            identifier = nameId->identifierLoc;
+        else if (auto * const definition
+                 = dynamic_cast<cxx::NamespaceDefinitionAST *>(path.last()))
+            identifier = definition->identifierLoc;
+        if (!identifier)
+            return true;
+
+        const CxxAstRange range = cxxTokenRangeAt(*document, identifier);
+        if (!range.isValid())
+            return false; // A macro wrote the name: there is nothing here to rename.
+
+        const ChangeSet::Range place(file->position(range.startLine, range.startColumn),
+                                     file->position(range.endLine, range.endColumn));
+        addOperation(interface, {file->textOf(place), place}, result);
+        return true;
+    }
+#endif
 };
 
 #ifdef WITH_TESTS
