@@ -225,7 +225,15 @@ bool AbstractProcessStep::handleProcessDone(const Process &process)
 {
     const OutputFormat format = process.result() == ProcessResult::FinishedWithSuccess
                                     ? OutputFormat::NormalMessage : OutputFormat::ErrorMessage;
-    emit addOutput(process.exitMessage(), format);
+    // Not process.exitMessage(): that repeats the real command line, and a step with
+    // a password in it has concealed that in the displayed parameters.
+    const CommandLine displayed{d->m_displayedParams->effectiveCommand(),
+                                d->m_displayedParams->effectiveArguments(), CommandLine::Raw};
+    QString message = Process::exitMessage(displayed, process.result(), process.exitCode(),
+                                           process.processDuration());
+    if (process.result() == ProcessResult::StartFailed)
+        message += ' ' + process.errorString();
+    emit addOutput(message, format);
     if (d->outputFormatter && d->outputFormatter->hasFatalErrors())
         return false;
     return process.result() == ProcessResult::FinishedWithSuccess;
