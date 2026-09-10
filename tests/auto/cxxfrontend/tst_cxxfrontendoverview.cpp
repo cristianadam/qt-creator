@@ -18,6 +18,7 @@
 #include <cplusplus/Control.h>
 #include <functional>
 #include <cplusplus/CxxFrontendOverview.h>
+#include <cplusplus/Icons.h>
 #include <cplusplus/Literals.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Scope.h>
@@ -79,6 +80,95 @@ QStringList cxxFrontend(const QByteArray &source, const Overview &settings)
     return result;
 }
 
+// The icon by name, so that a disagreement says which one was wanted rather
+// than which number.
+QString iconName(Utils::CodeModelIcon::Type icon)
+{
+    static const QStringList names{
+        "Class", "Struct", "Enum", "Enumerator", "FuncPublic", "FuncProtected",
+        "FuncPrivate", "FuncPublicStatic", "FuncProtectedStatic", "FuncPrivateStatic",
+        "Namespace", "VarPublic", "VarProtected", "VarPrivate", "VarPublicStatic",
+        "VarProtectedStatic", "VarPrivateStatic", "Signal", "SlotPublic", "SlotProtected",
+        "SlotPrivate", "Keyword", "Macro", "Property", "Unknown"};
+    return names.value(int(icon), "?");
+}
+
+// One line per symbol, the way an outline draws it: how deep it sits, its
+// icon, and its name followed by the two pieces that come after -- a
+// function's parameter list and the type after the colon.
+QString outlineLine(int depth, Utils::CodeModelIcon::Type icon, const QString &name,
+                    const QString &signature, const QString &valueType)
+{
+    QString line = QString(depth * 2, ' ') + iconName(icon) + ' ' + name + signature;
+    if (!valueType.isEmpty())
+        line += ": " + valueType;
+    return line;
+}
+
+// What the built-in model would have an outline draw. The rule is
+// SymbolItem::data()'s, less the Objective-C cases the other model has
+// nothing to say about and the template case, which the outline spells out
+// of the template's own parameters.
+QStringList builtInOutline(const QByteArray &source)
+{
+    Control control;
+
+    const StringLiteral *fileId = control.stringLiteral("<stdin>");
+    TranslationUnit unit(&control, fileId);
+    unit.setSource(source.constData(), source.size());
+    unit.setLanguageFeatures(LanguageFeatures::defaultFeatures());
+    unit.parse(TranslationUnit::ParseTranslationUnit);
+    if (!unit.ast())
+        return {};
+
+    Namespace *globals = control.newNamespace(0, nullptr);
+    Bind bind(&unit);
+    bind(unit.ast()->asTranslationUnit(), globals);
+
+    const Overview settings; // the outline's own, with its defaults
+    QStringList result;
+    const std::function<void(Scope *, int)> walk = [&](Scope *scope, int depth) {
+        for (int i = 0, count = scope->memberCount(); i < count; ++i) {
+            CPlusPlus::Symbol *member = scope->memberAt(i);
+            if (!member->name())
+                continue;
+
+            QString signature;
+            QString valueType;
+            if (!member->asScope() || member->asFunction()) {
+                valueType = settings.prettyType(member->type());
+                if (Function *function = member->type()->asFunctionType()) {
+                    signature = valueType;
+                    valueType = settings.prettyType(function->returnType());
+                }
+            }
+            result.append(outlineLine(depth, CPlusPlus::Icons::iconTypeForSymbol(member),
+                                      settings.prettyName(member->name()), signature,
+                                      valueType));
+            if (Scope *inner = member->asScope())
+                walk(inner, depth + 1);
+        }
+    };
+    walk(globals, 0);
+    return result;
+}
+
+QStringList cxxFrontendOutline(const QByteArray &source)
+{
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const QList<CxxFrontendDocument::Symbol> symbols = document.symbols();
+    QStringList result;
+    for (const CxxFrontendDocument::Symbol &symbol : symbols) {
+        int depth = 0;
+        for (int parent = symbol.parent; parent >= 0; parent = symbols.at(parent).parent)
+            ++depth;
+        result.append(outlineLine(depth, symbol.icon, symbol.name, symbol.signature,
+                                  symbol.valueType));
+    }
+    return result;
+}
+
 QString firstDifference(const QStringList &expected, const QStringList &actual)
 {
     const int count = qMin(expected.size(), actual.size());
@@ -127,6 +217,17 @@ const char *knownDivergence(const QString &row)
     return nullptr;
 }
 
+// The same, for what an outline draws. A row that diverges in its
+// declaration diverges here too, so those are listed again; anything else is
+// a divergence the icon or the tree brought with it.
+const char *knownOutlineDivergence(const QString &row)
+{
+    if (const char *reason = knownDivergence(row))
+        return reason;
+
+    return nullptr;
+}
+
 } // namespace
 
 class tst_cxxfrontendoverview : public QObject
@@ -136,6 +237,10 @@ class tst_cxxfrontendoverview : public QObject
 private slots:
     void declarations_data();
     void declarations();
+
+    void outline_data();
+    void outline();
+    void outlineMarksWhatIsNotThere();
 
     void starBinding();
     void unsupportedSettings();
@@ -178,6 +283,48 @@ void tst_cxxfrontendoverview::declarations()
     if (const char *reason = knownDivergence(QTest::currentDataTag()))
         QEXPECT_FAIL("", reason, Abort);
     QVERIFY2(difference.isEmpty(), qPrintable(difference));
+}
+
+// An outline shows more of a symbol than its declaration: an icon for what it
+// is and who may see it, the tree it sits in, and the name with its type
+// after it rather than around it. The same declarations as above, drawn.
+void tst_cxxfrontendoverview::outline_data()
+{
+    declarations_data();
+}
+
+void tst_cxxfrontendoverview::outline()
+{
+    QFETCH(QByteArray, source);
+
+    const QString difference = firstDifference(builtInOutline(source),
+                                               cxxFrontendOutline(source));
+    if (const char *reason = knownOutlineDivergence(QTest::currentDataTag()))
+        QEXPECT_FAIL("", reason, Abort);
+    QVERIFY2(difference.isEmpty(), qPrintable(difference));
+}
+
+// The two things an outline needs that are not on the screen: whether a
+// symbol was written by a macro, which is how Q_OBJECT declares things, and
+// whether a class was named without its body, which the outline greys out.
+void tst_cxxfrontendoverview::outlineMarksWhatIsNotThere()
+{
+    const QByteArray source =
+        "#define DECLARE_THINGS int fromMacro;\n"
+        "class Forward;\n"
+        "class Whole { DECLARE_THINGS int written; };\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    QStringList marked;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+        marked.append(QString("%1%2%3")
+                          .arg(symbol.name,
+                               symbol.isGenerated ? " generated" : "",
+                               symbol.isForwardDeclaration ? " forward" : ""));
+    }
+
+    QCOMPARE(marked, QStringList({"Forward forward", "Whole", "fromMacro generated",
+                                  "written"}));
 }
 
 // The one Overview knob that is honoured, since it is the one that decides

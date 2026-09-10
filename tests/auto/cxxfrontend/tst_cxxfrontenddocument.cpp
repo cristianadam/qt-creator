@@ -483,6 +483,20 @@ void tst_cxxfrontenddocument::unsupportedQueries()
     QVERIFY(!unsupported.contains("Snapshot"));
     QVERIFY(unsupported.contains("the line each include is on"));
 
+    // A slot is written with a macro that expands to an access specifier, so
+    // the parser is handed a member function and nothing says otherwise --
+    // asserted here rather than left to be found in an outline.
+    QVERIFY(unsupported.contains("whether a member function is a signal or a slot"));
+    const CxxFrontendDocument qtClass("#define slots\n"
+                                      "class C { public slots: void s(); };\n",
+                                      "<stdin>");
+    QStringList slotIcons;
+    for (const CxxFrontendDocument::Symbol &symbol : qtClass.symbols()) {
+        if (symbol.name == "s")
+            slotIcons.append(QString::number(int(symbol.icon)));
+    }
+    QCOMPARE(slotIcons, QStringList(QString::number(int(Utils::CodeModelIcon::FuncPublic))));
+
     // What the list said before, and it went stale the moment the document
     // began recording which macros it consulted. The document answers it, so
     // asking is enough to say the entry had to go; whether a header is reused

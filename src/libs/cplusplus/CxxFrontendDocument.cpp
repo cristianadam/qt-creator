@@ -108,6 +108,12 @@ QString applyStarBinding(const QString &declaration, const Overview &settings)
     static const QRegularExpression star(QStringLiteral(R"((\S)([*&]+) (\w))"));
     QString result = declaration;
     result.replace(star, QStringLiteral("\\1 \\2\\3"));
+
+    // A type printed without a name still has the space the name would have
+    // followed: Overview writes "char *" where the printer writes "char*",
+    // and an outline shows exactly that after the colon.
+    static const QRegularExpression trailingStar(QStringLiteral(R"((\S)([*&]+)$)"));
+    result.replace(trailingStar, QStringLiteral("\\1 \\2"));
     return result;
 }
 
@@ -144,6 +150,71 @@ QString classNamedBy(const cxx::Type *type)
     // making -- __lambda_0. Nobody wrote it, so nobody can mean it.
     const QString name = fromStd(cxx::to_string(cls->symbol()->name()));
     return name.startsWith("__") ? QString() : name;
+}
+
+// Which icon stands for a symbol, as Icons::iconTypeForSymbol() decides it
+// for a built-in one: what the thing is, who may see it, and whether it
+// belongs to the class rather than to an object.
+//
+// Two of that function's answers cannot be reached from here. A Qt signal or
+// slot is one: signals and slots are macros that expand to an access
+// specifier, so what arrives is a plain member function -- see
+// unsupportedQueries(). Objective-C is the other, and this front end has
+// none.
+// \a classKey is the keyword a class was written with, which the symbol does
+// not record and the caller reads off the token before the name.
+Utils::CodeModelIcon::Type iconTypeOf(cxx::Symbol *symbol, cxx::TokenKind classKey)
+{
+    using namespace Utils::CodeModelIcon;
+
+    using Icon = Utils::CodeModelIcon::Type;
+    const auto byAccess = [symbol](Icon isPublic, Icon isProtected, Icon isPrivate) {
+        switch (symbol->accessSpecifier()) {
+        case cxx::AccessSpecifier::kProtected:
+            return isProtected;
+        case cxx::AccessSpecifier::kPrivate:
+            return isPrivate;
+        default:
+            return isPublic;
+        }
+    };
+
+    if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol)) {
+        return function->isStatic()
+                   ? byAccess(FuncPublicStatic, FuncProtectedStatic, FuncPrivateStatic)
+                   : byAccess(FuncPublic, FuncProtected, FuncPrivate);
+    }
+    if (dynamic_cast<cxx::EnumeratorSymbol *>(symbol))
+        return Enumerator;
+    if (auto *variable = dynamic_cast<cxx::VariableSymbol *>(symbol)) {
+        return variable->isStatic() ? byAccess(VarPublicStatic, VarProtectedStatic,
+                                               VarPrivateStatic)
+                                    : byAccess(VarPublic, VarProtected, VarPrivate);
+    }
+    if (auto *field = dynamic_cast<cxx::FieldSymbol *>(symbol)) {
+        return field->isStatic() ? byAccess(VarPublicStatic, VarProtectedStatic,
+                                            VarPrivateStatic)
+                                 : byAccess(VarPublic, VarProtected, VarPrivate);
+    }
+    if (dynamic_cast<cxx::EnumSymbol *>(symbol) || dynamic_cast<cxx::ScopedEnumSymbol *>(symbol))
+        return Utils::CodeModelIcon::Enum;
+    if (dynamic_cast<cxx::ClassSymbol *>(symbol))
+        return classKey == cxx::TokenKind::T_STRUCT ? Struct : Utils::CodeModelIcon::Class;
+    if (dynamic_cast<cxx::NamespaceSymbol *>(symbol)
+        || dynamic_cast<cxx::NamespaceAliasSymbol *>(symbol)
+        || dynamic_cast<cxx::UsingDeclarationSymbol *>(symbol)) {
+        return Utils::CodeModelIcon::Namespace;
+    }
+    if (dynamic_cast<cxx::TypeParameterSymbol *>(symbol)
+        || dynamic_cast<cxx::TemplateTypeParameterSymbol *>(symbol)) {
+        return Utils::CodeModelIcon::Class;
+    }
+    // A name for a type is not a type: the built-in model records a typedef
+    // as a declaration and shows it with the icon of one, alias or not.
+    if (dynamic_cast<cxx::TypeAliasSymbol *>(symbol))
+        return byAccess(VarPublic, VarProtected, VarPrivate);
+
+    return Unknown;
 }
 
 // Where to point for a name, and whether that place defines the thing.
@@ -356,8 +427,10 @@ public:
 
     // Walks a scope, describing what it declares and remembering the symbol
     // itself so that a position can be resolved back to it.
-    void collect(cxx::ScopeSymbol *scope, const QStringList &enclosing);
-    void describe(cxx::Symbol *member, const QStringList &enclosing);
+    // \a parent is where in symbols the scope being walked was recorded, or
+    // -1 for the file itself.
+    void collect(cxx::ScopeSymbol *scope, const QStringList &enclosing, int parent = -1);
+    void describe(cxx::Symbol *member, const QStringList &enclosing, int parent);
 
     [[nodiscard]] bool isFromMainFile(cxx::Symbol *symbol) const;
 
@@ -435,7 +508,7 @@ bool CxxFrontendDocument::Private::isFromMainFile(cxx::Symbol *symbol) const
 }
 
 void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
-                                           const QStringList &enclosing)
+                                           const QStringList &enclosing, int parent)
 {
     for (cxx::Symbol *member : scope->members()) {
         if (member->isHidden() || !isFromMainFile(member))
@@ -450,16 +523,16 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
         // What the source declared are the functions in it.
         if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
             for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions())
-                describe(function, enclosing);
+                describe(function, enclosing, parent);
             continue;
         }
 
-        describe(member, enclosing);
+        describe(member, enclosing, parent);
     }
 }
 
 void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
-                                            const QStringList &enclosing)
+                                            const QStringList &enclosing, int parent)
 {
     const QString name = member->name() ? fromStd(cxx::to_string(member->name())) : QString();
     if (name.isEmpty())
@@ -468,6 +541,7 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     CxxFrontendDocument::Symbol symbol;
     symbol.name = name;
     symbol.qualified = enclosing;
+    symbol.parent = parent;
 
     // Overview prints a declaration as it would be written in the scope it
     // was written in, so the path to a name is not part of it.
@@ -481,17 +555,50 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
                                                     config.settings)
                                  : name;
 
+    // The same type, in the two pieces an outline writes it in. A function
+    // hands over its parameter list and then its return type; anything that
+    // is not a scope hands over its type; a scope has nothing to add to its
+    // name.
+    if (auto *functionType = member->type()
+                                 ? cxx::type_cast<cxx::FunctionType>(member->type())
+                                 : nullptr) {
+        symbol.signature = fromStd(cxx::to_string(functionType, "",
+                                                  {.omitFunctionReturnType = true,
+                                                   .omitEnclosingScope = true}));
+        symbol.valueType = applyStarBinding(
+            fromStd(cxx::to_string(functionType->returnType(), "", options)), config.settings);
+    } else if (member->type() && !member->asScopeSymbol()) {
+        symbol.valueType = applyStarBinding(
+            fromStd(cxx::to_string(member->type(), "", options)), config.settings);
+    }
+
+    cxx::TokenKind classKey = cxx::TokenKind::T_EOF_SYMBOL;
     if (const cxx::SourceLocation location = member->location()) {
         const cxx::SourcePosition position = unit.tokenStartPosition(location);
         symbol.line = int(position.line);
         symbol.column = int(position.column);
+
+        // Q_OBJECT declares members nobody wrote, and there is no text to
+        // point at for them.
+        symbol.isGenerated = unit.tokenAt(location).macroGenerated();
+
+        // Which keyword a class was written with is not on the symbol, and
+        // the token before its name is that keyword. One written with
+        // something in between -- an attribute, an export macro -- reads as
+        // a class, which is what it is called when nobody can tell.
+        if (location.index() > 0)
+            classKey = unit.tokenAt(cxx::SourceLocation{location.index() - 1}).kind();
     }
+
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member))
+        symbol.isForwardDeclaration = !cls->isComplete();
+    symbol.icon = iconTypeOf(member, classKey);
 
     symbols.append(symbol);
     cxxSymbols.push_back(member);
 
     if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
-        collect(inner, enclosing + QStringList(name));
+        collect(inner, enclosing + QStringList(name), int(symbols.size()) - 1);
 }
 
 cxx::FunctionSymbol *CxxFrontendDocument::Private::functionAround(
@@ -1465,6 +1572,11 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // how anything can be said about an include that is not used; this
         // reports the headers and not the lines.
         "the line each include is on",
+        // Whether a member function is a Qt signal or slot. Both are macros
+        // that expand to an access specifier, so what reaches the parser is
+        // an ordinary member function and an outline gives it an ordinary
+        // icon.
+        "whether a member function is a signal or a slot",
     };
 }
 

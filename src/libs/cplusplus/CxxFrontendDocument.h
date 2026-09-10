@@ -5,6 +5,8 @@
 
 #include <cplusplus/Overview.h>
 
+#include <utils/utilsicons.h>
+
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -86,6 +88,34 @@ public:
         QStringList qualified; // the enclosing scopes, outermost first
         int line = 0;
         int column = 0;
+
+        // The symbol this one is declared inside, as an index into the list
+        // it came from, or -1 at file scope. The list is in the order the
+        // file declares things, so a scope always comes before its members,
+        // and the two together are the tree an outline draws.
+        int parent = -1;
+
+        // The two halves an outline writes after the name, printed apart
+        // because Overview prints them apart: a function's parameter list,
+        // and the type after the colon -- its return type, or the type of
+        // whatever else this is. Both empty for a scope, which has no type
+        // to show.
+        QString signature;
+        QString valueType;
+
+        // Which icon stands for it, the question Icons::iconTypeForSymbol()
+        // answers of a built-in symbol: what it is, who may see it, and
+        // whether it belongs to the class rather than to an object.
+        Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Unknown;
+
+        // Written by a macro's replacement rather than by the file, the way
+        // Q_OBJECT declares things. An outline leaves those out: there is no
+        // text of its own to point at.
+        bool isGenerated = false;
+
+        // A class named without its body, which an outline greys out because
+        // the thing itself is somewhere else.
+        bool isForwardDeclaration = false;
     };
     const QList<Symbol> &symbols() const;
 
