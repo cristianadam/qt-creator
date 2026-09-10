@@ -12,6 +12,15 @@
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#endif
+
 #include <functional>
 
 #ifdef WITH_TESTS
@@ -239,6 +248,161 @@ void checkControlStatements(
 {
     (... || checkControlStatementsHelper<Statements>(interface, constraint, makeOp));
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same statement, on the cxx-frontend model's tree. One struct for every
+// kind of control statement, as above; cxx points at a token where the
+// built-in front end counts them, which is the only difference.
+struct CxxControlStatementParts
+{
+    QList<cxx::SourceLocation> triggers;
+    cxx::StatementAST *body = nullptr;
+    cxx::SourceLocation openBraceAfter;
+    cxx::SourceLocation closeBraceBefore;
+    bool spaceAfterCloseBrace = false;
+};
+
+std::optional<CxxControlStatementParts> cxxPartsOf(cxx::AST *node)
+{
+    if (auto * const s = dynamic_cast<cxx::IfStatementAST *>(node)) {
+        return CxxControlStatementParts{{s->ifLoc, s->elseLoc}, s->statement, s->rparenLoc,
+                                        s->elseStatement ? s->elseLoc : cxx::SourceLocation{},
+                                        true};
+    }
+    if (auto * const s = dynamic_cast<cxx::DoStatementAST *>(node))
+        return CxxControlStatementParts{{s->doLoc}, s->statement, s->doLoc, s->whileLoc, true};
+    if (auto * const s = dynamic_cast<cxx::WhileStatementAST *>(node))
+        return CxxControlStatementParts{{s->whileLoc}, s->statement, s->rparenLoc, {}, false};
+    if (auto * const s = dynamic_cast<cxx::ForStatementAST *>(node))
+        return CxxControlStatementParts{{s->forLoc}, s->statement, s->rparenLoc, {}, false};
+    if (auto * const s = dynamic_cast<cxx::ForRangeStatementAST *>(node))
+        return CxxControlStatementParts{{s->forLoc}, s->statement, s->rparenLoc, {}, false};
+    return {};
+}
+
+using CxxStmtConstraint = std::function<bool(cxx::StatementAST *, bool &)>;
+
+// What checkControlStatementsHelper() collects, worked out on the other
+// tree: the branches this fix rewrites, and the final else if it takes that
+// too. Empty where the cursor is not on the keyword of a control statement,
+// and where what is written rules the fix out -- in either case the built-in
+// path answers, and answers the same nothing.
+struct CxxControlStatements
+{
+    QList<CxxControlStatementParts> statements;
+    cxx::StatementAST *elseStatement = nullptr;
+    cxx::SourceLocation elseLoc;
+
+    bool isEmpty() const { return statements.isEmpty() && !elseStatement; }
+};
+
+CxxControlStatements cxxControlStatementsUnderCursor(const CxxFrontendDocument &document,
+                                                    const CppQuickFixInterface &interface,
+                                                    const CxxStmtConstraint &constraint)
+{
+    const CppRefactoringFilePtr file = interface.currentFile();
+
+    // The editor counts from zero and the tree from one.
+    const QTextCursor cursor = file->cursor();
+    const QList<cxx::AST *> path
+        = cxxAstPathAt(document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+    if (path.isEmpty())
+        return {};
+
+    const std::optional<CxxControlStatementParts> parts = cxxPartsOf(path.last());
+    if (!parts)
+        return {};
+
+    // Not something to rewrite: where the front end stumbled inside this
+    // statement its tree does not match the text, and the braces would go
+    // in the wrong places. The built-in path answers instead.
+    if (cxxAstWasReadWithErrors(document, path.last()))
+        return {};
+
+    const bool onAKeyword = Utils::anyOf(parts->triggers, [&](cxx::SourceLocation trigger) {
+        const CxxAstRange range = cxxTokenRangeAt(document, trigger);
+        if (!range.isValid())
+            return false;
+        const int position = file->cursor().selectionStart();
+        return position >= file->position(range.startLine, range.startColumn)
+               && position <= file->position(range.endLine, range.endColumn);
+    });
+    if (!onAKeyword)
+        return {};
+
+    CxxControlStatements found;
+    bool abort = false;
+    if (parts->body && constraint(parts->body, abort))
+        found.statements << *parts;
+    if (abort)
+        return {};
+
+    if (auto * const ifStatement = dynamic_cast<cxx::IfStatementAST *>(path.last())) {
+        cxx::IfStatementAST *current = ifStatement;
+        for (found.elseStatement = current->elseStatement, found.elseLoc = current->elseLoc;
+             found.elseStatement
+             && (current = dynamic_cast<cxx::IfStatementAST *>(found.elseStatement));
+             found.elseStatement = current->elseStatement, found.elseLoc = current->elseLoc) {
+            if (current->statement && constraint(current->statement, abort))
+                found.statements << *cxxPartsOf(current);
+            if (abort)
+                return {};
+        }
+        if (found.elseStatement
+            && (dynamic_cast<cxx::IfStatementAST *>(found.elseStatement)
+                || !constraint(found.elseStatement, abort))) {
+            if (abort)
+                return {};
+            found.elseStatement = nullptr;
+            found.elseLoc = {};
+        }
+    }
+
+    return found;
+}
+
+// The file the cursor is in as the other front end read it, or nothing where
+// it has not read it -- the model is off unless asked for. See
+// cxxfrontendmodel.h.
+const CxxFrontendDocument *cxxFrontendDocumentFor(const CppQuickFixInterface &interface)
+{
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(file->filePath());
+    if (!model)
+        return nullptr;
+    return model->document(file->filePath().toFSPathString());
+}
+
+// The position just after a token, and just before it, as the editor counts
+// them -- or nothing where the file does not write the token, which is where
+// these fixes hand back to the built-in path.
+std::optional<int> endOfToken(const CxxFrontendDocument &document,
+                              const CppRefactoringFilePtr &file, cxx::SourceLocation location)
+{
+    const CxxAstRange range = cxxTokenRangeAt(document, location);
+    if (!range.isValid())
+        return {};
+    return file->position(range.endLine, range.endColumn);
+}
+
+std::optional<int> startOfToken(const CxxFrontendDocument &document,
+                                const CppRefactoringFilePtr &file, cxx::SourceLocation location)
+{
+    const CxxAstRange range = cxxTokenRangeAt(document, location);
+    if (!range.isValid())
+        return {};
+    return file->position(range.startLine, range.startColumn);
+}
+
+std::optional<int> endOfNode(const CxxFrontendDocument &document,
+                             const CppRefactoringFilePtr &file, cxx::AST *node)
+{
+    const CxxAstRange range = cxxAstRangeOf(document, node);
+    if (!range.isValid())
+        return {};
+    return file->position(range.endLine, range.endColumn);
+}
+#endif
 
 class MoveDeclarationOutOfIfOp: public CppQuickFixOperation
 {
@@ -660,6 +824,11 @@ class AddBracesToControlStatement : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         if (interface.path().isEmpty())
             return;
         const CppRefactoringFilePtr file = interface.currentFile();
@@ -692,6 +861,51 @@ class AddBracesToControlStatement : public CppQuickFixFactory
                                RangeBasedForStatementAST,
                                DoStatementAST>(interface, constraint, makeOp);
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same operation on the cxx-frontend model's tree: a "{" after the
+    // statement's parentheses and a "}" where its body ends.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+        if (!document)
+            return false;
+
+        const auto constraint = [](cxx::StatementAST *statement, bool &) {
+            return !dynamic_cast<cxx::CompoundStatementAST *>(statement);
+        };
+        const CxxControlStatements found
+            = cxxControlStatementsUnderCursor(*document, interface, constraint);
+        if (found.isEmpty())
+            return false;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        QList<std::pair<int, QString>> insertions;
+        const auto brace = [&](cxx::SourceLocation openAfter, cxx::SourceLocation closeBefore,
+                               cxx::AST *body) {
+            const std::optional<int> open = endOfToken(*document, file, openAfter);
+            const std::optional<int> close = closeBefore
+                ? startOfToken(*document, file, closeBefore) : endOfNode(*document, file, body);
+            if (!open || !close)
+                return false;
+            insertions << std::make_pair(*open, QString(" {"));
+            insertions << std::make_pair(*close, closeBefore ? QString("} ") : QString("\n}"));
+            return true;
+        };
+        for (const CxxControlStatementParts &parts : found.statements) {
+            if (!brace(parts.openBraceAfter, parts.closeBraceBefore, parts.body))
+                return false;
+        }
+        if (found.elseStatement
+            && !brace(found.elseLoc, cxx::SourceLocation{}, found.elseStatement)) {
+            return false;
+        }
+
+        result << new AddBracesToControlStatementOp(interface, insertions);
+        return true;
+    }
+#endif
 };
 
 /*!
@@ -701,6 +915,11 @@ class RemoveBracesFromControlStatement : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (matchOnTheCxxFrontendModel(interface, result))
+            return;
+#endif
+
         if (interface.path().isEmpty())
             return;
         const auto constraint = [&](AST *ast, bool &abort) {
@@ -750,6 +969,73 @@ class RemoveBracesFromControlStatement : public CppQuickFixFactory
                                RangeBasedForStatementAST,
                                DoStatementAST>(interface, constraint, makeOp);
     }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same operation on the cxx-frontend model's tree, and the same rule
+    // about which body may lose its braces: it must hold one statement
+    // written on one line, or none at all.
+    bool matchOnTheCxxFrontendModel(const CppQuickFixInterface &interface,
+                                    QuickFixOperations &result)
+    {
+        const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+        if (!document)
+            return false;
+
+        const auto constraint = [&](cxx::StatementAST *statement, bool &abort) {
+            auto * const compound = dynamic_cast<cxx::CompoundStatementAST *>(statement);
+            if (!compound)
+                return false;
+            if (!compound->statementList || !compound->statementList->value)
+                return true; // No statements.
+            if (compound->statementList->next) {
+                abort = true;
+                return false; // More than one statement.
+            }
+
+            // Exactly one. It keeps its braces if it spans more than a line --
+            // and if the file does not write it at all, which is a macro's
+            // body and not something to count the lines of.
+            const CxxAstRange range = cxxAstRangeOf(*document, compound->statementList->value);
+            if (range.isValid() && range.startLine == range.endLine)
+                return true;
+            abort = true;
+            return false;
+        };
+        const CxxControlStatements found
+            = cxxControlStatementsUnderCursor(*document, interface, constraint);
+        if (found.isEmpty())
+            return false;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        QList<RemoveBracesFromControlStatementOp::Braces> braces;
+        const auto unbrace = [&](cxx::StatementAST *body, bool spaceAfterRbrace) {
+            auto * const compound = dynamic_cast<cxx::CompoundStatementAST *>(body);
+            QTC_ASSERT(compound, return false);
+            const std::optional<int> lbrace = startOfToken(*document, file, compound->lbraceLoc);
+            const std::optional<int> rbrace = startOfToken(*document, file, compound->rbraceLoc);
+            if (!lbrace || !rbrace)
+                return false;
+            std::optional<int> semicolonAt;
+            if (!compound->statementList) {
+                semicolonAt = endOfNode(*document, file, compound);
+                if (!semicolonAt)
+                    return false;
+            }
+            braces << RemoveBracesFromControlStatementOp::Braces{*lbrace, *rbrace,
+                                                                 spaceAfterRbrace, semicolonAt};
+            return true;
+        };
+        for (const CxxControlStatementParts &parts : found.statements) {
+            if (!unbrace(parts.body, parts.spaceAfterCloseBrace))
+                return false;
+        }
+        if (found.elseStatement && !unbrace(found.elseStatement, true))
+            return false;
+
+        result << new RemoveBracesFromControlStatementOp(interface, braces);
+        return true;
+    }
+#endif
 };
 
 /*!
