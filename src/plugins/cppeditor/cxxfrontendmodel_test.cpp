@@ -161,9 +161,13 @@ private:
 
 } // namespace
 
-// The closure, not just the file: a header reached through another header is
-// in the model too, which is what says the built-in model's resolution came
-// across rather than only its first level.
+// The closure, not just the file: a header reached through another header was
+// read too, which is what says the built-in model's resolution came across
+// rather than only its first level.
+//
+// What it was read into is the one document there is. A header is read where
+// it is written, the way a compiler reads it, so it has no document of its
+// own -- and what it contributed is in the includer's.
 void CxxFrontendModelTest::testRunsOverAFileAndItsIncludes()
 {
     const Parsed parsed({{"inner.h", "int fromInner;\n"},
@@ -173,14 +177,20 @@ void CxxFrontendModelTest::testRunsOverAFileAndItsIncludes()
     QVERIFY(parsed.isValid());
 
     QCOMPARE(parsed.symbolNames(), QStringList("fromSource"));
-    QVERIFY(parsed.model()->contains(parsed.path("outer.h").toFSPathString()));
-    QVERIFY(parsed.model()->contains(parsed.path("inner.h").toFSPathString()));
-    QCOMPARE(parsed.model()->allIncludesFor(parsed.mainFilePath().toFSPathString()).size(), 2);
+    QCOMPARE(parsed.model()->files(), QStringList(parsed.mainFilePath().toFSPathString()));
+
+    const QStringList includes
+        = parsed.model()->allIncludesFor(parsed.mainFilePath().toFSPathString());
+    QCOMPARE(includes.size(), 2);
+    QVERIFY(includes.contains(parsed.path("outer.h").toFSPathString()));
+    QVERIFY(includes.contains(parsed.path("inner.h").toFSPathString()));
 }
 
 // An open editor holds text that is nowhere on disk, and that is the text the
 // model has to read -- of the file itself and of any header being edited
-// beside it.
+// beside it. The header has no document to look into, so what says its edited
+// text is the text that was read is that a name only that text declares
+// resolves at all.
 void CxxFrontendModelTest::testReadsWhatIsBeingTyped()
 {
     CppEditor::Tests::TestCase testCase;
@@ -194,7 +204,7 @@ void CxxFrontendModelTest::testReadsWhatIsBeingTyped()
 
     WorkingCopy workingCopy;
     workingCopy.insert(header, "int beingTyped;\n");
-    workingCopy.insert(source, "#include \"h.h\"\nint alsoBeingTyped;\n");
+    workingCopy.insert(source, "#include \"h.h\"\nint alsoBeingTyped = beingTyped;\n");
 
     updateCxxFrontendModel(CppEditor::Tests::TestCase::globalSnapshot(), source, {}, workingCopy);
     const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(source);
@@ -205,10 +215,13 @@ void CxxFrontendModelTest::testReadsWhatIsBeingTyped()
     QCOMPARE(sourceDocument->symbols().size(), 1);
     QCOMPARE(sourceDocument->symbols().first().name, QString("alsoBeingTyped"));
 
-    const CxxFrontendDocument *headerDocument = model->document(header.toFSPathString());
-    QVERIFY(headerDocument);
-    QCOMPARE(headerDocument->symbols().size(), 1);
-    QCOMPARE(headerDocument->symbols().first().name, QString("beingTyped"));
+    // "beingTyped" is in no version of the header on disk, so resolving it
+    // says which text the header was read from.
+    const CxxFrontendDocument::Declaration found
+        = model->declarationAt(source.toFSPathString(), 2, 22);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("beingTyped"));
+    QCOMPARE(FilePath::fromUserInput(found.filePath), header);
 }
 
 // The question a consumer will ask first, over files rather than over strings:
@@ -295,9 +308,10 @@ void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
     QVERIFY(!cxxFrontendFollowSymbol(parsed.path("elsewhere.cpp"), 1, 0, 0, 0).hasValidTarget());
     // A position on no name at all.
     QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 8, 0, 0).hasValidTarget());
-    // A name from a header: the model has the header, and this still declines.
-    QVERIFY(parsed.model()->contains(parsed.path("h.h").toFSPathString()));
-    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
+    // A name from a header is not one of them: the header is read into this
+    // file, so the model does answer, and what with is in
+    // testResolvesANameDeclaredInAnInclude.
+    QVERIFY(cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
 }
 
 // A name a using declaration brought in: the built-in model answers with the
