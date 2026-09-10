@@ -223,8 +223,8 @@ class MoveFunctionCommentsOp : public CppQuickFixOperation
 public:
     enum class Direction { ToDecl, ToDef };
     MoveFunctionCommentsOp(const CppQuickFixInterface &interface, const Symbol *symbol,
-                           const QList<Token> &commentTokens, Direction direction)
-        : CppQuickFixOperation(interface), m_symbol(symbol), m_commentTokens(commentTokens)
+                           const QList<CommentRange> &comments, Direction direction)
+        : CppQuickFixOperation(interface), m_symbol(symbol), m_comments(comments)
     {
         setDescription(direction == Direction::ToDecl
                            ? Tr::tr("Move Function Documentation to Declaration")
@@ -242,7 +242,7 @@ private:
         cursor.setPosition(pos);
         const CursorInEditor cursorInEditor(cursor, file->filePath(), editor(),
                                             editor()->textDocument());
-        const auto callback = [symbolLoc = m_symbol->toLink(), comments = m_commentTokens, file]
+        const auto callback = [symbolLoc = m_symbol->toLink(), comments = m_comments, file]
             (const Link &link) {
                 moveComments(file, link, symbolLoc, comments);
             };
@@ -256,7 +256,7 @@ private:
         const CppRefactoringFilePtr &sourceFile,
         const Link &targetLoc,
         const Link &symbolLoc,
-        const QList<Token> &comments)
+        const QList<CommentRange> &comments)
     {
         if (!targetLoc.hasValidTarget() || targetLoc.hasSameLocation(symbolLoc))
             return;
@@ -286,11 +286,8 @@ private:
             return;
         const int insertionPos = targetCppDoc->translationUnit()->getTokenPositionInDocument(
             targetDeclAst->firstToken(), targetFile->document());
-        const TranslationUnit * const sourceTu = sourceFile->cppDocument()->translationUnit();
-        const int sourceCommentStartPos = sourceTu->getTokenPositionInDocument(
-            comments.first(), sourceFile->document());
-        const int sourceCommentEndPos = sourceTu->getTokenEndPositionInDocument(
-            comments.last(), sourceFile->document());
+        const int sourceCommentStartPos = comments.first().start;
+        const int sourceCommentEndPos = comments.last().end;
 
         // Manually adjust indentation, as both our built-in indenter and ClangFormat
         // are unreliable with regards to comment continuation lines.
@@ -373,7 +370,7 @@ private:
     }
 
     const Symbol * const m_symbol;
-    const QList<Token> m_commentTokens;
+    const QList<CommentRange> m_comments;
 };
 
 //! Converts C-style to C++-style comments and vice versa
@@ -450,10 +447,10 @@ class MoveFunctionComments : public CppQuickFixFactory
         if (!symbol)
             return;
 
-        if (const QList<Token> commentTokens = commentsForDeclaration(
+        if (const QList<CommentRange> comments = commentsForDeclaration(
                 symbol, *interface.textDocument(), interface.currentFile()->cppDocument());
-            !commentTokens.isEmpty()) {
-            result << new MoveFunctionCommentsOp(interface, symbol, commentTokens, direction);
+            !comments.isEmpty()) {
+            result << new MoveFunctionCommentsOp(interface, symbol, comments, direction);
         }
     }
 };

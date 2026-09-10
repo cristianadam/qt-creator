@@ -374,12 +374,12 @@ SearchResultItems symbolOccurrencesInDeclarationComments(
     timer.start();
     Snapshot snapshot = CppModelManager::snapshot();
     std::vector<std::unique_ptr<QTextDocument>> docPool;
-    using FileData = std::tuple<QTextDocument *, QString, Document::Ptr, QList<Token>>;
+    using FileData = std::tuple<QTextDocument *, QString, Document::Ptr, QList<CommentRange>>;
     QHash<FilePath, FileData> dataPerFile;
     QString symbolName;
     const auto fileData = [&](const FilePath &filePath) -> FileData & {
         auto &data = dataPerFile[filePath];
-        auto &[doc, content, cppDoc, allCommentTokens] = data;
+        auto &[doc, content, cppDoc, allComments] = data;
         if (!doc) {
             if (TextEditor::TextDocument * const textDoc
                 = TextEditor::TextDocument::textDocumentForFilePath(filePath)) {
@@ -401,10 +401,10 @@ SearchResultItems symbolOccurrencesInDeclarationComments(
         }
         return data;
     };
-    static const auto addToken = [](QList<Token> &tokens, const Token &tok) {
-        if (!Utils::contains(tokens, [&tok](const Token &t) {
-                return t.byteOffset == tok.byteOffset; })) {
-            tokens << tok;
+    static const auto addComment = [](QList<CommentRange> &comments, const CommentRange &comment) {
+        if (!Utils::contains(comments, [&comment](const CommentRange &c) {
+                return c.start == comment.start; })) {
+            comments << comment;
         }
     };
 
@@ -418,14 +418,14 @@ SearchResultItems symbolOccurrencesInDeclarationComments(
     // Collect comment blocks associated with replace locations.
     for (const SearchResultItem &item : symbolOccurrencesInCode) {
         const FilePath filePath = FilePath::fromUserInput(item.path().last());
-        auto &[doc, _, cppDoc, allCommentTokens] = fileData(filePath);
+        auto &[doc, _, cppDoc, allComments] = fileData(filePath);
         const Text::Range &range = item.mainRange();
         if (symbolName.isEmpty())
             symbolName = range.text(doc);
-        const QList<Token> commentTokens = commentsForDeclaration(symbolName, range.begin,
-                                                                  *doc, cppDoc);
-        for (const Token &tok : commentTokens)
-            addToken(allCommentTokens, tok);
+        const QList<CommentRange> comments = commentsForDeclaration(symbolName, range.begin,
+                                                                    *doc, cppDoc);
+        for (const CommentRange &comment : comments)
+            addComment(allComments, comment);
 
         if (!classInfo) {
             QTextCursor cursor = range.begin.toTextCursor(doc);
@@ -453,7 +453,7 @@ SearchResultItems symbolOccurrencesInDeclarationComments(
 
     // If the symbol is a class, collect all comment blocks in the class body.
     if (classInfo && !classInfo->filePath.isEmpty()) {
-        auto &[_1, _2, symbolCppDoc, commentTokens] = fileData(classInfo->filePath);
+        auto &[doc, _2, symbolCppDoc, comments] = fileData(classInfo->filePath);
         TranslationUnit * const tu = symbolCppDoc->translationUnit();
         for (int i = 0; i < tu->commentCount(); ++i) {
             const Token &tok = tu->commentAt(i);
@@ -461,23 +461,21 @@ SearchResultItems symbolOccurrencesInDeclarationComments(
                 continue;
             if (tok.bytesBegin() >= classInfo->endOffset)
                 break;
-            addToken(commentTokens, tok);
+            addComment(comments, {tu->getTokenPositionInDocument(tok, doc),
+                                  tu->getTokenEndPositionInDocument(tok, doc)});
         }
     }
 
     // Create new replace items for occurrences of the symbol name in collected comment blocks.
     SearchResultItems commentItems;
     for (auto it = dataPerFile.cbegin(); it != dataPerFile.cend(); ++it) {
-        const auto &[doc, content, cppDoc, commentTokens] = it.value();
+        const auto &[doc, content, cppDoc, comments] = it.value();
         const QStringView docView(content);
-        for (const Token &tok : commentTokens) {
-            const int tokenStartPos = cppDoc->translationUnit()->getTokenPositionInDocument(
-                tok, doc);
-            const int tokenEndPos = cppDoc->translationUnit()->getTokenEndPositionInDocument(
-                tok, doc);
-            const QStringView tokenView = docView.mid(tokenStartPos, tokenEndPos - tokenStartPos);
+        for (const CommentRange &comment : comments) {
+            const QStringView commentView = docView.mid(comment.start,
+                                                        comment.end - comment.start);
             const QList<Text::Range> ranges = symbolOccurrencesInText(
-                *doc, tokenView, tokenStartPos, symbolName);
+                *doc, commentView, comment.start, symbolName);
             for (const Text::Range &range : ranges) {
                 SearchResultItem item;
                 item.setUseTextEditorFont(true);
@@ -543,20 +541,16 @@ QList<Text::Range> symbolOccurrencesInDeclarationComments(CppEditorWidget *edito
         return {};
     const QTextDocument * const textDoc = editorWidget->textDocument()->document();
     QTC_ASSERT(textDoc, return {});
-    const QList<Token> comments = commentsForDeclaration(symbol, *textDoc, cppDoc);
+    const QList<CommentRange> comments = commentsForDeclaration(symbol, *textDoc, cppDoc);
     if (comments.isEmpty())
         return {};
     QList<Text::Range> ranges;
     const QString &content = textDoc->toPlainText();
     const QStringView docView = QStringView(content);
     const QString symbolName = Overview().prettyName(symbol->name());
-    for (const Token &tok : comments) {
-        const int tokenStartPos = cppDoc->translationUnit()->getTokenPositionInDocument(
-            tok, textDoc);
-        const int tokenEndPos = cppDoc->translationUnit()->getTokenEndPositionInDocument(
-            tok, textDoc);
-        const QStringView tokenView = docView.mid(tokenStartPos, tokenEndPos - tokenStartPos);
-        ranges << symbolOccurrencesInText(*textDoc, tokenView, tokenStartPos, symbolName);
+    for (const CommentRange &comment : comments) {
+        const QStringView commentView = docView.mid(comment.start, comment.end - comment.start);
+        ranges << symbolOccurrencesInText(*textDoc, commentView, comment.start, symbolName);
     }
     return ranges;
 }

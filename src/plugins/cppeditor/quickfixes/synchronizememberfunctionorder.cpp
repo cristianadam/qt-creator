@@ -145,10 +145,10 @@ private:
                          ++next) {
                         ast = *next;
                     }
-                    const QList<Token> commentTokens = commentsForDeclaration(
+                    const QList<CommentRange> comments = commentsForDeclaration(
                         defLoc.decl, ast, *file.document(), file.cppDocument());
-                    const int start = commentTokens.isEmpty() ? file.startOf(ast)
-                                                              : file.startOf(commentTokens.first());
+                    const int start = comments.isEmpty() ? file.startOf(ast)
+                                                         : comments.first().start;
                     return ChangeSet::Range{start, file.endOf(ast)};
                 }
             }

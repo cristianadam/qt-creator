@@ -191,13 +191,11 @@ public:
 
         // Do not insert right between the function and an associated comment.
         int position = currentFile()->startOf(m_refFuncDef);
-        const QList<Token> functionDoc = commentsForDeclaration(
+        const QList<CommentRange> functionDoc = commentsForDeclaration(
             m_refFuncDef->symbol, m_refFuncDef, *currentFile()->document(),
             currentFile()->cppDocument());
-        if (!functionDoc.isEmpty()) {
-            position = currentFile()->cppDocument()->translationUnit()->getTokenPositionInDocument(
-                functionDoc.first(), currentFile()->document());
-        }
+        if (!functionDoc.isEmpty())
+            position = functionDoc.first().start;
 
         ChangeSet change;
         change.insert(position, funcDef);

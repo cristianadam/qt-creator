@@ -884,7 +884,7 @@ ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffse
         [&] {
             if (renamedTargetParameters.isEmpty())
                 return;
-            const QList<Token> functionComments = commentsForDeclaration(
+            const QList<CommentRange> functionComments = commentsForDeclaration(
                     targetFunction, targetDeclaration, *targetFile->document(),
                 targetFile->cppDocument());
             if (functionComments.isEmpty())
@@ -896,16 +896,11 @@ ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffse
                 if (!it.key()->name())
                     continue;
                 const QString paramName = Overview().prettyName(it.key()->name());
-                for (const Token &tok : functionComments) {
-                    const TranslationUnit * const tu = targetFile->cppDocument()->translationUnit();
-                    const int tokenStartPos = tu->getTokenPositionInDocument(
-                        tok, targetFile->document());
-                    const int tokenEndPos = tu->getTokenEndPositionInDocument(
-                        tok, targetFile->document());
-                    const QStringView tokenView = docView.mid(tokenStartPos,
-                                                              tokenEndPos - tokenStartPos);
+                for (const CommentRange &comment : functionComments) {
+                    const QStringView commentView = docView.mid(comment.start,
+                                                                comment.end - comment.start);
                     const QList<Text::Range> ranges = symbolOccurrencesInText(
-                        *targetFile->document(), tokenView, tokenStartPos, paramName);
+                        *targetFile->document(), commentView, comment.start, paramName);
                     for (const Text::Range &r : ranges) {
                         const int startPos = r.begin.toPositionInDocument(targetFile->document());
                         const int endPos = r.end.toPositionInDocument(targetFile->document());

@@ -58,17 +58,15 @@ public:
             Symbol * const symbol = it.key();
             if (!symbol->asArgument())
                 continue;
-            const QList<Token> commentTokens = commentsForDeclaration(symbol, ast, textDoc, _doc);
-            if (commentTokens.isEmpty())
+            const QList<CommentRange> comments = commentsForDeclaration(symbol, ast, textDoc, _doc);
+            if (comments.isEmpty())
                 continue;
             const QString symbolName = Overview().prettyName(symbol->name());
-            for (const Token &tok : commentTokens) {
-                const int commentPos = translationUnit()->getTokenPositionInDocument(tok, &textDoc);
-                const int commentEndPos = translationUnit()->getTokenEndPositionInDocument(
-                    tok, &textDoc);
-                const QStringView commentView = docView.mid(commentPos, commentEndPos - commentPos);
+            for (const CommentRange &comment : comments) {
+                const QStringView commentView
+                    = docView.mid(comment.start, comment.end - comment.start);
                 const QList<Utils::Text::Range> ranges = symbolOccurrencesInText(
-                    textDoc, commentView, commentPos, symbolName);
+                    textDoc, commentView, comment.start, symbolName);
                 for (const Utils::Text::Range &range : ranges) {
                     it.value().append(HighlightingResult(range.begin.line, range.begin.column + 1,
                                                          symbolName.size(),

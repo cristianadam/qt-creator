@@ -26,19 +26,77 @@ static QString nameFromSymbol(const Symbol *symbol)
     return symbolParts.last();
 }
 
-static QList<Token> commentsForDeclaration(
-    const AST *decl, const QString &symbolName, const QTextDocument &textDoc,
-    const Document::Ptr &cppDoc, bool isParameter)
+QList<CommentRange> commentBlockAbove(const QList<PrecedingComment> &comments,
+                                      int declarationStart, const QString &symbolName,
+                                      bool isParameter, const QTextDocument &textDoc)
 {
-    if (symbolName.isEmpty())
+    if (symbolName.isEmpty() || comments.isEmpty())
         return {};
 
-    // Get the list of all tokens (including comments) and find the declaration start token there.
+    // How much of the run belongs together, from the one nearest the
+    // declaration upwards: the same kind of comment, and no empty line
+    // between one and the next.
+    QList<PrecedingComment> block;
+    CommentStyle style = comments.last().style;
+    bool needsSymbolReference = isParameter;
+
+    for (auto it = comments.crbegin(); it != comments.crend(); ++it) {
+        const QTextBlock endBlock = textDoc.findBlock(it->range.end);
+
+        if (block.isEmpty()) {
+            // The nearest one. Where it does not end on the line above the
+            // declaration, something stands between them, and then the block
+            // is only the declaration's if it says the name.
+            if (endBlock.next() != textDoc.findBlock(declarationStart))
+                needsSymbolReference = true;
+            style = it->style;
+        } else {
+            if (it->style != style)
+                break;
+            if (endBlock.next() != textDoc.findBlock(block.first().range.start))
+                break;
+        }
+
+        block.prepend(*it);
+    }
+
+    const auto ranges = [&] {
+        return Utils::transform<QList<CommentRange>>(block, &PrecedingComment::range);
+    };
+
+    if (!needsSymbolReference)
+        return ranges();
+
+    // The name has to be written in the block. For a parameter of a
+    // documented function, under the command that documents a parameter.
+    const bool isDoxygenComment = style == CommentStyle::CStyleDoxygen
+                                  || style == CommentStyle::CppStyleDoxygen;
+    const QRegularExpression symbolRegExp(QString("%1\\b%2\\b").arg(
+        isParameter && isDoxygenComment ? "[\\@]param\\s+" : QString(), symbolName));
+    for (const PrecedingComment &comment : std::as_const(block)) {
+        const QTextBlock last = textDoc.findBlock(comment.range.end);
+        for (QTextBlock b = textDoc.findBlock(comment.range.start);
+             b.blockNumber() <= last.blockNumber(); b = b.next()) {
+            if (b.text().contains(symbolRegExp))
+                return ranges();
+        }
+    }
+
+    return {};
+}
+
+// The comments written directly above \a decl, as the built-in front end's
+// token stream has them: the run of comment tokens before the declaration's
+// first token, with nothing else in between.
+static QList<PrecedingComment> precedingComments(const AST *decl, const QTextDocument &textDoc,
+                                                 const Document::Ptr &cppDoc)
+{
     TranslationUnit * const tu = cppDoc->translationUnit();
     QTC_ASSERT(tu && tu->isParsed(), return {});
     const Token &declToken = tu->tokenAt(decl->firstToken());
-    std::vector<Token> allTokens = tu->allTokens();
+    const std::vector<Token> allTokens = tu->allTokens();
     QTC_ASSERT(!allTokens.empty(), return {});
+
     int tokenPos = -1;
     for (int i = 0; i < int(allTokens.size()); ++i) {
         if (allTokens.at(i).byteOffset == declToken.byteOffset) {
@@ -49,79 +107,46 @@ static QList<Token> commentsForDeclaration(
     if (tokenPos == -1)
         return {};
 
-    // Go backwards in the token list and collect all associated comments.
-    struct Comment {
-        Token token;
-        QTextBlock startBlock;
-        QTextBlock endBlock;
+    const auto styleOf = [](const Token &token) {
+        switch (token.kind()) {
+        case T_CPP_COMMENT: return CommentStyle::CppStyle;
+        case T_DOXY_COMMENT: return CommentStyle::CStyleDoxygen;
+        case T_CPP_DOXY_COMMENT: return CommentStyle::CppStyleDoxygen;
+        default: return CommentStyle::CStyle;
+        }
     };
-    QList<Comment> comments;
-    Kind commentKind = T_EOF_SYMBOL;
-    const auto blockForTokenStart = [&](const Token &tok) {
-        return textDoc.findBlock(tu->getTokenPositionInDocument(tok, &textDoc));
-    };
-    const auto blockForTokenEnd = [&](const Token &tok) {
-        return textDoc.findBlock(tu->getTokenEndPositionInDocument(tok, &textDoc));
-    };
-    bool needsSymbolReference = isParameter;
+
+    QList<PrecedingComment> comments;
     for (int i = tokenPos - 1; i >= 0; --i) {
-        const Token &tok = allTokens.at(i);
-        if (!tok.isComment())
+        const Token &token = allTokens.at(i);
+        if (!token.isComment())
             break;
-        const QTextBlock tokenEndBlock = blockForTokenEnd(tok);
-        if (commentKind == T_EOF_SYMBOL) {
-            if (tokenEndBlock.next() != blockForTokenStart(declToken))
-                needsSymbolReference = true;
-            commentKind = tok.kind();
-        } else {
-            // If it's not the same kind of comment, it's not part of our comment block.
-            if (tok.kind() != commentKind)
-                break;
-
-            // If there are empty lines between the comments, we don't consider them as
-            // belonging together.
-            if (tokenEndBlock.next() != comments.first().startBlock)
-                break;
-        }
-
-        comments.push_front({tok, blockForTokenStart(tok), tokenEndBlock});
+        comments.prepend({{tu->getTokenPositionInDocument(token, &textDoc),
+                           tu->getTokenEndPositionInDocument(token, &textDoc)},
+                          styleOf(token)});
     }
 
-    if (comments.isEmpty())
-        return {};
-
-    const auto tokenList = [&] {
-        return Utils::transform<QList<Token>>(comments, &Comment::token);
-    };
-
-    // We consider the comment block as associated with the symbol if it
-    //   a) precedes it directly, without any empty lines in between or
-    //   b) the symbol name occurs in it.
-    // Obviously, this heuristic can yield false positives in the case of very short names,
-    // but if a symbol is important enough to get documented, it should also have a proper name.
-    // Note that for function parameters, we always require the name to occur in the comment.
-
-    if (!needsSymbolReference) // a)
-        return tokenList();
-
-    // b)
-    const Kind tokenKind = comments.first().token.kind();
-    const bool isDoxygenComment = tokenKind == T_DOXY_COMMENT || tokenKind == T_CPP_DOXY_COMMENT;
-    const QRegularExpression symbolRegExp(QString("%1\\b%2\\b").arg(
-        isParameter && isDoxygenComment ? "[\\@]param\\s+" : QString(), symbolName));
-    for (const Comment &c : std::as_const(comments)) {
-        for (QTextBlock b = c.startBlock; b.blockNumber() <= c.endBlock.blockNumber();
-             b = b.next()) {
-            if (b.text().contains(symbolRegExp))
-                return tokenList();
-        }
-    }
-    return {};
+    return comments;
 }
 
+static QList<CommentRange> commentsForDeclaration(
+    const AST *decl, const QString &symbolName, const QTextDocument &textDoc,
+    const Document::Ptr &cppDoc, bool isParameter)
+{
+    if (symbolName.isEmpty())
+        return {};
 
-QList<Token> commentsForDeclaration(const Symbol *symbol, const QTextDocument &textDoc,
-                                    const Document::Ptr &cppDoc)
+    TranslationUnit * const tu = cppDoc->translationUnit();
+    QTC_ASSERT(tu && tu->isParsed(), return {});
+    const int declarationStart
+        = tu->getTokenPositionInDocument(tu->tokenAt(decl->firstToken()), &textDoc);
+
+    return commentBlockAbove(precedingComments(decl, textDoc, cppDoc), declarationStart,
+                             symbolName, isParameter, textDoc);
+}
+
+QList<CommentRange> commentsForDeclaration(const Symbol *symbol, const QTextDocument &textDoc,
+                                           const Document::Ptr &cppDoc)
 {
     QTC_ASSERT(cppDoc->translationUnit() && cppDoc->translationUnit()->isParsed(), return {});
     Utils::Text::Position pos;
@@ -130,8 +155,10 @@ QList<Token> commentsForDeclaration(const Symbol *symbol, const QTextDocument &t
     return commentsForDeclaration(nameFromSymbol(symbol), pos, textDoc, cppDoc);
 }
 
-QList<Token> commentsForDeclaration(const QString &symbolName, const Utils::Text::Position &pos,
-                                    const QTextDocument &textDoc, const Document::Ptr &cppDoc)
+QList<CommentRange> commentsForDeclaration(const QString &symbolName,
+                                           const Utils::Text::Position &pos,
+                                           const QTextDocument &textDoc,
+                                           const Document::Ptr &cppDoc)
 {
     if (symbolName.isEmpty())
         return {};
@@ -165,8 +192,9 @@ QList<Token> commentsForDeclaration(const QString &symbolName, const Utils::Text
     return commentsForDeclaration(declAst, symbolName, textDoc, cppDoc, isParameter);
 }
 
-QList<Token> commentsForDeclaration(const Symbol *symbol, const AST *decl,
-                                    const QTextDocument &textDoc, const Document::Ptr &cppDoc)
+QList<CommentRange> commentsForDeclaration(const Symbol *symbol, const AST *decl,
+                                           const QTextDocument &textDoc,
+                                           const Document::Ptr &cppDoc)
 {
     return commentsForDeclaration(decl, nameFromSymbol(symbol), textDoc, cppDoc,
                                   symbol->asArgument());

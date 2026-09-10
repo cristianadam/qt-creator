@@ -287,17 +287,15 @@ private:
                                        const CursorInfo::Range &declaration,
                                        const QTextDocument &textDoc) const
     {
-        TranslationUnit * const unit = m_document->translationUnit();
-        const QList<Token> comments = commentsForDeclaration(
+        const QList<CommentRange> comments = commentsForDeclaration(
             name, {declaration.line, declaration.column - 1}, textDoc, m_document);
 
         CursorInfo::Ranges places;
         const QStringView content(m_content);
-        for (const Token &comment : comments) {
-            const int begin = unit->getTokenPositionInDocument(comment, &textDoc);
-            const int end = unit->getTokenEndPositionInDocument(comment, &textDoc);
-            const QList<Utils::Text::Range> found
-                = symbolOccurrencesInText(textDoc, content.mid(begin, end - begin), begin, name);
+        for (const CommentRange &comment : comments) {
+            const QList<Utils::Text::Range> found = symbolOccurrencesInText(
+                textDoc, content.mid(comment.start, comment.end - comment.start),
+                comment.start, name);
             for (const Utils::Text::Range &range : found)
                 places.append({range.begin.line, range.begin.column + 1, int(name.size())});
         }
