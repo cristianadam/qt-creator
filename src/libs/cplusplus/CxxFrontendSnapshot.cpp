@@ -286,6 +286,12 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // the definition of the same thing, which is in the front end and
         // not yet read out of it.
         "a definition written apart from its declaration",
+        // Going the other way from a declaration in a header: which source
+        // file defines it is a question about the project, and a document
+        // holds one file and what it includes. counterpartAt() answers the
+        // direction that is reachable -- from a definition to the
+        // declaration it was written for -- and declines this one.
+        "the definition of a declaration outside the translation unit",
         // Finding a definition that is in a file this one does not include.
         // Within a file the definition is preferred and a declaration on its
         // own is reported as one -- Declaration::isDefinition -- so a caller

@@ -206,6 +206,35 @@ public:
     // with it.
     const QList<Comment> &comments() const;
 
+    // The other place the function at a position is written: its declaration
+    // where a definition stands there, its definition where a declaration
+    // does. What "Switch Between Function Declaration/Definition" follows,
+    // and half of what the decl/def link needs.
+    //
+    // Not answered by resolving the name, which is what every other question
+    // here does: the name in "void C::f() {}" declares nothing new and the
+    // parser resolves it to nothing. What answers is the definition itself --
+    // the function it declares carries the place it was first declared.
+    //
+    // Nothing where the position is on no function, and nothing where the
+    // other place is not in this translation unit: a declaration in a header
+    // whose definition is in some .cpp is not reachable from here, since a
+    // document holds one file and what it includes, not the project. That
+    // one is on unsupportedQueries().
+    struct Counterpart
+    {
+        QString filePath;
+        int line = 0; // one-based
+        int column = 0;
+        // Whether what was found defines the function -- which says which
+        // way round the answer is, without the caller having to work out
+        // what it asked from.
+        bool isDefinition = false;
+
+        bool isValid() const { return line > 0; }
+    };
+    Counterpart counterpartAt(int line, int column) const;
+
     // The fully qualified name of the function enclosing the position, or an
     // empty string if it is not inside one. What Document::functionAt answers,
     // and what the editor puts above the text.

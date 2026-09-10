@@ -542,6 +542,10 @@ public:
     // opens.
     [[nodiscard]] cxx::FunctionSymbol *definitionAround(cxx::SourceLocation location) const;
 
+    // The function a declarator written at \a location declares, or null
+    // where no declarator stands there.
+    [[nodiscard]] cxx::FunctionSymbol *declaredFunctionAt(cxx::SourceLocation location) const;
+
     // The parameters and block variables of \a function, each with every
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
@@ -813,6 +817,31 @@ cxx::FunctionSymbol *CxxFrontendDocument::Private::definitionAround(
         const unsigned last = definition->lastSourceLocation().index();
         if (location.index() >= first && location.index() < last)
             return definition->symbol;
+    }
+    return nullptr;
+}
+
+cxx::FunctionSymbol *CxxFrontendDocument::Private::declaredFunctionAt(
+    cxx::SourceLocation location) const
+{
+    if (!location || !unit.ast())
+        return nullptr;
+
+    // The function a declarator at this position declares. Not asked of the
+    // name, which is where every other question starts: a name that declares
+    // something is not a use of it, and the parser resolves uses.
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        auto *declarator = dynamic_cast<cxx::InitDeclaratorAST *>(*slot);
+        if (!declarator || !declarator->symbol || !declarator->declarator)
+            continue;
+
+        const unsigned first = declarator->declarator->firstSourceLocation().index();
+        const unsigned last = declarator->declarator->lastSourceLocation().index();
+        if (location.index() >= first && location.index() < last)
+            return dynamic_cast<cxx::FunctionSymbol *>(declarator->symbol);
     }
     return nullptr;
 }
@@ -1425,6 +1454,43 @@ QString CxxFrontendDocument::lastVisibleSymbolAt(int line, int column) const
 QString CxxFrontendDocument::scopeAt(int line, int column) const
 {
     return d->scopeNameAt(line, column);
+}
+
+CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
+                                                                   int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+
+    const auto place = [this](cxx::Symbol *symbol, bool isDefinition) -> Counterpart {
+        const cxx::SourceLocation location = symbol->location();
+        if (!location)
+            return {};
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        return {d->fileOf(location), int(position.line), int(position.column), isDefinition};
+    };
+
+    // A definition is written here: the declaration is the place the function
+    // was first written, which is the header where there is one.
+    if (cxx::FunctionSymbol * const definition = d->definitionAround(location)) {
+        cxx::Symbol * const declared = definition->canonical();
+        if (!declared || declared == definition)
+            return {}; // Declared nowhere else: this is the only place.
+        return place(declared, false);
+    }
+
+    // Otherwise a declaration may be, and then the definition is wanted --
+    // reachable only where this translation unit has it, which for a header
+    // read into the file being edited it is.
+    cxx::FunctionSymbol * const declared = d->declaredFunctionAt(location);
+    if (!declared)
+        return {};
+
+    cxx::FunctionSymbol * const defined = declared->definition();
+    if (!defined || defined == declared)
+        return {};
+    return place(defined, true);
 }
 
 CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,

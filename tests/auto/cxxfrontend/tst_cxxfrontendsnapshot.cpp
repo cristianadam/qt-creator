@@ -75,6 +75,10 @@ class tst_cxxfrontendsnapshot : public QObject
     Q_OBJECT
 
 private slots:
+    void theDeclarationOfADefinition();
+    void theDefinitionOfADeclarationInTheSameFile();
+    void noDefinitionOutsideTheTranslationUnit();
+    void noCounterpartOffAFunction();
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
     void aMacroCrossesFromAHeader();
@@ -947,6 +951,68 @@ void tst_cxxfrontendsnapshot::unsupportedLookups()
     // What reading a header into its includer settled, so that the list
     // does not keep saying it.
     QVERIFY(!unsupported.contains("members named through an object across files"));
+}
+
+// The two places a function is written, and the one direction that is
+// reachable: from the definition in the file being edited to the declaration
+// in the header it was read from. What "Switch Between Function
+// Declaration/Definition" follows.
+//
+// Not through the name: "void C::f(int)" declares nothing new there and
+// resolves to nothing, which is why this is asked of the definition itself.
+void tst_cxxfrontendsnapshot::theDeclarationOfADefinition()
+{
+    Files files;
+    files.add("h.h", "struct C {\n    void f(int a);\n};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\n\nvoid C::f(int a) {}\n");
+    QVERIFY(document);
+
+    const CxxFrontendDocument::Counterpart declaration = document->counterpartAt(3, 9);
+    QVERIFY(declaration.isValid());
+    QCOMPARE(declaration.filePath, QString("h.h"));
+    QCOMPARE(declaration.line, 2);
+    QCOMPARE(declaration.column, 10);
+    QVERIFY(!declaration.isDefinition);
+}
+
+// And the other way round where one file holds both, which is the case a
+// document can answer: the definition below is what the declaration above
+// points at.
+void tst_cxxfrontendsnapshot::theDefinitionOfADeclarationInTheSameFile()
+{
+    const CxxFrontendDocument document("void f(int a);\n\nvoid f(int a) {}\n", "a.cpp");
+
+    const CxxFrontendDocument::Counterpart definition = document.counterpartAt(1, 6);
+    QVERIFY(definition.isValid());
+    QCOMPARE(definition.filePath, QString("a.cpp"));
+    QCOMPARE(definition.line, 3);
+    QVERIFY(definition.isDefinition);
+}
+
+// What is out of reach, and why it is on the list rather than guessed at: a
+// declaration in a header whose definition is in some source file this
+// document never read. A document holds one file and what it includes, not
+// the project, so there is nowhere here to look.
+void tst_cxxfrontendsnapshot::noDefinitionOutsideTheTranslationUnit()
+{
+    const CxxFrontendDocument header("struct C {\n    void f(int a);\n};\n", "h.h");
+
+    QVERIFY(!header.counterpartAt(2, 10).isValid());
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups().contains(
+        "the definition of a declaration outside the translation unit"));
+}
+
+// Neither side of a function is a function at all here.
+void tst_cxxfrontendsnapshot::noCounterpartOffAFunction()
+{
+    const CxxFrontendDocument document("int global;\nvoid f() {}\n", "a.cpp");
+
+    QVERIFY(!document.counterpartAt(1, 5).isValid());
+    QVERIFY(!document.counterpartAt(2, 6).isValid());
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)
