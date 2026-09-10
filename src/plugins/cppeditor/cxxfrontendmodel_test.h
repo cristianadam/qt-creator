@@ -27,6 +27,7 @@ private slots:
     void testOutline();
     void testNames_data();
     void testNames();
+    void testHighlightingReachesTheEditor();
 };
 
 } // namespace CppEditor::Internal

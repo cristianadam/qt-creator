@@ -10,6 +10,7 @@
 #include "cppmodelmanager.h"
 #include "cpptoolsreuse.h"
 #include "cppworkingcopy.h"
+#include "cxxfrontendmodel.h"
 
 #include <coreplugin/editormanager/documentmodel.h>
 
@@ -71,18 +72,16 @@ QList<QTextEdit::ExtraSelection> toTextEditorSelections(
     return result;
 }
 
-CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
-                                          const CPlusPlus::Snapshot &snapshot,
-                                          QTextDocument *textDocument)
+// Where the file defines a macro and where it uses one, which is the
+// preprocessor's answer rather than the parser's and is the same for
+// whichever model says what the names are.
+QList<TextEditor::HighlightingResult> macroUsesIn(const CPlusPlus::Document::Ptr &doc,
+                                                  QTextDocument *textDocument)
 {
-    QTC_ASSERT(doc, return nullptr);
-    QTC_ASSERT(doc->translationUnit(), return nullptr);
-    QTC_ASSERT(doc->translationUnit()->ast(), return nullptr);
-    QTC_ASSERT(textDocument, return nullptr);
-
     using namespace CPlusPlus;
     using Result = TextEditor::HighlightingResult;
     QList<Result> macroUses;
+    QTC_ASSERT(doc && textDocument, return macroUses);
 
     using Utils::Text::convertPosition;
 
@@ -124,9 +123,48 @@ CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
         macroUses.append(use);
     }
 
-    LookupContext context(doc, snapshot);
-    return CheckSymbols::create(doc, textDocument->toPlainText(), context, macroUses);
+    return macroUses;
 }
+
+CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
+                                          const CPlusPlus::Snapshot &snapshot,
+                                          QTextDocument *textDocument)
+{
+    QTC_ASSERT(doc, return nullptr);
+    QTC_ASSERT(doc->translationUnit(), return nullptr);
+    QTC_ASSERT(doc->translationUnit()->ast(), return nullptr);
+    QTC_ASSERT(textDocument, return nullptr);
+
+    CPlusPlus::LookupContext context(doc, snapshot);
+    return CheckSymbols::create(doc, textDocument->toPlainText(), context,
+                                macroUsesIn(doc, textDocument));
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The names and the macros as one answer, in the order the highlighter
+// reads them: it walks the results a line at a time, so they arrive
+// sorted. Nothing is computed here -- the parse already happened -- so the
+// future is handed over finished.
+QFuture<TextEditor::HighlightingResult> highlightsOf(
+    QList<TextEditor::HighlightingResult> names,
+    const QList<TextEditor::HighlightingResult> &macroUses)
+{
+    names.append(macroUses);
+    std::stable_sort(names.begin(), names.end(),
+                     [](const TextEditor::HighlightingResult &left,
+                        const TextEditor::HighlightingResult &right) {
+                         return std::tie(left.line, left.column)
+                                < std::tie(right.line, right.column);
+                     });
+
+    QFutureInterface<TextEditor::HighlightingResult> future;
+    future.reportStarted();
+    for (const TextEditor::HighlightingResult &result : std::as_const(names))
+        future.reportResult(result);
+    future.reportFinished();
+    return future.future();
+}
+#endif
 
 QList<TextEditor::BlockRange> toTextEditorBlocks(
         const QList<CPlusPlus::Document::Block> &skippedBlocks)
@@ -156,6 +194,19 @@ BuiltinEditorDocumentProcessor::BuiltinEditorDocumentProcessor(TextEditor::TextD
     m_semanticHighlighter->setHighlightingRunner(
                 [this]() -> QFuture<TextEditor::HighlightingResult> {
                     const SemanticInfo semanticInfo = m_semanticInfoUpdater.semanticInfo();
+#ifdef QTC_WITH_CXX_FRONTEND
+                    // What every name in the file is, from the cxx-frontend
+                    // model where it has the file. The macros are the
+                    // preprocessor's answer either way and are merged in
+                    // here, as they are for the walk below.
+                    if (semanticInfo.doc) {
+                        if (std::optional<QList<TextEditor::HighlightingResult>> names
+                            = cxxFrontendHighlighting(semanticInfo.doc->filePath())) {
+                            return highlightsOf(*names,
+                                                macroUsesIn(semanticInfo.doc, textDocument()));
+                        }
+                    }
+#endif
                     CheckSymbols *checkSymbols = createHighlighter(semanticInfo.doc, semanticInfo.snapshot,
                     textDocument());
                     QTC_ASSERT(checkSymbols, return QFuture<TextEditor::HighlightingResult>());

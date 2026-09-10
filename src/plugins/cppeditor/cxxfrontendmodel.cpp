@@ -203,6 +203,53 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     return link;
 }
 
+std::optional<QList<TextEditor::HighlightingResult>> cxxFrontendHighlighting(
+    const FilePath &filePath)
+{
+    // The same reason the outline declines it: what this front end makes of
+    // Objective-C is not a smaller answer but a wrong one.
+    if (ProjectFile::isObjC(filePath))
+        return std::nullopt;
+
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument *document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    using NameKind = CxxFrontendDocument::NameKind;
+    const auto kindOf = [](NameKind kind) {
+        switch (kind) {
+        case NameKind::Type: return CppEditor::SemanticHighlighter::TypeUse;
+        case NameKind::Namespace: return CppEditor::SemanticHighlighter::NamespaceUse;
+        case NameKind::Local: return CppEditor::SemanticHighlighter::LocalUse;
+        case NameKind::Field: return CppEditor::SemanticHighlighter::FieldUse;
+        case NameKind::StaticField: return CppEditor::SemanticHighlighter::StaticFieldUse;
+        case NameKind::Enumeration: return CppEditor::SemanticHighlighter::EnumerationUse;
+        case NameKind::Function: return CppEditor::SemanticHighlighter::FunctionUse;
+        case NameKind::VirtualMethod: return CppEditor::SemanticHighlighter::VirtualMethodUse;
+        case NameKind::StaticMethod: return CppEditor::SemanticHighlighter::StaticMethodUse;
+        case NameKind::FunctionDeclaration:
+            return CppEditor::SemanticHighlighter::FunctionDeclarationUse;
+        case NameKind::VirtualFunctionDeclaration:
+            return CppEditor::SemanticHighlighter::VirtualFunctionDeclarationUse;
+        case NameKind::StaticMethodDeclaration:
+            return CppEditor::SemanticHighlighter::StaticMethodDeclarationUse;
+        case NameKind::Label: return CppEditor::SemanticHighlighter::LabelUse;
+        case NameKind::PseudoKeyword: return CppEditor::SemanticHighlighter::PseudoKeywordUse;
+        }
+        return CppEditor::SemanticHighlighter::Unknown;
+    };
+
+    QList<TextEditor::HighlightingResult> results;
+    for (const CxxFrontendDocument::Name &name : document->namesIn()) {
+        results.append(TextEditor::HighlightingResult(name.line, name.column, name.length,
+                                                      kindOf(name.kind)));
+    }
+    return results;
+}
+
 std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const FilePath &filePath)
 {
     // Objective-C is not a language this front end reads. What it makes of a

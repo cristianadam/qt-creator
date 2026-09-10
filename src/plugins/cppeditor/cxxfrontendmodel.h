@@ -6,6 +6,9 @@
 #include "cppcursorinfo.h"
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
+#include "semantichighlighter.h"
+
+#include <texteditor/semantichighlighter.h>
 
 #include <utils/filepath.h>
 #include <utils/link.h>
@@ -141,5 +144,15 @@ struct CxxFrontendOutlineEntry
 // Objective-C, so a file written in it is declined rather than answered with
 // the little that parsed.
 std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::FilePath &filePath);
+
+// What the editor colours in \a filePath: every name it writes, with the
+// kind that decides the colour, in the order they are written. Nothing
+// where the model has no such file.
+//
+// The macros are not here. The preprocessor reports those and the caller
+// merges them in, which is what it does for the built-in model too, so
+// this answers for the names and leaves that where it is.
+std::optional<QList<TextEditor::HighlightingResult>> cxxFrontendHighlighting(
+    const Utils::FilePath &filePath);
 
 } // namespace CppEditor::Internal

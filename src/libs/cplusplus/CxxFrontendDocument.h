@@ -293,6 +293,10 @@ public:
         FunctionDeclaration,
         VirtualFunctionDeclaration,
         StaticMethodDeclaration,
+        Label,
+        // A word that reads as a keyword without being one: override and
+        // final, which are identifiers anywhere else.
+        PseudoKeyword,
     };
 
     struct Name

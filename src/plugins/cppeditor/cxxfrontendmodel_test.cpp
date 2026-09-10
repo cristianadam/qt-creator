@@ -14,6 +14,7 @@
 #include "cxxfrontendmodel_test.h"
 
 #include "cppchecksymbols.h"
+#include "cppeditorwidget.h"
 #include "cpplocalsymbols.h"
 #include "cppmodelmanager.h"
 #include "cppoutlinemodel.h"
@@ -443,6 +444,8 @@ QString nameOf(SemanticHighlighter::Kind kind)
     case SemanticHighlighter::VirtualFunctionDeclarationUse:
         return "VirtualFunctionDeclaration";
     case SemanticHighlighter::StaticMethodDeclarationUse: return "StaticMethodDeclaration";
+    case SemanticHighlighter::LabelUse: return "Label";
+    case SemanticHighlighter::PseudoKeywordUse: return "PseudoKeyword";
     default: return {};
     }
 }
@@ -463,6 +466,8 @@ QString nameOf(CxxFrontendDocument::NameKind kind)
     case NameKind::FunctionDeclaration: return "FunctionDeclaration";
     case NameKind::VirtualFunctionDeclaration: return "VirtualFunctionDeclaration";
     case NameKind::StaticMethodDeclaration: return "StaticMethodDeclaration";
+    case NameKind::Label: return "Label";
+    case NameKind::PseudoKeyword: return "PseudoKeyword";
     }
     return {};
 }
@@ -487,8 +492,12 @@ QStringList colouredBy(const QList<CxxFrontendDocument::Name> &names)
 {
     QStringList lines;
     for (const CxxFrontendDocument::Name &name : names) {
-        // A HighlightingResult counts lines from zero; this model counts
-        // them from one.
+        // A document that was never preprocessed carries no #line
+        // markers, and TranslationUnit::getPosition() counts its lines
+        // from zero for want of one -- see the expectations in
+        // cpplocalsymbols_test.cpp, which are the same shape. The editor's
+        // own documents are preprocessed and count from one, as this model
+        // does.
         lines.append(QString("%1:%2+%3 %4")
                          .arg(name.line - 1).arg(name.column).arg(name.length)
                          .arg(nameOf(name.kind)));
@@ -691,6 +700,21 @@ void CxxFrontendModelTest::testNames_data()
                                                            "static int s_counter;\n"
                                                            "int plain;\n"
                                                            "int f() { return s_counter + plain; }\n");
+    QTest::newRow("labels") << QByteArray("\n"
+                                          "void f(int a)\n"
+                                          "{\n"
+                                          "    if (a) goto out;\n"
+                                          "    a = 1;\n"
+                                          "out:\n"
+                                          "    return;\n"
+                                          "}\n");
+    QTest::newRow("override and final")
+        << QByteArray("\n"
+                      "struct B { virtual void run(); virtual void stop(); };\n"
+                      "struct D final : B {\n"
+                      "    void run() override;\n"
+                      "    void stop() final;\n"
+                      "};\n");
     QTest::newRow("enumerators") << QByteArray("\n"
                                                 "enum E { First, Second };\n"
                                                 "E pick() { return Second; }\n");
@@ -743,6 +767,50 @@ void CxxFrontendModelTest::testNames()
     if (const char *reason = knownNameDivergence(QString::fromUtf8(QTest::currentDataTag())))
         QEXPECT_FAIL("", reason, Abort);
     QCOMPARE(colouredBy(document.namesIn()).join('\n'), colouredBy(results).join('\n'));
+}
+
+// And that the answer reaches the text. testNames says the two models agree
+// on what every name is; this says the editor is coloured by it -- the
+// runner hands the highlighter a future, the highlighter applies what it
+// reports, and a local ends up with a format of its own.
+//
+// Which model answered depends on QTC_CXX_FRONTEND_MODEL, as everywhere
+// else: the file has a model only where the parser was asked to keep one.
+void CxxFrontendModelTest::testHighlightingReachesTheEditor()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    Tests::CppTestDocument testFile(
+        "file.cpp",
+        "int f(int arg)\n"
+        "{\n"
+        "    int local = arg;\n"
+        "    return local;\n"
+        "}\n");
+    testFile.setBaseDirectory(dir.path());
+    QVERIFY(testFile.writeToDisk());
+
+    TextEditor::BaseTextEditor *editor = nullptr;
+    CppEditorWidget *widget = nullptr;
+    QVERIFY(CppEditor::Tests::TestCase::openCppEditor(testFile.filePath(), &editor, &widget));
+    testCase.closeEditorAtEndOfTestCase(editor);
+    QVERIFY(CppEditor::Tests::TestCase::waitForRehighlightedSemanticDocument(widget));
+
+    // "local" where it is declared: line 3, nine characters in, five long.
+    // The syntactic highlighter colours the keyword before it and leaves
+    // the name alone, so a format there is the semantic one.
+    const auto localIsColoured = [widget] {
+        const QTextBlock block = widget->document()->findBlockByNumber(2);
+        for (const QTextLayout::FormatRange &range : block.layout()->formats()) {
+            if (range.start == 8 && range.length == 5)
+                return true;
+        }
+        return false;
+    };
+    QTRY_VERIFY(localIsColoured());
 }
 
 void CxxFrontendModelTest::testLocalUses()

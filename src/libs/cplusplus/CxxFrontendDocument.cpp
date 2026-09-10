@@ -1600,6 +1600,40 @@ QList<CxxFrontendDocument::Name> CxxFrontendDocument::namesIn() const
             continue;
         }
 
+        // A label, where it is written and where it is jumped to. It
+        // stands for a place in the code and for nothing else, so there is
+        // no symbol to ask.
+        if (auto *labeled = dynamic_cast<cxx::LabeledStatementAST *>(*slot)) {
+            recordAs(labeled->identifierLoc, NameKind::Label);
+            continue;
+        }
+        if (auto *jump = dynamic_cast<cxx::GotoStatementAST *>(*slot)) {
+            recordAs(jump->identifierLoc, NameKind::Label);
+            continue;
+        }
+
+        // final on a class, and override or final on a member function.
+        // The class writes down where its own is; the function only says
+        // that it has one, so the word is found where it can stand.
+        if (auto *cls = dynamic_cast<cxx::ClassSpecifierAST *>(*slot)) {
+            recordAs(cls->finalLoc, NameKind::PseudoKeyword);
+            continue;
+        }
+        if (auto *chunk = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(*slot);
+            chunk && (chunk->isOverride || chunk->isFinal) && chunk->rparenLoc) {
+            for (unsigned i = chunk->rparenLoc.index() + 1,
+                          last = chunk->lastSourceLocation().index();
+                 i <= last; ++i) {
+                const cxx::SourceLocation location{i};
+                if (d->unit.tokenAt(location).kind() != cxx::TokenKind::T_IDENTIFIER)
+                    continue;
+                const std::string_view text = d->unit.tokenText(location);
+                if (text == "override" || text == "final")
+                    recordAs(location, NameKind::PseudoKeyword);
+            }
+            continue;
+        }
+
         if (auto *idExpression = dynamic_cast<cxx::IdExpressionAST *>(*slot)) {
             if (idExpression->unqualifiedId) {
                 record(idExpression->unqualifiedId->firstSourceLocation(),
