@@ -359,6 +359,10 @@ public:
     // declares. See the Definition comment above.
     [[nodiscard]] Definition definitionOf(cxx::Symbol *symbol) const;
 
+    // Whether a using declaration in this file names \a symbol, or brought in
+    // the function \a symbol is.
+    [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
+
     // The name of the class specifier that has a body for \a symbol, if this
     // document holds one.
     [[nodiscard]] cxx::SourceLocation classBodyNameOf(cxx::ClassSymbol *symbol) const;
@@ -463,6 +467,57 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
 
     if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
         collect(inner, enclosing + QStringList(name));
+}
+
+bool CxxFrontendDocument::Private::isThroughUsingDeclaration(cxx::Symbol *symbol) const
+{
+    cxx::ScopeSymbol *global = unit.globalScope();
+    if (!global || !symbol)
+        return false;
+
+    // Every scope of the file, since a using declaration sits wherever it was
+    // written -- at file scope, in a namespace, in a class, in a function.
+    bool found = false;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            if (found)
+                return;
+            if (auto *usingDeclaration = dynamic_cast<cxx::UsingDeclarationSymbol *>(member)) {
+                if (usingDeclaration->target() == symbol) {
+                    found = true;
+                    return;
+                }
+                for (cxx::FunctionSymbol *function : usingDeclaration->introducedFunctions()) {
+                    if (function == symbol) {
+                        found = true;
+                        return;
+                    }
+                }
+            }
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::UsingDeclarationSymbol *usingDeclaration
+                     : overloadSet->usingDeclarations()) {
+                    for (cxx::FunctionSymbol *function
+                         : usingDeclaration->introducedFunctions()) {
+                        if (function == symbol) {
+                            found = true;
+                            return;
+                        }
+                    }
+                }
+                // And into the bodies: a using declaration is as much at home
+                // inside a function as at file scope, and a function is
+                // reached through the set it lives in.
+                for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions())
+                    walk(function);
+                continue;
+            }
+            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                walk(inner);
+        }
+    };
+    walk(global);
+    return found;
 }
 
 cxx::SourceLocation CxxFrontendDocument::Private::classBodyNameOf(
@@ -911,6 +966,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     declaration.name = qualifiedNameOf(symbol);
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
+    declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
 
     if (const cxx::SourceLocation location = definition.location ? definition.location
                                                                  : symbol->location()) {
@@ -1166,6 +1222,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     declaration.name = qualifiedNameOf(symbol);
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
+    declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
     const cxx::SourcePosition position = d->unit.tokenStartPosition(
         definition.location ? definition.location : symbol->location());
     declaration.line = int(position.line);

@@ -168,6 +168,7 @@ private slots:
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
     void aDeclarationWithoutItsDefinitionSaysSo();
+    void aNameFromAUsingDeclarationSaysSo();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -571,6 +572,52 @@ void tst_cxxfrontenddocument::aDeclarationWithoutItsDefinitionSaysSo()
     const CxxFrontendDocument::Declaration variable = other.declarationAt(2, 12);
     QVERIFY(variable.isValid());
     QVERIFY(variable.isDefinition);
+}
+
+// A using declaration brings a name in, and the built-in model answers such a
+// name with the using declaration itself -- QTCREATORBUG7903 asked for that.
+// This model resolves the name to what it actually names, so it says which
+// names came in that way and leaves the choice to whoever has to agree with
+// the built-in answer.
+void tst_cxxfrontenddocument::aNameFromAUsingDeclarationSaysSo()
+{
+    const QByteArray source =
+        "namespace NS {\n"
+        "class Foo {};\n"
+        "class Bar {};\n"
+        "}\n"
+        "using NS::Foo;\n"
+        "void f() {\n"
+        "    Foo brought;\n"
+        "    NS::Bar qualified;\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Declaration brought = document.declarationAt(7, 5);
+    QVERIFY(brought.isValid());
+    QCOMPARE(brought.name, QString("NS::Foo"));
+    QVERIFY(brought.throughUsingDeclaration);
+
+    // A name nothing brought in is answered without that caveat.
+    const CxxFrontendDocument::Declaration qualified = document.declarationAt(8, 9);
+    QVERIFY(qualified.isValid());
+    QCOMPARE(qualified.name, QString("NS::Bar"));
+    QVERIFY(!qualified.throughUsingDeclaration);
+
+    // And a using declaration inside a function body counts as much as one at
+    // file scope, which takes looking into the bodies to see.
+    const QByteArray inFunction =
+        "namespace NS {\n"
+        "class Foo {};\n"
+        "}\n"
+        "void f() {\n"
+        "    using NS::Foo;\n"
+        "    Foo brought;\n"
+        "}\n";
+    const CxxFrontendDocument inner(QString::fromUtf8(inFunction), "<stdin>");
+    const CxxFrontendDocument::Declaration fromBlock = inner.declarationAt(6, 5);
+    QVERIFY(fromBlock.isValid());
+    QVERIFY(fromBlock.throughUsingDeclaration);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

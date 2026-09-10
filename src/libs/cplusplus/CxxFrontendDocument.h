@@ -166,6 +166,13 @@ public:
         // means the document does not have it at all.
         bool isDefinition = true;
 
+        // Whether a using declaration in this file brought the name in. The
+        // built-in model answers such a name with the using declaration
+        // itself rather than with what it names, which is what
+        // QTCREATORBUG7903 asked for; a caller that has to agree with it can
+        // tell from here that it must answer this one itself.
+        bool throughUsingDeclaration = false;
+
         bool isValid() const { return line != 0; }
     };
 
