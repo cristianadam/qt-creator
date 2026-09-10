@@ -14,7 +14,11 @@ QtcPlugin {
     // beside the built-in one for the file being edited. Available when the
     // option is on, used when the environment asks for it; see
     // CppEditorPlugin::initialize() and cxxfrontendmodel.h.
+    // cxx-frontend directly as well, because the quick fixes read the syntax
+    // tree itself (see CxxFrontendAst.h): that is where those headers and the
+    // C++23 they are written in come from.
     Depends { name: "CxxFrontendBridge"; condition: qtc.enableCxxFrontend }
+    Depends { name: "cxx-frontend"; condition: qtc.enableCxxFrontend }
 
     Group {
         name: "CxxFrontend"

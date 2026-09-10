@@ -169,9 +169,12 @@ extend_qtc_plugin(CppEditor
 # the built-in one for the file being edited. Available when the option is on,
 # used when the environment asks for it; see CppEditorPlugin::initialize() and
 # cxxfrontendmodel.h.
+# cxx-frontend is depended on directly, not only through the bridge: the quick
+# fixes read the syntax tree itself (see CxxFrontendAst.h), which needs those
+# headers and the C++23 they are written in.
 extend_qtc_plugin(CppEditor
   CONDITION QTC_ENABLE_CXX_FRONTEND
-  DEPENDS CxxFrontendBridge
+  DEPENDS CxxFrontendBridge cxx-frontend
   DEFINES QTC_WITH_CXX_FRONTEND
   SOURCES
     cxxfrontendmodel.cpp cxxfrontendmodel.h
