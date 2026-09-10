@@ -16,6 +16,10 @@
 #include <memory>
 #include <optional>
 
+namespace cxx {
+class TranslationUnit;
+}
+
 namespace CPlusPlus {
 
 // One parsed file, on the cxx-frontend model.
@@ -464,6 +468,16 @@ public:
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list
     // cannot go stale.
     static QStringList unsupportedQueries();
+
+    // The parsed file itself, for the readers that work on the shape of the
+    // code rather than on what it means: the quick fixes, the decl/def link,
+    // expanding a selection. Everything above is a question with an answer
+    // this document works out; this hands over the tree those readers walk.
+    //
+    // Only forward declared, so that including this header still does not
+    // mean compiling cxx's own headers, which need C++23. Whoever takes it
+    // up does have to; CxxFrontendAst.h is where that begins.
+    cxx::TranslationUnit *translationUnit() const;
 
 private:
     class Private;

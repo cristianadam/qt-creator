@@ -57,6 +57,21 @@ Project {
         cpp.defines: base.concat(['SRCDIR="' + path + '"'])
     }
 
+    // Reads the syntax tree itself, so it depends on cxx-frontend directly:
+    // that is where the include paths and the C++23 those headers need come
+    // from.
+    QtcAutotest {
+        name: "cxx-frontend ast autotest"
+        builtByDefault: qtc.enableCxxFrontend
+
+        Depends { name: "CxxFrontendBridge" }
+        Depends { name: "CPlusPlus" }
+        Depends { name: "cxx-frontend" }
+        files: "tst_cxxfrontendast.cpp"
+
+        cpp.defines: base.concat(['SRCDIR="' + path + '"'])
+    }
+
     QtcAutotest {
         name: "cxx-frontend snapshot autotest"
         builtByDefault: qtc.enableCxxFrontend

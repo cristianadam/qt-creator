@@ -39,3 +39,13 @@ add_qtc_test(tst_cxxfrontendsnapshot
   DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES tst_cxxfrontendsnapshot.cpp
 )
+
+# Reads the syntax tree itself, so it depends on cxx-frontend directly: that
+# is where the include paths and the C++23 those headers need come from. Every
+# other test here asks a document questions instead and does not.
+add_qtc_test(tst_cxxfrontendast
+  CONDITION QTC_ENABLE_CXX_FRONTEND
+  DEPENDS CxxFrontendBridge CPlusPlus cxx-frontend
+  DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  SOURCES tst_cxxfrontendast.cpp
+)

@@ -1327,6 +1327,11 @@ const CxxFrontendDocument::Completion &CxxFrontendDocument::completion() const
     return d->completion;
 }
 
+cxx::TranslationUnit *CxxFrontendDocument::translationUnit() const
+{
+    return &d->unit;
+}
+
 const QList<CxxFrontendDocument::Diagnostic> &CxxFrontendDocument::diagnostics() const
 {
     return d->diagnostics;

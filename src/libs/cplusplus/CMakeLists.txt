@@ -64,6 +64,7 @@ add_qtc_library(CxxFrontendBridge STATIC
   DEPENDS 3rd_cplusplus CPlusPlus cxx-frontend Qt::Core
   PUBLIC_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/.."
   SOURCES
+    CxxFrontendAst.cpp CxxFrontendAst.h
     CxxFrontendLexer.cpp CxxFrontendLexer.h
     CxxFrontendDocument.cpp CxxFrontendDocument.h
     CxxFrontendOverview.cpp CxxFrontendOverview.h

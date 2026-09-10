@@ -16,6 +16,8 @@ QtcLibrary {
     Depends { name: "cxx-frontend" }
 
     files: [
+        "CxxFrontendAst.cpp",
+        "CxxFrontendAst.h",
         "CxxFrontendLexer.cpp",
         "CxxFrontendLexer.h",
         "CxxFrontendDocument.cpp",
