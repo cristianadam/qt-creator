@@ -1,0 +1,3 @@
+Convert to Hexadecimal
+Convert to Octal
+Convert to Binary

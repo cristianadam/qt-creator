@@ -7,6 +7,10 @@
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
 
+#ifdef WITH_TESTS
+#include "cppquickfix_test.h"
+#endif
+
 #include <bitset>
 
 using namespace CPlusPlus;
@@ -40,29 +44,10 @@ private:
   Base class for converting numeric literals between decimal, octal and hex.
   Does the base check for the specific ones and parses the number.
 
-  Test cases:
-    0xFA0Bu;
-    0X856A;
-    298.3;
-    199;
-    074;
-    199L;
-    074L;
-    -199;
-    -017;
-    0783; // invalid octal
-    0; // border case, allow only hex<->decimal
-
   Activates on: numeric literals
 */
 class ConvertNumericLiteral : public CppQuickFixFactory
 {
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         const QList<AST *> &path = interface.path();
@@ -189,11 +174,24 @@ private:
     }
 };
 
+#ifdef WITH_TESTS
+class ConvertNumericLiteralTest : public Tests::CppQuickFixTestObject
+{
+    Q_OBJECT
+public:
+    using CppQuickFixTestObject::CppQuickFixTestObject;
+};
+#endif
+
 } // namespace
 
 void registerConvertNumericLiteralQuickfix()
 {
-    CppQuickFixFactory::registerFactory<ConvertNumericLiteral>();
+    REGISTER_QUICKFIX_FACTORY_WITH_STANDARD_TEST(ConvertNumericLiteral);
 }
 
 } // namespace CppEditor::Internal
+
+#ifdef WITH_TESTS
+#include <convertnumericliteral.moc>
+#endif
