@@ -121,8 +121,9 @@ QString DoxygenGenerator::generate(QTextCursor cursor, DeclarationAST *decl)
             && decltr->core_declarator->asDeclaratorId()
             && decltr->core_declarator->asDeclaratorId()->name) {
         CoreDeclaratorAST *coreDecl = decltr->core_declarator;
+        NameAST * const nameAst = coreDecl->asDeclaratorId()->name;
         if (m_settings.generateBrief)
-            writeBrief(&comment, m_printer.prettyName(coreDecl->asDeclaratorId()->name->name));
+            writeBrief(&comment, m_printer.prettyName(nameAst->name));
         else
             writeNewLine(&comment);
 
@@ -151,7 +152,12 @@ QString DoxygenGenerator::generate(QTextCursor cursor, DeclarationAST *decl)
                     }
                 }
             }
-            if (funcDecltr->symbol
+            // A destructor returns nothing, whatever the front end made of
+            // the declaration on its own: read out of the class it belongs
+            // to, "~C();" has no type written in it at all, and the implicit
+            // int of an old C rule is not something to document.
+            if (!nameAst->asDestructorName()
+                    && funcDecltr->symbol
                     && funcDecltr->symbol->returnType().type()
                     && !funcDecltr->symbol->returnType()->asVoidType()
                     && !funcDecltr->symbol->returnType()->isUndefinedType()) {
