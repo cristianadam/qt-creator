@@ -15,6 +15,15 @@
 #include <cplusplus/ASTPath.h>
 #include <cplusplus/TranslationUnit.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#endif
+
 using namespace CPlusPlus;
 using namespace Utils::Text;
 
@@ -425,10 +434,397 @@ SelectionSteps BuiltinTree::stepsOf(AST *ast) const
     return {extent};
 }
 
-// The places to stop at around the cursor, read off the built-in tree.
-SelectionPath selectionPathAt(const Document::Ptr &doc, const QTextDocument *text,
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The same, read off the cxx-frontend model's tree.
+//
+// Which constructs have places inside them worth stopping at is a fact about
+// C++ rather than about a tree, so these are the cases above, one for one.
+// What differs is where each part is written down: cxx keeps the parameters
+// of a lambda on the lambda itself and the qualifiers of a member function on
+// a chunk of its declarator, and it says which token is which rather than
+// counting from the ends of a node.
+class CxxTree
+{
+public:
+    CxxTree(const CxxFrontendDocument &document, QTextDocument *text, const QTextCursor &cursor)
+        : m_document(document)
+        , m_text(text)
+        , m_cursorAnchor(cursor.anchor())
+        , m_cursorPosition(cursor.position())
+        , m_line(cursor.blockNumber() + 1)
+        , m_column(cursor.positionInBlock() + 1)
+    {}
+
+    SelectionPath path() const
+    {
+        SelectionPath path;
+        const QList<cxx::AST *> nodes = cxxAstPathAt(m_document, m_line, m_column);
+        for (cxx::AST *node : nodes) {
+            // A node with nothing written where it stands -- one a macro
+            // stood for -- is not a place a selection can grow to.
+            const SelectionSteps steps = stepsOf(node);
+            if (!steps.isEmpty())
+                path.append(steps);
+        }
+        return path;
+    }
+
+private:
+    int startOf(const CxxAstRange &range) const
+    {
+        return m_text->findBlockByNumber(range.startLine - 1).position() + range.startColumn - 1;
+    }
+
+    int endOf(const CxxAstRange &range) const
+    {
+        return m_text->findBlockByNumber(range.endLine - 1).position() + range.endColumn - 1;
+    }
+
+    SelectionStep extentOf(cxx::AST *node) const
+    {
+        if (!node)
+            return {};
+        const CxxAstRange range = cxxAstRangeOf(m_document, node);
+        if (!range.isValid())
+            return {};
+        return {startOf(range), endOf(range)};
+    }
+
+    // Where one token stands, and where a pair of them stands together.
+    SelectionStep placeOf(cxx::SourceLocation location) const
+    {
+        const CxxAstRange range = cxxTokenRangeAt(m_document, location);
+        if (!range.isValid())
+            return {};
+        return {startOf(range), endOf(range)};
+    }
+
+    SelectionStep placeBetween(cxx::SourceLocation first, cxx::SourceLocation last) const
+    {
+        const SelectionStep firstPlace = placeOf(first);
+        const SelectionStep lastPlace = placeOf(last);
+        if (!firstPlace || !lastPlace)
+            return {};
+        return {firstPlace.start, lastPlace.end};
+    }
+
+    bool isCursorIn(const SelectionStep &step) const
+    {
+        return m_cursorAnchor >= step.start && m_cursorPosition <= step.end;
+    }
+
+    QString textOf(const SelectionStep &step) const
+    {
+        QTextCursor cursor(m_text);
+        cursor.setPosition(step.start);
+        cursor.setPosition(step.end, QTextCursor::KeepAnchor);
+        return cursor.selectedText();
+    }
+
+    // What a literal says, without the quotes around it -- and, where it is a
+    // raw string, without the parentheses inside them either. Read off the
+    // text: how much of a literal is punctuation is a question about how it
+    // was written, prefix and delimiter and all.
+    SelectionStep contentsOfLiteral(const SelectionStep &extent) const
+    {
+        const QString spelling = textOf(extent);
+
+        // The first quote of either kind: a string may hold an apostrophe and
+        // a char literal a quotation mark, so which one opens the literal is
+        // whichever comes first, and it is the one that closes it too.
+        qsizetype firstQuote = -1;
+        for (qsizetype i = 0; i < spelling.size() && firstQuote < 0; ++i) {
+            if (spelling.at(i) == u'"' || spelling.at(i) == u'\'')
+                firstQuote = i;
+        }
+        if (firstQuote < 0)
+            return {};
+        const QChar quote = spelling.at(firstQuote);
+
+        const bool isRaw = firstQuote > 0 && spelling.at(firstQuote - 1) == u'R';
+        const qsizetype open = isRaw ? spelling.indexOf(u'(') : firstQuote;
+        const qsizetype close = isRaw ? spelling.lastIndexOf(u')') : spelling.lastIndexOf(quote);
+        if (open < 0 || close <= open)
+            return {};
+
+        return {extent.start + int(open) + 1, extent.start + int(close)};
+    }
+
+    // The statements between the braces of a scope, or -- where there are
+    // none -- the blank space itself.
+    SelectionStep contentsOfBraces(cxx::List<cxx::StatementAST *> *statements,
+                                   cxx::SourceLocation lbraceLoc,
+                                   cxx::SourceLocation rbraceLoc) const
+    {
+        const SelectionStep lbrace = placeOf(lbraceLoc);
+        const SelectionStep rbrace = placeOf(rbraceLoc);
+        if (!lbrace || !rbrace)
+            return {};
+        if (!statements)
+            return {lbrace.end, rbrace.start};
+
+        cxx::List<cxx::StatementAST *> *last = statements;
+        while (last->next)
+            last = last->next;
+
+        const SelectionStep first = extentOf(statements->value);
+        const SelectionStep lastStatement = extentOf(last->value);
+        if (!first || !lastStatement)
+            return {};
+        return {first.start, lastStatement.end};
+    }
+
+    // What is inside the parentheses, then them as well, then the whole
+    // construct -- and with the cursor in front of them, only the last of
+    // those, since what is inside is a node of its own.
+    SelectionSteps stepsAroundParentheses(cxx::SourceLocation lparenLoc,
+                                          cxx::SourceLocation rparenLoc,
+                                          const SelectionStep &extent) const
+    {
+        const SelectionStep parens = placeBetween(lparenLoc, rparenLoc);
+        if (!parens || m_cursorPosition <= parens.start)
+            return {extent};
+        return {{parens.start + 1, parens.end - 1}, parens, extent};
+    }
+
+    SelectionSteps stepsOfClass(cxx::ClassSpecifierAST *specifier,
+                                const SelectionStep &extent) const
+    {
+        const SelectionStep braces = placeBetween(specifier->lbraceLoc, specifier->rbraceLoc);
+        const SelectionStep keyword = placeOf(specifier->classLoc);
+        if (!braces || !keyword)
+            return {extent};
+
+        int nameEnd = braces.end;
+        bool isInClassName = false;
+        if (auto * const name = dynamic_cast<cxx::NameIdAST *>(specifier->unqualifiedId)) {
+            if (const SelectionStep identifier = placeOf(name->identifierLoc)) {
+                nameEnd = identifier.end;
+                isInClassName = isCursorIn(identifier);
+            }
+        }
+
+        if (m_cursorPosition > braces.start)
+            return {{braces.start + 1, braces.end - 1}, braces, extent};
+        if (isCursorIn(keyword))
+            return {keyword, {keyword.start, nameEnd}, extent};
+        if (isInClassName)
+            return {{keyword.start, nameEnd}, extent};
+        return {extent};
+    }
+
+    SelectionSteps stepsOfNamespace(cxx::NamespaceDefinitionAST *definition,
+                                    const SelectionStep &extent) const
+    {
+        const SelectionStep keyword = placeOf(definition->namespaceLoc);
+        const SelectionStep identifier = placeOf(definition->identifierLoc);
+        if (!keyword || !identifier)
+            return {extent};
+
+        if (m_cursorPosition <= keyword.end)
+            return {keyword, {keyword.start, identifier.end}, extent};
+        if (isCursorIn(identifier))
+            return {identifier, {keyword.start, identifier.end}, extent};
+        return {extent};
+    }
+
+    SelectionSteps stepsOfFunctionDefinition(cxx::FunctionDefinitionAST *definition,
+                                             const SelectionStep &extent) const
+    {
+        // Everything to the left of the body, before the definition as a
+        // whole, and only with the cursor outside that body.
+        auto * const body
+            = dynamic_cast<cxx::CompoundStatementFunctionBodyAST *>(definition->functionBody);
+        if (!body || !body->statement || !definition->declSpecifierList)
+            return {extent};
+
+        const SelectionStep lbrace = placeOf(body->statement->lbraceLoc);
+        const SelectionStep specifier = extentOf(definition->declSpecifierList->value);
+        if (!lbrace || !specifier || m_cursorPosition > lbrace.start)
+            return {extent};
+
+        return {{specifier.start, lbrace.start - 1}, extent};
+    }
+
+    SelectionSteps stepsOfDeclarator(cxx::DeclaratorAST *declarator,
+                                     const SelectionStep &extent) const
+    {
+        // The declarator without the qualifiers written after its parameters,
+        // before the whole of it.
+        cxx::List<cxx::DeclaratorChunkAST *> * const chunks = declarator->declaratorChunkList;
+        if (!chunks)
+            return {extent};
+
+        auto * const chunk = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunks->value);
+        if (!chunk || !chunk->cvQualifierList)
+            return {extent};
+
+        const SelectionStep cvQualifier = extentOf(chunk->cvQualifierList->value);
+        if (!cvQualifier || m_cursorPosition >= cvQualifier.start)
+            return {extent};
+
+        return {{extent.start, cvQualifier.start - 1}, extent};
+    }
+
+    SelectionSteps stepsOfLambda(cxx::LambdaExpressionAST *lambda,
+                                 const SelectionStep &extent) const
+    {
+        const SelectionStep captures = placeBetween(lambda->lbracketLoc, lambda->rparenLoc);
+        if (!captures || !isCursorIn(captures))
+            return {extent};
+
+        const SelectionStep returnType = lambda->trailingReturnType
+                                             ? extentOf(lambda->trailingReturnType)
+                                             : SelectionStep();
+        SelectionSteps steps;
+
+        // What a lambda declares of itself: its parameters, and the return
+        // type where one is written after them. The built-in tree has a node
+        // for exactly that much and cxx keeps the parts on the lambda, so the
+        // step is written out here rather than found -- under the same
+        // condition a node would put it: that the cursor is in it.
+        if (const SelectionStep parameters = placeBetween(lambda->lparenLoc, lambda->rparenLoc)) {
+            const SelectionStep declarator = returnType
+                                                 ? SelectionStep(parameters.start, returnType.end)
+                                                 : parameters;
+            if (isCursorIn(declarator))
+                steps.append(declarator);
+        }
+
+        // Then the capture group with the parameters, the prototype where
+        // there is a return type, and the whole lambda.
+        steps.append(captures);
+        if (returnType)
+            steps.append({captures.start, returnType.end});
+        steps.append(extent);
+        return steps;
+    }
+
+    SelectionSteps stepsOf(cxx::AST *node) const;
+
+    const CxxFrontendDocument &m_document;
+    QTextDocument * const m_text;
+    const int m_cursorAnchor;
+    const int m_cursorPosition;
+    const int m_line;
+    const int m_column;
+};
+
+SelectionSteps CxxTree::stepsOf(cxx::AST *node) const
+{
+    const SelectionStep extent = extentOf(node);
+    if (!extent)
+        return {};
+
+    // An initializer is a node here and part of the declarator in the
+    // built-in tree, and what it stands for -- the equals sign with the value
+    // after it -- is not something to select: the value is a node of its own,
+    // and what has the equals sign in it as well is the declaration. So it is
+    // no stop on the way out.
+    if (dynamic_cast<cxx::EqualInitializerAST *>(node))
+        return {};
+
+    if (auto * const statement = dynamic_cast<cxx::CompoundStatementAST *>(node)) {
+        const SelectionStep contents = contentsOfBraces(statement->statementList,
+                                                        statement->lbraceLoc,
+                                                        statement->rbraceLoc);
+        if (!contents)
+            return {extent};
+        return {contents, extent};
+    }
+
+    if (auto * const call = dynamic_cast<cxx::CallExpressionAST *>(node))
+        return stepsAroundParentheses(call->lparenLoc, call->rparenLoc, extent);
+
+    if (dynamic_cast<cxx::StringLiteralExpressionAST *>(node)
+        || dynamic_cast<cxx::CharLiteralExpressionAST *>(node)) {
+        const SelectionStep contents = contentsOfLiteral(extent);
+        if (!contents)
+            return {extent};
+        return {contents, extent};
+    }
+
+    if (auto * const statement = dynamic_cast<cxx::ForStatementAST *>(node))
+        return stepsAroundParentheses(statement->lparenLoc, statement->rparenLoc, extent);
+
+    if (auto * const statement = dynamic_cast<cxx::ForRangeStatementAST *>(node))
+        return stepsAroundParentheses(statement->lparenLoc, statement->rparenLoc, extent);
+
+    if (auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(node))
+        return stepsOfClass(specifier, extent);
+
+    if (auto * const definition = dynamic_cast<cxx::NamespaceDefinitionAST *>(node))
+        return stepsOfNamespace(definition, extent);
+
+    if (auto * const initializer = dynamic_cast<cxx::ParenInitializerAST *>(node)) {
+        const SelectionStep parens = placeBetween(initializer->lparenLoc,
+                                                  initializer->rparenLoc);
+        if (!parens)
+            return {extent};
+        return {{parens.start + 1, parens.end - 1}, parens};
+    }
+
+    if (auto * const chunk = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(node)) {
+        // The parameters and the parentheses around them. What is written
+        // after them belongs to the declarator this is a chunk of.
+        const SelectionStep parens = placeBetween(chunk->lparenLoc, chunk->rparenLoc);
+        if (!parens)
+            return {extent};
+        return {parens};
+    }
+
+    if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(node))
+        return stepsOfFunctionDefinition(definition, extent);
+
+    if (auto * const declarator = dynamic_cast<cxx::DeclaratorAST *>(node))
+        return stepsOfDeclarator(declarator, extent);
+
+    if (auto * const templateId = dynamic_cast<cxx::SimpleTemplateIdAST *>(node)) {
+        // The name a template is instantiated by, before the instantiation.
+        const SelectionStep identifier = placeOf(templateId->identifierLoc);
+        if (!identifier || !isCursorIn(identifier))
+            return {extent};
+        return {identifier, extent};
+    }
+
+    if (auto * const declaration = dynamic_cast<cxx::TemplateDeclarationAST *>(node)) {
+        const SelectionStep keyword = placeOf(declaration->templateLoc);
+        const SelectionStep greater = placeOf(declaration->greaterLoc);
+        if (!keyword || !greater || !isCursorIn(keyword))
+            return {extent};
+
+        // The keyword, then the keyword with the parameters it introduces.
+        return {keyword, {keyword.start, greater.end}, extent};
+    }
+
+    if (auto * const lambda = dynamic_cast<cxx::LambdaExpressionAST *>(node))
+        return stepsOfLambda(lambda, extent);
+
+    return {extent};
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+// The places to stop at around the cursor.
+SelectionPath selectionPathAt(const Document::Ptr &doc, QTextDocument *text,
                               const QTextCursor &cursor)
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The other model, where it has read this file. It has not unless it was
+    // asked for, and a file it could not read at all offers nothing, so an
+    // empty answer means the built-in tree answers the way it always did.
+    if (const std::shared_ptr<const CxxFrontendSnapshot> model
+        = Internal::cxxFrontendModel(doc->filePath())) {
+        if (const CxxFrontendDocument * const document
+            = model->document(doc->filePath().toFSPathString())) {
+            const SelectionPath path = CxxTree(*document, text, cursor).path();
+            if (!path.isEmpty())
+                return path;
+        }
+    }
+#endif
+
     return BuiltinTree(doc, text, cursor).path();
 }
 

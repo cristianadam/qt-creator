@@ -6,6 +6,10 @@
 // tree, and it is next in line to be read off another one, so what it selects
 // has to be written down first -- a rewrite of untested code is a rewrite
 // nobody can check.
+//
+// Which is also what says the other tree answers the same: with
+// QTC_CXX_FRONTEND_MODEL set every row here is walked on the cxx-frontend
+// model instead, and the selections are the same ones.
 
 #include "cppselectionchanger_test.h"
 
@@ -18,6 +22,11 @@
 #include <QTest>
 #include <QTextCursor>
 #include <QTextDocument>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cppworkingcopy.h"
+#include "cxxfrontendmodel.h"
+#endif
 
 using namespace CPlusPlus;
 
@@ -48,9 +57,26 @@ public:
         // without one the built-in translation unit counts lines from zero,
         // and then nothing it says lines up with the text the cursor is in.
         // The marker's own line is consumed by it.
-        m_document = Document::create(Utils::FilePath::fromPathPart(u"<test>"));
+        const Utils::FilePath filePath = Utils::FilePath::fromPathPart(u"<test>");
+        m_document = Document::create(filePath);
         m_document->setUtf8Source("#line 1 \"<test>\"\n" + source);
         m_document->check();
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // What the editor's parser does when the other model is asked for:
+        // run it over the file being edited, so that the changer finds it and
+        // reads that tree instead. The rows are the same either way -- which
+        // tree answers is decided by the environment, exactly as in the
+        // editor -- and that is the whole of what the comparison says.
+        //
+        // The source itself, with no marker in front of it: that model counts
+        // lines from the text it is given.
+        if (cxxFrontendModelRequested()) {
+            WorkingCopy workingCopy;
+            workingCopy.insert(filePath, source);
+            updateCxxFrontendModel({}, filePath, {}, workingCopy);
+        }
+#endif
 
         m_text.setPlainText(QString::fromUtf8(source));
         m_cursor = QTextCursor(&m_text);
