@@ -441,14 +441,14 @@ F2TestCase::F2TestCase(CppEditorAction action,
         QEXPECT_FAIL("matchFunctionSignature_Follow_9_fuzzy",
                      "clangd points to declaration", Abort);
     } else {
-        QEXPECT_FAIL("globalVarFromEnum", "Contributor works on a fix.", Abort);
         QEXPECT_FAIL("matchFunctionSignature_Follow_5", "foo(int) resolved as CallAST", Abort);
         if (tag.contains("SLOT") && tag.contains("no 2nd QObject"))
             QEXPECT_FAIL("", "FIXME", Abort);
-        // The built-in lookup's limit, and not the other model's: with that
-        // one consulted this case is answered correctly, and expecting it to
-        // fail would then fail itself.
+        // The built-in lookup's limits, and not the other model's: with that
+        // one consulted these cases are answered correctly, and expecting
+        // them to fail would then fail itself.
         if (!cxxFrontendConsulted()) {
+            QEXPECT_FAIL("globalVarFromEnum", "Contributor works on a fix.", Abort);
             QEXPECT_FAIL("baseClassViaDecltype",
                          "we cannot properly evaluate decltype at bind time", Abort);
         }
