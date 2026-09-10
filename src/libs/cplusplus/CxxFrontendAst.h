@@ -61,4 +61,14 @@ CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node);
 // what a macro wrote has no place here to rewrite.
 CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location);
 
+// Whether the front end stumbled over anything inside \a node: an error
+// reported at a position the node covers.
+//
+// A construct it could not read is not one to rewrite. Recovering from an
+// error, the parser makes a tree that no longer matches the text -- a
+// statement can come out ending before its semicolon -- and a fix that moves
+// text by that tree moves the wrong text. Whoever rewrites code asks this
+// first and leaves the construct alone when the answer is true.
+bool cxxAstWasReadWithErrors(const CxxFrontendDocument &document, cxx::AST *node);
+
 } // namespace CPlusPlus

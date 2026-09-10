@@ -130,6 +130,7 @@ private slots:
     void nothingOutsideEveryNode();
     void whatAMacroWroteIsNotOnThePath();
     void whereOneTokenStands();
+    void aConstructTheFrontEndCouldNotRead();
 
     void theEnclosingDeclaration_data();
     void theEnclosingDeclaration();
@@ -348,6 +349,80 @@ void tst_cxxfrontendast::whereOneTokenStands()
     QVERIFY(cxxTokenRangeAt(document, macroOperand->opLoc).isValid());
     QVERIFY(!cxxAstRangeOf(document, macroOperand->leftExpression).isValid());
     QVERIFY(cxxAstRangeOf(document, macroOperand->rightExpression).isValid());
+}
+
+// Error recovery makes a tree that no longer matches the text, and that is
+// the trap for everything that rewrites code by the tree. The case is a real
+// one: "emit" is a macro in a Qt project and reads as nothing, but in a file
+// that never saw Qt it is an unknown name, and the statement comes out
+// ending before its own semicolon.
+void tst_cxxfrontendast::aConstructTheFrontEndCouldNotRead()
+{
+    const QByteArray source = "void f()\n"
+                              "{\n"
+                              "    if (true)\n"
+                              "        emit mySig();\n"
+                              "    else\n"
+                              "        return;\n"
+                              "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const QList<cxx::AST *> path = cxxAstPathAt(document, 3, 6);
+    cxx::IfStatementAST *ifStatement = nullptr;
+    for (auto it = path.rbegin(); it != path.rend(); ++it) {
+        if ((ifStatement = dynamic_cast<cxx::IfStatementAST *>(*it)))
+            break;
+    }
+    QVERIFY(ifStatement);
+
+    // What the tree says: the body is the one word, and it ends where the
+    // word does -- so a "}" put after it would land in the middle of the
+    // statement somebody wrote.
+    const CxxAstRange body = cxxAstRangeOf(document, ifStatement->statement);
+    QCOMPARE(body.endLine, 4);
+    QCOMPARE(body.endColumn, 13);
+
+    // Which is why this answers true here, and false for the same file with
+    // the name declared.
+    QVERIFY(cxxAstWasReadWithErrors(document, ifStatement));
+
+    const CxxFrontendDocument sound("void mySig();\n"
+                                    "void f()\n"
+                                    "{\n"
+                                    "    if (true)\n"
+                                    "        mySig();\n"
+                                    "    else\n"
+                                    "        return;\n"
+                                    "}\n",
+                                    "<stdin>");
+    const QList<cxx::AST *> soundPath = cxxAstPathAt(sound, 4, 6);
+    cxx::IfStatementAST *soundIf = nullptr;
+    for (auto it = soundPath.rbegin(); it != soundPath.rend(); ++it) {
+        if ((soundIf = dynamic_cast<cxx::IfStatementAST *>(*it)))
+            break;
+    }
+    QVERIFY(soundIf);
+    QVERIFY(!cxxAstWasReadWithErrors(sound, soundIf));
+
+    // And an error somewhere else in the file is not this construct's
+    // business.
+    const CxxFrontendDocument elsewhere("int broken = ;\n"
+                                        "void mySig();\n"
+                                        "void f()\n"
+                                        "{\n"
+                                        "    if (true)\n"
+                                        "        mySig();\n"
+                                        "}\n",
+                                        "<stdin>");
+    QVERIFY(!elsewhere.diagnostics().isEmpty());
+    const QList<cxx::AST *> elsewherePath = cxxAstPathAt(elsewhere, 5, 6);
+    cxx::IfStatementAST *elsewhereIf = nullptr;
+    for (auto it = elsewherePath.rbegin(); it != elsewherePath.rend(); ++it) {
+        if ((elsewhereIf = dynamic_cast<cxx::IfStatementAST *>(*it)))
+            break;
+    }
+    QVERIFY(elsewhereIf);
+    QVERIFY(!cxxAstWasReadWithErrors(elsewhere, elsewhereIf));
 }
 
 void tst_cxxfrontendast::theEnclosingDeclaration_data()

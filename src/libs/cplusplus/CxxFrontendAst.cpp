@@ -160,6 +160,26 @@ CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node)
     return {int(start.line), int(start.column), int(end.line), int(end.column)};
 }
 
+bool cxxAstWasReadWithErrors(const CxxFrontendDocument &document, cxx::AST *node)
+{
+    const CxxAstRange range = cxxAstRangeOf(document, node);
+    if (!range.isValid())
+        return false;
+
+    for (const CxxFrontendDocument::Diagnostic &diagnostic : document.diagnostics()) {
+        if (!diagnostic.isError)
+            continue;
+        if (diagnostic.line < range.startLine || diagnostic.line > range.endLine)
+            continue;
+        if (diagnostic.line == range.startLine && diagnostic.column < range.startColumn)
+            continue;
+        if (diagnostic.line == range.endLine && diagnostic.column > range.endColumn)
+            continue;
+        return true;
+    }
+    return false;
+}
+
 CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location)
 {
     cxx::TranslationUnit *unit = document.translationUnit();
