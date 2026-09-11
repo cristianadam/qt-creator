@@ -89,6 +89,12 @@ public:
                     int operationIndex = 0);
 };
 
+// Whether the fixes are being read on the cxx-frontend model. What a test
+// asks when the two models write the same thing two ways and both are
+// right: the case then says which, rather than excusing one of them, so
+// that a change on either side is still caught.
+bool onTheCxxFrontendModel();
+
 class CppQuickFixTestObject : public QObject
 {
     Q_OBJECT

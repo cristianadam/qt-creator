@@ -40,7 +40,7 @@ namespace CppEditor::Internal::Tests {
 
 // Whether the fixes are being matched on the cxx-frontend model, which reads
 // one of the cases below better than the built-in tree does.
-static bool onTheCxxFrontendModel()
+bool onTheCxxFrontendModel()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     return cxxFrontendModelRequested();

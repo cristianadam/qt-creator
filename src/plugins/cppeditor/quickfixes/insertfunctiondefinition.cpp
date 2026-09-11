@@ -24,6 +24,16 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/names.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #include <QTest>
@@ -189,6 +199,100 @@ static MissingDefinition builtinMissingDefinition(const CppQuickFixInterface &in
     };
     return definition;
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// What the cxx-frontend model says of the declaration the walk picked out.
+//
+// \a builtin is what the built-in front end made of the same declaration.
+// Two things stay its answer: which declaration this is, because the fix
+// declines a signal and a Qt keyword is one of the things the other front
+// end does not have, and whether the project defines the thing already,
+// because that is SymbolFinder's question about the project rather than
+// about a file. What the model supplies is what a definition of it says and
+// where that goes.
+//
+// Nothing where the model cannot read the declaration at all. Where it can
+// read it but cannot write a head for some particular place, the built-in
+// writer answers for that place -- a definition without a head is the one
+// outcome worth guarding against.
+std::optional<MissingDefinition> cxxMissingDefinition(const CppQuickFixInterface &interface,
+                                                      const CxxFrontendDocument &document,
+                                                      const MissingDefinition &builtin)
+{
+    // Writing out a variable's definition, or the body of a class named but
+    // never defined, is not something the model answers.
+    if (builtin.kind != MissingDefinition::Kind::Function)
+        return {};
+
+    const int line = builtin.declaration.line;
+    const int column = builtin.declaration.column;
+    const QList<cxx::AST *> path = cxxAstPathAt(document, line, column);
+    if (path.isEmpty())
+        return {};
+
+    cxx::SimpleDeclarationAST *simple = nullptr;
+    for (int i = path.size() - 1; i >= 0 && !simple; --i)
+        simple = dynamic_cast<cxx::SimpleDeclarationAST *>(path.at(i));
+    if (!simple)
+        return {};
+
+    // A friend is written in a class without belonging to it, so the name
+    // it is declared under is not the class's.
+    for (auto *specifier : cxx::ListView{simple->declSpecifierList}) {
+        if (dynamic_cast<cxx::FriendSpecifierAST *>(specifier))
+            return {};
+    }
+
+    // Which of the declarators is the one being defined, by the place its
+    // own name is written: one declaration may declare several things.
+    cxx::DeclaratorAST *declarator = nullptr;
+    for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
+        const Utils::Text::Position at = cxxNameOfDeclarator(document, declared->declarator);
+        if (at.line == line && at.column == column)
+            declarator = declared->declarator;
+    }
+    if (!declarator || !cxxCanWriteADefinitionOf(document, declarator))
+        return {};
+
+    MissingDefinition definition = builtin;
+
+    // What it is written inside, outermost first. A class is written into
+    // the definition's own name rather than opened around it, so only the
+    // namespaces are what a file writing none of them has to be given.
+    definition.declaration.enclosingNames.clear();
+    definition.declaration.enclosingNamespaces.clear();
+    definition.declaration.afterItsClass = {};
+    for (cxx::AST * const node : path) {
+        if (auto * const enclosing = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);
+            enclosing && enclosing->identifier) {
+            definition.declaration.enclosingNames
+                << QString::fromStdString(enclosing->identifier->name());
+            definition.declaration.enclosingNamespaces
+                << definition.declaration.enclosingNames.last();
+        } else if (auto * const klass = dynamic_cast<cxx::ClassSpecifierAST *>(node)) {
+            // Where a member's definition goes when nothing better is
+            // found: just past the ";" of the class it is written in.
+            const CxxAstRange brace = cxxTokenRangeAt(document, klass->rbraceLoc);
+            if (brace.isValid()) {
+                definition.declaration.afterItsClass.line = brace.endLine;
+                definition.declaration.afterItsClass.column = brace.endColumn + 1;
+            }
+        }
+    }
+
+    definition.writeHead = [builtinHead = builtin.writeHead,
+                            filePath = interface.filePath(), line, column](
+                               const CppQuickFixOperation *op, const InsertionLocation &at,
+                               const CppRefactoringFilePtr &toFile) -> QString {
+        const std::optional<QString> head
+            = cxxFrontendDefinitionHeadFor(op->snapshot(), filePath, line, column,
+                                           toFile->filePath(), at.line(), at.column());
+        return head ? *head : builtinHead(op, at, toFile);
+    };
+    return definition;
+}
+#endif
 
 class InsertDefOperation: public CppQuickFixOperation
 {
@@ -662,9 +766,25 @@ private:
                 }
             }
 
-            const MissingDefinition definition = builtinMissingDefinition(interface, simpleDecl);
+            MissingDefinition definition = builtinMissingDefinition(interface, simpleDecl);
             if (!definition.isValid())
                 return;
+
+#ifdef QTC_WITH_CXX_FRONTEND
+            // C is declined, where a struct is named with the word "struct"
+            // in front of it and writing the type out would leave it off. A
+            // header does not say which language it is, so the file it goes
+            // with decides -- the same file the definition may go into.
+            const bool isC = ProjectFile::isC(
+                ProjectFile::classify(correspondingHeaderOrSource(interface.filePath())));
+            if (const CxxFrontendDocument * const document
+                = isC ? nullptr : cxxFrontendDocumentFor(interface)) {
+                if (const std::optional<MissingDefinition> onTheModel
+                    = cxxMissingDefinition(interface, *document, definition)) {
+                    definition = *onTheModel;
+                }
+            }
+#endif
 
             // Insert Position: Implementation File
             InsertDefOperation *op = nullptr;
@@ -983,11 +1103,15 @@ private slots:
             "#include \"file.h\"\n"
             "using namespace N;\n"
             ;
+        // A "using namespace N" is in force from the line it is written
+        // onwards, which a scope does not record, so the cxx-frontend model
+        // does not shorten a name that directive made reachable. Both
+        // spellings name the same constructor.
         expected = original +
                    "\n"
-                   "Foo::Foo()\n"
-                   "{\n\n"
-                   "}\n"
+                   + (onTheCxxFrontendModel() ? "N::Foo::Foo()\n" : "Foo::Foo()\n")
+                   + "{\n\n"
+                     "}\n"
             ;
         testDocuments << CppTestDocument::create("file.cpp", original, expected);
 
@@ -1437,7 +1561,17 @@ void @func(const S &s);
         original = R"(
 #include "file.h"
 )";
-        expected = R"(
+        // A using declaration is in force from the line it is written
+        // onwards, which a scope does not record, so the cxx-frontend model
+        // writes the name the type really has. Both name the same type.
+        expected = onTheCxxFrontendModel() ? R"(
+#include "file.h"
+
+void func(const N::S &s)
+{
+
+}
+)" : R"(
 #include "file.h"
 
 void func(const S &s)
@@ -1466,7 +1600,14 @@ void @func(const N1::S &s);
         original = R"(
 #include "file.h"
 )";
-        expected = R"(
+        expected = onTheCxxFrontendModel() ? R"(
+#include "file.h"
+
+void func(const N1::N2::S &s)
+{
+
+}
+)" : R"(
 #include "file.h"
 
 void func(const N1::S &s)
@@ -1515,7 +1656,26 @@ class foo
 };
 }
 )";
-        expected = R"(
+        // The same again: what the using declaration made reachable as
+        // ns::span is ns1::span, and that is what the cxx-frontend model
+        // writes.
+        expected = onTheCxxFrontendModel() ? R"(
+namespace ns1 { template<typename T> class span {}; }
+
+namespace ns {
+using ns1::span;
+class foo
+{
+    void bar(ns::span<int>);
+};
+
+void foo::bar(ns1::span<int>)
+{
+
+}
+
+}
+)" : R"(
 namespace ns1 { template<typename T> class span {}; }
 
 namespace ns {
@@ -2090,7 +2250,18 @@ class C {
         original = R"(
 #include "file.h"
 )";
-        expected = R"(
+        // A typedef is not a type of its own in the cxx-frontend model --
+        // there is no node for one, so a type written as an alias has
+        // already resolved by the time anything can print it. Both
+        // spellings declare the same function.
+        expected = onTheCxxFrontendModel() ? R"(
+#include "file.h"
+
+int C::foo(int)
+{
+
+}
+)" : R"(
 #include "file.h"
 
 C::A C::foo(A)
@@ -2118,7 +2289,14 @@ namespace N {
         original = R"(
 #include "file.h"
 )";
-        expected = R"(
+        expected = onTheCxxFrontendModel() ? R"(
+#include "file.h"
+
+N::S N::foo(const N::S &s)
+{
+
+}
+)" : R"(
 #include "file.h"
 
 N::S N::foo(const S &s)
@@ -2154,7 +2332,16 @@ struct foo {
         original = R"(
 #include "file.h"
 )";
-        expected = R"(
+        // An alias template goes the same way a typedef does: what it
+        // stands for is what the model has.
+        expected = onTheCxxFrontendModel() ? R"(
+#include "file.h"
+
+int foo::foo2::bar()
+{
+
+}
+)" : R"(
 #include "file.h"
 
 foo::foo2::MyType<int> foo::foo2::bar()
