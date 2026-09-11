@@ -635,6 +635,14 @@ void CxxFrontendModelTest::testOutline_data()
                                               "void f();\n"
                                               "}\n"
                                               "}\n");
+    QTest::newRow("a namespace written without a name")
+        << QByteArray("namespace {\n"
+                      "int hidden;\n"
+                      "struct S { void f(); };\n"
+                      "}\n");
+    QTest::newRow("a class template and a specialization of it")
+        << QByteArray("template<typename T> struct R { void run(); };\n"
+                      "template<> struct R<int> { void run(); };\n");
     QTest::newRow("an enum and a typedef") << QByteArray("enum E { First, Second };\n"
                                                          "typedef int Integer;\n"
                                                          "struct S { E kind; };\n");
@@ -661,6 +669,15 @@ static const char *knownOutlineDivergence(const QString &row)
     // the same disagreement tst_cxxfrontendoverview holds open.
     if (row == "an enum and a typedef")
         return "the two disagree about the type of an enumerator";
+
+    // A template is a symbol of its own to the built-in model, with the
+    // class under it and its parameters beside it, so a class template
+    // draws three rows where this model draws one. This model has no such
+    // distinction -- a class template is a class that has parameters -- and
+    // it writes a specialization under the arguments it is for, which is
+    // what somebody wrote, where the built-in one writes "R<>".
+    if (row == "a class template and a specialization of it")
+        return "the built-in model makes a template a symbol of its own";
 
     // One symbol stands for every declaration of a class, recorded where the
     // class was first named. So a class declared above and defined below is

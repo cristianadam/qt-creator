@@ -111,9 +111,17 @@ public:
     // What the file declares, outermost first, each scope's members after it.
     struct Symbol
     {
-        QString name;          // as prettyName would print it
+        // As prettyName would print it, and empty for a scope written
+        // without a name -- an anonymous namespace or union, which has
+        // nothing written for it but holds what is written inside.
+        QString name;
         QString type;          // as prettyType would print it, with the name
-        QStringList qualified; // the enclosing scopes, outermost first
+        // The enclosing scopes, outermost first. A scope with no name of its
+        // own stands here as "<anonymous namespace>" and its like, the words
+        // the built-in front end's readers write: a path with a gap in it
+        // leads nowhere, and two things of one name in two anonymous scopes
+        // have to be told apart.
+        QStringList qualified;
         int line = 0;
         int column = 0;
 

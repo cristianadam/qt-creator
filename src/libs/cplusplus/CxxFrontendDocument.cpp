@@ -287,6 +287,26 @@ QString qualifiedNameOf(cxx::Symbol *symbol)
     return parts.join("::");
 }
 
+// What stands in a path where a scope has no name of its own. An anonymous
+// namespace declares things this file has, and a path with a gap in it
+// leads nowhere, so something has to be written there -- and these are the
+// words the built-in front end's readers write, so that whoever reads a
+// path reads the same one either way.
+QString anonymousScopeNameOf(cxx::Symbol *symbol, cxx::TokenKind classKey)
+{
+    if (dynamic_cast<cxx::NamespaceSymbol *>(symbol))
+        return QLatin1String("<anonymous namespace>");
+    if (dynamic_cast<cxx::EnumSymbol *>(symbol) || dynamic_cast<cxx::ScopedEnumSymbol *>(symbol))
+        return QLatin1String("<anonymous enum>");
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(symbol)) {
+        if (cls->isUnion())
+            return QLatin1String("<anonymous union>");
+        return classKey == cxx::TokenKind::T_STRUCT ? QLatin1String("<anonymous struct>")
+                                                    : QLatin1String("<anonymous class>");
+    }
+    return QLatin1String("<anonymous symbol>");
+}
+
 // What kind of thing a symbol is, in the distinctions a reader asking "what
 // is this" cares about.
 CxxFrontendDocument::Kind kindOf(cxx::Symbol *symbol)
@@ -770,21 +790,66 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
         }
 
         describe(member, enclosing, parent);
+
+        // A class template keeps its specializations on the template itself,
+        // the way a class keeps its constructors, so walking the scope does
+        // not reach them. What the file wrote is whichever of them stands
+        // here: an instantiation the front end made for itself stands where
+        // the template does, which the rule above has already recorded.
+        if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member)) {
+            for (const cxx::TemplateSpecialization &specialization : cls->specializations()) {
+                cxx::Symbol * const specialized = specialization.symbol;
+                if (!specialized || !isFromMainFile(specialized))
+                    continue;
+                if (const cxx::SourceLocation location = specialized->location();
+                    location && described.contains(location.index())) {
+                    continue;
+                }
+                describe(specialized, enclosing, parent);
+            }
+        }
     }
 }
 
 void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
                                             const QStringList &enclosing, int parent)
 {
-    const QString name = member->name() ? fromStd(cxx::to_string(member->name())) : QString();
-    if (name.isEmpty())
+    QString name = member->name() ? fromStd(cxx::to_string(member->name())) : QString();
+
+    // Something with no name is nothing to send a reader to -- unless it is
+    // a namespace, a class or an enumeration written without one: those
+    // declare things the file has, and leaving them out leaves those out.
+    // A block is a scope as well and declares nothing anybody looks for.
+    const CxxFrontendDocument::Kind kind = kindOf(member);
+    cxx::ScopeSymbol * const innerScope = member->asScopeSymbol();
+    const bool declaresThingsOfItsOwn = kind == CxxFrontendDocument::Kind::Namespace
+                                        || kind == CxxFrontendDocument::Kind::Class
+                                        || kind == CxxFrontendDocument::Kind::Enum;
+    if (name.isEmpty() && !(innerScope && declaresThingsOfItsOwn))
         return;
+
+    // A specialization is written under its template's name with the
+    // arguments it is for, and those arguments are the whole of what tells
+    // it from the template and from another specialization.
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member); cls && !name.isEmpty()) {
+        QStringList arguments;
+        for (const cxx::TemplateArgument &argument : cls->templateArguments()) {
+            // Written the way somebody writes it, and nobody writes the
+            // leading "::" of the path from the global scope.
+            QString written = fromStd(cxx::to_string(argument));
+            if (written.startsWith("::"))
+                written.remove(0, 2);
+            arguments.append(written);
+        }
+        if (!arguments.isEmpty())
+            name += "<" + arguments.join(", ") + ">";
+    }
 
     CxxFrontendDocument::Symbol symbol;
     symbol.name = name;
     symbol.qualified = enclosing;
     symbol.parent = parent;
-    symbol.kind = kindOf(member);
+    symbol.kind = kind;
 
     // A constructor or a destructor returns nothing, so nothing is written
     // where a return type would be -- not even void, which is what the type
@@ -866,8 +931,10 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     symbols.append(symbol);
     cxxSymbols.push_back(member);
 
-    if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
-        collect(inner, enclosing + QStringList(name), int(symbols.size()) - 1);
+    if (innerScope) {
+        const QString written = name.isEmpty() ? anonymousScopeNameOf(member, classKey) : name;
+        collect(innerScope, enclosing + QStringList(written), int(symbols.size()) - 1);
+    }
 }
 
 cxx::FunctionSymbol *CxxFrontendDocument::Private::functionAround(
