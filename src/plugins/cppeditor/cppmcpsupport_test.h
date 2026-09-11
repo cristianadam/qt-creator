@@ -16,6 +16,7 @@ private slots:
     void testGetSymbolInfo();
     void testFindReferences();
     void testGetTypeHierarchy();
+    void testFindCallers();
     void testTypeHierarchyBases();
     void testFindOverrides();
     void testFindOverridesThroughTheHierarchy();

@@ -156,6 +156,40 @@ void CppMcpSupportTest::testGetTypeHierarchy()
 }
 
 // The other direction: what the class inherits, and what those inherit.
+// Who calls a function, grouped by the function the call is written in.
+void CppMcpSupportTest::testFindCallers()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+    CppEditor::Tests::TemporaryDir dir;
+    Utils::FilePath file;
+    QVERIFY(writeAndParse(dir,
+                          "void target();\n"
+                          "void caller() { target(); }\n"
+                          "void twice() { target(); target(); }\n"
+                          "void none() {}\n",
+                          &file));
+
+    // target at line 1, column 6.
+    const QJsonArray callers = callTool("cpp_find_callers",
+                                        {{"file", file.toFSPathString()}, {"line", 1}, {"column", 6}})
+                                   .value("callers").toArray();
+
+    QHash<QString, int> sitesPerCaller;
+    for (const QJsonValue &value : callers) {
+        const QJsonObject node = value.toObject();
+        sitesPerCaller.insert(node.value("caller").toString(),
+                              node.value("call_sites").toArray().size());
+    }
+
+    // The declaration is not a call, and a function that does not call it is
+    // not a caller.
+    QCOMPARE(sitesPerCaller.value("caller"), 1);
+    QCOMPARE(sitesPerCaller.value("twice"), 2);
+    QVERIFY(!sitesPerCaller.contains("none"));
+    QCOMPARE(sitesPerCaller.size(), 2);
+}
+
 void CppMcpSupportTest::testTypeHierarchyBases()
 {
     CppEditor::Tests::TestCase testCase;
