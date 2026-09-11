@@ -1806,6 +1806,17 @@ QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsA
         auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
         if (!simple)
             continue;
+
+        // A friend is written in the class without being one of its members:
+        // it is somebody else's function, named here to let it in.
+        bool isFriend = false;
+        for (auto *specifier : cxx::ListView{simple->declSpecifierList}) {
+            if (dynamic_cast<cxx::FriendSpecifierAST *>(specifier))
+                isFriend = true;
+        }
+        if (isFriend)
+            continue;
+
         for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
             auto * const function = dynamic_cast<cxx::FunctionSymbol *>(declared->symbol);
             if (!function || !declared->declarator)

@@ -515,7 +515,9 @@ public:
     // A function a macro's replacement declared is not among them: nobody
     // wrote it where it stands, so there is no order to keep it in. Neither
     // is one defined inside the class, which is already where its
-    // declaration is.
+    // declaration is, nor a friend -- that is written in the class without
+    // being one of its members, and its definition belongs with whatever
+    // else the namespace it really lives in defines.
     struct MemberFunction
     {
         QString name; // written out in full, the scopes included

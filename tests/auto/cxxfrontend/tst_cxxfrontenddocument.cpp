@@ -1334,6 +1334,16 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "};\n")
         << QStringList({"S::p/0 @2:18 pure", "S::q/0 @3:10"});
 
+    // Written in the class without being one of its members: somebody else's
+    // function, named here to let it in. So it is not among the ones whose
+    // definitions belong with this class's.
+    QTest::newRow("a friend")
+        << QByteArray("struct $S {\n"
+                      "    friend void f();\n"
+                      "    void g();\n"
+                      "};\n")
+        << QStringList("S::g/0 @3:10");
+
     QTest::newRow("a position in no class")
         << QByteArray("$void f();\n") << QStringList();
 }
