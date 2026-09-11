@@ -1443,6 +1443,45 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     return parts;
 }
 
+std::optional<CxxFrontendDocument::UsingDirective> cxxFrontendUsingDirectiveAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::UsingDirective directive = document->usingDirectiveAt(line, column);
+    if (!directive.isValid())
+        return std::nullopt;
+    return directive;
+}
+
+std::optional<CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const QString &namespaceName, int afterLine, int afterColumn, bool everyOneAtGlobalScope)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    // The one the editor is running over where there is one, and otherwise
+    // the file read here and now: a directive in a header is in force in
+    // every file that includes it, and those are files nobody has open.
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    return holding.document->usingDirectivesOf(namespaceName, afterLine, afterColumn,
+                                               everyOneAtGlobalScope);
+}
+
 QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
     const QList<CxxFrontendDocument::MemberFunction> &functions)

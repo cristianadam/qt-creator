@@ -220,6 +220,8 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void usingDirectiveAt_data();
+    void usingDirectiveAt();
     void usingDirectives_data();
     void usingDirectives();
 
@@ -1588,6 +1590,62 @@ void tst_cxxfrontenddocument::partsOfAClass()
                              .arg(part.endLine).arg(part.endColumn));
     }
     QCOMPARE(described, expected);
+}
+
+// The using directive at the cursor.
+void tst_cxxfrontenddocument::usingDirectiveAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("on the directive")
+        << QByteArray("namespace N {}\n"
+                      "$using namespace N;\n")
+        << QString("N 2:1-2:19 global");
+    QTest::newRow("on the name it names")
+        << QByteArray("namespace N {}\n"
+                      "using namespace $N;\n")
+        << QString("N 2:1-2:19 global");
+    QTest::newRow("in a block")
+        << QByteArray("namespace N {}\n"
+                      "void f() { $using namespace N; }\n")
+        << QString("N 2:12-2:30 scoped");
+
+    // More than a name would have to be written in front of what it
+    // found, which the fix reading this does not offer.
+    QTest::newRow("a nested namespace")
+        << QByteArray("namespace N { namespace M {} }\n"
+                      "$using namespace N::M;\n")
+        << QString();
+    QTest::newRow("a using declaration is not one")
+        << QByteArray("namespace N { int i; }\n"
+                      "$using N::i;\n")
+        << QString();
+    QTest::newRow("on nothing of the sort") << QByteArray("$int i;\n") << QString();
+}
+
+void tst_cxxfrontenddocument::usingDirectiveAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::UsingDirective directive
+        = document.usingDirectiveAt(positions.first().line, positions.first().column);
+    if (expected.isEmpty()) {
+        QVERIFY(!directive.isValid());
+        return;
+    }
+    QVERIFY(directive.isValid());
+    QCOMPARE(QString("%1 %2:%3-%4:%5 %6").arg(directive.namespaceName)
+                 .arg(directive.extent.startLine).arg(directive.extent.startColumn)
+                 .arg(directive.extent.endLine).arg(directive.extent.endColumn)
+                 .arg(directive.isAtGlobalScope ? "global" : "scoped"),
+             expected);
 }
 
 // What taking a using directive away comes down to: which directives go,

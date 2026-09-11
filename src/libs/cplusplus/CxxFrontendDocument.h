@@ -620,6 +620,27 @@ public:
     // would be left behind.
     QList<Extent> partsOfClass(const QString &qualifiedName) const;
 
+    // The using directive written at a position, and nothing where the
+    // position is on none -- it has to be on the directive itself or on
+    // the name it names, which is where a reader asking to remove one has
+    // the cursor.
+    //
+    // Nothing either for one that names a nested namespace: what has to be
+    // written in front of the names it found is then more than a name, and
+    // the fix that reads this does not offer itself there.
+    struct UsingDirective
+    {
+        QString namespaceName;
+        Extent extent;
+
+        // Written at global scope rather than in a block, which is what
+        // makes it reach every file that includes this one.
+        bool isAtGlobalScope = false;
+
+        bool isValid() const { return extent.isValid(); }
+    };
+    UsingDirective usingDirectiveAt(int line, int column) const;
+
     // What taking "using namespace \a namespaceName" out of this file comes
     // down to: the directives for it whose lines go away, and every place
     // that has to write the namespace out once they are gone.

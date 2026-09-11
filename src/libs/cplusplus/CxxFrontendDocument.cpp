@@ -2084,6 +2084,23 @@ QStringList nameWrittenInUsingDirective(cxx::UsingDirectiveAST *directive)
     return parts;
 }
 
+// What a name written down reaches: an alias stands for what it names,
+// which is what the parser records where the alias is used as a scope.
+cxx::Symbol *throughAlias(cxx::Symbol *symbol)
+{
+    auto * const alias = cxx::symbol_cast<cxx::TypeAliasSymbol>(symbol);
+    if (!alias)
+        return symbol;
+    const cxx::Type * const type = cxx::unqualified_type(alias->type());
+    if (auto * const cls = cxx::type_cast<cxx::ClassType>(type))
+        return cls->symbol();
+    if (auto * const enumeration = cxx::type_cast<cxx::EnumType>(type))
+        return enumeration->symbol();
+    if (auto * const enumeration = cxx::type_cast<cxx::ScopedEnumType>(type))
+        return enumeration->symbol();
+    return symbol;
+}
+
 // A block or a body that a using directive's effect ends with. A class is
 // not one: a directive cannot be written in a class.
 bool isAScopeAUsingDirectiveEndsWith(cxx::AST *node)
@@ -2107,6 +2124,36 @@ cxx::SourceLocation locationOfWrittenName(cxx::UnqualifiedIdAST *id)
 }
 
 } // namespace
+
+CxxFrontendDocument::UsingDirective CxxFrontendDocument::usingDirectiveAt(int line,
+                                                                          int column) const
+{
+    const QList<cxx::AST *> path = cxxAstPathAt(*this, line, column);
+    cxx::UsingDirectiveAST *directive = nullptr;
+    bool insideAScope = false;
+    for (cxx::AST * const node : path) {
+        if (isAScopeAUsingDirectiveEndsWith(node))
+            insideAScope = true;
+        if (auto * const found = dynamic_cast<cxx::UsingDirectiveAST *>(node))
+            directive = found;
+    }
+    if (!directive)
+        return {};
+
+    // Only a plain name: what a nested one found has more than a name to
+    // be written in front of it.
+    const QStringList written = nameWrittenInUsingDirective(directive);
+    if (written.size() != 1)
+        return {};
+
+    const CxxAstRange range = cxxAstRangeOf(*this, directive);
+    if (!range.isValid())
+        return {};
+
+    return {written.first(),
+            {range.startLine, range.startColumn, range.endLine, range.endColumn},
+            !insideAScope};
+}
 
 CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
     const QString &namespaceName, int afterLine, int afterColumn,
@@ -2143,6 +2190,19 @@ CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
             return answer;
     }
 
+    // The namespace itself, for the names the tree does not resolve: what
+    // an alias written in front of a :: stands for is recorded rather than
+    // the alias, and a using directive carries no symbol at all.
+    cxx::ScopeSymbol *theNamespace = d->unit.globalScope();
+    for (const QString &part : namespaceParts) {
+        cxx::Symbol * const found = theNamespace
+                                        ? cxx::qualifiedLookup(theNamespace,
+                                                               d->unit.control()->getIdentifier(
+                                                                   part.toStdString()))
+                                        : nullptr;
+        theNamespace = found ? found->asScopeSymbol() : nullptr;
+    }
+
     // Whether a node ends exactly at the place given, which is what tells
     // the directive being taken away from one that merely stands before
     // the place reading starts at -- an #include, a line above.
@@ -2168,19 +2228,59 @@ CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
     bool shadowed = false;         // another directive for the namespace is in force
     unsigned shadowEnd = 0;        // and it is in force until here
 
-    // A name needs the namespace written in front of it when what it
-    // resolves to is reached through that namespace and nothing else.
-    const auto consider = [&](cxx::SourceLocation location, cxx::Symbol *symbol) {
-        if (!symbol || !isThisFile(location) || d->unit.tokenAt(location).macroGenerated())
-            return;
-        const QString written = fromStd(d->unit.tokenText(location));
-        if (written.isEmpty())
-            return;
-        if (reachablePathOf(symbol) != namespaceParts + QStringList(written))
-            return;
+    const auto record = [&](cxx::SourceLocation location) {
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
         answer.placesNeedingTheNamespace.append(
             Place{QString(), int(position.line), int(position.column)});
+    };
+
+    // What the namespace has under the name written at a place, which is
+    // what the name found while the directive was in force.
+    const auto inTheNamespace = [&](const QString &written) {
+        return theNamespace ? cxx::qualifiedLookup(theNamespace,
+                                                   d->unit.control()->getIdentifier(
+                                                       written.toStdString()))
+                            : nullptr;
+    };
+
+    const auto writtenAt = [&](cxx::SourceLocation location) {
+        if (!isThisFile(location) || d->unit.tokenAt(location).macroGenerated())
+            return QString();
+        return fromStd(d->unit.tokenText(location));
+    };
+
+    // A name needs the namespace written in front of it when what it
+    // resolves to is reached through that namespace and nothing else.
+    const auto consider = [&](cxx::SourceLocation location, cxx::Symbol *symbol) {
+        if (!symbol)
+            return;
+        const QString written = writtenAt(location);
+        if (written.isEmpty())
+            return;
+        if (reachablePathOf(symbol) == namespaceParts + QStringList(written)) {
+            record(location);
+            return;
+        }
+
+        // Or the namespace has it under that name and that is what the
+        // name reached: an alias is written down as itself, while what the
+        // parser recorded for it is the thing it stands for.
+        cxx::Symbol * const found = inTheNamespace(written);
+        if (found && throughAlias(found) == symbol)
+            record(location);
+    };
+
+    // A using directive names a namespace and carries no symbol of its
+    // own, so there is nothing to compare: a directive for a namespace
+    // inside the one going away has to say it from now on.
+    const auto considerNamespaceName = [&](cxx::SourceLocation location) {
+        const QString written = writtenAt(location);
+        if (written.isEmpty())
+            return;
+        if (auto * const found = inTheNamespace(written);
+            found && found->asScopeSymbol()) {
+            record(location);
+        }
     };
 
     for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
@@ -2210,8 +2310,12 @@ CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
         if (leftTheDirectivesScope)
             break;
 
-        if (auto * const directive = dynamic_cast<cxx::UsingDirectiveAST *>(node)) {
-            if (nameWrittenInUsingDirective(directive) == namespaceParts) {
+        // The directives for the namespace itself, which are what goes --
+        // read before the start is settled, the way the built-in visitor
+        // reads them, since one of them may be where reading starts.
+        auto * const directive = dynamic_cast<cxx::UsingDirectiveAST *>(node);
+        if (directive && nameWrittenInUsingDirective(directive) == namespaceParts) {
+            {
                 if (searchForTheDirective && !started) {
                     // The file's own directive: start after it, and it is
                     // the one that goes.
@@ -2273,6 +2377,14 @@ CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
 
         if (!started || shadowed)
             continue;
+
+        // A directive for another namespace, which the one going away may
+        // be what found: "using namespace chrono" under "using namespace
+        // std" has to say std::chrono from now on.
+        if (directive && !directive->nestedNameSpecifier && directive->unqualifiedId) {
+            considerNamespaceName(directive->unqualifiedId->firstSourceLocation());
+            continue;
+        }
 
         // Inside the namespace itself nothing has to name it.
         if (auto * const ns = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);

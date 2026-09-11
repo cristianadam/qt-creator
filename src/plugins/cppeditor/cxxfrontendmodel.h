@@ -306,6 +306,23 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// The using directive written at a position, and nothing where this model
+// has not read the file or the position is on no directive.
+std::optional<CPlusPlus::CxxFrontendDocument::UsingDirective> cxxFrontendUsingDirectiveAt(
+    const Utils::FilePath &filePath, int line, int column);
+
+// What taking that directive out of \a filePath comes down to, and nothing
+// where this model cannot read the file -- which is a file to be read by the
+// other one rather than left alone.
+//
+// The file being edited comes out of the store, the rest are read here and
+// now: removing a directive from a header reaches every file that includes
+// it, and those are files nobody has open.
+std::optional<CPlusPlus::CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, const QString &namespaceName, int afterLine,
+    int afterColumn, bool everyOneAtGlobalScope);
+
 // Where the function at a position is *declared*, when that is somewhere
 // other than the position itself -- which is what appending a parameter to a
 // definition has to change as well.

@@ -11,6 +11,13 @@
 #include <cplusplus/Overview.h>
 #include <projectexplorer/projectmanager.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cppmodelmanager.h"
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
@@ -445,6 +452,81 @@ std::optional<UsingDirectiveToRemove> builtinUsingDirectiveAt(
     return directive;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// What the cxx-frontend model says the directive at the cursor is, and
+// what each file has to have done to it.
+//
+// A file the model cannot read is read by the built-in front end instead:
+// this fix reaches every file that includes the one being edited, and
+// leaving one of them alone would take away a directive some file still
+// leans on.
+std::optional<UsingDirectiveToRemove> modelUsingDirectiveAt(
+    const CppQuickFixInterface &interface, const FileReader &builtinReader)
+{
+    const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
+        interface.textDocument(), interface.position());
+    const std::optional<CxxFrontendDocument::UsingDirective> read
+        = cxxFrontendUsingDirectiveAt(interface.filePath(), at.line, at.column + 1);
+    if (!read)
+        return std::nullopt;
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    UsingDirectiveToRemove directive;
+    directive.namespaceName = read->namespaceName;
+    directive.range = {file->position(read->extent.startLine, read->extent.startColumn),
+                       file->position(read->extent.endLine, read->extent.endColumn)};
+    directive.isAtGlobalScope = read->isAtGlobalScope;
+    directive.read = [namespaceName = read->namespaceName, snapshot = interface.snapshot(),
+                      builtinReader](const CppRefactoringFilePtr &file, const Snapshot &fileSnapshot,
+                                     int startSymbol, bool removeAllAtGlobalScope) {
+        // A place is a line and a column to the model, and the sentinel
+        // "find the file's own directive" is no place at all.
+        int line = 0;
+        int column = 0;
+        if (startSymbol != SearchGlobalUsingDirectivePos)
+            file->lineAndColumn(startSymbol, &line, &column);
+
+        const std::optional<CxxFrontendDocument::UsingDirectives> read
+            = cxxFrontendUsingDirectivesIn(snapshot, CppModelManager::workingCopy(),
+                                           file->filePath(), namespaceName, line, column,
+                                           removeAllAtGlobalScope);
+        if (!read)
+            return builtinReader(file, fileSnapshot, startSymbol, removeAllAtGlobalScope);
+
+        UsingDirectivesInAFile answer;
+        for (const CxxFrontendDocument::Extent &directive : read->directivesToRemove) {
+            answer.directivesToRemove
+                << ChangeSet::Range{file->position(directive.startLine, directive.startColumn),
+                                    file->position(directive.endLine, directive.endColumn)};
+        }
+        for (const CxxFrontendDocument::Place &place : read->placesNeedingTheNamespace)
+            answer.placesNeedingTheNamespace << file->position(place.line, place.column);
+        answer.isGlobalUsingNamespace = read->isGlobalUsingNamespace;
+        answer.foundGlobalUsingNamespace = read->foundGlobalUsingNamespace;
+        return answer;
+    };
+    return directive;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+// The using directive at the cursor, read by whichever front end can read
+// it.
+std::optional<UsingDirectiveToRemove> usingDirectiveAt(const CppQuickFixInterface &interface)
+{
+    const std::optional<UsingDirectiveToRemove> builtin = builtinUsingDirectiveAt(interface);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (builtin) {
+        if (const std::optional<UsingDirectiveToRemove> onTheModel
+            = modelUsingDirectiveAt(interface, builtin->read)) {
+            return onTheModel;
+        }
+    }
+#endif
+    return builtin;
+}
+
 class RemoveUsingNamespaceOperation : public CppQuickFixOperation
 {
     struct Node
@@ -643,7 +725,7 @@ public:
 private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const std::optional<UsingDirectiveToRemove> directive = builtinUsingDirectiveAt(interface);
+        const std::optional<UsingDirectiveToRemove> directive = usingDirectiveAt(interface);
         if (!directive)
             return;
 
