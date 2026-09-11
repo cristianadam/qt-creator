@@ -306,6 +306,16 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// Every class \a filePath writes, with what each of its bases resolves to,
+// and nothing where this model cannot read the file -- which is then a file
+// for the other one to read rather than one to leave out.
+//
+// The file is read here and now unless the editor is running over it: a
+// search for what derives from a class looks at files nobody has open.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::ClassWithBases>> cxxFrontendClassesIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath);
+
 // The using directive written at a position, and nothing where this model
 // has not read the file or the position is on no directive.
 std::optional<CPlusPlus::CxxFrontendDocument::UsingDirective> cxxFrontendUsingDirectiveAt(

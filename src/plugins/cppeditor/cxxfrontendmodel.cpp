@@ -1443,6 +1443,24 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     return parts;
 }
 
+std::optional<QList<CxxFrontendDocument::ClassWithBases>> cxxFrontendClassesIn(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    return holding.document->classesWithTheirBases();
+}
+
 std::optional<CxxFrontendDocument::UsingDirective> cxxFrontendUsingDirectiveAt(
     const FilePath &filePath, int line, int column)
 {

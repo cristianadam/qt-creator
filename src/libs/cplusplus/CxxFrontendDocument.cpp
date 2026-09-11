@@ -3956,6 +3956,48 @@ QStringList CxxFrontendDocument::basesAt(int line, int column) const
     });
 }
 
+QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheirBases() const
+{
+    QList<ClassWithBases> classes;
+    if (!d->unit.ast())
+        return classes;
+
+    const auto mainFileId = std::uint32_t(d->unit.preprocessor()->mainSourceFileId());
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!specifier || !specifier->symbol || !specifier->unqualifiedId)
+            continue;
+
+        // Where this file writes the class's name. A class read in from a
+        // header belongs to the header, and a name a macro wrote stands
+        // nowhere anybody can be sent to.
+        const cxx::SourceLocation name = specifier->unqualifiedId->firstSourceLocation();
+        if (!name || d->unit.tokenAt(name).fileId() != mainFileId
+            || d->unit.tokenAt(name).macroGenerated()) {
+            continue;
+        }
+
+        ClassWithBases written;
+        written.qualifiedName = qualifiedNameOf(specifier->symbol);
+        if (written.qualifiedName.isEmpty())
+            continue;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(name);
+        written.place = {d->fileName, int(position.line), int(position.column)};
+        for (const auto &base : specifier->symbol->baseClasses()) {
+            if (!base || !base->symbol())
+                continue;
+            const QString path = qualifiedNameOf(base->symbol());
+            if (!path.isEmpty())
+                written.bases.append(path);
+        }
+        classes.append(written);
+    }
+    return classes;
+}
+
 QStringList CxxFrontendDocument::basesOf(const QString &className) const
 {
     if (className.isEmpty())

@@ -220,6 +220,8 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void classesWithTheirBases_data();
+    void classesWithTheirBases();
     void enclosingFunction_data();
     void enclosingFunction();
     void typeDeclared_data();
@@ -1592,6 +1594,83 @@ void tst_cxxfrontenddocument::partsOfAClass()
     for (const CxxFrontendDocument::Extent &part : document.partsOfClass(className)) {
         described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
                              .arg(part.endLine).arg(part.endColumn));
+    }
+    QCOMPARE(described, expected);
+}
+
+// Every class the file writes, with what its bases resolve to: what a search
+// for the classes deriving from one of them compares against.
+void tst_cxxfrontenddocument::classesWithTheirBases_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("a chain")
+        << QByteArray("class A {};\n"
+                      "class B : public A {};\n"
+                      "class C : public B {};\n")
+        << QStringList({"A @1:7", "B @2:7 : A", "C @3:7 : B"});
+
+    // The parser resolved the alias, so nothing here has to follow one.
+    QTest::newRow("a base named through an alias")
+        << QByteArray("class A {};\n"
+                      "typedef A AA;\n"
+                      "using AAA = AA;\n"
+                      "class B : public AA {};\n"
+                      "class C : public AAA {};\n")
+        << QStringList({"A @1:7", "B @4:7 : A", "C @5:7 : A"});
+
+    // Two classes of one name are two classes, which is what writing the
+    // path out says.
+    QTest::newRow("a name that means something else elsewhere")
+        << QByteArray("class A {};\n"
+                      "namespace N {\n"
+                      "class A {};\n"
+                      "class B : public A {};\n"
+                      "}\n"
+                      "class C : public A {};\n")
+        << QStringList({"A @1:7", "N::A @3:7", "N::B @4:7 : N::A", "C @6:7 : A"});
+
+    QTest::newRow("more than one base")
+        << QByteArray("class A {};\n"
+                      "class Other {};\n"
+                      "class B : public Other, public A {};\n")
+        << QStringList({"A @1:7", "Other @2:7", "B @3:7 : Other, A"});
+
+    // How a class inherits says nothing about what it inherits.
+    QTest::newRow("privately")
+        << QByteArray("class A {};\n"
+                      "class B : private A {};\n")
+        << QStringList({"A @1:7", "B @2:7 : A"});
+
+    QTest::newRow("a template deriving from it")
+        << QByteArray("class A {};\n"
+                      "template<typename T> class B : public A {};\n")
+        << QStringList({"A @1:7", "B @2:28 : A"});
+
+    QTest::newRow("a nested class")
+        << QByteArray("class A {};\n"
+                      "class Outer { class Inner : public A {}; };\n")
+        << QStringList({"A @1:7", "Outer @2:7", "Outer::Inner @2:21 : A"});
+
+    QTest::newRow("nothing that is not a class")
+        << QByteArray("struct S {};\nenum E { E1 };\nvoid f();\n")
+        << QStringList("S @1:8");
+}
+
+void tst_cxxfrontenddocument::classesWithTheirBases()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(QStringList, expected);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    for (const CxxFrontendDocument::ClassWithBases &written : document.classesWithTheirBases()) {
+        QString line = QString("%1 @%2:%3").arg(written.qualifiedName)
+                           .arg(written.place.line).arg(written.place.column);
+        if (!written.bases.isEmpty())
+            line += " : " + written.bases.join(", ");
+        described.append(line);
     }
     QCOMPARE(described, expected);
 }

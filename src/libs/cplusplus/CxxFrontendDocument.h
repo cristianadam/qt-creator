@@ -959,6 +959,22 @@ public:
     // that has followed a base here can go on to the next one.
     QStringList basesOf(const QString &className) const;
 
+    // Every class this file writes, with what each of its bases resolves to
+    // written out in full: what a search for the classes deriving from a
+    // particular one compares against.
+    //
+    // A base named through an alias is the class the alias stands for, and
+    // nothing here has to follow one -- the parser did. Two classes of the
+    // same name in different namespaces are told apart by the path, which is
+    // the whole reason the bases are written out rather than named.
+    struct ClassWithBases
+    {
+        QString qualifiedName;
+        Place place;       // where the class writes its name, in this file
+        QStringList bases; // written out in full
+    };
+    QList<ClassWithBases> classesWithTheirBases() const;
+
     // Looks a name up in what this file declares, through the front end's own
     // lookup rather than by scanning what symbols() flattened.
     //
