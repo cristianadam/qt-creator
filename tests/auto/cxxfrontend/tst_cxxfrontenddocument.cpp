@@ -208,6 +208,7 @@ private slots:
     void signatureWritesAsLittleAsTheOtherPlaceNeeds();
     void signatureWritesAReturnTypeForOutsideTheFunction();
     void noSignatureOffAFunction();
+    void signatureForAPlaceThatNamesNoFunction();
     void signatureOfADeclarationInAHeader();
 
     void memberFunctionsOfAClass_data();
@@ -1239,8 +1240,43 @@ void tst_cxxfrontenddocument::noSignatureOffAFunction()
 {
     const CxxFrontendDocument document("int global;\nvoid f() {}\n", "<stdin>");
 
+    // The first place has to name a function: that is what is being read.
     QVERIFY(!document.signatureAt({{}, 1, 5}, {{}, 2, 6}).isValid());
-    QVERIFY(!document.signatureAt({{}, 2, 6}, {{}, 1, 5}).isValid());
+
+    // The second does not, but it does have to be somewhere in the file.
+    QVERIFY(document.signatureAt({{}, 2, 6}, {{}, 1, 5}).isValid());
+    QVERIFY(!document.signatureAt({{}, 2, 6}, {{}, 90, 1}).isValid());
+}
+
+// A definition written into a file that says nothing about the function yet
+// is written at a place that names no function of its own. All the place
+// decides is how much has to stand in front of each name.
+void tst_cxxfrontenddocument::signatureForAPlaceThatNamesNoFunction()
+{
+    const QByteArray source =
+        "namespace N {\n"
+        "struct T {};\n"
+        "struct C {\n"
+        "    T f(T t);\n"
+        "};\n"
+        "}\n"
+        "\n"
+        "int here;\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // Written at file scope, where nothing of N is in force.
+    const CxxFrontendDocument::Signature outside
+        = document.signatureAt({{}, 4, 7}, {{}, 8, 5});
+    QVERIFY(outside.isValid());
+    QCOMPARE(outside.writeReturnType("N::C::f"), QString("N::T N::C::f"));
+    QCOMPARE(outside.writeParameter(0, "t"), QString("N::T t"));
+
+    // And inside the namespace, where it is not.
+    const CxxFrontendDocument::Signature inside
+        = document.signatureAt({{}, 4, 7}, {{}, 2, 8});
+    QVERIFY(inside.isValid());
+    QCOMPARE(inside.writeReturnType("C::f"), QString("T C::f"));
+    QCOMPARE(inside.writeParameter(0, "t"), QString("T t"));
 }
 
 // The case the whole thing is for: the declaration is in a header and the

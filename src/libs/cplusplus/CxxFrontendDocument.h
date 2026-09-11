@@ -371,9 +371,17 @@ public:
         int column = 0;
     };
 
-    // \a function is on the function being read, \a writtenAt on the
-    // declaration its types are to be written at. Both name a function this
-    // translation unit declares.
+    // \a function is on the function being read, \a writtenAt where its
+    // types are to be written. The first names a function this translation
+    // unit declares; the second need only be somewhere in it, since what a
+    // place decides is how much has to stand in front of each name.
+    //
+    // Where it does name a function -- the other side of a declaration and
+    // its definition, which is what the two-sided readers ask about -- a
+    // parameter is written inside that function, so a type its own scope
+    // reaches is written plain. Where it names none, which is what writing a
+    // definition into a file that says nothing about it yet looks like,
+    // every type is written for the scope the text is going into.
     Signature signatureAt(const Place &function, const Place &writtenAt) const;
 
     // The function at \a function, written out as a declaration of \a name

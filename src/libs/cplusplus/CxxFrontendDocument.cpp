@@ -2232,12 +2232,35 @@ CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
     };
 
     cxx::FunctionSymbol * const function = functionAt(function_);
-    cxx::FunctionSymbol * const other = functionAt(writtenAt);
-    if (!function || !other)
+    if (!function)
         return {};
     auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
     if (!type)
         return {};
+
+    // Where the two halves of a declaration written at the other place would
+    // be read. A parameter of a function stands inside it, so what that
+    // function's own scope reaches needs nothing written in front of it; its
+    // return type stands in front of the name, which is wherever the
+    // declaration is written -- for a definition under a qualified name,
+    // outside the class.
+    //
+    // Where the other place names no function, there is nothing to stand
+    // inside of: a definition being written somewhere that says nothing
+    // about it yet is the case, and then both halves are read where the text
+    // is going.
+    cxx::ScopeSymbol *inside = nullptr;
+    cxx::ScopeSymbol *around = nullptr;
+    if (cxx::FunctionSymbol * const other = functionAt(writtenAt)) {
+        inside = other;
+        around = d->scopeWrittenAround(d->nameLocationOf(other));
+    } else {
+        const cxx::SourceLocation there = d->tokenAt(writtenAt.line, writtenAt.column,
+                                                      writtenAt.filePath);
+        if (!there)
+            return {};
+        inside = around = d->scopeWrittenAround(there);
+    }
 
     Signature signature;
     signature.d = std::make_unique<Signature::Private>();
@@ -2245,14 +2268,8 @@ CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
     signature.d->function = function;
     signature.d->type = type;
     signature.d->parameterNames = d->parameterNamesOf(function);
-
-    // A parameter of the other side stands inside it, so what its own scope
-    // reaches needs nothing written in front of it. Its return type stands
-    // in front of the name, which is wherever the declaration is written --
-    // for a definition under a qualified name, outside the class.
-    signature.d->insideTheOtherSide = other;
-    signature.d->aroundTheOtherSide
-        = d->scopeWrittenAround(d->nameLocationOf(other));
+    signature.d->insideTheOtherSide = inside;
+    signature.d->aroundTheOtherSide = around;
 
     return signature;
 }
