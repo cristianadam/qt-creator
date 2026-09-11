@@ -615,15 +615,36 @@ InsertionLocation InsertionPointLocator::methodDeclarationInClass(
     AccessSpec xsSpec,
     ForceAccessSpec forceAccessSpec) const
 {
+    const InsertionLocation atItsName
+        = methodDeclarationInClass(filePath, clazz->line(), clazz->column(), xsSpec,
+                                   forceAccessSpec);
+    if (atItsName.isValid())
+        return atItsName;
+
+    // A class is recorded where it was *first* named, and that may be a
+    // declaration of it rather than the body: "class Foo;" written ahead of
+    // "class Foo {...};". Then there is nothing at that place to insert
+    // into, and what the symbol stands for has to be looked for.
+    const Document::Ptr doc = m_refactoringChanges.cppFile(filePath)->cppDocument();
+    if (!doc)
+        return {};
+    FindInClass find(doc->translationUnit(), clazz);
+    return methodDeclarationInClass(doc->translationUnit(), find(), xsSpec, AccessSpecEnd,
+                                    forceAccessSpec);
+}
+
+InsertionLocation InsertionPointLocator::methodDeclarationInClass(
+    const Utils::FilePath &filePath,
+    int line, int column,
+    AccessSpec xsSpec,
+    ForceAccessSpec forceAccessSpec) const
+{
 #ifdef QTC_WITH_CXX_FRONTEND
-    // A class is named where its name is written, and that is the one thing
-    // both front ends agree on -- so that is what the other model is asked
-    // about.
     if (const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(filePath)) {
         if (const CxxFrontendDocument * const document
             = model->document(filePath.toFSPathString())) {
             if (const std::optional<QList<AccessRun>> runs
-                = cxxAccessRuns(*document, clazz->line(), clazz->column())) {
+                = cxxAccessRuns(*document, line, column)) {
                 return insertionLocation(
                     filePath,
                     findMatch(*runs, xsSpec, AccessSpecEnd, forceAccessSpec),
@@ -634,14 +655,23 @@ InsertionLocation InsertionPointLocator::methodDeclarationInClass(
 #endif
 
     const Document::Ptr doc = m_refactoringChanges.cppFile(filePath)->cppDocument();
-    if (doc) {
-        FindInClass find(doc->translationUnit(), clazz);
-        ClassSpecifierAST *classAST = find();
-        return methodDeclarationInClass(doc->translationUnit(), classAST, xsSpec, AccessSpecEnd,
-                                        forceAccessSpec);
-    } else {
+    if (!doc)
         return InsertionLocation();
+
+    // The innermost class written around the position, which for the place a
+    // class is named at is that class. Nothing where no class body is
+    // written there at all.
+    ClassSpecifierAST *classAST = nullptr;
+    for (AST * const node : ASTPath(doc)(line, column)) {
+        if (ClassSpecifierAST * const specifier = node->asClassSpecifier();
+            specifier && specifier->lbrace_token && specifier->rbrace_token) {
+            classAST = specifier;
+        }
     }
+    if (!classAST)
+        return {};
+    return methodDeclarationInClass(doc->translationUnit(), classAST, xsSpec, AccessSpecEnd,
+                                    forceAccessSpec);
 }
 
 InsertionLocation InsertionPointLocator::methodDeclarationInClass(const TranslationUnit *tu,

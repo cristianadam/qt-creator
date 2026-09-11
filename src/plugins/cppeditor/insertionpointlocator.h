@@ -82,6 +82,19 @@ public:
             ForceAccessSpec forceAccessSpec = ForceAccessSpec::No
             ) const;
 
+    // The same, for the class whose name is written at \a line and \a column
+    // of \a filePath, both counted from one.
+    //
+    // A class is named where its name is written, which is the one thing
+    // every front end agrees on, so this is what a caller that read the class
+    // on any of them can ask. The overload above says the same thing with a
+    // symbol, and answers by asking this one.
+    InsertionLocation methodDeclarationInClass(const Utils::FilePath &filePath,
+            int line, int column,
+            AccessSpec xsSpec,
+            ForceAccessSpec forceAccessSpec = ForceAccessSpec::No
+            ) const;
+
     InsertionLocation methodDeclarationInClass(
             const CPlusPlus::TranslationUnit *tu,
             const CPlusPlus::ClassSpecifierAST *clazz,
