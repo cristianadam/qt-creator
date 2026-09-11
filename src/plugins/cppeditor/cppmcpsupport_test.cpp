@@ -3,6 +3,8 @@
 
 #include "cppmcpsupport_test.h"
 
+#include <utils/algorithm.h>
+
 #include "cpptoolstestcase.h"
 
 #include <mcp/server/toolregistry.h>
@@ -151,6 +153,37 @@ void CppMcpSupportTest::testGetTypeHierarchy()
     QCOMPARE(hierarchy.value("name").toString(), QString("Base"));
     QCOMPARE(objectNamed(hierarchy.value("derived").toArray(), "Derived").value("name").toString(),
              QString("Derived"));
+}
+
+// The other direction: what the class inherits, and what those inherit.
+void CppMcpSupportTest::testTypeHierarchyBases()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+    CppEditor::Tests::TemporaryDir dir;
+    Utils::FilePath file;
+    QVERIFY(writeAndParse(dir,
+                          "struct Top {};\n"
+                          "struct Middle : Top {};\n"
+                          "struct Other {};\n"
+                          "struct Leaf : Middle, Other {};\n",
+                          &file));
+
+    // Leaf at line 4, column 8.
+    const QJsonObject hierarchy = callTool("cpp_get_type_hierarchy",
+                                           {{"file", file.toFSPathString()}, {"line", 4}, {"column", 8}});
+    QCOMPARE(hierarchy.value("name").toString(), QString("Leaf"));
+
+    const QJsonArray bases = hierarchy.value("bases").toArray();
+    QStringList names;
+    for (const QJsonValue &value : bases)
+        names << value.toObject().value("name").toString();
+    QCOMPARE(Utils::sorted(names), QStringList({"Middle", "Other"}));
+
+    // What Middle inherits comes with it.
+    const QJsonObject middle = objectNamed(bases, "Middle");
+    QCOMPARE(objectNamed(middle.value("bases").toArray(), "Top").value("name").toString(),
+             QString("Top"));
 }
 
 void CppMcpSupportTest::testFindOverrides()
