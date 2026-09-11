@@ -408,7 +408,10 @@ void CodegenTest::testDefinitionFirstMember()
             "int y;\n").arg(temporaryDir.path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
-    sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
+    // The name as the source writes it, which is the whole point of
+    // recording it: whoever resolves that directive again looks it up by
+    // what is written there.
+    sourceDocument->addIncludeFile(Document::Include(headerDocument->filePath().path(),
                                                      headerDocument->filePath(), 1,
                                                      Client::IncludeLocal));
 
@@ -467,7 +470,10 @@ void CodegenTest::testDefinitionLastMember()
 
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
-    sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
+    // The name as the source writes it, which is the whole point of
+    // recording it: whoever resolves that directive again looks it up by
+    // what is written there.
+    sourceDocument->addIncludeFile(Document::Include(headerDocument->filePath().path(),
                                                      headerDocument->filePath(), 1,
                                                      Client::IncludeLocal));
 
@@ -529,11 +535,14 @@ void CodegenTest::testDefinitionMiddleMember()
             "\n"
             "}\n"
             "\n"
-            "int y;\n").arg(Utils::TemporaryDirectory::masterDirectoryPath()).toLatin1();
+            "int y;\n").arg(temporaryDir.path()).toLatin1();
 
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 4);
     QVERIFY(sourceDocument);
-    sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
+    // The name as the source writes it, which is the whole point of
+    // recording it: whoever resolves that directive again looks it up by
+    // what is written there.
+    sourceDocument->addIncludeFile(Document::Include(headerDocument->filePath().path(),
                                                      headerDocument->filePath(), 1,
                                                      Client::IncludeLocal));
 
@@ -593,7 +602,10 @@ void CodegenTest::testDefinitionMiddleMemberSurroundedByUndefined()
             "int y;\n").arg(temporaryDir.path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
-    sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
+    // The name as the source writes it, which is the whole point of
+    // recording it: whoever resolves that directive again looks it up by
+    // what is written there.
+    sourceDocument->addIncludeFile(Document::Include(headerDocument->filePath().path(),
                                                      headerDocument->filePath(), 1,
                                                      Client::IncludeLocal));
 
@@ -656,7 +668,10 @@ void CodegenTest::testDefinitionMemberSpecificFile()
             "int y;\n").arg(temporaryDir.path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
-    sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
+    // The name as the source writes it, which is the whole point of
+    // recording it: whoever resolves that directive again looks it up by
+    // what is written there.
+    sourceDocument->addIncludeFile(Document::Include(headerDocument->filePath().path(),
                                                      headerDocument->filePath(), 1,
                                                      Client::IncludeLocal));
 
