@@ -1563,6 +1563,12 @@ cxx::Symbol *CxxFrontendDocument::Private::resolvedSymbolAt(int line, int column
             return symbol;
         if (auto *symbol = resolved(dynamic_cast<cxx::TypenameSpecifierAST *>(node)))
             return symbol;
+        // What a qualified name is written after -- the C of C::f -- stands
+        // for something of its own, and naming it is using it.
+        if (auto * const nested = dynamic_cast<cxx::SimpleNestedNameSpecifierAST *>(node);
+            nested && nested->identifierLoc == location && nested->symbol) {
+            return nested->symbol;
+        }
         if (auto *symbol = resolved(dynamic_cast<cxx::ParenMemInitializerAST *>(node)))
             return symbol;
         if (auto *symbol = resolved(dynamic_cast<cxx::BracedMemInitializerAST *>(node)))
@@ -3259,10 +3265,24 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
     if (name.isEmpty())
         return {};
 
+    // A constructor and a destructor are written under their class's name,
+    // so a place naming one of them names the class.
+    const auto named = [](cxx::Symbol *symbol) -> cxx::Symbol * {
+        auto * const function = dynamic_cast<cxx::FunctionSymbol *>(symbol);
+        if (!function || !(function->isConstructor() || function->isDestructor()))
+            return symbol;
+        for (cxx::Symbol *s = function->parent(); s; s = s->parent()) {
+            if (auto * const cls = dynamic_cast<cxx::ClassSymbol *>(s))
+                return cls;
+        }
+        return symbol;
+    };
+
     // Where each of them was first declared, which is the one place a
     // declaration and a definition apart from it agree on.
-    const auto canonical = [](cxx::Symbol *symbol) {
-        return symbol && symbol->canonical() ? symbol->canonical() : symbol;
+    const auto canonical = [&](cxx::Symbol *symbol) {
+        cxx::Symbol * const which = named(symbol);
+        return which && which->canonical() ? which->canonical() : which;
     };
     cxx::Symbol * const wanted = canonical(target);
 

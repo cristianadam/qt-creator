@@ -306,6 +306,17 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// Every place \a filePath names what is declared at \a declaration, and
+// nothing where this model cannot read the file -- which is then a file for
+// the other one to read rather than one to leave out of a search.
+//
+// What find usages asks of each file it looks at. The declaration is a place
+// in some other file as a rule, and that file is read into this one, so one
+// document answers it.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, const CPlusPlus::CxxFrontendDocument::Place &declaration);
+
 // Every class \a filePath writes, with what each of its bases resolves to,
 // and nothing where this model cannot read the file -- which is then a file
 // for the other one to read rather than one to leave out.

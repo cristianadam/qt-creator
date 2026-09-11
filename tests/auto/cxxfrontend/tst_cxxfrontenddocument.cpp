@@ -1658,6 +1658,19 @@ void tst_cxxfrontenddocument::usagesInAFile_data()
                       "void f(A &a, B &b) { a.$m = b.m; }\n")
         << QStringList({"1:16 declaration", "3:24"});
 
+    // A constructor and a destructor are written under their class's name,
+    // so a place naming one names the class -- which is what renaming a
+    // class has to reach.
+    QTest::newRow("a class, its constructor and its destructor")
+        << QByteArray("class $C {\n"
+                      "    $C() {}\n"
+                      "    ~$C();\n"
+                      "};\n"
+                      "$C::~$C() {}\n"
+                      "$C c;\n")
+        << QStringList({"1:7 declaration", "2:5 declaration", "3:6 declaration",
+                        "5:1", "5:5 declaration", "6:1"});
+
     QTest::newRow("a position that declares nothing")
         << QByteArray("void f() { int x = 0; $x = 1; }\n") << QStringList();
 }

@@ -25,6 +25,10 @@
 #include <texteditor/basefilefind.h>
 
 #include <utils/algorithm.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 #include <utils/async.h>
 #include <utils/qtcassert.h>
 #include <utils/textfileformat.h>
@@ -210,6 +214,61 @@ static QList<QByteArray> fullIdForSymbol(CPlusPlus::Symbol *symbol)
 
 namespace {
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// What one file says about the thing being searched for, as the
+// cxx-frontend model reads it: it is handed the place the thing is
+// declared -- which for anything worth searching for is a header this file
+// read -- and answers with every place this file names it.
+//
+// Nothing where the model cannot read the file, and then the other front
+// end reads that one: a file left out of a search is a usage nobody is
+// shown, and for a rename a place left as it was.
+class ProcessFileOnTheModel
+{
+    const WorkingCopy workingCopy;
+    const CPlusPlus::Snapshot snapshot;
+    const Utils::FilePath declarationFile;
+    const int declarationLine;
+    const int declarationColumn;
+
+public:
+    ProcessFileOnTheModel(const WorkingCopy &workingCopy, const CPlusPlus::Snapshot &snapshot,
+                          CPlusPlus::Symbol *symbol)
+        : workingCopy(workingCopy)
+        , snapshot(snapshot)
+        , declarationFile(symbol->filePath())
+        , declarationLine(symbol->line())
+        , declarationColumn(symbol->column())
+    {}
+
+    std::optional<QList<CPlusPlus::Usage>> operator()(const Utils::FilePath &filePath) const
+    {
+        const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
+            = cxxFrontendUsagesIn(snapshot, workingCopy, filePath,
+                                  {declarationFile.toFSPathString(), declarationLine,
+                                   declarationColumn});
+        if (!places)
+            return std::nullopt;
+
+        // The line each place stands on, which the search view shows beside
+        // it. Read off the text, that being what it is.
+        const QStringList lines = QString::fromUtf8(getSource(filePath, workingCopy)).split('\n');
+
+        QList<CPlusPlus::Usage> usages;
+        for (const CPlusPlus::CxxFrontendDocument::NamedPlace &place : *places) {
+            const QString lineText = place.place.line >= 1 && place.place.line <= lines.size()
+                                         ? lines.at(place.place.line - 1)
+                                         : QString();
+            usages.append(CPlusPlus::Usage(filePath, lineText, {}, {}, place.place.line,
+                                           place.place.column - 1, place.place.length));
+        }
+        return usages;
+    }
+};
+
+#endif // QTC_WITH_CXX_FRONTEND
+
 class ProcessFile
 {
     const WorkingCopy workingCopy;
@@ -245,6 +304,20 @@ public:
         if (m_promise->isCanceled())
             return usages;
         const CPlusPlus::Identifier *symbolId = symbol->identifier();
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // Where the search does not have to say how each place uses the
+        // thing, the other model can answer: which of them is a read and
+        // which a write is a reading of each place that it does not do.
+        if (!categorize && cxxFrontendModelRequested()) {
+            const ProcessFileOnTheModel onTheModel(workingCopy, snapshot, symbol);
+            if (const std::optional<QList<CPlusPlus::Usage>> found = onTheModel(filePath)) {
+                m_promise->suspendIfRequested();
+                return *found;
+            }
+        }
+#endif
+
 
         if (CPlusPlus::Document::Ptr previousDoc = snapshot.document(filePath)) {
             CPlusPlus::Control *control = previousDoc->control();
