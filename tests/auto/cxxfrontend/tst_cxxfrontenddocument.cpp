@@ -204,6 +204,11 @@ private slots:
     void noSignatureOffAFunction();
     void signatureOfADeclarationInAHeader();
 
+    void literalInAFunction_data();
+    void literalInAFunction();
+    void noLiteralToExtract_data();
+    void noLiteralToExtract();
+
     void discardedValue_data();
     void discardedValue();
     void noDiscardedValue_data();
@@ -1217,6 +1222,94 @@ void tst_cxxfrontenddocument::signatureOfADeclarationInAHeader()
         = document.signatureAt({{}, 3, 9}, {"h.h", 2, 18});
     QVERIFY(back.isValid());
     QCOMPARE(back.writeParameter(0, "t"), QString("N::T t"));
+}
+
+// A literal inside a function: its type, and every place that function
+// writes the same thing -- which is what turning it into one parameter
+// rests on.
+void tst_cxxfrontenddocument::literalInAFunction_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expectedType");
+    QTest::addColumn<QStringList>("expectedPlaces");
+
+    QTest::newRow("an int")
+        << QByteArray("int foo() { return $156; }\n") << "int"
+        << QStringList("1:20+3");
+
+    QTest::newRow("a suffixed int")
+        << QByteArray("unsigned long long foo() { return $156ull; }\n")
+        << "unsigned long long" << QStringList("1:35+6");
+
+    QTest::newRow("a string")
+        << QByteArray("const char *foo() { return $\"narf\"; }\n")
+        << "const char *" << QStringList("1:28+6");
+
+    QTest::newRow("a bool")
+        << QByteArray("bool foo() { return $true; }\n") << "bool"
+        << QStringList("1:21+4");
+
+    QTest::newRow("a char")
+        << QByteArray("char foo() { return $'c'; }\n") << "char"
+        << QStringList("1:21+3");
+
+    // Every place the function writes the same literal, since one parameter
+    // stands for all of them -- and nothing else, however similar.
+    QTest::newRow("the same literal written more than once")
+        << QByteArray("int foo() { return $156 + 123 + 156; }\n") << "int"
+        << QStringList({"1:20+3", "1:32+3"});
+
+    QTest::newRow("a literal of another kind that reads the same")
+        << QByteArray("int foo() { char c = '1'; return $1; }\n") << "int"
+        << QStringList("1:34+1");
+}
+
+void tst_cxxfrontenddocument::literalInAFunction()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expectedType);
+    QFETCH(QStringList, expectedPlaces);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::LiteralInAFunction found
+        = document.literalInAFunctionAt(positions.first().line, positions.first().column);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.type, expectedType);
+
+    QStringList places;
+    for (const CxxFrontendDocument::Occurrence &place : found.places) {
+        places.append(QString("%1:%2+%3").arg(place.line).arg(place.column).arg(place.length));
+    }
+    QCOMPARE(places, expectedPlaces);
+}
+
+void tst_cxxfrontenddocument::noLiteralToExtract_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+
+    QTest::newRow("a literal outside any function")
+        << QByteArray("int global = $156;\n");
+    QTest::newRow("a position on a name")
+        << QByteArray("int foo(int a) { return $a; }\n");
+    QTest::newRow("a position on no literal at all")
+        << QByteArray("int foo(int a) { return a $+ 1; }\n");
+}
+
+void tst_cxxfrontenddocument::noLiteralToExtract()
+{
+    QFETCH(QByteArray, marked);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(!document.literalInAFunctionAt(positions.first().line,
+                                            positions.first().column).isValid());
 }
 
 // A call whose value is thrown away, which is what offering to assign it to

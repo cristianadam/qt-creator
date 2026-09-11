@@ -22,6 +22,7 @@
 #include <cxx/preprocessor_delegate.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
+#include <cxx/type_traits.h>
 #include <cxx/types.h>
 
 namespace CPlusPlus {
@@ -1718,6 +1719,25 @@ QString caseLabelFor(cxx::ScopeSymbol *enumeration, bool isScoped, cxx::Symbol *
 
 namespace {
 
+// What a literal expression says, as it was written -- the quotes and the
+// prefix of a string, the suffix of a number -- or nothing where the node is
+// not a literal. A bool has no literal of its own, so it answers with the
+// word it is written as.
+std::optional<std::string> literalWrittenBy(cxx::AST *node)
+{
+    if (auto * const number = dynamic_cast<cxx::IntLiteralExpressionAST *>(node))
+        return number->literal ? std::optional(number->literal->value()) : std::nullopt;
+    if (auto * const number = dynamic_cast<cxx::FloatLiteralExpressionAST *>(node))
+        return number->literal ? std::optional(number->literal->value()) : std::nullopt;
+    if (auto * const character = dynamic_cast<cxx::CharLiteralExpressionAST *>(node))
+        return character->literal ? std::optional(character->literal->value()) : std::nullopt;
+    if (auto * const text = dynamic_cast<cxx::StringLiteralExpressionAST *>(node))
+        return text->literal ? std::optional(text->literal->value()) : std::nullopt;
+    if (auto * const yesOrNo = dynamic_cast<cxx::BoolLiteralExpressionAST *>(node))
+        return std::optional<std::string>(yesOrNo->isTrue ? "true" : "false");
+    return std::nullopt;
+}
+
 // The name a call is written under, which is the name of what it calls.
 cxx::UnqualifiedIdAST *calledNameOf(cxx::ExpressionAST *expression)
 {
@@ -1741,6 +1761,77 @@ cxx::UnqualifiedIdAST *calledNameOf(cxx::ExpressionAST *expression)
 }
 
 } // namespace
+
+CxxFrontendDocument::LiteralInAFunction CxxFrontendDocument::literalInAFunctionAt(
+    int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    const auto holds = [](cxx::AST *node, cxx::SourceLocation what) {
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return what.index() >= first && what.index() < last;
+    };
+
+    // The innermost function definition the position is in, and the literal
+    // it is on. The walk reaches an outer definition first.
+    cxx::FunctionDefinitionAST *function = nullptr;
+    cxx::ExpressionAST *literal = nullptr;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+            definition && holds(definition, location)) {
+            function = definition;
+            continue;
+        }
+        if (literalWrittenBy(*slot) && holds(*slot, location))
+            literal = dynamic_cast<cxx::ExpressionAST *>(*slot);
+    }
+    if (!function || !function->functionBody || !literal || !literal->type)
+        return {};
+
+    const std::optional<std::string> written = literalWrittenBy(literal);
+
+    // What the front end recorded is not what stands there: the
+    // preprocessor joins literals written next to each other, and then the
+    // value holds every piece while the token stands on the first alone.
+    if (int(written->size()) != int(d->unit.tokenAt(literal->firstSourceLocation()).length()))
+        return {};
+
+    LiteralInAFunction answer;
+    // The type a *parameter* holding this value has, which for a string is
+    // not the type of the literal: an array decays to a pointer on the way
+    // in, and a parameter of array type is not what anybody writes.
+    const cxx::TypeTraits traits(&d->unit);
+    answer.type = applyStarBinding(
+        fromStd(cxx::to_string(traits.decay(literal->type), "",
+                               {.writtenIn = d->scopeWrittenAround(location)})),
+        d->config.settings);
+
+    // Every place the body writes the same thing. The same kind as well, so
+    // that 1 and '1' and "1" are not taken for one another.
+    for (cxx::ASTCursor cursor(function->functionBody, "body"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        const std::optional<std::string> other = literalWrittenBy(*slot);
+        if (!other || *other != *written)
+            continue;
+        if ((*slot)->kind() != literal->kind())
+            continue;
+        const cxx::SourceLocation at = (*slot)->firstSourceLocation();
+        if (!at)
+            continue;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+        answer.places.append({int(position.line), int(position.column),
+                              int(d->unit.tokenAt(at).length())});
+    }
+    return answer;
+}
 
 CxxFrontendDocument::DiscardedValue CxxFrontendDocument::discardedValueAt(int line,
                                                                           int column) const
@@ -2128,6 +2219,46 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString
 
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
         found = {d->fileOf(location), int(position.line), int(position.column), true,
+                 name, parameterCount};
+    }
+
+    return found;
+}
+
+CxxFrontendDocument::Counterpart CxxFrontendDocument::declarationOf(const QString &name,
+                                                                   int parameterCount) const
+{
+    if (name.isEmpty() || !d->unit.ast())
+        return {};
+
+    Counterpart found;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        auto *declared = dynamic_cast<cxx::InitDeclaratorAST *>(*slot);
+        if (!declared || !declared->symbol || !declared->declarator)
+            continue;
+        auto * const function = dynamic_cast<cxx::FunctionSymbol *>(declared->symbol);
+        if (!function)
+            continue;
+        if (qualifiedNameOf(function) != name
+            || int(d->parameterCountOf(function)) != parameterCount) {
+            continue;
+        }
+
+        const cxx::SourceLocation location = d->nameLocationOfDeclarator(declared->declarator);
+        if (!location)
+            continue;
+
+        // Two of them, and nothing here tells them apart: overloads that
+        // differ in their parameter types. Saying either would change a
+        // function nobody asked about.
+        if (found.isValid())
+            return {};
+
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        found = {d->fileOf(location), int(position.line), int(position.column), false,
                  name, parameterCount};
     }
 

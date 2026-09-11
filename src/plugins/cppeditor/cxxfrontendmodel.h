@@ -200,6 +200,10 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
 // between it and the function.
 struct CxxFrontendFunctionDeclaration
 {
+    // Which file the answer is about, which is not always the file asked:
+    // the declaration of a function defined here may be in another one.
+    Utils::FilePath filePath;
+
     // The name it is declared under, without the scopes in front of it and
     // past a destructor's tilde, which is where a link into a function
     // points. Where it begins and where it ends, so that whoever has the
@@ -215,6 +219,13 @@ struct CxxFrontendFunctionDeclaration
     int startColumn = 0;
     bool isDefinition = false;
 
+    // Just before the ')' of its parameter list, which is where another
+    // parameter is appended, and whether it has any -- which decides
+    // whether a comma goes in front of the new one.
+    int parametersEndLine = 0;
+    int parametersEndColumn = 0;
+    bool hasParameters = false;
+
     bool isValid() const { return nameLine > 0 && startLine > 0; }
 };
 
@@ -229,6 +240,31 @@ struct CxxFrontendFunctionDeclaration
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
+
+// Where the function at a position is *declared*, when that is somewhere
+// other than the position itself -- which is what appending a parameter to a
+// definition has to change as well.
+//
+// This translation unit first, which for a class member is where the
+// declaration is: a header is read into the file that includes it. Otherwise
+// the file that goes with this one, the header beside the source, which is
+// where the built-in front end looks for a free function's declaration too.
+//
+// Nothing where the model cannot read the file; an invalid answer where the
+// function is declared nowhere else, and then the definition is the only
+// place there is.
+std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, int line, int column);
+
+// A literal at \a line and \a column of \a filePath, both counted from one,
+// written inside a function.
+//
+// Nothing where the model has no such file, and then the caller answers the
+// way it did before. An invalid answer is an answer: there is no literal
+// there to make a parameter of.
+std::optional<CPlusPlus::CxxFrontendDocument::LiteralInAFunction>
+cxxFrontendLiteralInAFunctionAt(const Utils::FilePath &filePath, int line, int column);
 
 // A call or a new expression at \a line and \a column of \a filePath, both
 // counted from one, whose value is thrown away.

@@ -4,6 +4,7 @@
 #include "cxxfrontendmodel.h"
 
 #include "cppfileiterationorder.h"
+#include "cpptoolsreuse.h"
 #include "cppmodelmanager.h"
 #include "projectpart.h"
 #include "cppprojectfile.h"
@@ -1141,6 +1142,62 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     return link;
 }
 
+std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const FilePath &filePath, int line, int column)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const own = model->document(filePath.toFSPathString());
+    if (!own)
+        return std::nullopt;
+
+    // This unit first: a class member's declaration is read in from its
+    // header, so the definition already knows where it is.
+    const CxxFrontendDocument::Counterpart counterpart = own->counterpartAt(line, column);
+    if (!counterpart.namesAFunction())
+        return std::nullopt;
+    if (counterpart.isValid() && !counterpart.isDefinition) {
+        return cxxFrontendFunctionAt(builtinSnapshot, workingCopy,
+                                     FilePath::fromUserInput(counterpart.filePath),
+                                     counterpart.line, counterpart.column);
+    }
+
+    // Otherwise the file that goes with this one. Not the whole project:
+    // a declaration is not something to go looking for, and the built-in
+    // front end looks exactly here.
+    bool isHeader = false;
+    const FilePath beside = correspondingHeaderOrSource(filePath, &isHeader);
+    if (beside.isEmpty() || !beside.exists())
+        return CxxFrontendFunctionDeclaration();
+
+    const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, beside, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+    const CxxFrontendDocument::Counterpart declared
+        = holding.document->declarationOf(counterpart.name, counterpart.parameterCount);
+    if (!declared.isValid())
+        return CxxFrontendFunctionDeclaration();
+    return cxxFrontendFunctionAt(builtinSnapshot, workingCopy, beside, declared.line,
+                                 declared.column);
+}
+
+std::optional<CxxFrontendDocument::LiteralInAFunction> cxxFrontendLiteralInAFunctionAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+    return document->literalInAFunctionAt(line, column);
+}
+
 std::optional<CxxFrontendDocument::DiscardedValue> cxxFrontendDiscardedValueAt(
     const FilePath &filePath, int line, int column)
 {
@@ -1203,13 +1260,22 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const CxxAstRange name = cxxAstRangeOf(*holding.document,
                                            unqualifiedNameOf(function.name()));
     const CxxAstRange start = cxxAstRangeOf(*holding.document, outermost);
-    if (!name.isValid() || !start.isValid())
+    const CxxAstRange rparen = cxxTokenRangeAt(*holding.document,
+                                               function.parameters->rparenLoc);
+    if (!name.isValid() || !start.isValid() || !rparen.isValid())
         return CxxFrontendFunctionDeclaration();
 
-    return CxxFrontendFunctionDeclaration{name.startLine, name.startColumn,
+    const auto *clause = function.parameters->parameterDeclarationClause;
+    const bool hasParameters = clause && clause->parameterDeclarationList
+                               && clause->parameterDeclarationList->value;
+
+    return CxxFrontendFunctionDeclaration{filePath,
+                                          name.startLine, name.startColumn,
                                           name.endLine, name.endColumn,
                                           start.startLine, start.startColumn,
-                                          function.isDefinition};
+                                          function.isDefinition,
+                                          rparen.startLine, rparen.startColumn,
+                                          hasParameters};
 }
 
 std::optional<QList<CxxFrontendComment>> cxxFrontendCommentsIn(

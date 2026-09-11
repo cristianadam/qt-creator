@@ -389,6 +389,16 @@ public:
     // apart. On unsupportedLookups() with the rest.
     Counterpart definitionOf(const QString &name, int parameterCount) const;
 
+    // Where this file *declares* \a name -- written out in full, as
+    // Counterpart::name is -- taking \a parameterCount parameters, without
+    // defining it there, or nothing where it does not.
+    //
+    // The other way round from definitionOf(), and for the other half of the
+    // same job: whoever has a definition in hand and has to change what was
+    // declared elsewhere. The file to look in is again what the project
+    // knows and this does not.
+    Counterpart declarationOf(const QString &name, int parameterCount) const;
+
     // The fully qualified name of the function enclosing the position, or an
     // empty string if it is not inside one. What Document::functionAt answers,
     // and what the editor puts above the text.
@@ -477,6 +487,29 @@ public:
         int length = 0;
     };
     QList<Occurrence> occurrencesOf(const QString &name) const;
+
+    // A literal written inside a function, which "extract it as a parameter"
+    // works on: its type, and every place that function writes the same
+    // literal -- they all say the same thing, which is what makes them one
+    // parameter.
+    //
+    // Nothing where the position is on no literal, or on one outside any
+    // function. Nothing either where the front end recorded something other
+    // than what stands at the literal's place, which is what the
+    // preprocessor joining literals written next to each other looks like:
+    // rewriting by that place would replace the wrong text.
+    struct LiteralInAFunction
+    {
+        // In the order they are written, the one asked about among them.
+        QList<Occurrence> places;
+
+        // Printed for the scope the function stands in, since that is where
+        // the parameter is going to be declared.
+        QString type;
+
+        bool isValid() const { return !places.isEmpty(); }
+    };
+    LiteralInAFunction literalInAFunctionAt(int line, int column) const;
 
     // The locals of the function written around a position -- its parameters
     // and the variables of its blocks -- each with every place it is written,
