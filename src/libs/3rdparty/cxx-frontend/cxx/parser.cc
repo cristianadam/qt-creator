@@ -5455,7 +5455,11 @@ auto Parser::parse_notypespec_function_definition(
 
   SourceLocation semicolonLoc;
 
-  if (isPure) {
+  // The ";" that closes it, which is part of the declaration. Taking it
+  // here rather than leaving it behind is what makes the node cover what
+  // was written: left behind it is read again as an empty declaration, and
+  // a tool asking where the declaration ends is told a token too early.
+  if (isDeclaration) {
     expect(TokenKind::T_SEMICOLON, semicolonLoc);
   }
 

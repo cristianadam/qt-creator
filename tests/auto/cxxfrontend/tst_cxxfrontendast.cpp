@@ -134,6 +134,8 @@ private slots:
 
     void theEnclosingDeclaration_data();
     void theEnclosingDeclaration();
+    void aDeclarationReachesItsSemicolon_data();
+    void aDeclarationReachesItsSemicolon();
 
     void aPositionInAHeaderTheFileRead();
 };
@@ -460,6 +462,65 @@ void tst_cxxfrontendast::aConstructTheFrontEndCouldNotRead()
     }
     QVERIFY(elsewhereIf);
     QVERIFY(!cxxAstWasReadWithErrors(elsewhere, elsewhereIf));
+}
+
+// What a declaration covers, which is up to and including the ";" that
+// closes it. A fix that replaces a declaration with a definition of the
+// same function replaces exactly this.
+void tst_cxxfrontendast::aDeclarationReachesItsSemicolon_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("covered");
+
+    QTest::newRow("a member function")
+        << QByteArray("struct S {\n    void m$ember();\n};\n") << "void member();";
+
+    // A constructor and a destructor are declared without a type specifier
+    // and were parsed apart from the rest, which is how their ";" came to
+    // be left out of them -- fixed upstream in "Take the semicolon that
+    // closes a constructor's declaration".
+    QTest::newRow("a constructor")
+        << QByteArray("struct S {\n    S$();\n};\n") << "S();";
+    QTest::newRow("a destructor")
+        << QByteArray("struct S {\n    ~S$();\n};\n") << "~S();";
+
+    QTest::newRow("a member variable")
+        << QByteArray("struct S {\n    int v$alue;\n};\n") << "int value;";
+    QTest::newRow("a function at file scope")
+        << QByteArray("void f$unc(int a);\n") << "void func(int a);";
+}
+
+void tst_cxxfrontendast::aDeclarationReachesItsSemicolon()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, covered);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const QList<cxx::AST *> path
+        = cxxAstPathAt(document, positions.first().line, positions.first().column);
+
+    // The innermost declaration the position is in, which is the one being
+    // written -- not the class it is written inside.
+    cxx::AST *declaration = nullptr;
+    for (cxx::AST * const node : path) {
+        if (dynamic_cast<cxx::DeclarationAST *>(node)
+            && !dynamic_cast<cxx::NamespaceDefinitionAST *>(node)) {
+            declaration = node;
+        }
+    }
+    QVERIFY(declaration);
+
+    const CxxAstRange range = cxxAstRangeOf(document, declaration);
+    QVERIFY(range.isValid());
+
+    const QStringList lines = QString::fromUtf8(source).split('\n');
+    QCOMPARE(range.startLine, range.endLine);
+    const QString &line = lines.at(range.startLine - 1);
+    QCOMPARE(line.mid(range.startColumn - 1, range.endColumn - range.startColumn), covered);
 }
 
 void tst_cxxfrontendast::theEnclosingDeclaration_data()
