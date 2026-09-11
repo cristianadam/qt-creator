@@ -51,8 +51,9 @@ public:
 
 void GlobalRenamingTest::test_data()
 {
-    QTest::addColumn<QByteArrayList>("headers");
-    QTest::addColumn<QByteArrayList>("sources");
+    QTest::addColumn<QStringList>("fileNames");
+    QTest::addColumn<QByteArrayList>("originals");
+    QTest::addColumn<QByteArrayList>("expected");
     QTest::addColumn<QString>("replacement");
 
     const char testClassHeader[] = R"cpp(
@@ -67,7 +68,6 @@ class MyClass {
   void run();
 };
 )cpp";
-
     const char testClassSource[] = R"cpp(
 #include "file.h"
 /** \brief MyClass::~MyClass */
@@ -99,9 +99,10 @@ MyNewClass::~MyNewClass() {}
 
 void MyNewClass::run() {}
 )cpp";
-    QTest::newRow("class name") << QByteArrayList{origHeaderClassName, newHeaderClassName}
-                                << QByteArrayList{testClassSource, newSourceClassName}
-                                << QString("MyNewClass");
+    QTest::newRow("class name")
+        << QStringList{"file.h", "file.cpp"}
+        << QByteArrayList{origHeaderClassName, testClassSource}
+        << QByteArrayList{newHeaderClassName, newSourceClassName} << QString("MyNewClass");
 
     QByteArray origSourceMethodName(testClassSource);
     const int methodOffset = origSourceMethodName.indexOf("::run()");
@@ -126,20 +127,70 @@ MyClass::~MyClass() {}
 
 void MyClass::runAgain() {}
 )cpp";
-    QTest::newRow("method name") << QByteArrayList{testClassHeader, newHeaderMethodName}
-                                 << QByteArrayList{origSourceMethodName, newSourceMethodName}
-                                 << QString("runAgain");
+    QTest::newRow("method name")
+        << QStringList{"file.h", "file.cpp"}
+        << QByteArrayList{testClassHeader, origSourceMethodName}
+        << QByteArrayList{newHeaderMethodName, newSourceMethodName} << QString("runAgain");
+
+    // A file the search has to reach on its own: nothing in the header says
+    // that this one uses what it declares.
+    QTest::newRow("used in a second source")
+        << QStringList{"file.h", "file.cpp", "other.cpp"}
+        << QByteArrayList{"void fu@nc();\n",
+                          "#include \"file.h\"\nvoid func() {}\n",
+                          "#include \"file.h\"\nvoid g() { func(); }\n"}
+        << QByteArrayList{"void renamed();\n",
+                          "#include \"file.h\"\nvoid renamed() {}\n",
+                          "#include \"file.h\"\nvoid g() { renamed(); }\n"}
+        << QString("renamed");
+
+    // A name spelled the same and meaning something else is left alone,
+    // which is the difference between this and a text replacement.
+    QTest::newRow("a name that means something else")
+        << QStringList{"file.h", "file.cpp", "other.h"}
+        << QByteArrayList{"struct A { void ru@n(); };\n",
+                          "#include \"file.h\"\n"
+                          "#include \"other.h\"\n"
+                          "void A::run() {}\n"
+                          "void B::run() {}\n"
+                          "void g(A &a, B &b) { a.run(); b.run(); }\n",
+                          "struct B { void run(); };\n"}
+        << QByteArrayList{"struct A { void walk(); };\n",
+                          "#include \"file.h\"\n"
+                          "#include \"other.h\"\n"
+                          "void A::walk() {}\n"
+                          "void B::run() {}\n"
+                          "void g(A &a, B &b) { a.walk(); b.run(); }\n",
+                          "struct B { void run(); };\n"}
+        << QString("walk");
+
+    // A variable, where each place is a use rather than a declaration.
+    QTest::newRow("a variable used in two files")
+        << QStringList{"file.h", "file.cpp", "other.cpp"}
+        << QByteArrayList{"extern int cou@nt;\n",
+                          "#include \"file.h\"\nint count = 0;\nvoid f() { count = 1; }\n",
+                          "#include \"file.h\"\nint g() { return count; }\n"}
+        << QByteArrayList{"extern int total;\n",
+                          "#include \"file.h\"\nint total = 0;\nvoid f() { total = 1; }\n",
+                          "#include \"file.h\"\nint g() { return total; }\n"}
+        << QString("total");
 }
 
 void GlobalRenamingTest::test()
 {
-    QFETCH(QByteArrayList, headers);
-    QFETCH(QByteArrayList, sources);
+    QFETCH(QStringList, fileNames);
+    QFETCH(QByteArrayList, originals);
+    QFETCH(QByteArrayList, expected);
     QFETCH(QString, replacement);
 
-    QList<TestDocumentPtr> testDocuments(
-        {CppTestDocument::create("file.h", headers.at(0), headers.at(1)),
-         CppTestDocument::create("file.cpp", sources.at(0), sources.at(1))});
+    QCOMPARE(originals.size(), fileNames.size());
+    QCOMPARE(expected.size(), fileNames.size());
+
+    QList<TestDocumentPtr> testDocuments;
+    for (int i = 0; i < fileNames.size(); ++i) {
+        testDocuments << CppTestDocument::create(fileNames.at(i).toUtf8(), originals.at(i),
+                                                 expected.at(i));
+    }
     RenamingTestRunner testRunner(testDocuments, replacement);
 }
 
