@@ -24,6 +24,7 @@ Project {
         "qmljs/qmljs.qbs",
         "qmldebug/qmldebug.qbs",
         "qtcreatorcdbext/qtcreatorcdbext.qbs",
+        "rstlang/rstlang.qbs",
         "solutions/solutions.qbs",
         "sqlite/sqlite.qbs",
         "tracing/tracing.qbs",
