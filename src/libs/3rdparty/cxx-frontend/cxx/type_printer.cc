@@ -247,9 +247,17 @@ class TypePrinter {
 
     const auto& params = type->parameterTypes();
 
+    // The names belong to this function's parameters. Nothing written
+    // inside one of them gets them, and neither does a function type the
+    // return type is made of, so they are taken here and not passed on.
+    auto parameterNames = std::move(options_.parameterNames);
+    options_.parameterNames.clear();
+
     for (std::size_t i = 0; i < params.size(); ++i) {
       const auto& param = params[i];
-      signature.append(to_string(param, "", options_));
+      const auto& name =
+          i < parameterNames.size() ? parameterNames[i] : std::string();
+      signature.append(to_string(param, name, options_));
 
       if (i != params.size() - 1) {
         signature.append(", ");

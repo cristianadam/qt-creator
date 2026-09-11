@@ -24,6 +24,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace cxx {
 class Name;
@@ -181,6 +182,17 @@ struct TypePrintOptions {
   // standing in the right scope. Ignored when omitEnclosingScope is set,
   // which is the stronger instruction.
   ScopeSymbol* writtenIn = nullptr;
+
+  // The names to write the parameters of a function under, in order. A
+  // parameter's name is not part of a type, so nothing here can be worked
+  // out from the type being printed; a tool writing a definition out has
+  // read the names off the declaration and is the one that knows them.
+  //
+  // Fewer names than parameters, or an empty one, leaves those unnamed.
+  // They apply to the function being printed and not to any function type
+  // written inside it: the names of a function pointer parameter's own
+  // parameters are not these.
+  std::vector<std::string> parameterNames;
 };
 
 auto to_string(const Type* type, const std::string& id = "",
