@@ -71,8 +71,8 @@ static QString definitionTextForDefaulted(
 static QString definitionSignature(
     const CppQuickFixInterface *assist,
     FunctionDefinitionAST *functionDefinitionAST,
-    CppRefactoringFilePtr &baseFile,
-    CppRefactoringFilePtr &targetFile,
+    const CppRefactoringFilePtr &baseFile,
+    const CppRefactoringFilePtr &targetFile,
     Scope *scope)
 {
     QTC_ASSERT(assist, return QString());
@@ -118,6 +118,62 @@ static QString definitionSignature(
     return oo.prettyType(tn, nameText);
 }
 
+// One function definition to move: where it is written, and what a
+// declaration of it has to say where it is going. What either front end
+// fills in, so that the moving itself reads no tree.
+struct MovableDefinition
+{
+    // What the locator needs in order to say where the definition goes.
+    DeclarationToDefine declaration;
+
+    // The whole definition, which is what is taken away from where it
+    // stands, and where its head stops: from there to bodyEnd is written
+    // out again as it stands.
+    ChangeSet::Range range;
+    int bodyStart = 0;
+    int bodyEnd = 0;
+
+    // A definition written "= default" is the one that does not end in a
+    // body, so the ";" that closed it has to be written after it.
+    bool endsWithSemicolon = false;
+
+    // What a declaration of it says where it is going. The one thing that
+    // cannot be settled beforehand: a type is written with as little in
+    // front of it as still finds it from there, so it takes the place.
+    std::function<QString(const CppQuickFixOperation *op, const InsertionLocation &at,
+                          const CppRefactoringFilePtr &toFile)> writeSignature;
+
+    bool isValid() const { return bodyEnd > 0 && writeSignature != nullptr; }
+};
+
+// What the built-in front end says of a definition it read.
+static MovableDefinition builtinMovableDefinition(const CppQuickFixInterface &interface,
+                                                  FunctionDefinitionAST *funcAST)
+{
+    const CppRefactoringFilePtr fromFile = interface.currentFile();
+
+    MovableDefinition definition;
+    definition.declaration = declarationToDefine(funcAST->symbol,
+                                                 CppRefactoringChanges(interface.snapshot()));
+    definition.range = fromFile->range(funcAST);
+    if (isDefaulted(funcAST, fromFile->cppDocument()->translationUnit())) {
+        definitionTextForDefaulted(funcAST, fromFile, &definition.bodyStart);
+        definition.bodyEnd = fromFile->endOf(funcAST->declarator->initializer);
+        definition.endsWithSemicolon = true;
+    } else {
+        definition.bodyStart = fromFile->endOf(funcAST->declarator);
+        definition.bodyEnd = fromFile->endOf(funcAST);
+    }
+
+    definition.writeSignature = [funcAST](const CppQuickFixOperation *op,
+                                          const InsertionLocation &at,
+                                          const CppRefactoringFilePtr &toFile) {
+        Scope *scope = toFile->cppDocument()->scopeAt(at.line(), at.column());
+        return definitionSignature(op, funcAST, op->currentFile(), toFile, scope);
+    };
+    return definition;
+}
+
 class MoveFuncDefRefactoringHelper
 {
 public:
@@ -135,23 +191,21 @@ public:
         m_toFile = (m_type == MoveOutside) ? m_fromFile : m_changes.cppFile(toFile);
     }
 
-    void performMove(FunctionDefinitionAST *funcAST)
+    void performMove(const MovableDefinition &definition)
     {
-        // Determine file, insert position and scope
-        InsertionLocation l = insertLocationForMethodDefinition(
-            funcAST->symbol, false, NamespaceHandling::Ignore,
+        // Determine file and insert position
+        const InsertionLocation l = insertLocationForMethodDefinition(
+            definition.declaration, false, NamespaceHandling::Ignore,
             m_changes, m_toFile->filePath());
         const QString prefix = l.prefix();
         const QString suffix = l.suffix();
         const int insertPos = m_toFile->position(l.line(), l.column());
-        Scope *scopeAtInsertPos = m_toFile->cppDocument()->scopeAt(l.line(), l.column());
 
         // construct definition
         const QString inlinePref = inlinePrefix(m_toFile->filePath(), [this] {
             return m_type == MoveOutside;
         });
-        QString funcDec = definitionSignature(m_operation, funcAST, m_fromFile, m_toFile,
-                                              scopeAtInsertPos);
+        QString funcDec = definition.writeSignature(m_operation, l, m_toFile);
         QString input = funcDec;
         int inlineIndex = 0;
         const QRegularExpression templateRegex("template\\s*<[^>]*>");
@@ -164,15 +218,10 @@ public:
         }
         funcDec.insert(inlineIndex, inlinePref);
 
-        QString funcDef = prefix + funcDec;
-        int startPosition;
-        if (isDefaulted(funcAST, m_fromFile->cppDocument()->translationUnit())) {
-            funcDef += definitionTextForDefaulted(funcAST, m_fromFile, &startPosition);
-        } else {
-            startPosition = m_fromFile->endOf(funcAST->declarator);
-            const int endPosition = m_fromFile->endOf(funcAST);
-            funcDef += m_fromFile->textOf(startPosition, endPosition);
-        }
+        QString funcDef = prefix + funcDec
+                          + m_fromFile->textOf(definition.bodyStart, definition.bodyEnd);
+        if (definition.endsWithSemicolon)
+            funcDef += QLatin1Char(';');
         funcDef += suffix;
 
         // insert definition at new position
@@ -181,16 +230,16 @@ public:
 
         // remove definition from fromFile
         if (m_type == MoveOutsideMemberToCppFile) {
-            m_fromFileChangeSet.remove(m_fromFile->range(funcAST));
+            m_fromFileChangeSet.remove(definition.range);
         } else {
-            QString textFuncDecl = m_fromFile->textOf(funcAST);
-            textFuncDecl.truncate(startPosition - m_fromFile->startOf(funcAST));
+            QString textFuncDecl = m_fromFile->textOf(definition.range.start,
+                                                      definition.bodyStart);
             if (textFuncDecl.left(7) == QLatin1String("inline "))
                 textFuncDecl = textFuncDecl.mid(7);
             else
                 textFuncDecl.replace(" inline ", QLatin1String(" "));
             textFuncDecl = textFuncDecl.trimmed() + QLatin1Char(';');
-            m_fromFileChangeSet.replace(m_fromFile->range(funcAST), textFuncDecl);
+            m_fromFileChangeSet.replace(definition.range, textFuncDecl);
         }
     }
 
@@ -215,7 +264,7 @@ class MoveFuncDefOutsideOp : public CppQuickFixOperation
 public:
     MoveFuncDefOutsideOp(const CppQuickFixInterface &interface,
                          MoveFuncDefRefactoringHelper::MoveType type,
-                         FunctionDefinitionAST *funcDef, const FilePath &cppFilePath)
+                         const MovableDefinition &funcDef, const FilePath &cppFilePath)
         : CppQuickFixOperation(interface, 0)
         , m_funcDef(funcDef)
         , m_type(type)
@@ -238,7 +287,7 @@ public:
     }
 
 private:
-    FunctionDefinitionAST *m_funcDef;
+    const MovableDefinition m_funcDef;
     MoveFuncDefRefactoringHelper::MoveType m_type;
     const FilePath m_cppFilePath;
 };
@@ -248,7 +297,7 @@ class MoveAllFuncDefOutsideOp : public CppQuickFixOperation
 public:
     MoveAllFuncDefOutsideOp(const CppQuickFixInterface &interface,
                             MoveFuncDefRefactoringHelper::MoveType type,
-                            ClassSpecifierAST *classDef, const FilePath &cppFileName)
+                            const QList<MovableDefinition> &classDef, const FilePath &cppFileName)
         : CppQuickFixOperation(interface, 0)
         , m_type(type)
         , m_classDef(classDef)
@@ -266,20 +315,14 @@ public:
     void perform() override
     {
         MoveFuncDefRefactoringHelper helper(this, m_type, m_cppFilePath);
-        for (DeclarationListAST *it = m_classDef->member_specifier_list; it; it = it->next) {
-            if (FunctionDefinitionAST *funcAST = it->value->asFunctionDefinition()) {
-                if (funcAST->symbol && !funcAST->symbol->isGenerated()
-                    && !isDeleted(funcAST, currentFile()->cppDocument()->translationUnit())) {
-                    helper.performMove(funcAST);
-                }
-            }
-        }
+        for (const MovableDefinition &definition : m_classDef)
+            helper.performMove(definition);
         helper.applyChanges();
     }
 
 private:
     MoveFuncDefRefactoringHelper::MoveType m_type;
-    ClassSpecifierAST *m_classDef;
+    const QList<MovableDefinition> m_classDef;
     const FilePath m_cppFilePath;
 };
 
@@ -423,6 +466,10 @@ public:
         if (!funcAST || !funcAST->symbol)
             return;
 
+        const MovableDefinition definition = builtinMovableDefinition(interface, funcAST);
+        if (!definition.isValid())
+            return;
+
         bool isHeaderFile = false;
         const FilePath cppFileName = correspondingHeaderOrSource(interface.filePath(), &isHeaderFile);
 
@@ -430,12 +477,12 @@ public:
             const MoveFuncDefRefactoringHelper::MoveType type = moveOutsideMemberDefinition
                                                                     ? MoveFuncDefRefactoringHelper::MoveOutsideMemberToCppFile
                                                                     : MoveFuncDefRefactoringHelper::MoveToCppFile;
-            result << new MoveFuncDefOutsideOp(interface, type, funcAST, cppFileName);
+            result << new MoveFuncDefOutsideOp(interface, type, definition, cppFileName);
         }
 
         if (classAST)
             result << new MoveFuncDefOutsideOp(interface, MoveFuncDefRefactoringHelper::MoveOutside,
-                                               funcAST, FilePath());
+                                               definition, FilePath());
 
         return;
     }
@@ -451,17 +498,22 @@ public:
         if (!classAST)
             return;
 
-        // Determine if the class has at least one function definition
-        bool classContainsFunctions = false;
+        // The definitions the class writes, in the order it writes them. One
+        // it did not write itself is not moved, and neither is a deleted one
+        // -- "= delete" says where the function is not, and there is nothing
+        // to put anywhere else.
+        QList<MovableDefinition> definitions;
         for (DeclarationListAST *it = classAST->member_specifier_list; it; it = it->next) {
-            if (FunctionDefinitionAST *funcAST = it->value->asFunctionDefinition()) {
-                if (funcAST->symbol && !funcAST->symbol->isGenerated()) {
-                    classContainsFunctions = true;
-                    break;
-                }
-            }
+            FunctionDefinitionAST * const funcAST = it->value->asFunctionDefinition();
+            if (!funcAST || !funcAST->symbol || funcAST->symbol->isGenerated())
+                continue;
+            if (isDeleted(funcAST, interface.currentFile()->cppDocument()->translationUnit()))
+                continue;
+            const MovableDefinition definition = builtinMovableDefinition(interface, funcAST);
+            if (definition.isValid())
+                definitions << definition;
         }
-        if (!classContainsFunctions)
+        if (definitions.isEmpty())
             return;
 
         bool isHeaderFile = false;
@@ -469,10 +521,10 @@ public:
         if (isHeaderFile && !cppFileName.isEmpty()) {
             result << new MoveAllFuncDefOutsideOp(interface,
                                                   MoveFuncDefRefactoringHelper::MoveToCppFile,
-                                                  classAST, cppFileName);
+                                                  definitions, cppFileName);
         }
         result << new MoveAllFuncDefOutsideOp(interface, MoveFuncDefRefactoringHelper::MoveOutside,
-                                              classAST, FilePath());
+                                              definitions, FilePath());
     }
 };
 
