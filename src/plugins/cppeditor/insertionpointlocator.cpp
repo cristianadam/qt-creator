@@ -16,6 +16,7 @@
 #include <utils/textutils.h>
 
 #ifdef QTC_WITH_CXX_FRONTEND
+#include "cppmodelmanager.h"
 #include "cxxfrontendmodel.h"
 
 #include <cplusplus/CxxFrontendAst.h>
@@ -865,6 +866,69 @@ std::optional<SurroundingDefinition> builtinDefinitionOfMember(
     return found;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The class's member functions in the order they are declared, as the
+// cxx-frontend model reads them, and where each is defined -- asked of every
+// one of them at once, because reading a file is the cost and each file is
+// then read once for all the names.
+//
+// Nothing where that model has not read the file the class is declared in, or
+// where the declaration being defined is not among what it reads there; the
+// built-in path then answers as it did before.
+struct SurroundingDefinitionsOnTheModel
+{
+    int count = 0;
+    int index = -1;
+    QList<std::optional<SurroundingDefinition>> definitions;
+};
+
+std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
+    Class *klass, Symbol *declaration, const CppRefactoringChanges &changes)
+{
+    const FilePath filePath = declaration->filePath();
+    if (!cxxFrontendModel(filePath))
+        return {};
+
+    const QList<CxxFrontendDocument::MemberFunction> functions
+        = cxxFrontendMemberFunctionsAt(filePath, klass->line(), klass->column());
+    if (functions.isEmpty())
+        return {};
+
+    // Which of them is the one being defined. A member is named where its
+    // name is written, which is the one place both front ends agree on.
+    SurroundingDefinitionsOnTheModel answer;
+    answer.count = functions.size();
+    for (int i = 0; i < functions.size(); ++i) {
+        if (functions.at(i).line == declaration->line()
+            && functions.at(i).column == declaration->column()) {
+            answer.index = i;
+        }
+    }
+    if (answer.index < 0)
+        return {};
+
+    const QList<CxxFrontendFunctionDeclaration> defined
+        = cxxFrontendDefinitionsOf(changes.snapshot(), CppModelManager::workingCopy(),
+                                   filePath, functions);
+    if (defined.size() != functions.size())
+        return {};
+
+    for (int i = 0; i < defined.size(); ++i) {
+        const CxxFrontendFunctionDeclaration &where = defined.at(i);
+
+        // A function this class does not define is not one to sit beside.
+        if (functions.at(i).isPureVirtual || !where.isValid() || !where.isDefinition) {
+            answer.definitions.append(std::nullopt);
+            continue;
+        }
+        answer.definitions.append(SurroundingDefinition{where.filePath,
+                                                        {where.startLine, where.startColumn},
+                                                        {where.endLine, where.endColumn}});
+    }
+    return answer;
+}
+#endif
+
 static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
                                                       const CppRefactoringChanges &changes,
                                                       const FilePath &destinationFile)
@@ -872,6 +936,16 @@ static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
     Class *klass = declaration->enclosingClass();
     if (!klass || declaration->isFriend())
         return {};
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<SurroundingDefinitionsOnTheModel> onTheModel
+        = cxxSurroundingDefinitions(klass, declaration, changes)) {
+        return placeNextToDefinitions(onTheModel->count, onTheModel->index, destinationFile,
+                                      [&](int index) {
+                                          return onTheModel->definitions.at(index);
+                                      });
+    }
+#endif
 
     // find the index of declaration
     int declIndex = -1;
