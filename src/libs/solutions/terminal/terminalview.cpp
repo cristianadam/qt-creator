@@ -205,6 +205,7 @@ std::function<void()> TerminalView::surfaceUpdater() const
 void TerminalView::setupSurface()
 {
     d->m_surface = std::make_unique<TerminalSurface>(QSize{80, 60});
+    d->m_surface->setCellSize(d->m_cellSize);
     connect(d->m_surface.get(), &TerminalSurface::cleared, this, &TerminalView::cleared);
 
     if (d->m_surfaceIntegration)
@@ -327,6 +328,9 @@ void TerminalView::setFont(const QFont &font)
     const qreal onePixel = 1.0 / dpr;
     d->m_cellSize = {qMax(onePixel, snapToDevicePixel(qfm.averageCharWidth(), dpr)),
                      qMax(onePixel, qCeil(qfm.height() * dpr) / dpr)};
+
+    if (d->m_surface)
+        d->m_surface->setCellSize(d->m_cellSize);
 
     QAbstractScrollArea::setFont(font);
 
@@ -766,6 +770,11 @@ int TerminalView::paintCell(QPainter &p,
     bool paintBackground = !paintSelection(p, cellRect, gridPos)
                            && !paintFindMatches(p, searchIt, cellRect, gridPos);
 
+    // An image cell carries neither text nor a background of its own, the image
+    // is painted over the whole run of them once the cells are done.
+    if (cell.image)
+        return cell.width;
+
     bool isDefaultBg = std::holds_alternative<int>(cell.backgroundColor)
                        && std::get<int>(cell.backgroundColor) == 17;
 
@@ -938,6 +947,15 @@ void TerminalView::paintCells(QPainter &p, QPaintEvent *event) const
                                return d->m_surface->posToGrid(hit.start).y() < value;
                            });
 
+    const auto continuesRun = [](const ImageRun &run, quint32 tag, QPoint gridPos) {
+        return gridPos.y() == run.start.y() && gridPos.x() == run.start.x() + run.count
+               && ImageCell::id(tag) == ImageCell::id(run.tag)
+               && ImageCell::row(tag) == ImageCell::row(run.tag)
+               && ImageCell::column(tag) == ImageCell::column(run.tag) + run.count;
+    };
+
+    QList<ImageRun> imageRuns;
+
     for (int cellY = startRow; cellY < endRow; ++cellY) {
         for (int cellX = 0; cellX < d->m_surface->liveSize().width();) {
             const auto cell = d->m_surface->fetchCell(cellX, cellY);
@@ -945,11 +963,57 @@ void TerminalView::paintCells(QPainter &p, QPaintEvent *event) const
             QRectF cellRect(gridToGlobal({cellX, cellY}),
                             QSizeF{d->m_cellSize.width() * cell.width, d->m_cellSize.height()});
 
+            if (cell.image) {
+                const QPoint gridPos{cellX, cellY};
+                if (!imageRuns.isEmpty() && continuesRun(imageRuns.last(), cell.image, gridPos))
+                    ++imageRuns.last().count;
+                else
+                    imageRuns.append(ImageRun{cell.image, gridPos, 1});
+            }
+
             int numCells = paintCell(p, cellRect, {cellX, cellY}, cell, f, searchIt);
 
             cellX += numCells;
         }
     }
+
+    paintImages(p, imageRuns);
+}
+
+void TerminalView::paintImages(QPainter &p, const QList<ImageRun> &runs) const
+{
+    if (runs.isEmpty())
+        return;
+
+    const bool smooth = p.testRenderHint(QPainter::SmoothPixmapTransform);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    for (const ImageRun &run : runs) {
+        const std::optional<ImageTile> tile = d->m_surface->imageTile(run.tag);
+        if (!tile)
+            continue;
+
+        QRectF source = tile->source;
+        source.setWidth(source.width() * run.count);
+
+        QRectF target{gridToGlobal(run.start),
+                      QSizeF{d->m_cellSize.width() * run.count, d->m_cellSize.height()}};
+
+        // The cells along the right and bottom edge of an image reach past it
+        const QRectF bounds{QPointF{}, QSizeF{tile->image.size()}};
+        const QRectF available = source.intersected(bounds);
+        if (available.isEmpty())
+            continue;
+
+        if (available != source) {
+            target.setWidth(target.width() * available.width() / source.width());
+            target.setHeight(target.height() * available.height() / source.height());
+        }
+
+        p.drawImage(target, tile->image, available);
+    }
+
+    p.setRenderHint(QPainter::SmoothPixmapTransform, smooth);
 }
 
 void TerminalView::paintDebugSelection(QPainter &p, const Selection &selection) const

@@ -32,6 +32,18 @@ public:
 
     void linkActivated(const Link &link) override { activated = link; }
 
+    QPoint viewportPos(QPoint gridPos) const
+    {
+        return globalToViewport(gridToGlobal(gridPos).toPoint()) + QPoint(1, 1);
+    }
+
+    QImage renderViewport()
+    {
+        QImage image(viewport()->size(), QImage::Format_ARGB32);
+        viewport()->render(&image);
+        return image;
+    }
+
     void ctrlHover(QPoint gridPos)
     {
         const QPoint pos = viewportPos(gridPos);
@@ -57,12 +69,6 @@ public:
                           Qt::LeftButton,
                           Qt::ControlModifier);
         QCoreApplication::sendEvent(viewport(), &press);
-    }
-
-private:
-    QPoint viewportPos(QPoint gridPos) const
-    {
-        return globalToViewport(gridToGlobal(gridPos).toPoint()) + QPoint(1, 1);
     }
 };
 
@@ -163,6 +169,22 @@ private slots:
 
         QCOMPARE(m_view->ptyResizes.last(), m_view->surface()->liveSize());
     }
+
+    void anImageIsPaintedOverTheCellsItCovers()
+    {
+        std::array<QColor, 20> colors;
+        colors.fill(Qt::black);
+        m_view->setColors(colors);
+
+        // A sixel image of 20 by 12 red pixels, which is a few cells wide
+        m_view->writeToTerminal("\x1bP0;1;0q\"1;1;20;12#0;2;100;0;0!20~-!20~\x1b\\", true);
+
+        const QImage rendered = m_view->renderViewport();
+
+        QCOMPARE(rendered.pixelColor(m_view->viewportPos({0, 0}) + QPoint(3, 3)), QColor(Qt::red));
+        QCOMPARE(rendered.pixelColor(m_view->viewportPos({20, 0})), QColor(Qt::black));
+    }
+
 
     void plainTextIsNotALink()
     {
