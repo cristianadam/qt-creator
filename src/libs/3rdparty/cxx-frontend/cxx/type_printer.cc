@@ -58,9 +58,17 @@ class TypePrinter {
     std::string buffer;
 
     buffer.append(specifiers_);
+    if (!ptrOps_.empty() && !buffer.empty() &&
+        options_.spaceBeforePointerOperators) {
+      buffer.append(" ");
+    }
     buffer.append(ptrOps_);
     if (!declarator_.empty()) {
-      if (!buffer.empty()) buffer.append(" ");
+      const bool afterPointerOperators = !ptrOps_.empty();
+      const bool space = afterPointerOperators
+                             ? options_.spaceAfterPointerOperators
+                             : true;
+      if (!buffer.empty() && space) buffer.append(" ");
       buffer.append(declarator_);
     }
 

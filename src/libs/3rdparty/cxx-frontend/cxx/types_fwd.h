@@ -194,6 +194,20 @@ struct TypePrintOptions {
   // written inside it: the names of a function pointer parameter's own
   // parameters are not these.
   std::vector<std::string> parameterNames;
+
+  // Where the spaces go around the * and & of a pointer or a reference,
+  // which is a matter of style and not of meaning: "char* s" by default,
+  // "char *s" binding them to the name, "char * s" with both spaces, and
+  // "char*s" with neither.
+  //
+  // A tool that rewrites declarations to a chosen style cannot work this
+  // out afterwards: which run of characters in the answer is the pointer
+  // operator, and which of the spaces around it were asked for, is only
+  // plain while the type is being written. Left alone where the operators
+  // stand inside parentheses -- the (* of a pointer to a function or to an
+  // array -- since there the spelling is not a choice.
+  bool spaceBeforePointerOperators = false;
+  bool spaceAfterPointerOperators = true;
 };
 
 auto to_string(const Type* type, const std::string& id = "",
