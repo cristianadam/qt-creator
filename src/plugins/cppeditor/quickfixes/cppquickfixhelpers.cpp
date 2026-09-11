@@ -15,7 +15,11 @@
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "../cxxfrontendmodel.h"
 
+#include <cplusplus/CxxFrontendAst.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#include <cxx/translation_unit.h>
 #endif
 
 using namespace CPlusPlus;
@@ -31,6 +35,57 @@ const CxxFrontendDocument *cxxFrontendDocumentFor(const CppQuickFixInterface &in
     if (!model)
         return nullptr;
     return model->document(file->filePath().toFSPathString());
+}
+
+Utils::Text::Position cxxNameOfDeclarator(const CxxFrontendDocument &document,
+                                          cxx::DeclaratorAST *declarator)
+{
+    auto * const id = declarator
+                          ? dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator)
+                          : nullptr;
+    if (!id || !id->unqualifiedId)
+        return {};
+
+    cxx::SourceLocation at = id->unqualifiedId->firstSourceLocation();
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id->unqualifiedId)) {
+        if (!destructor->id)
+            return {};
+        at = destructor->id->firstSourceLocation();
+    }
+
+    const CxxAstRange name = cxxTokenRangeAt(document, at);
+    if (!name.isValid())
+        return {};
+    return {name.startLine, name.startColumn};
+}
+
+bool cxxCanWriteADefinitionOf(const CxxFrontendDocument &document,
+                              cxx::DeclaratorAST *declarator)
+{
+    if (!declarator)
+        return false;
+
+    for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+        auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+        if (parameters && parameters->trailingReturnType)
+            return false;
+    }
+
+    if (auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator);
+        id && dynamic_cast<cxx::OperatorFunctionIdAST *>(id->unqualifiedId)) {
+        return false;
+    }
+
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    if (!unit)
+        return false;
+    const unsigned first = declarator->firstSourceLocation().index();
+    const unsigned last = declarator->lastSourceLocation().index();
+    for (unsigned i = first; i < last; ++i) {
+        if (unit->tokenAt(cxx::SourceLocation{i}).macroGenerated())
+            return false;
+    }
+    return true;
 }
 #endif
 

@@ -201,34 +201,6 @@ struct CxxWrittenDefinition
     bool isOutsideMemberDefinition = false;
 };
 
-// The chunk of a declarator that makes it a function: its parameters and
-// everything written after them.
-cxx::FunctionDeclaratorChunkAST *cxxFunctionChunkOf(cxx::DeclaratorAST *declarator)
-{
-    if (!declarator)
-        return nullptr;
-    for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
-        if (auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk))
-            return parameters;
-    }
-    return nullptr;
-}
-
-// Where the name of whatever a declarator declares is written, past the
-// scopes in front of it and past a destructor's tilde -- which is where
-// every front end records the thing it declares.
-cxx::SourceLocation cxxNameLocationOf(cxx::DeclaratorAST *declarator)
-{
-    auto * const id = declarator
-                          ? dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator)
-                          : nullptr;
-    if (!id || !id->unqualifiedId)
-        return {};
-    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id->unqualifiedId))
-        return destructor->id ? destructor->id->firstSourceLocation() : cxx::SourceLocation();
-    return id->unqualifiedId->firstSourceLocation();
-}
-
 std::optional<CxxWrittenDefinition> cxxWrittenDefinitionAt(
     const CxxFrontendDocument &document, int line, int column)
 {
@@ -271,37 +243,10 @@ std::optional<CxxWrittenDefinition> cxxWrittenDefinitionAt(
     if (dynamic_cast<cxx::DeleteFunctionBodyAST *>(function->functionBody))
         return {};
 
-    // A trailing return type is how somebody chose to write the declaration
-    // and the built-in path keeps it that way; printing from the type would
-    // write the other form, so this one is handed back.
-    if (cxx::FunctionDeclaratorChunkAST * const chunk
-        = cxxFunctionChunkOf(function->declarator);
-        chunk && chunk->trailingReturnType) {
+    // A trailing return type, an operator, a declarator a macro wrote part
+    // of: each one the built-in path keeps as written and this would not.
+    if (!cxxCanWriteADefinitionOf(document, function->declarator))
         return {};
-    }
-
-    // How much space stands in the name of an operator is how somebody
-    // wrote it, and this writes the name out of the front end's own
-    // spelling, which is one of the two.
-    if (auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(
-            function->declarator ? function->declarator->coreDeclarator : nullptr);
-        id && dynamic_cast<cxx::OperatorFunctionIdAST *>(id->unqualifiedId)) {
-        return {};
-    }
-
-    // A declarator a macro wrote part of: what stands in the text is the
-    // macro's name and what the front end read is its replacement, so
-    // neither the declaration left behind nor the definition written out
-    // would say what the author wrote.
-    cxx::TranslationUnit * const unit = document.translationUnit();
-    if (function->declarator && unit) {
-        const unsigned first = function->declarator->firstSourceLocation().index();
-        const unsigned last = function->declarator->lastSourceLocation().index();
-        for (unsigned i = first; i < last; ++i) {
-            if (unit->tokenAt(cxx::SourceLocation{i}).macroGenerated())
-                return {};
-        }
-    }
 
     // Error recovery moves where a construct ends, and this one takes text
     // from one place to another.
@@ -340,8 +285,8 @@ std::optional<MovableDefinition> cxxMovableDefinition(const CppQuickFixInterface
 
     const CxxAstRange whole = cxxAstRangeOf(document, function);
     const CxxAstRange head = cxxAstRangeOf(document, function->declarator);
-    const CxxAstRange name = cxxTokenRangeAt(document, cxxNameLocationOf(function->declarator));
-    if (!whole.isValid() || !head.isValid() || !name.isValid())
+    const Utils::Text::Position name = cxxNameOfDeclarator(document, function->declarator);
+    if (!whole.isValid() || !head.isValid() || name.line <= 0)
         return {};
 
     const auto positionOf = [&](int line, int column) {
@@ -366,14 +311,14 @@ std::optional<MovableDefinition> cxxMovableDefinition(const CppQuickFixInterface
 
     DeclarationToDefine &declaration = definition.declaration;
     declaration.filePath = interface.filePath();
-    declaration.line = name.startLine;
-    declaration.column = name.startColumn;
+    declaration.line = name.line;
+    declaration.column = name.column;
 
     // What it is written inside, outermost first, which decides the
     // namespace the definition goes into. A class is written into the
     // definition's own name rather than opened around it, so only the
     // namespaces are what a file writing none of them has to be given.
-    for (cxx::AST * const node : cxxAstPathAt(document, name.startLine, name.startColumn)) {
+    for (cxx::AST * const node : cxxAstPathAt(document, name.line, name.column)) {
         auto * const enclosing = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);
         if (!enclosing || !enclosing->identifier)
             continue;
@@ -391,8 +336,8 @@ std::optional<MovableDefinition> cxxMovableDefinition(const CppQuickFixInterface
         }
     }
 
-    definition.writeSignature = [filePath = interface.filePath(), line = name.startLine,
-                                 column = name.startColumn](
+    definition.writeSignature = [filePath = interface.filePath(), line = name.line,
+                                 column = name.column](
                                     const CppQuickFixOperation *op,
                                     const InsertionLocation &at,
                                     const CppRefactoringFilePtr &toFile) -> QString {
