@@ -309,20 +309,34 @@ class TypePrinter {
   // Whether writing \a symbol's own name where the answer is going finds
   // this very symbol. If it does, nothing has to stand in front of it.
   //
-  // The lookup walks the scope the caller named and the scopes around it,
-  // which is unqualified lookup over the symbol chain rather than over the
-  // lexical one: a type is printed long after the file was read, and the
-  // lexical scopes belong to the reading.
+  // The search walks the scope the caller named and the scopes around it,
+  // through the symbols' own parent chain rather than the lexical one: a
+  // type is printed long after the file was read, and the lexical scopes
+  // belong to the reading. The first scope that has the name settles it,
+  // which is what shadowing means.
+  //
+  // What it deliberately does not follow is a using directive or a using
+  // declaration. Those are in force from the line they are written onwards,
+  // which a scope does not record, and the answer may be going into another
+  // file entirely -- a source file's "using namespace N" says nothing about
+  // what a header can see. Leaving them out can only make a name longer
+  // than it had to be, and a longer name still says the right thing.
   [[nodiscard]] auto isReachedByItsOwnName(Symbol* symbol) const -> bool {
     const Name* name = symbol->name();
     if (!name) return false;
     for (auto scope = options_.writtenIn; scope; scope = scope->parent()) {
-      auto found = qualifiedLookup(scope, name);
-      if (!found) continue;
-      if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {
-        found = injected->classSymbol();
+      auto lookIn = scope;
+      if (auto cls = symbol_cast<ClassSymbol>(lookIn)) {
+        if (auto def = cls->definition()) lookIn = def;
       }
-      return found == symbol;
+      for (auto candidate : lookIn->find(name)) {
+        if (candidate->isHidden()) continue;
+        auto found = candidate;
+        if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {
+          found = injected->classSymbol();
+        }
+        return found == symbol;
+      }
     }
     return false;
   }
