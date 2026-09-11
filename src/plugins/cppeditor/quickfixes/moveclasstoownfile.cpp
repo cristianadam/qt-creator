@@ -24,6 +24,12 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "../cpptoolstestcase.h"
 #include <coreplugin/editormanager/editormanager.h>
@@ -316,6 +322,71 @@ std::optional<ClassToMove> builtinClassToMove(const CppQuickFixInterface &interf
     });
     klass.hasOtherDeclarations = foundOtherDecls;
     return klass;
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// Everything the class is written in besides its own declaration, as the
+// cxx-frontend model finds it: every file that writes the class's name is
+// read, and each is asked what of the class stands there.
+//
+// Handed over through the event loop even though it is ready straight away,
+// as the other seams of this kind are: this one's caller is written for an
+// answer that arrives later -- the built-in path's lookups are queued -- and
+// one that arrives while perform() is still running is an answer nobody is
+// listening for yet.
+PartsFinder modelPartsFinder(const CppQuickFixInterface &interface, const QString &qualifiedName)
+{
+    return [snapshot = interface.snapshot(), filePath = interface.filePath(), qualifiedName](
+               const FileGetter &getFile, const PartsHandler &handler) {
+        const auto find = [snapshot, filePath, qualifiedName, getFile, handler] {
+            QList<ClassPart> parts;
+            for (const CxxFrontendClassPart &part : cxxFrontendPartsOfClass(
+                     snapshot, CppModelManager::workingCopy(), filePath, qualifiedName)) {
+                const CppRefactoringFilePtr file = getFile(part.filePath);
+                QTC_ASSERT(file, continue);
+                parts.append(
+                    {part.filePath,
+                     {file->position(part.extent.startLine, part.extent.startColumn),
+                      file->position(part.extent.endLine, part.extent.endColumn)}});
+            }
+            handler(parts);
+        };
+        QMetaObject::invokeMethod(CppModelManager::instance(), find, Qt::QueuedConnection);
+    };
+}
+
+// What the cxx-frontend model says of the class at the cursor.
+std::optional<ClassToMove> modelClassToMove(const CppQuickFixInterface &interface)
+{
+    const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
+        interface.textDocument(), interface.position());
+    const std::optional<CxxFrontendDocument::ClassToMove> read
+        = cxxFrontendClassToMoveAt(interface.filePath(), at.line, at.column + 1);
+    if (!read)
+        return std::nullopt;
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    ClassToMove klass;
+    klass.className = read->className;
+    klass.namespacePath = read->namespacePath;
+    klass.range = {file->position(read->declaration.startLine, read->declaration.startColumn),
+                   file->position(read->declaration.endLine, read->declaration.endColumn)};
+    klass.hasOtherDeclarations = read->hasOtherDeclarations;
+    klass.findOtherParts = modelPartsFinder(interface, read->qualifiedName);
+    return klass;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+// The class at the cursor, read by whichever front end can read it.
+std::optional<ClassToMove> classToMove(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<ClassToMove> onTheModel = modelClassToMove(interface))
+        return onTheModel;
+#endif
+    return builtinClassToMove(interface);
 }
 
 class MoveClassToOwnFileOp : public CppQuickFixOperation
@@ -658,7 +729,7 @@ private:
     void doMatch(const CppQuickFixInterface &interface,
                  TextEditor::QuickFixOperations &result) override
     {
-        const std::optional<ClassToMove> klass = builtinClassToMove(interface);
+        const std::optional<ClassToMove> klass = classToMove(interface);
         if (!klass || !klass->hasOtherDeclarations)
             return;
         if (fileIsNamedAfter(interface.filePath(), klass->className))

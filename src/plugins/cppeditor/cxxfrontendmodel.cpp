@@ -1390,6 +1390,59 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     return functionIn(*holding.document, filePath, line, column);
 }
 
+std::optional<CxxFrontendDocument::ClassToMove> cxxFrontendClassToMoveAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::ClassToMove klass = document->classToMoveAt(line, column);
+    if (!klass.isValid())
+        return std::nullopt;
+    return klass;
+}
+
+QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const QString &qualifiedName)
+{
+    QList<CxxFrontendClassPart> parts;
+    if (!cxxFrontendModelRequested() || qualifiedName.isEmpty())
+        return parts;
+
+    // The file the class stands in first, out of the model the editor is
+    // running over: whoever asks this is editing that file, and what it says
+    // now is what moves.
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    const CxxFrontendDocument * const own
+        = model ? model->document(filePath.toFSPathString()) : nullptr;
+    if (!own)
+        return parts;
+    for (const CxxFrontendDocument::Extent &extent : own->partsOfClass(qualifiedName))
+        parts.append({filePath, extent});
+
+    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+        if (candidate == filePath)
+            continue;
+        if (!mayWrite(builtinSnapshot, candidate, qualifiedName))
+            continue;
+
+        const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, candidate, {}, {});
+        if (!holding.document)
+            continue;
+        for (const CxxFrontendDocument::Extent &extent
+             : holding.document->partsOfClass(qualifiedName)) {
+            parts.append({candidate, extent});
+        }
+    }
+
+    return parts;
+}
+
 QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
     const QList<CxxFrontendDocument::MemberFunction> &functions)

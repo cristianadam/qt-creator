@@ -278,6 +278,34 @@ QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
     const Utils::FilePath &filePath,
     const QList<CPlusPlus::CxxFrontendDocument::MemberFunction> &functions);
 
+// The class written at a position, as the file about to give it away reads
+// it, and nothing where this model has not read that file.
+std::optional<CPlusPlus::CxxFrontendDocument::ClassToMove> cxxFrontendClassToMoveAt(
+    const Utils::FilePath &filePath, int line, int column);
+
+// A stretch of text that belongs to a class though it stands outside it,
+// and which file writes it.
+struct CxxFrontendClassPart
+{
+    Utils::FilePath filePath;
+    CPlusPlus::CxxFrontendDocument::Extent extent;
+};
+
+// Everything the project writes that belongs to the class called
+// \a qualifiedName -- a member's definition, a nested class's body, a
+// static member's definition -- which is what moving that class to files of
+// its own has to carry along.
+//
+// Every file that writes the class's name is read, since there is no count
+// to stop at: a class's parts can be spread over as many files as somebody
+// chose to put them in. What keeps that from reading the project is the
+// filter the rest of this file uses -- the built-in parse of a file says
+// which identifiers it wrote, and a file that never wrote this name cannot
+// define a part of it.
+QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, const QString &qualifiedName);
+
 // Where the function at a position is *declared*, when that is somewhere
 // other than the position itself -- which is what appending a parameter to a
 // definition has to change as well.

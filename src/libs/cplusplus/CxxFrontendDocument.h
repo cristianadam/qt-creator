@@ -565,6 +565,61 @@ public:
     };
     QList<MemberFunction> memberFunctionsAt(int line, int column) const;
 
+    // A stretch of text this file writes, counted from one: where its
+    // first token begins, and where its last one ends -- which is the
+    // place just past its last character, as CxxAstRange says it too.
+    struct Extent
+    {
+        int startLine = 0;
+        int startColumn = 0;
+        int endLine = 0;
+        int endColumn = 0;
+
+        bool isValid() const { return startLine > 0 && endLine > 0; }
+    };
+
+    // The class written at a position, as the file about to give it away
+    // reads it -- what moving a class to files of its own needs to know
+    // about the file it stands in today.
+    //
+    // Nothing unless a class is written there: the position has to be in
+    // the class's own declaration or on the name it is declared under,
+    // which is where a reader asking for this has the cursor.
+    struct ClassToMove
+    {
+        QString className;         // as written, without its scopes
+        QString qualifiedName;     // with them, which is what names its parts
+        QStringList namespacePath; // the namespaces around it, outermost first
+
+        // The whole declaration, the template header included: what is
+        // taken out of the file that writes it today.
+        Extent declaration;
+
+        // Whether this file writes anything besides the class. A class
+        // that is all its file says is where it belongs already, and a
+        // class named without being defined (class Foo;) is not something
+        // the file says of its own.
+        bool hasOtherDeclarations = false;
+
+        bool isValid() const { return declaration.isValid(); }
+    };
+    ClassToMove classToMoveAt(int line, int column) const;
+
+    // Everything this file writes that belongs to the class called
+    // \a qualifiedName -- a member's definition, a nested class's body, a
+    // static member's definition -- as the whole declaration around each,
+    // the template header included, in the order they are written.
+    //
+    // A member written outside its class is written under that class's own
+    // name, so that is what this looks for. A nested class comes along for
+    // free, and so does everything written under it: those are written
+    // under the class too.
+    //
+    // The class's own declaration is not among them, and neither is
+    // anything written inside its body: what is asked for here is what
+    // would be left behind.
+    QList<Extent> partsOfClass(const QString &qualifiedName) const;
+
     // A literal written inside a function, which "extract it as a parameter"
     // works on: its type, and every place that function writes the same
     // literal -- they all say the same thing, which is what makes them one

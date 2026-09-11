@@ -216,6 +216,11 @@ private slots:
     void memberFunctionsOfAClass_data();
     void memberFunctionsOfAClass();
 
+    void classToMove_data();
+    void classToMove();
+    void partsOfAClass_data();
+    void partsOfAClass();
+
     void literalInAFunction_data();
     void literalInAFunction();
     void noLiteralToExtract_data();
@@ -1404,6 +1409,181 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass()
                              .arg(function.parameterCount)
                              .arg(function.line).arg(function.column)
                              .arg(function.isPureVirtual ? " pure" : ""));
+    }
+    QCOMPARE(described, expected);
+}
+
+// The class a position is on, as the file it stands in reads it: what it is
+// called, what it is written inside, and where its declaration begins and
+// ends -- what moving it to files of its own takes away.
+void tst_cxxfrontenddocument::classToMove_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("a class at file scope")
+        << QByteArray("void f();\n"
+                      "class $C\n"
+                      "{\n"
+                      "    void g();\n"
+                      "};\n")
+        << QString("C|C||2:1-5:3|other");
+
+    QTest::newRow("the cursor on the class's own name")
+        << QByteArray("void f();\n"
+                      "class $C {};\n")
+        << QString("C|C||2:1-2:12|other");
+
+    QTest::newRow("a class in nested namespaces")
+        << QByteArray("namespace N {\n"
+                      "namespace Inner {\n"
+                      "void f();\n"
+                      "class $C {};\n"
+                      "}\n"
+                      "}\n")
+        << QString("C|N::Inner::C|N, Inner|4:1-4:12|other");
+
+    QTest::newRow("a class written under one namespace name")
+        << QByteArray("namespace N::Inner {\n"
+                      "void f();\n"
+                      "class $C {};\n"
+                      "}\n")
+        << QString("C|N::Inner::C|N, Inner|3:1-3:12|other");
+
+    // The template header is written around the class and goes with it.
+    QTest::newRow("a class template")
+        << QByteArray("void f();\n"
+                      "template<typename T>\n"
+                      "class $C\n"
+                      "{\n"
+                      "    T t;\n"
+                      "};\n")
+        << QString("C|C||2:1-6:3|other");
+
+    // A class that is all its file says is where it belongs already, and a
+    // class named without being defined says nothing of its own.
+    QTest::newRow("the only thing the file says")
+        << QByteArray("class $C {};\n") << QString("C|C||1:1-1:12|alone");
+    QTest::newRow("a class named but not defined is not something else")
+        << QByteArray("class Other;\n"
+                      "class $C {};\n")
+        << QString("C|C||2:1-2:12|alone");
+
+    // Nothing to answer: a class written inside another one is not at
+    // namespace scope, and a position on a member is on the member.
+    QTest::newRow("a nested class") << QByteArray("class Outer { class $C {}; };\n")
+                                    << QString();
+    QTest::newRow("a position on a member")
+        << QByteArray("void f();\n"
+                      "class C { void $g(); };\n")
+        << QString();
+    QTest::newRow("a position on nothing at all") << QByteArray("void f();\n$\n") << QString();
+
+    // What the recovery made of it ends where the text does not, so there is
+    // no range to carry away. A Qt class is one of these.
+    QTest::newRow("a class this front end stumbled over")
+        << QByteArray("void f();\n"
+                      "class $C\n"
+                      "{\n"
+                      "signals:\n"
+                      "    void s();\n"
+                      "};\n")
+        << QString();
+}
+
+void tst_cxxfrontenddocument::classToMove()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::ClassToMove klass
+        = document.classToMoveAt(positions.first().line, positions.first().column);
+    if (expected.isEmpty()) {
+        QVERIFY(!klass.isValid());
+        return;
+    }
+    QVERIFY(klass.isValid());
+    QCOMPARE(QString("%1|%2|%3|%4:%5-%6:%7|%8")
+                 .arg(klass.className, klass.qualifiedName, klass.namespacePath.join(", "))
+                 .arg(klass.declaration.startLine).arg(klass.declaration.startColumn)
+                 .arg(klass.declaration.endLine).arg(klass.declaration.endColumn)
+                 .arg(klass.hasOtherDeclarations ? "other" : "alone"),
+             expected);
+}
+
+// Everything a file writes that belongs to a class though it stands outside
+// it, which is what has to go along when the class moves.
+void tst_cxxfrontenddocument::partsOfAClass_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<QString>("className");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("a member's definition")
+        << QByteArray("class C { void f(); };\n"
+                      "void C::f() {}\n")
+        << QString("C") << QStringList("2:1-2:15");
+
+    QTest::newRow("a static member's definition")
+        << QByteArray("class C { static int i; };\n"
+                      "int C::i = 1;\n")
+        << QString("C") << QStringList("2:1-2:14");
+
+    // A nested class is written under the class, and so is everything
+    // written under it: one rule carries them both.
+    QTest::newRow("a nested class and its members")
+        << QByteArray("class C { class P; };\n"
+                      "class C::P { void g(); };\n"
+                      "void C::P::g() {}\n")
+        << QString("C") << QStringList({"2:1-2:26", "3:1-3:18"});
+
+    QTest::newRow("a template member's definition")
+        << QByteArray("class C { template<typename T> T t() const; };\n"
+                      "template<typename T> T C::t() const { return T(); }\n")
+        << QString("C") << QStringList("2:1-2:52");
+
+    QTest::newRow("written in the namespace the class is in")
+        << QByteArray("namespace N {\n"
+                      "class C { void f(); };\n"
+                      "void C::f() {}\n"
+                      "}\n")
+        << QString("N::C") << QStringList("3:1-3:15");
+
+    // The class's own declaration is not a part of it, nor is anything
+    // written inside its body: what is asked for is what stays behind.
+    QTest::newRow("nothing but the class itself")
+        << QByteArray("class C { void f() {} };\n") << QString("C") << QStringList();
+
+    QTest::newRow("another class's member")
+        << QByteArray("class C {};\n"
+                      "class D { void f(); };\n"
+                      "void D::f() {}\n")
+        << QString("C") << QStringList();
+
+    // A class of the same name in another namespace is another class.
+    QTest::newRow("the same name somewhere else")
+        << QByteArray("class C { void f(); };\n"
+                      "namespace N { class C { void f(); }; }\n"
+                      "void N::C::f() {}\n")
+        << QString("C") << QStringList();
+}
+
+void tst_cxxfrontenddocument::partsOfAClass()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(QString, className);
+    QFETCH(QStringList, expected);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    for (const CxxFrontendDocument::Extent &part : document.partsOfClass(className)) {
+        described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
+                             .arg(part.endLine).arg(part.endColumn));
     }
     QCOMPARE(described, expected);
 }

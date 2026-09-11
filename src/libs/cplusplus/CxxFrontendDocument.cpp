@@ -3,6 +3,8 @@
 
 #include "CxxFrontendDocument.h"
 
+#include "CxxFrontendAst.h"
+
 #include <QRegularExpression>
 #include <QSet>
 
@@ -1838,6 +1840,203 @@ QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsA
         }
     }
     return functions;
+}
+
+namespace {
+
+// The class a position is on: the innermost node is the class's own, or
+// the name it is declared under. The rule the built-in path applies too, so
+// that the same cursor is offered the same thing.
+cxx::ClassSpecifierAST *classSpecifierIn(const QList<cxx::AST *> &path)
+{
+    for (int index = path.size() - 1; index >= 0; --index) {
+        cxx::AST * const node = path.at(index);
+        if (auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(node))
+            return specifier;
+        // Only the name may stand between the cursor and the class. In
+        // anything else -- a member, a base, a statement of a body -- the
+        // cursor is on something of its own.
+        if (!dynamic_cast<cxx::UnqualifiedIdAST *>(node))
+            return nullptr;
+    }
+    return nullptr;
+}
+
+// Everything written around the class body that goes away with it: the
+// declaration it is a specifier of, and the template header above that.
+cxx::AST *declarationAroundClass(const QList<cxx::AST *> &path, cxx::ClassSpecifierAST *specifier)
+{
+    cxx::AST *declaration = nullptr;
+    for (int index = path.indexOf(specifier) - 1; index >= 0; --index) {
+        cxx::AST * const node = path.at(index);
+        if (!dynamic_cast<cxx::SimpleDeclarationAST *>(node)
+            && !dynamic_cast<cxx::TemplateDeclarationAST *>(node)) {
+            break;
+        }
+        declaration = node;
+    }
+    return declaration;
+}
+
+// What a declaration written at namespace scope declares: the function it
+// defines, the class whose body it writes, the names it declares. A
+// template header is written around any of those and says nothing itself.
+QList<cxx::Symbol *> declaredBy(cxx::DeclarationAST *declaration)
+{
+    while (auto * const templated = dynamic_cast<cxx::TemplateDeclarationAST *>(declaration))
+        declaration = templated->declaration;
+    if (auto * const function = dynamic_cast<cxx::FunctionDefinitionAST *>(declaration))
+        return {function->symbol};
+
+    QList<cxx::Symbol *> symbols;
+    if (auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration)) {
+        for (auto *specifier : cxx::ListView{simple->declSpecifierList}) {
+            if (auto * const cls = dynamic_cast<cxx::ClassSpecifierAST *>(specifier))
+                symbols.append(cls->symbol);
+        }
+        for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
+            if (declared)
+                symbols.append(declared->symbol);
+        }
+    }
+    return symbols;
+}
+
+// A class named without being defined -- "class Foo;" -- which says nothing
+// about the file it stands in beyond letting the name be used.
+bool isForwardClassDeclaration(cxx::DeclarationAST *declaration)
+{
+    auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
+    if (!simple || simple->initDeclaratorList)
+        return false;
+    for (auto *specifier : cxx::ListView{simple->declSpecifierList}) {
+        if (dynamic_cast<cxx::ElaboratedTypeSpecifierAST *>(specifier))
+            return true;
+    }
+    return false;
+}
+
+// The declarations a file writes at namespace scope, handed over one by one
+// with the namespaces they stand in, outermost first.
+using NamespaceScopeHandler
+    = std::function<void(cxx::DeclarationAST *, const QStringList &namespacePath)>;
+
+void walkNamespaceScope(const CxxFrontendDocument &document,
+                        cxx::List<cxx::DeclarationAST *> *declarations,
+                        const QStringList &namespacePath, const NamespaceScopeHandler &handle)
+{
+    for (auto *declaration : cxx::ListView{declarations}) {
+        if (!declaration)
+            continue;
+
+        // A translation unit holds the front end's own declarations and
+        // every header the file read as well, so a declaration counts only
+        // where this file wrote it.
+        if (!cxxAstRangeOf(document, declaration).isValid())
+            continue;
+
+        if (auto * const ns = dynamic_cast<cxx::NamespaceDefinitionAST *>(declaration)) {
+            QStringList inside = namespacePath;
+            for (auto *nested : cxx::ListView{ns->nestedNamespaceSpecifierList}) {
+                if (nested && nested->identifier)
+                    inside << fromStd(nested->identifier->name());
+            }
+            if (ns->identifier)
+                inside << fromStd(ns->identifier->name());
+            walkNamespaceScope(document, ns->declarationList, inside, handle);
+            continue;
+        }
+
+        handle(declaration, namespacePath);
+    }
+}
+
+} // namespace
+
+CxxFrontendDocument::ClassToMove CxxFrontendDocument::classToMoveAt(int line, int column) const
+{
+    if (!d->unit.ast())
+        return {};
+
+    const QList<cxx::AST *> path = cxxAstPathAt(*this, line, column);
+    cxx::ClassSpecifierAST * const specifier = classSpecifierIn(path);
+    if (!specifier || !specifier->symbol || !specifier->symbol->name())
+        return {};
+    cxx::AST * const declaration = declarationAroundClass(path, specifier);
+    if (!declaration)
+        return {};
+
+    // A class this front end stumbled over is not one to carry away: what
+    // the recovery made of it ends where the text does not, and moving by
+    // that range would take half a class. A Qt class is one of these --
+    // "signals:" is a word this front end does not have.
+    if (cxxAstWasReadWithErrors(*this, declaration))
+        return {};
+
+    const CxxAstRange range = cxxAstRangeOf(*this, declaration);
+    if (!range.isValid())
+        return {};
+
+    ClassToMove answer;
+    answer.className = fromStd(cxx::to_string(specifier->symbol->name()));
+    answer.qualifiedName = qualifiedNameOf(specifier->symbol);
+    answer.declaration = {range.startLine, range.startColumn, range.endLine, range.endColumn};
+    if (answer.className.isEmpty())
+        return {};
+
+    // Where the class stands, and what else the file has to say. Both are
+    // read off the declarations the file writes at namespace scope: a class
+    // written anywhere else is not one this fix takes away.
+    auto * const unit = dynamic_cast<cxx::TranslationUnitAST *>(d->unit.ast());
+    if (!unit)
+        return {};
+    bool foundSelf = false;
+    walkNamespaceScope(
+        *this, unit->declarationList, {},
+        [&](cxx::DeclarationAST *written, const QStringList &namespacePath) {
+            if (written == declaration) {
+                foundSelf = true;
+                answer.namespacePath = namespacePath;
+                return;
+            }
+            if (!isForwardClassDeclaration(written))
+                answer.hasOtherDeclarations = true;
+        });
+    if (!foundSelf)
+        return {};
+
+    return answer;
+}
+
+QList<CxxFrontendDocument::Extent> CxxFrontendDocument::partsOfClass(
+    const QString &qualifiedName) const
+{
+    QList<Extent> parts;
+    auto * const unit = qualifiedName.isEmpty()
+                            ? nullptr
+                            : dynamic_cast<cxx::TranslationUnitAST *>(d->unit.ast());
+    if (!unit)
+        return parts;
+
+    const QString prefix = qualifiedName + "::";
+    walkNamespaceScope(
+        *this, unit->declarationList, {},
+        [&](cxx::DeclarationAST *written, const QStringList &) {
+            const QList<cxx::Symbol *> symbols = declaredBy(written);
+            const bool belongs = std::any_of(symbols.begin(), symbols.end(),
+                                             [&](cxx::Symbol *symbol) {
+                                                 return symbol
+                                                        && qualifiedNameOf(symbol).startsWith(
+                                                            prefix);
+                                             });
+            if (!belongs)
+                return;
+            const CxxAstRange range = cxxAstRangeOf(*this, written);
+            if (range.isValid())
+                parts.append({range.startLine, range.startColumn, range.endLine, range.endColumn});
+        });
+
+    return parts;
 }
 
 CxxFrontendDocument::LiteralInAFunction CxxFrontendDocument::literalInAFunctionAt(
