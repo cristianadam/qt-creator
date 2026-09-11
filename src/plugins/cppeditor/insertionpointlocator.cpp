@@ -22,6 +22,7 @@
 #include <cplusplus/CxxFrontendSnapshot.h>
 
 #include <cxx/ast.h>
+#include <cxx/names.h>
 #include <cxx/translation_unit.h>
 #endif
 
@@ -542,79 +543,169 @@ public:
     }
 };
 
-class FindMethodDefinitionInsertPoint : protected ASTVisitor
+// A namespace a file writes, and the two places a definition put in it goes:
+// just after its "{", where a class definition goes, and just in front of its
+// "}", where everything else does. With the ones written inside it, since the
+// innermost one that matches is the one wanted.
+struct WrittenNamespace
 {
-    QList<const Identifier *> _namespaceNames;
-    int _currentDepth = 0;
-    HighestValue<int, unsigned> _bestToken;
-    bool _isClassDefinition = false;
-
-public:
-    explicit FindMethodDefinitionInsertPoint(TranslationUnit *translationUnit)
-        : ASTVisitor(translationUnit)
-    {}
-
-    void operator()(Symbol *decl, int *line, int *column)
-    {
-        _isClassDefinition = decl->asForwardClassDeclaration();
-
-        AST * const ast = translationUnit()->ast();
-
-        // default to start of file for class definition, otherwise end of file
-        const unsigned defaultToken = _isClassDefinition ? ast->firstToken() : ast->lastToken();
-        _bestToken.maybeSet(-1, defaultToken);
-
-        if (translationUnit()->ast()->lastToken() >= 2) {
-            const QList<const Name *> names = LookupContext::fullyQualifiedName(decl);
-            for (const Name *name : names) {
-                const Identifier *id = name->asNameId();
-                if (!id)
-                    break;
-                _namespaceNames += id;
-            }
-            _currentDepth = 0;
-
-            accept(ast);
-        }
-
-        if (defaultToken == _bestToken.get()) // No matching namespace found
-            translationUnit()->getTokenPosition(defaultToken, line, column);
-        else // Insert at start or end of matching namespace
-            translationUnit()->getTokenEndPosition(_bestToken.get(), line, column);
-    }
-
-protected:
-    bool preVisit(AST *ast) override
-    {
-        return ast->asNamespace() || ast->asTranslationUnit() || ast->asLinkageBody();
-    }
-
-    bool visit(NamespaceAST *ast) override
-    {
-        if (_currentDepth >= _namespaceNames.size())
-            return false;
-
-        // ignore anonymous namespaces
-        if (!ast->identifier_token)
-            return false;
-
-        const Identifier *name = translationUnit()->identifier(ast->identifier_token);
-        if (!name->equalTo(_namespaceNames.at(_currentDepth)))
-            return false;
-
-        // found a good namespace
-        _bestToken.maybeSet(
-            _currentDepth,
-            _isClassDefinition && ast->linkage_body ? ast->linkage_body->firstToken()
-                                                    : ast->lastToken() - 2);
-
-        ++_currentDepth;
-        accept(ast->linkage_body);
-        --_currentDepth;
-
-        return false;
-    }
+    QString name;
+    Utils::Text::Position bodyBegin;
+    Utils::Text::Position bodyEnd;
+    QList<WrittenNamespace> inside;
 };
+
+// Where a definition goes in a file that writes none of the namespaces it
+// belongs to: the beginning of the file for a class, its end for anything
+// else.
+struct FileEnds
+{
+    Utils::Text::Position begin;
+    Utils::Text::Position end;
+};
+
+// The innermost of \a names that \a namespaces writes, and where in it a
+// definition goes; the file's own end where it writes none of them.
+//
+// \a names is what the declaration is written inside, outermost first, and
+// may name things other than namespaces -- its class, itself. Those simply
+// match no namespace.
+Utils::Text::Position placeForDefinition(const QList<WrittenNamespace> &namespaces,
+                                         const QStringList &names,
+                                         bool isClassDefinition,
+                                         const FileEnds &ends)
+{
+    Utils::Text::Position best = isClassDefinition ? ends.begin : ends.end;
+    const QList<WrittenNamespace> *level = &namespaces;
+    for (const QString &name : names) {
+        const auto found = std::find_if(level->cbegin(), level->cend(),
+                                        [&](const WrittenNamespace &one) {
+                                            return one.name == name;
+                                        });
+        if (found == level->cend())
+            break;
+        best = isClassDefinition ? found->bodyBegin : found->bodyEnd;
+        level = &found->inside;
+    }
+    return best;
+}
+
+// The namespaces a file writes, as the built-in front end reads them.
+QList<WrittenNamespace> builtinNamespacesIn(const TranslationUnit *tu,
+                                            DeclarationListAST *declarations)
+{
+    QList<WrittenNamespace> namespaces;
+    for (DeclarationListAST *iter = declarations; iter; iter = iter->next) {
+        NamespaceAST * const ns = iter->value ? iter->value->asNamespace() : nullptr;
+
+        // An anonymous namespace is not one a declaration can be written in.
+        if (!ns || !ns->identifier_token || !ns->linkage_body)
+            continue;
+
+        WrittenNamespace one;
+        one.name = QString::fromUtf8(tu->identifier(ns->identifier_token)->chars());
+        tu->getTokenEndPosition(ns->linkage_body->firstToken(),
+                                &one.bodyBegin.line, &one.bodyBegin.column);
+        tu->getTokenEndPosition(ns->lastToken() - 2, &one.bodyEnd.line, &one.bodyEnd.column);
+        LinkageBodyAST * const body = ns->linkage_body->asLinkageBody();
+        one.inside = body ? builtinNamespacesIn(tu, body->declaration_list)
+                          : QList<WrittenNamespace>();
+        namespaces.append(one);
+    }
+    return namespaces;
+}
+
+FileEnds builtinFileEnds(const TranslationUnit *tu)
+{
+    AST * const ast = tu->ast();
+    FileEnds ends;
+    tu->getTokenPosition(ast->firstToken(), &ends.begin.line, &ends.begin.column);
+    tu->getTokenPosition(ast->lastToken(), &ends.end.line, &ends.end.column);
+    return ends;
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The namespaces a file writes, as the cxx-frontend model reads them, or
+// nothing where one of them was read with errors -- then where its "}" stands
+// is not to be trusted, and the built-in path answers as it did before.
+std::optional<QList<WrittenNamespace>> cxxNamespacesIn(
+    const CxxFrontendDocument &document, cxx::List<cxx::DeclarationAST *> *declarations)
+{
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    QList<WrittenNamespace> namespaces;
+    for (auto *declaration : cxx::ListView{declarations}) {
+        auto * const ns = dynamic_cast<cxx::NamespaceDefinitionAST *>(declaration);
+
+        // An anonymous namespace is not one a declaration can be written in,
+        // and neither is one another file wrote.
+        if (!ns || !ns->identifier || !ns->lbraceLoc || !ns->rbraceLoc)
+            continue;
+        if (unit->tokenAt(ns->identifierLoc).macroGenerated())
+            continue;
+        const CxxAstRange range = cxxAstRangeOf(document, ns);
+        if (!range.isValid())
+            continue;
+        if (cxxAstWasReadWithErrors(document, ns))
+            return {};
+
+        const auto placeAfter = [unit](cxx::SourceLocation at) {
+            const cxx::SourcePosition position = unit->tokenEndPosition(at);
+            return Utils::Text::Position{int(position.line), int(position.column)};
+        };
+
+        WrittenNamespace one;
+        one.name = QString::fromStdString(ns->identifier->name());
+        one.bodyBegin = placeAfter(ns->lbraceLoc);
+        one.bodyEnd = placeAfter(cxx::SourceLocation{ns->rbraceLoc.index() - 1});
+        const std::optional<QList<WrittenNamespace>> inside
+            = cxxNamespacesIn(document, ns->declarationList);
+        if (!inside)
+            return {};
+        one.inside = *inside;
+        namespaces.append(one);
+    }
+    return namespaces;
+}
+
+// The namespaces \a filePath writes, where that model has read it.
+std::optional<QList<WrittenNamespace>> cxxNamespacesIn(const FilePath &filePath)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(filePath);
+    if (!model)
+        return {};
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return {};
+
+    cxx::TranslationUnit * const unit = document->translationUnit();
+    auto * const translationUnit = unit ? dynamic_cast<cxx::TranslationUnitAST *>(unit->ast())
+                                        : nullptr;
+    if (!translationUnit)
+        return {};
+
+    return cxxNamespacesIn(*document, translationUnit->declarationList);
+}
+#endif
+
+// Where a definition goes in the file it is being written into.
+//
+// Which namespaces that file writes is what each front end answers. Where the
+// file begins and ends is not: that is a fact about its text, and the
+// built-in document the caller already holds is asked for it either way.
+Utils::Text::Position definitionPlaceIn(const FilePath &filePath, const TranslationUnit *tu,
+                                        const QStringList &names, bool isClassDefinition)
+{
+    const FileEnds ends = builtinFileEnds(tu);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<WrittenNamespace>> namespaces = cxxNamespacesIn(filePath))
+        return placeForDefinition(*namespaces, names, isClassDefinition, ends);
+#else
+    Q_UNUSED(filePath)
+#endif
+    return placeForDefinition(
+        builtinNamespacesIn(tu, tu->ast()->asTranslationUnit()->declaration_list),
+        names, isClassDefinition, ends);
+}
 
 class FindFunctionDefinition : protected ASTVisitor
 {
@@ -812,9 +903,20 @@ const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
     if (doc.isNull())
         return result;
 
-    int line = 0, column = 0;
-    FindMethodDefinitionInsertPoint finder(doc->translationUnit());
-    finder(declaration, &line, &column);
+    // What the declaration is written inside, outermost first, which is what
+    // decides the namespace its definition goes into.
+    QStringList names;
+    const Overview printer;
+    for (const Name *name : LookupContext::fullyQualifiedName(declaration)) {
+        if (!name->asNameId())
+            break;
+        names << printer.prettyName(name);
+    }
+    const bool isClassDefinition = declaration->asForwardClassDeclaration();
+
+    Utils::Text::Position at = definitionPlaceIn(target, doc->translationUnit(), names,
+                                                 isClassDefinition);
+    int line = at.line, column = at.column;
 
     // Force empty lines before and after the new definition.
     QString prefix;
