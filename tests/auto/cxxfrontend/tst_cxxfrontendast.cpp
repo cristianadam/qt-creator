@@ -172,6 +172,20 @@ void tst_cxxfrontendast::pathAtAPosition_data()
                         "simple-declaration", "init-declarator", "declarator",
                         "id-declarator", "name-id"});
 
+    // A range-based for loop the front end could read gains children nobody
+    // wrote -- the calls to begin and end, the comparison, the increment --
+    // each built out of tokens from the loop's own head. What the file says
+    // is still what it says: the cursor in the loop is on its container.
+    QTest::newRow("the container of a range-based for loop")
+        << QByteArray("struct C { int *begin(); int *end(); };\n"
+                      "void f(C c)\n"
+                      "{\n"
+                      "    for (int x : $c) {}\n"
+                      "}\n")
+        << QStringList({"translation-unit", "function-definition",
+                        "compound-statement-function-body", "compound-statement",
+                        "for-range-statement", "id-expression", "name-id"});
+
     // A cursor between two nodes is in both, so both are here: after the name
     // of a function it stands at the end of that name and at the start of the
     // parameter list following it. Which is the position an editor leaves a

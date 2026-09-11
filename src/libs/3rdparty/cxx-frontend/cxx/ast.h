@@ -2554,11 +2554,11 @@ class ForRangeStatementAST final : public StatementAST {
   ExpressionAST* rangeInitializer = nullptr;
   SourceLocation rparenLoc;
   StatementAST* statement = nullptr;
-  ExpressionAST* beginInitializer = nullptr;
-  ExpressionAST* endInitializer = nullptr;
-  ExpressionAST* condition = nullptr;
-  ExpressionAST* increment = nullptr;
-  ExpressionAST* element = nullptr;
+  ExpressionAST* beginInitializer = nullptr;  // synthesized
+  ExpressionAST* endInitializer = nullptr;    // synthesized
+  ExpressionAST* condition = nullptr;         // synthesized
+  ExpressionAST* increment = nullptr;         // synthesized
+  ExpressionAST* element = nullptr;           // synthesized
   BlockSymbol* symbol = nullptr;
   VariableSymbol* rangeVariable = nullptr;
   VariableSymbol* beginVariable = nullptr;

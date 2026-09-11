@@ -1137,20 +1137,10 @@ auto ForRangeStatementAST::firstSourceLocation() -> SourceLocation {
   if (auto loc = cxx::firstSourceLocation(rangeInitializer)) return loc;
   if (auto loc = cxx::firstSourceLocation(rparenLoc)) return loc;
   if (auto loc = cxx::firstSourceLocation(statement)) return loc;
-  if (auto loc = cxx::firstSourceLocation(beginInitializer)) return loc;
-  if (auto loc = cxx::firstSourceLocation(endInitializer)) return loc;
-  if (auto loc = cxx::firstSourceLocation(condition)) return loc;
-  if (auto loc = cxx::firstSourceLocation(increment)) return loc;
-  if (auto loc = cxx::firstSourceLocation(element)) return loc;
   return {};
 }
 
 auto ForRangeStatementAST::lastSourceLocation() -> SourceLocation {
-  if (auto loc = cxx::lastSourceLocation(element)) return loc;
-  if (auto loc = cxx::lastSourceLocation(increment)) return loc;
-  if (auto loc = cxx::lastSourceLocation(condition)) return loc;
-  if (auto loc = cxx::lastSourceLocation(endInitializer)) return loc;
-  if (auto loc = cxx::lastSourceLocation(beginInitializer)) return loc;
   if (auto loc = cxx::lastSourceLocation(statement)) return loc;
   if (auto loc = cxx::lastSourceLocation(rparenLoc)) return loc;
   if (auto loc = cxx::lastSourceLocation(rangeInitializer)) return loc;
