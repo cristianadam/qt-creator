@@ -4,6 +4,12 @@
 #include "cppelementevaluator.h"
 
 #include "cppmodelmanager.h"
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
 #include "cpptoolsreuse.h"
 #include "symbolfinder.h"
 #include "typehierarchybuilder.h"
@@ -156,9 +162,76 @@ CppClass *CppClass::toCppClass()
     return this;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The class written at a place, out of the file's own parse: a place is what
+// either front end can say, and a Symbol is what this one draws.
+static Class *classWrittenAt(const Snapshot &snapshot,
+                             const CPlusPlus::CxxFrontendDocument::Place &place)
+{
+    const Document::Ptr document = snapshot.document(
+        Utils::FilePath::fromUserInput(place.filePath));
+    if (!document || !document->translationUnit())
+        return nullptr;
+
+    Control * const control = document->translationUnit()->control();
+    for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
+        if (Class * const candidate = (*it)->asClass();
+            candidate && candidate->line() == place.line && candidate->column() == place.column) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+// What the class inherits, as the cxx-frontend model reads it, and nothing
+// where it has not read the file or a base cannot be said as a class of the
+// file's own parse -- half a hierarchy is worse than the other model's whole
+// one.
+static bool lookupBasesOnTheModel(CppClass *cppClass, Symbol *declaration,
+                                  const Snapshot &snapshot)
+{
+    if (!declaration || declaration->filePath().isEmpty())
+        return false;
+    const std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> bases
+        = cxxFrontendBasesOfTheClassAt(snapshot, CppModelManager::workingCopy(),
+                                       declaration->filePath(), declaration->line(),
+                                       declaration->column());
+    if (!bases)
+        return false;
+
+    // The list says which entry each one is a base of, and a parent always
+    // comes before its children, so the tree is built as it is read. Each
+    // entry is remembered as the path to it rather than as a pointer: the
+    // lists grow as this goes, and what a pointer into one meant a moment
+    // ago is not where it is now.
+    QList<QList<int>> paths;
+    for (const CPlusPlus::CxxFrontendDocument::BaseClass &base : *bases) {
+        Class * const symbol = classWrittenAt(snapshot, base.place);
+        if (!symbol)
+            return false;
+
+        QList<int> path = base.parent == -1 ? QList<int>() : paths.at(base.parent);
+        CppClass *parent = cppClass;
+        for (const int step : path)
+            parent = &parent->bases[step];
+        parent->bases.append(CppClass(symbol));
+        path.append(int(parent->bases.size()) - 1);
+        paths.append(path);
+    }
+    return true;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
 void CppClass::lookupBases(const QFuture<void> &future, Symbol *declaration,
                            const LookupContext &context)
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (lookupBasesOnTheModel(this, declaration, context.snapshot()))
+        return;
+#endif
+
     ClassOrNamespace *hierarchy = context.lookupType(declaration);
     if (!hierarchy)
         return;

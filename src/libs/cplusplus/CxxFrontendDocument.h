@@ -1054,6 +1054,28 @@ public:
     // and compared without anything having to be spelled out and matched.
     QList<Place> overridesIn(const Place &classPlace, const Place &function) const;
 
+    // What the class written at a position inherits, and what those inherit
+    // in turn: the hierarchy upwards, which is the other half of what a type
+    // hierarchy shows.
+    //
+    // A flat list, each entry saying which one it is a base of, because that
+    // is how the symbols themselves are laid out here and a tree of them is
+    // the caller's to build. The order is the order they are written in.
+    //
+    // The bases are looked at rather than looked up: a class's bases are
+    // read into the file that writes it, so a base declared in a header this
+    // file included is here with the place it writes its name.
+    struct BaseClass
+    {
+        QString qualifiedName;
+        Place place;
+
+        // Which entry it is a base of, as an index into the list, or -1 for
+        // a base of the class asked about.
+        int parent = -1;
+    };
+    QList<BaseClass> basesOfTheClassAt(int line, int column) const;
+
     // Every class this file writes, with what each of its bases resolves to
     // written out in full: what a search for the classes deriving from a
     // particular one compares against.

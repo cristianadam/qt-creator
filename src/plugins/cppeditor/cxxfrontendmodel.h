@@ -335,6 +335,17 @@ std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclaratio
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// What the class written at a position inherits, and what those inherit in
+// turn, and nothing where this model cannot read the file.
+//
+// A class's bases are read into the file that writes it, so one document
+// holds the whole hierarchy upwards -- read here and now where the editor is
+// not running over that file, since whoever asks this is drawing a hierarchy
+// rather than typing.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassAt(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, int line, int column);
+
 // The members of the class written at \a classPlace in \a filePath that
 // override the function declared at \a function, and nothing where this
 // model cannot read the file.

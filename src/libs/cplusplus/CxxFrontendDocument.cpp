@@ -4284,6 +4284,47 @@ QList<CxxFrontendDocument::Place> CxxFrontendDocument::overridesIn(
     return places;
 }
 
+QList<CxxFrontendDocument::BaseClass> CxxFrontendDocument::basesOfTheClassAt(int line,
+                                                                             int column) const
+{
+    const cxx::SourceLocation at = d->tokenAt(line, column);
+    auto * const cls = dynamic_cast<cxx::ClassSymbol *>(d->declaredAt(at));
+    if (!cls)
+        return {};
+
+    QList<BaseClass> bases;
+    QSet<cxx::ClassSymbol *> visited{cls};
+
+    // Breadth first, so that what a class inherits stands beside what its
+    // sibling does, and a class reached twice is listed where it was
+    // reached first -- a diamond is written once.
+    QList<QPair<cxx::ClassSymbol *, int>> queue{{cls, -1}};
+    while (!queue.isEmpty()) {
+        const auto [current, parent] = queue.takeFirst();
+        for (const auto &base : current->baseClasses()) {
+            auto * const baseClass = base ? dynamic_cast<cxx::ClassSymbol *>(base->symbol())
+                                          : nullptr;
+            if (!baseClass || visited.contains(baseClass))
+                continue;
+            visited.insert(baseClass);
+
+            const cxx::SourceLocation location = d->classBodyNameOf(baseClass)
+                                                     ? d->classBodyNameOf(baseClass)
+                                                     : baseClass->location();
+            BaseClass written;
+            written.qualifiedName = qualifiedNameOf(baseClass);
+            if (location) {
+                const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+                written.place = {d->fileOf(location), int(position.line), int(position.column)};
+            }
+            written.parent = parent;
+            bases.append(written);
+            queue.append({baseClass, int(bases.size()) - 1});
+        }
+    }
+    return bases;
+}
+
 QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheirBases() const
 {
     QList<ClassWithBases> classes;

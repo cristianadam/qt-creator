@@ -227,6 +227,8 @@ private slots:
     void virtuality();
     void overridesInAClass_data();
     void overridesInAClass();
+    void basesOfAClass_data();
+    void basesOfAClass();
     void usagesInAFile_data();
     void usagesInAFile();
     void classesWithTheirBases_data();
@@ -1732,6 +1734,71 @@ void tst_cxxfrontenddocument::partsOfAClass()
     for (const CxxFrontendDocument::Extent &part : document.partsOfClass(className)) {
         described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
                              .arg(part.endLine).arg(part.endColumn));
+    }
+    QCOMPARE(described, expected);
+}
+
+// What a class inherits, and what those inherit in turn: the hierarchy
+// upwards, said as a flat list of who is a base of whom.
+void tst_cxxfrontenddocument::basesOfAClass_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("nothing to inherit")
+        << QByteArray("struct $A {};\n") << QStringList();
+
+    QTest::newRow("one base")
+        << QByteArray("struct A {};\n"
+                      "struct $B : A {};\n")
+        << QStringList("A @1:8");
+
+    QTest::newRow("two bases and one of their bases")
+        << QByteArray("struct Top {};\n"
+                      "struct Middle : Top {};\n"
+                      "struct Other {};\n"
+                      "struct $Leaf : Middle, Other {};\n")
+        << QStringList({"Middle @2:8", "Other @3:8", "Top @1:8 of Middle"});
+
+    // A class reached twice is written once, where it was reached first.
+    QTest::newRow("a diamond")
+        << QByteArray("struct Top {};\n"
+                      "struct Left : Top {};\n"
+                      "struct Right : Top {};\n"
+                      "struct $Bottom : Left, Right {};\n")
+        << QStringList({"Left @2:8", "Right @3:8", "Top @1:8 of Left"});
+
+    // What a namespace holds is named with it, which is what tells two
+    // classes of one name apart.
+    QTest::newRow("a base in a namespace")
+        << QByteArray("namespace N { struct A {}; }\n"
+                      "struct $B : N::A {};\n")
+        << QStringList("N::A @1:22");
+
+    QTest::newRow("a position on no class")
+        << QByteArray("void $f();\n") << QStringList();
+}
+
+void tst_cxxfrontenddocument::basesOfAClass()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const QList<CxxFrontendDocument::BaseClass> bases
+        = document.basesOfTheClassAt(positions.first().line, positions.first().column);
+
+    QStringList described;
+    for (const CxxFrontendDocument::BaseClass &base : bases) {
+        QString line = QString("%1 @%2:%3").arg(base.qualifiedName)
+                           .arg(base.place.line).arg(base.place.column);
+        if (base.parent != -1)
+            line += " of " + bases.at(base.parent).qualifiedName;
+        described.append(line);
     }
     QCOMPARE(described, expected);
 }
