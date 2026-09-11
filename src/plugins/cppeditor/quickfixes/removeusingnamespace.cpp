@@ -87,15 +87,63 @@ int countNames(const Name *name)
     return NameCounter{}.count(name);
 }
 
+// What removing a using directive comes down to in one file, as either
+// front end reads it: the directives whose lines go away, and the places
+// that have to say the namespace now that nothing else does.
+//
+// Which of those places need it is the whole question, and it is the one
+// thing here that cannot be answered without resolving names: a name is
+// written short because the directive was in force.
+struct UsingDirectivesInAFile
+{
+    QList<ChangeSet::Range> directivesToRemove;
+    QList<int> placesNeedingTheNamespace;
+
+    // Whether the directive being removed is in force for whatever
+    // includes this file, and whether another one keeps it in force here
+    // even after this one is gone. Together they say whether the files
+    // that include this one have to be looked at as well.
+    bool isGlobalUsingNamespace = false;
+    bool foundGlobalUsingNamespace = false;
+};
+
+// Where to start reading a file when the directive is not in it and no
+// include brought one in either: find the file's own global directive and
+// start after that.
+constexpr int SearchGlobalUsingDirectivePos = std::numeric_limits<int>::max();
+
+// What one file has to have done to it, read by whichever front end read
+// the file. \a startSymbol is the position to start after -- the end of
+// the directive itself, of the #include that brought it in, or the
+// sentinel above.
+// \a removeAllAtGlobalScope says which of the two things is being done:
+// taking this one directive away, or every one of them at global scope.
+using FileReader = std::function<UsingDirectivesInAFile(const CppRefactoringFilePtr &file,
+                                                        const Snapshot &snapshot,
+                                                        int startSymbol,
+                                                        bool removeAllAtGlobalScope)>;
+
+// What removing a using directive rewrites: the namespace that has to be
+// written out from now on, where the directive itself stands, and how a
+// file is read.
+struct UsingDirectiveToRemove
+{
+    QString namespaceName;
+    ChangeSet::Range range;      // the directive, in the file being edited
+    bool isAtGlobalScope = false; // so it reaches whatever includes the file
+    FileReader read;
+};
+
 /**
- * @brief removeLine removes the whole line in which the ast node is located if there are otherwise only whitespaces
- * @param file The file in which the AST node is located
- * @param ast The ast node
+ * @brief removeLine removes the whole line the range is in if there are otherwise only whitespaces
+ * @param file The file in which the range is
+ * @param rangeToRemove The range
  * @param changeSet The ChangeSet of the file
  */
-void removeLine(const CppRefactoringFile *file, AST *ast, ChangeSet &changeSet)
+void removeLine(const CppRefactoringFile *file, const ChangeSet::Range &rangeToRemove,
+                ChangeSet &changeSet)
 {
-    RefactoringFile::Range range = file->range(ast);
+    RefactoringFile::Range range = rangeToRemove;
     --range.start;
     while (range.start >= 0) {
         QChar current = file->charAt(range.start);
@@ -131,7 +179,6 @@ void removeLine(const CppRefactoringFile *file, AST *ast, ChangeSet &changeSet)
 class RemoveNamespaceVisitor : public ASTVisitor
 {
 public:
-    constexpr static int SearchGlobalUsingDirectivePos = std::numeric_limits<int>::max();
     RemoveNamespaceVisitor(const CppRefactoringFile *file,
                            const Snapshot &snapshot,
                            const Name *namespace_,
@@ -141,14 +188,19 @@ public:
         , m_file(file)
         , m_snapshot(snapshot)
         , m_namespace(namespace_)
-        , m_missingNamespace(toString(namespace_) + "::")
         , m_context(m_file->cppDocument(), m_snapshot)
         , m_symbolPos(symbolPos)
         , m_removeAllAtGlobalScope(removeAllAtGlobalScope)
 
     {}
 
-    const ChangeSet &getChanges() { return m_changeSet; }
+    UsingDirectivesInAFile read() const
+    {
+        UsingDirectivesInAFile answer = m_read;
+        answer.isGlobalUsingNamespace = isGlobalUsingNamespace();
+        answer.foundGlobalUsingNamespace = foundGlobalUsingNamespace();
+        return answer;
+    }
 
     /**
      * @brief isGlobalUsingNamespace return true if the using namespace that should be removed
@@ -177,13 +229,13 @@ private:
                     if (m_symbolPos == SearchGlobalUsingDirectivePos) {
                         // we have found a global using directive, so lets start
                         m_start = true;
-                        removeLine(m_file, ast, m_changeSet);
+                        m_read.directivesToRemove << m_file->range(ast);
                         return false;
                     }
                     // ignore the using namespace that should be removed
                     if (m_file->endOf(ast) != m_symbolPos) {
                         if (m_removeAllAtGlobalScope)
-                            removeLine(m_file, ast, m_changeSet);
+                            m_read.directivesToRemove << m_file->range(ast);
                         else
                             m_done = true;
                     }
@@ -233,7 +285,7 @@ private:
     {
         if (nameEqual(ast->name->name, m_namespace)) {
             if (m_removeAllAtGlobalScope && m_namespaceScopeCounter == 0)
-                removeLine(m_file, ast, m_changeSet);
+                m_read.directivesToRemove << m_file->range(ast);
             else
                 m_foundNamespace = true;
             return false;
@@ -319,10 +371,9 @@ private:
     {
         DestructorNameAST *destructorName = ast->name->asDestructorName();
         if (destructorName)
-            m_changeSet.insert(m_file->startOf(destructorName->unqualified_name), m_missingNamespace);
+            m_read.placesNeedingTheNamespace << m_file->startOf(destructorName->unqualified_name);
         else
-            m_changeSet.insert(m_file->startOf(ast->name), m_missingNamespace);
-        m_changeSet.operationList().last().setFormat1(false);
+            m_read.placesNeedingTheNamespace << m_file->startOf(ast->name);
     }
 
     bool needMissingNamespaces(QList<const Name *> &&fullName, int currentNameCount)
@@ -342,20 +393,12 @@ private:
         return Matcher::match(name1, name2);
     }
 
-    QString toString(const Name *id)
-    {
-        const Identifier *identifier = id->asNameId();
-        QTC_ASSERT(identifier, return {});
-        return QString::fromUtf8(identifier->chars(), identifier->size());
-    }
-
     const CppRefactoringFile *const m_file;
     const Snapshot &m_snapshot;
 
-    const Name *m_namespace;          // the name of the namespace that should be removed
-    const QString m_missingNamespace; // that should be added if a type was using the namespace
+    const Name *m_namespace; // the name of the namespace that should be removed
     LookupContext m_context;
-    ChangeSet m_changeSet;
+    UsingDirectivesInAFile m_read;
     const int m_symbolPos; // the end position of the start symbol
     bool m_done = false;
     bool m_start = false;
@@ -366,6 +409,41 @@ private:
     AST *m_parentNode = nullptr;
     int m_namespaceScopeCounter = 0;
 };
+
+// What the built-in front end says of the using directive at the cursor.
+std::optional<UsingDirectiveToRemove> builtinUsingDirectiveAt(
+    const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    // We expect something like
+    // [0] TranslationUnitAST
+    // ...
+    // [] UsingDirectiveAST : if activated at 'using namespace'
+    // [] NameAST (optional): if activated at the name e.g. 'std'
+    int n = path.size() - 1;
+    if (n <= 0)
+        return {};
+    if (path.last()->asName())
+        --n;
+    UsingDirectiveAST * const usingDirective = path.at(n)->asUsingDirective();
+    if (!usingDirective || !usingDirective->name->name->asNameId())
+        return {};
+
+    UsingDirectiveToRemove directive;
+    directive.namespaceName = Overview{}.prettyName(usingDirective->name->name);
+    directive.range = interface.currentFile()->range(usingDirective);
+    directive.isAtGlobalScope = path.at(n - 1)->asTranslationUnit();
+    directive.read = [name = usingDirective->name->name](const CppRefactoringFilePtr &file,
+                                                         const Snapshot &snapshot,
+                                                         int startSymbol,
+                                                         bool removeAllAtGlobalScope) {
+        RemoveNamespaceVisitor visitor(file.get(), snapshot, name, startSymbol,
+                                       removeAllAtGlobalScope);
+        visitor.accept(file->cppDocument()->translationUnit()->ast());
+        return visitor.read();
+    };
+    return directive;
+}
 
 class RemoveUsingNamespaceOperation : public CppQuickFixOperation
 {
@@ -383,13 +461,13 @@ class RemoveUsingNamespaceOperation : public CppQuickFixOperation
 
 public:
     RemoveUsingNamespaceOperation(const CppQuickFixInterface &interface,
-                                  UsingDirectiveAST *usingDirective,
+                                  const UsingDirectiveToRemove &directive,
                                   bool removeAllAtGlobalScope)
         : CppQuickFixOperation(interface, 1)
-        , m_usingDirective(usingDirective)
+        , m_directive(directive)
         , m_removeAllAtGlobalScope(removeAllAtGlobalScope)
     {
-        const QString name = Overview{}.prettyName(usingDirective->name->name);
+        const QString &name = directive.namespaceName;
         if (m_removeAllAtGlobalScope) {
             setDescription(Tr::tr(
                                "Remove All Occurrences of \"using namespace %1\" in Global Scope "
@@ -467,7 +545,7 @@ private:
             const bool parentHasUsing = Utils::anyOf(node.includes, &Node::hasGlobalUsingDirective);
             const int startPos = parentHasUsing
                                      ? 0
-                                     : RemoveNamespaceVisitor::SearchGlobalUsingDirectivePos;
+                                     : SearchGlobalUsingDirectivePos;
             const bool noGlobalUsing = refactorFile(file, refactoring.snapshot(), startPos);
             node.hasGlobalUsingDirective = !noGlobalUsing || parentHasUsing;
 
@@ -486,7 +564,7 @@ private:
             removeAllUsingsAtGlobalScope(refactoring);
         } else if (refactorFile(currentFile(),
                                 refactoring.snapshot(),
-                                currentFile()->endOf(m_usingDirective),
+                                m_directive.range.end,
                                 true)) {
             processIncludes(refactoring, filePath());
         }
@@ -508,22 +586,28 @@ private:
                       int startSymbol,
                       bool removeUsing = false)
     {
-        RemoveNamespaceVisitor visitor(file.get(),
-                                       snapshot,
-                                       m_usingDirective->name->name,
-                                       startSymbol,
-                                       m_removeAllAtGlobalScope);
-        visitor.accept(file->cppDocument()->translationUnit()->ast());
-        Utils::ChangeSet changes = visitor.getChanges();
+        const UsingDirectivesInAFile read
+            = m_directive.read(file, snapshot, startSymbol, m_removeAllAtGlobalScope);
+
+        // Writing it out is the same either way: the lines the directives
+        // stand on go, and every place that leaned on them says the
+        // namespace itself from now on.
+        Utils::ChangeSet changes;
+        for (const ChangeSet::Range &directive : read.directivesToRemove)
+            removeLine(file.get(), directive, changes);
+        for (const int place : read.placesNeedingTheNamespace) {
+            changes.insert(place, m_directive.namespaceName + "::");
+            changes.operationList().last().setFormat1(false);
+        }
         if (removeUsing)
-            removeLine(file.get(), m_usingDirective, changes);
+            removeLine(file.get(), m_directive.range, changes);
         if (!changes.isEmpty()) {
             file->setChangeSet(changes);
             // apply changes at the end, otherwise the symbol finder will fail to resolve symbols if
             // the using namespace is missing
             m_changes.insert(file);
         }
-        return visitor.isGlobalUsingNamespace() && !visitor.foundGlobalUsingNamespace();
+        return read.isGlobalUsingNamespace && !read.foundGlobalUsingNamespace;
     }
 
     void processIncludes(CppRefactoringChanges &refactoring, const FilePath &filePath)
@@ -546,7 +630,7 @@ private:
     QSet<Document::Ptr> m_processed;
     QSet<CppRefactoringFilePtr> m_changes;
 
-    UsingDirectiveAST *m_usingDirective;
+    const UsingDirectiveToRemove m_directive;
     bool m_removeAllAtGlobalScope;
 };
 
@@ -559,24 +643,18 @@ public:
 private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
-        // We expect something like
-        // [0] TranslationUnitAST
-        // ...
-        // [] UsingDirectiveAST : if activated at 'using namespace'
-        // [] NameAST (optional): if activated at the name e.g. 'std'
-        int n = path.size() - 1;
-        if (n <= 0)
+        const std::optional<UsingDirectiveToRemove> directive = builtinUsingDirectiveAt(interface);
+        if (!directive)
             return;
-        if (path.last()->asName())
-            --n;
-        UsingDirectiveAST *usingDirective = path.at(n)->asUsingDirective();
-        if (usingDirective && usingDirective->name->name->asNameId()) {
-            result << new RemoveUsingNamespaceOperation(interface, usingDirective, false);
-            const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(interface.filePath()));
-            if (isHeader && path.at(n - 1)->asTranslationUnit()) // using namespace at global scope
-                result << new RemoveUsingNamespaceOperation(interface, usingDirective, true);
-        }
+
+        result << new RemoveUsingNamespaceOperation(interface, *directive, false);
+
+        // A directive at the top of a header is in force in every file that
+        // includes it, so there is a second thing to offer: take it out of
+        // all of them.
+        const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(interface.filePath()));
+        if (isHeader && directive->isAtGlobalScope)
+            result << new RemoveUsingNamespaceOperation(interface, *directive, true);
     }
 };
 
