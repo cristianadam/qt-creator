@@ -346,6 +346,11 @@ void PointerDeclarationFormatter::processIfWhileForStatement(ExpressionAST *expr
     Performs some further checks and rewrites the type and name of \a symbol
     into the substitution range in the file specified by \a tokenRange.
  */
+/*!
+    Performs some further checks and notes the type and name of \a symbol as
+    what is to be written into the substitution range specified by \a
+    tokenRange.
+*/
 void PointerDeclarationFormatter::checkAndRewrite(DeclaratorAST *declarator,
                                                   Symbol *symbol,
                                                   TokenRange tokenRange,
@@ -365,29 +370,11 @@ void PointerDeclarationFormatter::checkAndRewrite(DeclaratorAST *declarator,
     CHECK_R(range.start >= 0 && range.end > 0, "ChangeRange invalid1");
     CHECK_R(range.start < range.end, "ChangeRange invalid2");
 
-    // Check range with respect to cursor position / selection
-    if (m_cursorHandling == RespectCursor) {
-        const QTextCursor cursor = m_cppRefactoringFile->cursor();
-        if (cursor.hasSelection()) {
-            CHECK_R(cursor.selectionStart() <= range.start, "Change not in selection range");
-            CHECK_R(range.end <= cursor.selectionEnd(), "Change not in selection range");
-        } else {
-            CHECK_R(range.start <= cursor.selectionStart(), "Cursor before activation range");
-            CHECK_R(cursor.selectionEnd() <= range.end, "Cursor after activation range");
-        }
-    }
-
     FullySpecifiedType type = symbol->type();
     if (Function *function = type->asFunctionType())
         type = function->returnType();
 
-    // Check if pointers or references are involved
-    const QString originalDeclaration = m_cppRefactoringFile->textOf(range);
-    CHECK_R(originalDeclaration.contains(QLatin1Char('&'))
-            || originalDeclaration.contains(QLatin1Char('*')), "No pointer or references");
-
-    // Does the rewritten declaration (part) differs from the original source (part)?
-    QString rewrittenDeclaration;
+    // An operator's name is spaced as it was written.
     const Name *name = symbol->name();
     if (name) {
         if (name->asOperatorNameId()
@@ -397,37 +384,67 @@ void PointerDeclarationFormatter::checkAndRewrite(DeclaratorAST *declarator,
             m_overview.includeWhiteSpaceInOperatorName = operatorText.contains(QLatin1Char(' '));
         }
     }
-    rewrittenDeclaration = m_overview.prettyType(type, name);
+    QString rewrittenDeclaration = m_overview.prettyType(type, name);
     rewrittenDeclaration.remove(0, charactersToRemove);
 
-    CHECK_R(originalDeclaration != rewrittenDeclaration, "Rewritten is same as original");
-    CHECK_R(rewrittenDeclaration.contains(QLatin1Char('&'))
-            || rewrittenDeclaration.contains(QLatin1Char('*')),
-            "No pointer or references in rewritten declaration");
+    m_declarations.append({range, rewrittenDeclaration});
+}
 
-    if (DEBUG_OUTPUT) {
-        qDebug("==> Rewritten: \"%s\" --> \"%s\"", originalDeclaration.toUtf8().constData(),
-               rewrittenDeclaration.toUtf8().constData());
+Utils::ChangeSet PointerDeclarationFormatter::changesForDeclarations(
+    const CppRefactoringFilePtr &file, CursorHandling cursorHandling,
+    const QList<DeclarationToFormat> &declarations)
+{
+    Utils::ChangeSet changeSet;
+    for (const DeclarationToFormat &declaration : declarations) {
+        const Utils::ChangeSet::Range &range = declaration.range;
+
+        // Check range with respect to cursor position / selection
+        if (cursorHandling == RespectCursor) {
+            const QTextCursor cursor = file->cursor();
+            if (cursor.hasSelection()) {
+                CHECK_C(cursor.selectionStart() <= range.start, "Change not in selection range");
+                CHECK_C(range.end <= cursor.selectionEnd(), "Change not in selection range");
+            } else {
+                CHECK_C(range.start <= cursor.selectionStart(), "Cursor before activation range");
+                CHECK_C(cursor.selectionEnd() <= range.end, "Cursor after activation range");
+            }
+        }
+
+        // Check if pointers or references are involved
+        const QString originalDeclaration = file->textOf(range);
+        CHECK_C(originalDeclaration.contains(QLatin1Char('&'))
+                || originalDeclaration.contains(QLatin1Char('*')), "No pointer or references");
+
+        // Does the rewritten declaration (part) differ from the original source (part)?
+        CHECK_C(originalDeclaration != declaration.rewritten, "Rewritten is same as original");
+        CHECK_C(declaration.rewritten.contains(QLatin1Char('&'))
+                || declaration.rewritten.contains(QLatin1Char('*')),
+                "No pointer or references in rewritten declaration");
+
+        if (DEBUG_OUTPUT) {
+            qDebug("==> Rewritten: \"%s\" --> \"%s\"", originalDeclaration.toUtf8().constData(),
+                   declaration.rewritten.toUtf8().constData());
+        }
+
+        // Creating the replacement in the changeset may fail due to operations
+        // in the changeset that overlap with the current range.
+        //
+        // Consider this case:
+        //
+        //    void (*foo)(char * s) = 0;
+        //
+        // First the simple declaration is read. It creates a replacement that
+        // also includes the parameter. Next the parameter declaration is read
+        // with the original source. It tries to create a replacement
+        // operation at this position and fails due to overlapping ranges (the
+        // simple declaration range includes parameter declaration range).
+        Utils::ChangeSet change(changeSet);
+        if (change.replace(range, declaration.rewritten))
+            changeSet = change;
+        else if (DEBUG_OUTPUT)
+            qDebug() << "Replacement operation failed";
     }
-
-    // Creating the replacement in the changeset may fail due to operations
-    // in the changeset that overlap with the current range.
-    //
-    // Consider this case:
-    //
-    //    void (*foo)(char * s) = 0;
-    //
-    // First visit(SimpleDeclarationAST *ast) will be called. It creates a
-    // replacement that also includes the parameter.
-    // Next visit(ParameterDeclarationAST *ast) is called with the
-    // original source. It tries to create an replacement operation
-    // at this position and fails due to overlapping ranges (the
-    // simple declaration range includes parameter declaration range).
-    Utils::ChangeSet change(m_changeSet);
-    if (change.replace(range, rewrittenDeclaration))
-        m_changeSet = change;
-    else if (DEBUG_OUTPUT)
-        qDebug() << "Replacement operation failed";
+    return changeSet;
 }
 
 void PointerDeclarationFormatter::printCandidate(AST *ast)

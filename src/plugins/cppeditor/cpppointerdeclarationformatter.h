@@ -29,6 +29,18 @@ using namespace CPlusPlus;
     \endlist
 */
 
+// One declaration a reformatting may rewrite: the part of it that says the
+// type, and what that part says written the way the settings ask for.
+//
+// This is what either front end reads. Whether it is written at all needs
+// neither of them and is decided afterwards, from the text standing there
+// now, the cursor, and whether the two differ at all.
+struct DeclarationToFormat
+{
+    Utils::ChangeSet::Range range;
+    QString rewritten;
+};
+
 class PointerDeclarationFormatter: protected ASTVisitor
 {
 public:
@@ -59,10 +71,22 @@ public:
     */
     Utils::ChangeSet format(AST *ast)
     {
+        m_declarations.clear();
         if (ast)
             accept(ast);
-        return m_changeSet;
+        return changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, m_declarations);
     }
+
+    /*!
+        The changes to make for \a declarations, leaving out the ones that
+        would change nothing and the ones the cursor is not on.
+
+        Which declarations those are is what a front end answers; this is
+        the rest of it, and it reads no tree.
+    */
+    static Utils::ChangeSet changesForDeclarations(
+        const CppRefactoringFilePtr &file, CursorHandling cursorHandling,
+        const QList<DeclarationToFormat> &declarations);
 
 protected:
     bool visit(SimpleDeclarationAST *ast) override;
@@ -91,7 +115,7 @@ private:
     Overview &m_overview;
     const CursorHandling m_cursorHandling;
 
-    Utils::ChangeSet m_changeSet;
+    QList<DeclarationToFormat> m_declarations;
 };
 
 } // namespace CppEditor::Internal
