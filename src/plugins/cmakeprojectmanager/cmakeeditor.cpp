@@ -12,6 +12,7 @@
 #include "cmakeprojectconstants.h"
 #include "cmakeprojectmanagertr.h"
 #include "cmakequickfixes.h"
+#include "cmakesemantichighlighter.h"
 #include "cmakeusages.h"
 #include "cmakeutils.h"
 
@@ -423,6 +424,7 @@ CMakeTextDocument::CMakeTextDocument()
     setMimeType(Utils::Constants::CMAKE_MIMETYPE);
     setQuickFixAssistProvider(&cmakeQuickFixAssistProvider());
     setFunctionHintAssistProvider(&cmakeFunctionHintAssistProvider());
+    setupCMakeSemanticHighlighter(this);
     setupCMakeQuickFixMarkers(this);
 }
 
