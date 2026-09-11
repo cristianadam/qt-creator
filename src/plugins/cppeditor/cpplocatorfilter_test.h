@@ -15,6 +15,7 @@ private slots:
     void testLocatorFilter();
     void testLocatorFilter_data();
     void testCurrentDocumentFilter();
+    void testCurrentDocumentFilter_data();
     void testCurrentDocumentHighlighting();
     void testFunctionsFilterHighlighting();
 };

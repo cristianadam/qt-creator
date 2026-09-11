@@ -266,58 +266,101 @@ void LocatorFilterTest::testLocatorFilter_data()
 
 void LocatorFilterTest::testCurrentDocumentFilter()
 {
-    const FilePath testDirectory = dataDir("testdata_basic");
-    const FilePath testFile = testDirectory / "file1.cpp";
-    QVERIFY(testFile.exists());
+    QFETCH(FilePath, testFile);
+    QFETCH(ResultDataList, expectedResults);
 
-    const ResultDataList expectedResults {
-        ResultData("int myVariable", ""),
-        ResultData("myFunction(bool, int)", ""),
-        ResultData("Pos", ""),
-        ResultData("somePositionWithin()", ""),
-        ResultData("pointOfService()", ""),
-        ResultData("matchArgument(Pos)", ""),
-        ResultData("positiveNumber()", ""),
-        ResultData("MyEnum", ""),
-        ResultData("int V1", "MyEnum"),
-        ResultData("int V2", "MyEnum"),
-        ResultData("MyClass", ""),
-        ResultData("MyClass()", "MyClass"),
-        ResultData("functionDeclaredOnly()", "MyClass"),
-        ResultData("functionDefinedInClass(bool, int)", "MyClass"),
-        ResultData("functionDefinedOutSideClass(char)", "MyClass"),
-        ResultData("int myVariable", "MyNamespace"),
-        ResultData("myFunction(bool, int)", "MyNamespace"),
-        ResultData("MyEnum", "MyNamespace"),
-        ResultData("int V1", "MyNamespace::MyEnum"),
-        ResultData("int V2", "MyNamespace::MyEnum"),
-        ResultData("MyClass", "MyNamespace"),
-        ResultData("MyClass()", "MyNamespace::MyClass"),
-        ResultData("functionDeclaredOnly()", "MyNamespace::MyClass"),
-        ResultData("functionDefinedInClass(bool, int)", "MyNamespace::MyClass"),
-        ResultData("functionDefinedOutSideClass(char)", "MyNamespace::MyClass"),
-        ResultData("functionDefinedOutSideClassAndNamespace(float)",
-                   "MyNamespace::MyClass"),
-        ResultData("int myVariable", "<anonymous namespace>"),
-        ResultData("myFunction(bool, int)", "<anonymous namespace>"),
-        ResultData("MyEnum", "<anonymous namespace>"),
-        ResultData("int V1", "<anonymous namespace>::MyEnum"),
-        ResultData("int V2", "<anonymous namespace>::MyEnum"),
-        ResultData("MyClass", "<anonymous namespace>"),
-        ResultData("MyClass()", "<anonymous namespace>::MyClass"),
-        ResultData("functionDeclaredOnly()", "<anonymous namespace>::MyClass"),
-        ResultData("functionDefinedInClass(bool, int)", "<anonymous namespace>::MyClass"),
-        ResultData("functionDefinedOutSideClass(char)", "<anonymous namespace>::MyClass"),
-        ResultData("Runner", "<anonymous namespace>"),
-        ResultData("run()", "<anonymous namespace>::Runner"),
-        ResultData("Runner<MyNamespace::MyClass>", "<anonymous namespace>"),
-        ResultData("run()", "<anonymous namespace>::Runner<MyNamespace::MyClass>"),
-        ResultData("main()", ""),
-    };
+    QVERIFY(testFile.exists());
 
     Tests::VerifyCleanCppModelManager verify;
     CppCurrentDocumentFilterTestCase(
         testFile, LocatorMatcher::matchers(MatcherType::CurrentDocumentSymbols), expectedResults);
+}
+
+void LocatorFilterTest::testCurrentDocumentFilter_data()
+{
+    QTest::addColumn<FilePath>("testFile");
+    QTest::addColumn<ResultDataList>("expectedResults");
+
+    const FilePath testDirectory = dataDir("testdata_basic");
+
+    QTest::newRow("namespaces-classes-and-functions")
+        << testDirectory / "file1.cpp"
+        << ResultDataList{
+            ResultData("int myVariable", ""),
+            ResultData("myFunction(bool, int)", ""),
+            ResultData("Pos", ""),
+            ResultData("somePositionWithin()", ""),
+            ResultData("pointOfService()", ""),
+            ResultData("matchArgument(Pos)", ""),
+            ResultData("positiveNumber()", ""),
+            ResultData("MyEnum", ""),
+            ResultData("int V1", "MyEnum"),
+            ResultData("int V2", "MyEnum"),
+            ResultData("MyClass", ""),
+            ResultData("MyClass()", "MyClass"),
+            ResultData("functionDeclaredOnly()", "MyClass"),
+            ResultData("functionDefinedInClass(bool, int)", "MyClass"),
+            ResultData("functionDefinedOutSideClass(char)", "MyClass"),
+            ResultData("int myVariable", "MyNamespace"),
+            ResultData("myFunction(bool, int)", "MyNamespace"),
+            ResultData("MyEnum", "MyNamespace"),
+            ResultData("int V1", "MyNamespace::MyEnum"),
+            ResultData("int V2", "MyNamespace::MyEnum"),
+            ResultData("MyClass", "MyNamespace"),
+            ResultData("MyClass()", "MyNamespace::MyClass"),
+            ResultData("functionDeclaredOnly()", "MyNamespace::MyClass"),
+            ResultData("functionDefinedInClass(bool, int)", "MyNamespace::MyClass"),
+            ResultData("functionDefinedOutSideClass(char)", "MyNamespace::MyClass"),
+            ResultData("functionDefinedOutSideClassAndNamespace(float)",
+                       "MyNamespace::MyClass"),
+            ResultData("int myVariable", "<anonymous namespace>"),
+            ResultData("myFunction(bool, int)", "<anonymous namespace>"),
+            ResultData("MyEnum", "<anonymous namespace>"),
+            ResultData("int V1", "<anonymous namespace>::MyEnum"),
+            ResultData("int V2", "<anonymous namespace>::MyEnum"),
+            ResultData("MyClass", "<anonymous namespace>"),
+            ResultData("MyClass()", "<anonymous namespace>::MyClass"),
+            ResultData("functionDeclaredOnly()", "<anonymous namespace>::MyClass"),
+            ResultData("functionDefinedInClass(bool, int)", "<anonymous namespace>::MyClass"),
+            ResultData("functionDefinedOutSideClass(char)", "<anonymous namespace>::MyClass"),
+            ResultData("Runner", "<anonymous namespace>"),
+            ResultData("run()", "<anonymous namespace>::Runner"),
+            ResultData("Runner<MyNamespace::MyClass>", "<anonymous namespace>"),
+            ResultData("run()", "<anonymous namespace>::Runner<MyNamespace::MyClass>"),
+            ResultData("main()", ""),
+        };
+
+    // A function written apart from its declaration is listed once, at its
+    // definition -- the filter drops the declaration of a function it has
+    // exactly one definition of, which is why staticFunction() and ~Outer()
+    // stand where the file defines them rather than where the class declares
+    // them. A variable is not deduplicated that way, so Outer::staticVariable
+    // is listed both times.
+    QTest::newRow("aliases-nested-types-and-members")
+        << testDirectory / "file2.cpp"
+        << ResultDataList{
+            ResultData("int MyTypedef", ""),
+            ResultData("MyTypedef MyAlias", ""),
+            ResultData("int declaredVariable", ""),
+            ResultData("Outer", ""),
+            ResultData("Inner", "Outer"),
+            ResultData("int innerField", "Outer::Inner"),
+            ResultData("ScopedEnum", "Outer"),
+            ResultData("int First", "Outer::ScopedEnum"),
+            ResultData("int Second", "Outer::ScopedEnum"),
+            ResultData("int staticVariable", "Outer"),
+            ResultData("int field", "Outer"),
+            ResultData("operator+(int) const", "Outer"),
+            ResultData("int Outer::staticVariable", ""),
+            ResultData("staticFunction(int)", "Outer"),
+            ResultData("~Outer()", "Outer"),
+            ResultData("MyUnion", ""),
+            ResultData("int asInt", "MyUnion"),
+            ResultData("float asFloat", "MyUnion"),
+            ResultData("templateFunction(T)", ""),
+            ResultData("Outer::Inner AliasInNamespace", "MyOtherNamespace"),
+            ResultData("Outer::ScopedEnum TypedefInNamespace", "MyOtherNamespace"),
+        };
 }
 
 void LocatorFilterTest::testCurrentDocumentHighlighting()
