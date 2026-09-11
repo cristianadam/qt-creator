@@ -764,14 +764,114 @@ static Declaration *isNonVirtualFunctionDeclaration(Symbol *s)
     return declaration;
 }
 
+// Where a member function is defined, if the project defines it anywhere:
+// which file, and where in that file the definition begins and ends -- the
+// template it is declared under included, since that is part of it.
+struct SurroundingDefinition
+{
+    FilePath filePath;
+    Utils::Text::Position begin;
+    Utils::Text::Position end;
+};
+
+// Where the definition of one of the class's member functions is, asked one
+// at a time and in the order the walk below wants them, so that no more of
+// the project is read than the answer needs.
+using DefinitionOfMember = std::function<std::optional<SurroundingDefinition>(int index)>;
+
+// Where a new definition goes so that it sits with the ones the class's other
+// members already have: behind the nearest one declared above it, and in
+// front of the nearest one declared below where nothing above it is defined.
+//
+// \a count is how many member functions the class declares and \a index which
+// of them is being defined. \a destinationFile, where it is named, is the
+// only file whose definitions count.
+InsertionLocation placeNextToDefinitions(int count, int index,
+                                         const FilePath &destinationFile,
+                                         const DefinitionOfMember &definitionOf)
+{
+    const auto isWanted = [&](const SurroundingDefinition &definition) {
+        return destinationFile.isEmpty() || destinationFile == definition.filePath;
+    };
+
+    for (int i = index - 1; i >= 0; --i) {
+        const std::optional<SurroundingDefinition> definition = definitionOf(i);
+        if (definition && isWanted(*definition)) {
+            return InsertionLocation(definition->filePath, "\n\n", {},
+                                     definition->end.line, definition->end.column);
+        }
+    }
+    for (int i = index + 1; i < count; ++i) {
+        const std::optional<SurroundingDefinition> definition = definitionOf(i);
+        if (definition && isWanted(*definition)) {
+            return InsertionLocation(definition->filePath, {}, "\n\n",
+                                     definition->begin.line, definition->begin.column);
+        }
+    }
+    return {};
+}
+
+// Where the built-in front end says the class's i-th member is defined.
+std::optional<SurroundingDefinition> builtinDefinitionOfMember(
+    Class *klass, int index, const CppRefactoringChanges &changes)
+{
+    Symbol * const member = klass->memberAt(index);
+    if (!member || member->isGenerated())
+        return {};
+    Declaration * const declaration = isNonVirtualFunctionDeclaration(member);
+    if (!declaration)
+        return {};
+
+    SymbolFinder symbolFinder;
+    Function * const definition
+        = symbolFinder.findMatchingDefinition(declaration, changes.snapshot(), true);
+    if (!definition)
+        return {};
+
+    SurroundingDefinition found;
+    found.filePath = definition->filePath();
+
+    const Document::Ptr targetDoc = changes.snapshot().document(found.filePath);
+    if (!targetDoc)
+        return {};
+    targetDoc->translationUnit()->getPosition(definition->endOffset(),
+                                              &found.end.line, &found.end.column);
+
+    // The symbol says where the function's name is, not where its definition
+    // begins, so that has to be found in the file -- and what the definition
+    // begins with is the template it is declared under, where there is one.
+    const CppRefactoringFilePtr targetFile = changes.cppFile(found.filePath);
+    if (!targetFile->isValid())
+        return {};
+    FindFunctionDefinition finder(targetFile->cppDocument()->translationUnit());
+    FunctionDefinitionAST * const functionDefinition = finder(definition->line(),
+                                                              definition->column());
+    if (!functionDefinition)
+        return {};
+
+    targetFile->cppDocument()->translationUnit()->getTokenPosition(
+        functionDefinition->firstToken(), &found.begin.line, &found.begin.column);
+    const QList<AST *> path = ASTPath(targetFile->cppDocument())(found.begin.line,
+                                                                 found.begin.column);
+    for (auto it = path.rbegin(); it != path.rend(); ++it) {
+        if (const auto templateDecl = (*it)->asTemplateDeclaration()) {
+            if (templateDecl->declaration == functionDefinition) {
+                targetFile->cppDocument()->translationUnit()->getTokenPosition(
+                    templateDecl->firstToken(), &found.begin.line, &found.begin.column);
+            }
+            break;
+        }
+    }
+    return found;
+}
+
 static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
                                                       const CppRefactoringChanges &changes,
                                                       const FilePath &destinationFile)
 {
-    InsertionLocation noResult;
     Class *klass = declaration->enclosingClass();
     if (!klass || declaration->isFriend())
-        return noResult;
+        return {};
 
     // find the index of declaration
     int declIndex = -1;
@@ -783,80 +883,12 @@ static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
         }
     }
     if (declIndex == -1)
-        return noResult;
+        return {};
 
-    // scan preceding declarations for a function declaration (and see if it is defined)
-    SymbolFinder symbolFinder;
-    Function *definitionFunction = nullptr;
-    QString prefix, suffix;
-    Declaration *surroundingFunctionDecl = nullptr;
-    for (int i = declIndex - 1; i >= 0; --i) {
-        Symbol *s = klass->memberAt(i);
-        if (s->isGenerated() || !(surroundingFunctionDecl = isNonVirtualFunctionDeclaration(s)))
-            continue;
-        if ((definitionFunction = symbolFinder.findMatchingDefinition(surroundingFunctionDecl,
-                                                                      changes.snapshot(), true)))
-        {
-            if (destinationFile.isEmpty() || destinationFile == definitionFunction->filePath()) {
-                prefix = QLatin1String("\n\n");
-                break;
-            }
-            definitionFunction = nullptr;
-        }
-    }
-    if (!definitionFunction) {
-        // try to find one below
-        for (int i = declIndex + 1; i < klass->memberCount(); ++i) {
-            Symbol *s = klass->memberAt(i);
-            surroundingFunctionDecl = isNonVirtualFunctionDeclaration(s);
-            if (!surroundingFunctionDecl)
-                continue;
-            if ((definitionFunction = symbolFinder.findMatchingDefinition(
-                     surroundingFunctionDecl, changes.snapshot(), true))) {
-                if (destinationFile.isEmpty() || destinationFile ==  definitionFunction->filePath()) {
-                    suffix = QLatin1String("\n\n");
-                    break;
-                }
-                definitionFunction = nullptr;
-            }
-        }
-    }
-
-    if (!definitionFunction)
-        return noResult;
-
-    int line, column;
-    if (suffix.isEmpty()) {
-        Document::Ptr targetDoc = changes.snapshot().document(definitionFunction->filePath());
-        if (!targetDoc)
-            return noResult;
-
-        targetDoc->translationUnit()->getPosition(definitionFunction->endOffset(), &line, &column);
-    } else {
-        // we don't have an offset to the start of the function definition, so we need to manually find it...
-        CppRefactoringFilePtr targetFile = changes.cppFile(definitionFunction->filePath());
-        if (!targetFile->isValid())
-            return noResult;
-
-        FindFunctionDefinition finder(targetFile->cppDocument()->translationUnit());
-        FunctionDefinitionAST *functionDefinition = finder(definitionFunction->line(), definitionFunction->column());
-        if (!functionDefinition)
-            return noResult;
-
-        targetFile->cppDocument()->translationUnit()->getTokenPosition(functionDefinition->firstToken(), &line, &column);
-        const QList<AST *> path = ASTPath(targetFile->cppDocument())(line, column);
-        for (auto it = path.rbegin(); it != path.rend(); ++it) {
-            if (const auto templateDecl = (*it)->asTemplateDeclaration()) {
-                if (templateDecl->declaration == functionDefinition) {
-                    targetFile->cppDocument()->translationUnit()->getTokenPosition(
-                                templateDecl->firstToken(), &line, &column);
-                }
-                break;
-            }
-        }
-    }
-
-    return InsertionLocation(definitionFunction->filePath(), prefix, suffix, line, column);
+    return placeNextToDefinitions(klass->memberCount(), declIndex, destinationFile,
+                                  [&](int index) {
+                                      return builtinDefinitionOfMember(klass, index, changes);
+                                  });
 }
 
 const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
