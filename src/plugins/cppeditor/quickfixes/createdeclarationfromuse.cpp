@@ -20,11 +20,24 @@
 
 #include <QInputDialog>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/ast_cursor.h>
+#include <cxx/names.h>
+#include <cxx/preprocessor.h>
+#include <cxx/symbols.h>
+#include <cxx/translation_unit.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
 
 #include <memory>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -83,17 +96,26 @@ static QString declFromExpr(
     return oo.prettyType(type) + ' ' + oo.prettyType(func.type(), varName->name);
 }
 
+// What a definition written outside its class needs declared in it: where
+// that class is written, and what the declaration says. Which tree it was
+// read off is the front end's business; neither of these is.
+struct MissingDeclaration
+{
+    FilePath classFilePath;
+    int classLine = 0; // where the class's name is written, counted from one
+    int classColumn = 0;
+    QString text;      // the declaration, without the ";"
+};
+
 class InsertDeclOperation: public CppQuickFixOperation
 {
 public:
     InsertDeclOperation(const CppQuickFixInterface &interface,
-                        const FilePath &targetFilePath, const Class *targetSymbol,
-                        InsertionPointLocator::AccessSpec xsSpec, const QString &decl, int priority)
+                        const MissingDeclaration &missing,
+                        InsertionPointLocator::AccessSpec xsSpec, int priority)
         : CppQuickFixOperation(interface, priority)
-        , m_targetFilePath(targetFilePath)
-        , m_targetSymbol(targetSymbol)
+        , m_missing(missing)
         , m_xsSpec(xsSpec)
-        , m_decl(decl)
     {
         setDescription(Tr::tr("Add %1 Declaration")
                            .arg(InsertionPointLocator::accessSpecToString(xsSpec)));
@@ -105,61 +127,39 @@ public:
 
         InsertionPointLocator locator(refactoring);
         const InsertionLocation loc = locator.methodDeclarationInClass(
-            m_targetFilePath, m_targetSymbol, m_xsSpec);
+            m_missing.classFilePath, m_missing.classLine, m_missing.classColumn, m_xsSpec);
         QTC_ASSERT(loc.isValid(), return);
 
-        CppRefactoringFilePtr targetFile = refactoring.cppFile(m_targetFilePath);
+        CppRefactoringFilePtr targetFile = refactoring.cppFile(m_missing.classFilePath);
         int targetPosition = targetFile->position(loc.line(), loc.column());
 
         ChangeSet target;
-        target.insert(targetPosition, loc.prefix() + m_decl);
+        target.insert(targetPosition, loc.prefix() + m_missing.text + ";\n");
         targetFile->setOpenEditor(true, targetPosition);
         targetFile->apply(target);
     }
 
-    static QString generateDeclaration(const Function *function)
-    {
-        Overview oo = CppCodeStyleSettings::currentProjectCodeStyleOverview();
-        oo.showFunctionSignatures = true;
-        oo.showReturnTypes = true;
-        oo.showArgumentNames = true;
-        oo.showEnclosingTemplate = true;
-
-        QString decl;
-        decl += oo.prettyType(function->type(), function->unqualifiedName());
-        decl += QLatin1String(";\n");
-
-        return decl;
-    }
-
 private:
-    FilePath m_targetFilePath;
-    const Class *m_targetSymbol;
-    InsertionPointLocator::AccessSpec m_xsSpec;
-    QString m_decl;
+    const MissingDeclaration m_missing;
+    const InsertionPointLocator::AccessSpec m_xsSpec;
 };
 
 class DeclOperationFactory
 {
 public:
-    DeclOperationFactory(const CppQuickFixInterface &interface, const FilePath &filePath,
-                         const Class *matchingClass, const QString &decl)
+    DeclOperationFactory(const CppQuickFixInterface &interface, const MissingDeclaration &missing)
         : m_interface(interface)
-        , m_filePath(filePath)
-        , m_matchingClass(matchingClass)
-        , m_decl(decl)
+        , m_missing(missing)
     {}
 
     QuickFixOperation *operator()(InsertionPointLocator::AccessSpec xsSpec, int priority)
     {
-        return new InsertDeclOperation(m_interface, m_filePath, m_matchingClass, xsSpec, m_decl, priority);
+        return new InsertDeclOperation(m_interface, m_missing, xsSpec, priority);
     }
 
 private:
     const CppQuickFixInterface &m_interface;
-    const FilePath &m_filePath;
-    const Class *m_matchingClass;
-    const QString &m_decl;
+    const MissingDeclaration &m_missing;
 };
 
 class InsertMemberFromInitializationOp : public CppQuickFixOperation
@@ -258,73 +258,242 @@ private:
     const SimpleNameAST *simpleNameAST;
 };
 
+// The declaration the definition at the cursor is missing, as the built-in
+// front end reads it. Nothing where the cursor is on no such definition, or
+// where the class declares this very function already.
+std::optional<MissingDeclaration> builtinMissingDeclarationAt(
+    const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    CppRefactoringFilePtr file = interface.currentFile();
+
+    FunctionDefinitionAST *funDef = nullptr;
+    int idx = 0;
+    for (; idx < path.size(); ++idx) {
+        AST *node = path.at(idx);
+        if (idx > 1) {
+            if (DeclaratorIdAST *declId = node->asDeclaratorId()) {
+                if (file->isCursorOn(declId)) {
+                    if (FunctionDefinitionAST *candidate = path.at(idx - 2)->asFunctionDefinition()) {
+                        funDef = candidate;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (node->asClassSpecifier())
+            return {};
+    }
+
+    if (!funDef || !funDef->symbol)
+        return {};
+
+    Function *fun = funDef->symbol;
+    Class * const matchingClass = isMemberFunction(interface.context(), fun);
+    if (!matchingClass)
+        return {};
+
+    const QualifiedNameId *qName = fun->name()->asQualifiedNameId();
+    for (Symbol *symbol = matchingClass->find(qName->identifier());
+         symbol; symbol = symbol->next()) {
+        Symbol *s = symbol;
+        if (fun->enclosingScope()->asTemplate()) {
+            if (const Template *templ = s->type()->asTemplateType()) {
+                if (Symbol *decl = templ->declaration()) {
+                    if (decl->type()->asFunctionType())
+                        s = decl;
+                }
+            }
+        }
+        if (!s->name()
+            || !qName->identifier()->match(s->identifier())
+            || !s->type()->asFunctionType())
+            continue;
+
+        if (s->type().match(fun->type()))
+            return {}; // Declaration exists.
+    }
+
+    Overview oo = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+    oo.showFunctionSignatures = true;
+    oo.showReturnTypes = true;
+    oo.showArgumentNames = true;
+    oo.showEnclosingTemplate = true;
+
+    return MissingDeclaration{matchingClass->filePath(), matchingClass->line(),
+                              matchingClass->column(),
+                              oo.prettyType(fun->type(), fun->unqualifiedName())};
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// Where the class \a symbol stands is written with its body, which is not
+// always where the class was first named: "class Foo;" may come first, and
+// there is nothing there to declare anything in.
+std::optional<MissingDeclaration> cxxClassBodyOf(const CxxFrontendDocument &document,
+                                                 cxx::Symbol *symbol)
+{
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    if (!unit || !unit->ast() || !symbol)
+        return {};
+
+    for (cxx::ASTCursor cursor(unit->ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!specifier || specifier->symbol != symbol || !specifier->lbraceLoc)
+            continue;
+
+        auto * const name = dynamic_cast<cxx::NameIdAST *>(specifier->unqualifiedId);
+        if (!name || !name->identifierLoc)
+            return {};
+
+        // Which file it is written in, since a class a source file defines a
+        // member of is written in a header it read.
+        const std::string fileName = unit->preprocessor()->sourceFileName(
+            unit->tokenAt(name->identifierLoc).fileId());
+        if (fileName.empty())
+            return {};
+
+        const cxx::SourcePosition at = unit->tokenStartPosition(name->identifierLoc);
+        MissingDeclaration missing;
+        missing.classFilePath = FilePath::fromUserInput(QString::fromStdString(fileName));
+        missing.classLine = int(at.line);
+        missing.classColumn = int(at.column);
+        return missing;
+    }
+    return {};
+}
+
+// The same on the cxx-frontend model.
+//
+// What the declaration says is read off the *text* of the definition --
+// everything written in front of the body, less the class in front of the
+// name -- because that is what a declaration of it has to say, and this way
+// it says it in the spelling somebody chose.
+//
+// Nothing where that model has not read the file, or where any part of this
+// cannot be read; an invalid answer is an answer: there is nothing to
+// declare here.
+std::optional<MissingDeclaration> cxxMissingDeclarationAt(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QTextCursor cursor = file->cursor();
+    const int line = cursor.blockNumber() + 1;
+    const int column = cursor.positionInBlock() + 1;
+    const QList<cxx::AST *> path = cxxAstPathAt(*document, line, column);
+    if (path.isEmpty())
+        return {};
+
+    // The definition the cursor is in, and nothing where a class body is
+    // written around it: a function defined inside its class needs no
+    // declaration of its own.
+    cxx::FunctionDefinitionAST *definition = nullptr;
+    cxx::AST *outermost = nullptr;
+    for (cxx::AST * const node : path) {
+        if (dynamic_cast<cxx::ClassSpecifierAST *>(node))
+            return MissingDeclaration{};
+        if (auto * const templated = dynamic_cast<cxx::TemplateDeclarationAST *>(node);
+            templated && !outermost) {
+            outermost = templated;
+        }
+        if (auto * const candidate = dynamic_cast<cxx::FunctionDefinitionAST *>(node)) {
+            definition = candidate;
+            if (!outermost)
+                outermost = candidate;
+        }
+    }
+    if (!definition || !definition->declarator || !outermost)
+        return MissingDeclaration{};
+
+    // Written under a name of its own, with the class in front of it: that
+    // qualifier is what a declaration inside the class leaves out.
+    auto * const core = dynamic_cast<cxx::IdDeclaratorAST *>(
+        definition->declarator->coreDeclarator);
+    if (!core || !core->nestedNameSpecifier || !core->unqualifiedId)
+        return MissingDeclaration{};
+
+    // On the name, which is where this fix is offered.
+    const CxxAstRange name = cxxAstRangeOf(*document, core->unqualifiedId);
+    if (!name.isValid())
+        return {};
+    const int position = cursor.selectionStart();
+    if (position < file->position(name.startLine, name.startColumn)
+        || position > file->position(name.endLine, name.endColumn)) {
+        return MissingDeclaration{};
+    }
+
+    auto * const theClass = dynamic_cast<cxx::ClassSymbol *>(core->nestedNameSpecifier->symbol);
+    if (!theClass)
+        return MissingDeclaration{};
+    std::optional<MissingDeclaration> missing = cxxClassBodyOf(*document, theClass);
+    if (!missing)
+        return {};
+
+    // Declared already, and then there is nothing to add -- but a member the
+    // front end declared for the class itself, the constructor every class
+    // has, is recorded where the class is *named*, and nobody wrote it there.
+    const CxxFrontendDocument::Counterpart declared = document->counterpartAt(line, column);
+    const bool isWritten = declared.isValid()
+                           && !(declared.line == missing->classLine
+                                && declared.column == missing->classColumn
+                                && FilePath::fromUserInput(declared.filePath)
+                                       == missing->classFilePath);
+    if (isWritten)
+        return MissingDeclaration{};
+
+    // What it says: the text in front of the body, with the qualifier taken
+    // out of it.
+    const CxxAstRange whole = cxxAstRangeOf(*document, outermost);
+    const CxxAstRange qualifier = cxxAstRangeOf(*document, core->nestedNameSpecifier);
+    const CxxAstRange declarator = cxxAstRangeOf(*document, definition->declarator);
+    if (!whole.isValid() || !qualifier.isValid() || !declarator.isValid())
+        return {};
+
+    const int start = file->position(whole.startLine, whole.startColumn);
+    const int qualifierStart = file->position(qualifier.startLine, qualifier.startColumn);
+    const int qualifierEnd = file->position(qualifier.endLine, qualifier.endColumn);
+    const int end = file->position(declarator.endLine, declarator.endColumn);
+    if (qualifierStart < start || end < qualifierEnd)
+        return {};
+
+    missing->text = file->textOf(start, qualifierStart) + file->textOf(qualifierEnd, end);
+    return missing;
+}
+#endif
+
+std::optional<MissingDeclaration> missingDeclarationAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<MissingDeclaration> onTheModel = cxxMissingDeclarationAt(interface))
+        return onTheModel->classLine > 0 ? onTheModel : std::nullopt;
+#endif
+    return builtinMissingDeclarationAt(interface);
+}
+
 //! Adds a declarations to a definition
 class InsertDeclFromDef: public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
-        CppRefactoringFilePtr file = interface.currentFile();
-
-        FunctionDefinitionAST *funDef = nullptr;
-        int idx = 0;
-        for (; idx < path.size(); ++idx) {
-            AST *node = path.at(idx);
-            if (idx > 1) {
-                if (DeclaratorIdAST *declId = node->asDeclaratorId()) {
-                    if (file->isCursorOn(declId)) {
-                        if (FunctionDefinitionAST *candidate = path.at(idx - 2)->asFunctionDefinition()) {
-                            funDef = candidate;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (node->asClassSpecifier())
-                return;
-        }
-
-        if (!funDef || !funDef->symbol)
+        const std::optional<MissingDeclaration> missing = missingDeclarationAt(interface);
+        if (!missing)
             return;
 
-        Function *fun = funDef->symbol;
-        if (Class *matchingClass = isMemberFunction(interface.context(), fun)) {
-            const QualifiedNameId *qName = fun->name()->asQualifiedNameId();
-            for (Symbol *symbol = matchingClass->find(qName->identifier());
-                 symbol; symbol = symbol->next()) {
-                Symbol *s = symbol;
-                if (fun->enclosingScope()->asTemplate()) {
-                    if (const Template *templ = s->type()->asTemplateType()) {
-                        if (Symbol *decl = templ->declaration()) {
-                            if (decl->type()->asFunctionType())
-                                s = decl;
-                        }
-                    }
-                }
-                if (!s->name()
-                    || !qName->identifier()->match(s->identifier())
-                    || !s->type()->asFunctionType())
-                    continue;
+        // Add several possible insertion locations for declaration
+        DeclOperationFactory operation(interface, *missing);
 
-                if (s->type().match(fun->type())) {
-                    // Declaration exists.
-                    return;
-                }
-            }
-            const FilePath fileName = matchingClass->filePath();
-            const QString decl = InsertDeclOperation::generateDeclaration(fun);
-
-            // Add several possible insertion locations for declaration
-            DeclOperationFactory operation(interface, fileName, matchingClass, decl);
-
-            result << operation(InsertionPointLocator::Public, 5)
-                   << operation(InsertionPointLocator::PublicSlot, 4)
-                   << operation(InsertionPointLocator::Protected, 3)
-                   << operation(InsertionPointLocator::ProtectedSlot, 2)
-                   << operation(InsertionPointLocator::Private, 1)
-                   << operation(InsertionPointLocator::PrivateSlot, 0);
-        }
+        result << operation(InsertionPointLocator::Public, 5)
+               << operation(InsertionPointLocator::PublicSlot, 4)
+               << operation(InsertionPointLocator::Protected, 3)
+               << operation(InsertionPointLocator::ProtectedSlot, 2)
+               << operation(InsertionPointLocator::Private, 1)
+               << operation(InsertionPointLocator::PrivateSlot, 0);
     }
 };
 
