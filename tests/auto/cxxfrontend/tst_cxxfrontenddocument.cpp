@@ -167,6 +167,9 @@ private slots:
     void typeAt_data();
     void typeAt();
 
+    void declarationOfATypeAt_data();
+    void declarationOfATypeAt();
+
     void completeAfterAnArrow();
     void completeAfterADot();
     void completeAnUnqualifiedName();
@@ -423,6 +426,54 @@ void tst_cxxfrontenddocument::typeAt()
         = document.typeAt(positions.first().line, positions.first().column);
 
     QCOMPARE(found.type, type);
+}
+
+// The same type written as a declaration, which is not the spelling above
+// with a name after it: a declarator is written *around* the name.
+void tst_cxxfrontenddocument::declarationOfATypeAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("declaration");
+
+    QTest::newRow("a variable")
+        << QByteArray("void f() { int x; int y = $x; }\n") << QString("int total");
+    QTest::newRow("a pointer")
+        << QByteArray("void f() { char *p; char *q = $p; }\n") << QString("char *total");
+    QTest::newRow("a sum")
+        << QByteArray("void f() { int a; long b; long c = a $+ b; }\n")
+        << QString("long total");
+    QTest::newRow("a pointer to a function")
+        << QByteArray("void g(int);\nvoid f() { void (*p)(int) = g; void (*q)(int) = $p; }\n")
+        << QString("void (*total)(int)");
+
+    // Written for where it stands, so a class from another namespace is
+    // named with it and one the scope reaches is not.
+    QTest::newRow("a type from another namespace")
+        << QByteArray("namespace N { struct T {}; }\n"
+                      "void f(N::T t) { N::T u = $t; }\n")
+        << QString("N::T total");
+    QTest::newRow("a type the scope reaches")
+        << QByteArray("namespace N { struct T {};\n"
+                      "void f(T t) { T u = $t; } }\n")
+        << QString("T total");
+
+    QTest::newRow("not an expression")
+        << QByteArray("$struct S {};\n") << QString();
+}
+
+void tst_cxxfrontenddocument::declarationOfATypeAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, declaration);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.declarationOfTypeAt(positions.first().line,
+                                          positions.first().column, "total"),
+             declaration);
 }
 
 // Completion. The parser works out what could be written at the position on

@@ -571,6 +571,13 @@ public:
     // which is the file itself where it stands in none.
     [[nodiscard]] cxx::ScopeSymbol *scopeWrittenAround(cxx::SourceLocation location) const;
 
+    // The innermost expression written around \a location whose type the
+    // checker settled, taken as the one spanning fewest tokens. Standing on
+    // the b of a.b that is the member access, and standing on the a it is
+    // just a, which is what someone pointing at either one means.
+    [[nodiscard]] cxx::ExpressionAST *innermostExpressionAt(
+        cxx::SourceLocation location) const;
+
     // The parameters and block variables of \a function, each with every
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
@@ -2873,24 +2880,19 @@ QString CxxFrontendDocument::identifierAt(int line, int column) const
     return fromStd(d->unit.tokenText(location));
 }
 
-CxxFrontendDocument::ExpressionType CxxFrontendDocument::typeAt(int line, int column) const
+cxx::ExpressionAST *CxxFrontendDocument::Private::innermostExpressionAt(
+    cxx::SourceLocation location) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
-    if (!location || !d->unit.ast())
-        return {};
+    if (!location || !unit.ast())
+        return nullptr;
 
-    // The innermost expression written around the token, taken as the one
-    // spanning fewest tokens. Standing on the b of a.b that is the member
-    // access, and standing on the a it is just a, which is what someone
-    // pointing at either one means.
-    //
     // The cursor happens to reach children after their parents, so taking the
     // last match would give the same answer today. Saying which one is wanted
     // does not depend on that staying true.
     cxx::ExpressionAST *innermost = nullptr;
     unsigned innermostWidth = 0;
 
-    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot || !*slot)
             continue;
@@ -2909,7 +2911,13 @@ CxxFrontendDocument::ExpressionType CxxFrontendDocument::typeAt(int line, int co
         innermost = expression;
         innermostWidth = width;
     }
+    return innermost;
+}
 
+CxxFrontendDocument::ExpressionType CxxFrontendDocument::typeAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::ExpressionAST * const innermost = d->innermostExpressionAt(location);
     if (!innermost)
         return {};
 
@@ -2918,6 +2926,28 @@ CxxFrontendDocument::ExpressionType CxxFrontendDocument::typeAt(int line, int co
                                          {.omitEnclosingScope = true}));
     result.isLvalue = innermost->valueCategory == cxx::ValueCategory::kLValue;
     return result;
+}
+
+QString CxxFrontendDocument::declarationOfTypeAt(int line, int column,
+                                                  const QString &name) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::ExpressionAST *found = d->innermostExpressionAt(location);
+    if (!found)
+        return {};
+
+    // The type of what stands there, not of the conversion the place it
+    // stands in asked for: "T u = t" copies through a const reference, so the
+    // expression the checker leaves around t says const T -- and a variable
+    // declared to hold that value is an ordinary T.
+    cxx::ExpressionAST * const innermost = written(found);
+    if (!innermost || !innermost->type)
+        return {};
+
+    return applyStarBinding(
+        fromStd(cxx::to_string(innermost->type, name.toStdString(),
+                               {.writtenIn = d->scopeWrittenAround(location)})),
+        d->config.settings);
 }
 
 QStringList CxxFrontendDocument::qualifierAt(int line, int column) const

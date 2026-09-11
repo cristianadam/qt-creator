@@ -629,6 +629,16 @@ public:
     };
     ExpressionType typeAt(int line, int column) const;
 
+    // That same type, written as a declaration of \a name and for the scope
+    // the expression stands in: what a fix declaring a variable to hold the
+    // value has to write there.
+    //
+    // Not the spelling typeAt() hands out with a name after it: how a
+    // declarator is written around a name -- the star of a pointer, the
+    // brackets of an array -- is not something a caller can work out from a
+    // type. Empty in the same cases typeAt() is.
+    QString declarationOfTypeAt(int line, int column, const QString &name) const;
+
     // What could be written where Config asked. The parser works this out on
     // its way past the position, so a document built without asking has
     // nothing here.
