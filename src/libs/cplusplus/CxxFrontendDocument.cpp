@@ -4243,6 +4243,47 @@ CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int 
     return answer;
 }
 
+QList<CxxFrontendDocument::Place> CxxFrontendDocument::overridesIn(
+    const Place &classPlace, const Place &function) const
+{
+    const cxx::SourceLocation at = d->tokenAt(function.line, function.column, function.filePath);
+    auto * const reference = dynamic_cast<cxx::FunctionSymbol *>(d->declaredAt(at));
+    if (!reference)
+        return {};
+    const QString signature = signatureOf(reference);
+    if (signature.isEmpty())
+        return {};
+
+    const cxx::SourceLocation classAt = d->tokenAt(classPlace.line, classPlace.column,
+                                                   classPlace.filePath);
+    auto * const cls = dynamic_cast<cxx::ClassSymbol *>(d->declaredAt(classAt));
+    if (!cls)
+        return {};
+
+    QList<Place> places;
+    for (cxx::Symbol *member : cls->members()) {
+        auto * const overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member);
+        QList<cxx::FunctionSymbol *> candidates;
+        if (overloadSet) {
+            for (cxx::FunctionSymbol *declared : overloadSet->declaredFunctions())
+                candidates.append(declared);
+        } else if (auto * const one = dynamic_cast<cxx::FunctionSymbol *>(member)) {
+            candidates.append(one);
+        }
+
+        for (cxx::FunctionSymbol * const candidate : candidates) {
+            if (!candidate || signatureOf(candidate) != signature)
+                continue;
+            const cxx::SourceLocation location = candidate->location();
+            if (!location)
+                continue;
+            const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+            places.append({d->fileOf(location), int(position.line), int(position.column)});
+        }
+    }
+    return places;
+}
+
 QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheirBases() const
 {
     QList<ClassWithBases> classes;

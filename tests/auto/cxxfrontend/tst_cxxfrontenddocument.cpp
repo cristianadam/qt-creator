@@ -225,6 +225,8 @@ private slots:
     void partsOfAClass();
     void virtuality_data();
     void virtuality();
+    void overridesInAClass_data();
+    void overridesInAClass();
     void usagesInAFile_data();
     void usagesInAFile();
     void classesWithTheirBases_data();
@@ -1730,6 +1732,79 @@ void tst_cxxfrontenddocument::partsOfAClass()
     for (const CxxFrontendDocument::Extent &part : document.partsOfClass(className)) {
         described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
                              .arg(part.endLine).arg(part.endColumn));
+    }
+    QCOMPARE(described, expected);
+}
+
+// The members of a class that override a function: what a reader following
+// a virtual call is shown, asked one class at a time. The first marker is
+// the class, the second the function, and the rest the places expected.
+void tst_cxxfrontenddocument::overridesInAClass_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("an override")
+        << QByteArray("struct Base { virtual void $f(); };\n"
+                      "struct $Derived : Base { void f() override; };\n")
+        << QStringList("2:30");
+
+    QTest::newRow("declared without the word")
+        << QByteArray("struct Base { virtual void $f(); };\n"
+                      "struct $Derived : Base { void f(); };\n")
+        << QStringList("2:30");
+
+    // Another signature is another function, whatever it is called.
+    QTest::newRow("another signature")
+        << QByteArray("struct Base { virtual void $f(); };\n"
+                      "struct $Derived : Base { void f(int); };\n")
+        << QStringList();
+
+    QTest::newRow("another constness")
+        << QByteArray("struct Base { virtual void $f(); };\n"
+                      "struct $Derived : Base { void f() const; };\n")
+        << QStringList();
+
+    // The class asked about is the one answered for, whatever the others
+    // declare.
+    QTest::newRow("a class that does not override it")
+        << QByteArray("struct Base { virtual void $f(); };\n"
+                      "struct Derived : Base { void f() override; };\n"
+                      "struct $Other { void f(); };\n")
+        << QStringList("3:21");
+
+    QTest::newRow("the class it is declared in")
+        << QByteArray("struct $Base { virtual void $f(); };\n")
+        << QStringList("1:28");
+}
+
+void tst_cxxfrontenddocument::overridesInAClass()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 2);
+
+    // The class comes first where it is written first; the two markers are
+    // told apart by what stands at them, so the data writes them in the
+    // order the source does.
+    const Position first = positions.at(0);
+    const Position second = positions.at(1);
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // Whichever of the two names a class is the class.
+    const bool firstIsTheClass = document.virtualityAt(first.line, first.column).namesAFunction
+                                 == false;
+    const Position &classPlace = firstIsTheClass ? first : second;
+    const Position &function = firstIsTheClass ? second : first;
+
+    QStringList described;
+    for (const CxxFrontendDocument::Place &place :
+         document.overridesIn({{}, classPlace.line, classPlace.column},
+                              {{}, function.line, function.column})) {
+        described.append(QString("%1:%2").arg(place.line).arg(place.column));
     }
     QCOMPARE(described, expected);
 }

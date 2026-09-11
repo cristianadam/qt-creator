@@ -227,6 +227,84 @@ bool FunctionUtils::isPureVirtualFunction(const Function *function,
     return Internal::isVirtualFunction(function, context, PureVirtual, firstVirtuals);
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The members of one class that override the function, as the other model
+// reads them, and nothing where it cannot read that class's file or cannot
+// say the answer as functions of that file's own parse.
+static std::optional<QList<Function *>> overridesOnTheModel(const Function *function,
+                                                            const Class *cls,
+                                                            const Snapshot &snapshot)
+{
+    if (!function || !cls || cls->filePath().isEmpty())
+        return std::nullopt;
+
+    const std::optional<QList<CPlusPlus::CxxFrontendDocument::Place>> places
+        = cxxFrontendOverridesIn(snapshot, CppModelManager::workingCopy(), cls->filePath(),
+                                 {cls->filePath().toFSPathString(), cls->line(), cls->column()},
+                                 {function->filePath().toFSPathString(), function->line(),
+                                  function->column()});
+    if (!places)
+        return std::nullopt;
+
+    const Document::Ptr document = snapshot.document(cls->filePath());
+    if (!document || !document->translationUnit())
+        return std::nullopt;
+
+    QList<Function *> found;
+    for (const CPlusPlus::CxxFrontendDocument::Place &place : *places) {
+        // Only what this class's own file declares: a place in another file
+        // is a base's declaration, which is not an override of anything.
+        if (!place.filePath.isEmpty()
+            && Utils::FilePath::fromUserInput(place.filePath) != cls->filePath()) {
+            continue;
+        }
+        Control * const control = document->translationUnit()->control();
+        Function *at = nullptr;
+        for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
+            if (Function * const candidate = (*it)->asFunction();
+                candidate && candidate->line() == place.line
+                && candidate->column() == place.column) {
+                at = candidate;
+                break;
+            }
+        }
+        if (!at)
+            return std::nullopt;
+        found.append(at);
+    }
+    return found;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+// The members of one class that override the function, read by whichever
+// front end can read that class.
+static QList<Function *> overridesIn(const Function *function, Class *c, const Name *referenceName,
+                                     const Snapshot &snapshot)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<Function *>> onTheModel
+        = overridesOnTheModel(function, c, snapshot)) {
+        return *onTheModel;
+    }
+#else
+    Q_UNUSED(snapshot)
+#endif
+
+    QList<Function *> result;
+    for (int i = 0, total = c->memberCount(); i < total; ++i) {
+        Symbol *candidate = c->memberAt(i);
+        const Name *candidateName = candidate->name();
+        Function *candidateFunc = candidate->type()->asFunctionType();
+        if (!candidateName || !candidateFunc)
+            continue;
+        if (candidateName->match(referenceName) && candidateFunc->isSignatureEqualTo(function))
+            result << candidateFunc;
+    }
+    return result;
+}
+
 QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsClass,
                                            Class *staticClass, const Snapshot &snapshot)
 {
@@ -259,17 +337,7 @@ QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsC
         }
 
         // Check member functions
-        for (int i = 0, total = c->memberCount(); i < total; ++i) {
-            Symbol *candidate = c->memberAt(i);
-            const Name *candidateName = candidate->name();
-            Function *candidateFunc = candidate->type()->asFunctionType();
-            if (!candidateName || !candidateFunc)
-                continue;
-            if (candidateName->match(referenceName)
-                    && candidateFunc->isSignatureEqualTo(function)) {
-                result << candidateFunc;
-            }
-        }
+        result += overridesIn(function, c, referenceName, snapshot);
     }
 
     return result;

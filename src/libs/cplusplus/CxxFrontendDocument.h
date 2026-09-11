@@ -1043,6 +1043,17 @@ public:
     };
     Virtuality virtualityAt(int line, int column) const;
 
+    // The members of the class whose name is written at \a classPlace that
+    // override the function declared at \a function: same name, what it
+    // takes and whether it may be called on a const object -- not what it
+    // hands back, which cannot tell two overrides apart.
+    //
+    // Both places are in this unit, which is what makes the comparison
+    // possible at all: a class that derives from another reads the header
+    // declaring it, so the two functions are written down by one front end
+    // and compared without anything having to be spelled out and matched.
+    QList<Place> overridesIn(const Place &classPlace, const Place &function) const;
+
     // Every class this file writes, with what each of its bases resolves to
     // written out in full: what a search for the classes deriving from a
     // particular one compares against.

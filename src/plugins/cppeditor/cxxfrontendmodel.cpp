@@ -1505,6 +1505,25 @@ std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
     return declaration;
 }
 
+std::optional<QList<CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const CxxFrontendDocument::Place &classPlace, const CxxFrontendDocument::Place &function)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    return holding.document->overridesIn(classPlace, function);
+}
+
 std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
     const FilePath &filePath, int line, int column)
 {

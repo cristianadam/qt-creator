@@ -335,6 +335,17 @@ std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclaratio
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// The members of the class written at \a classPlace in \a filePath that
+// override the function declared at \a function, and nothing where this
+// model cannot read the file.
+//
+// The file is read here and now unless the editor is running over it: the
+// classes deriving from one are in files nobody has open.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, const CPlusPlus::CxxFrontendDocument::Place &classPlace,
+    const CPlusPlus::CxxFrontendDocument::Place &function);
+
 // Whether the function whose name is written at a position is virtual, and
 // where that was said. Nothing where this model has not read the file.
 //
