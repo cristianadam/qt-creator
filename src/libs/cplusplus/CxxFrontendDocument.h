@@ -410,6 +410,22 @@ public:
     QString declarationOfFunctionAt(const Place &function, const Place &writtenAt,
                                     const QString &name) const;
 
+    // The same function, written out as the head of a *definition* at \a
+    // writtenAt: everything a definition puts in front of its body.
+    //
+    // The name is not the caller's choice here, which is the whole
+    // difference from the call above: a definition is of one particular
+    // function, and how much of its path has to stand in front of it is
+    // settled by where it is going -- "C::f" written outside the class and
+    // "f" within it -- the same way each type in it is.
+    //
+    // Empty where the position is on no function, and where the function is
+    // under a template: the "template<...>" a definition written apart from
+    // its declaration has to carry is not something this writes, and half a
+    // definition is worse than none. Whoever needs one hands back and lets
+    // the built-in path do it.
+    QString definitionHeadAt(const Place &function, const Place &writtenAt) const;
+
     // Where this file defines \a name -- written out in full, as
     // Counterpart::name is -- taking \a parameterCount parameters, or
     // nothing where it does not define it.

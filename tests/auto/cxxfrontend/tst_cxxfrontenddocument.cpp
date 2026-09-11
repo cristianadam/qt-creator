@@ -172,6 +172,8 @@ private slots:
 
     void declarationOfAFunctionAt_data();
     void declarationOfAFunctionAt();
+    void definitionHeadAt_data();
+    void definitionHeadAt();
 
     void completeAfterAnArrow();
     void completeAfterADot();
@@ -1772,6 +1774,99 @@ void tst_cxxfrontenddocument::declarationOfAFunctionAt()
                                                positions.last().column},
                                               name),
              declaration);
+}
+
+// The head of a definition written somewhere else: the same as above, less
+// the caller's say over the name -- a definition is of one function and how
+// much of its path stands in front of it is settled by where it goes.
+void tst_cxxfrontenddocument::definitionHeadAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("head");
+
+    // The first marker is the function, the second the place it goes.
+    QTest::newRow("a member, going just outside its class")
+        << QByteArray("struct C {\n"
+                      "    void $f(int a);\n"
+                      "};\n"
+                      "$\n")
+        << QString("void C::f(int a)");
+
+    QTest::newRow("a member of a class in a namespace, going into the namespace")
+        << QByteArray("namespace N {\n"
+                      "struct C {\n"
+                      "    void $f();\n"
+                      "};\n"
+                      "$\n"
+                      "}\n")
+        << QString("void C::f()");
+
+    QTest::newRow("the same, going outside the namespace")
+        << QByteArray("namespace N {\n"
+                      "struct C {\n"
+                      "    void $f();\n"
+                      "};\n"
+                      "}\n"
+                      "$\n")
+        << QString("void N::C::f()");
+
+    // A type of the class needs the class in front of it outside, and the
+    // name it is a definition of needs it too.
+    QTest::newRow("a type of the class comes along")
+        << QByteArray("struct C {\n"
+                      "    struct T {};\n"
+                      "    T $f(T t);\n"
+                      "};\n"
+                      "$\n")
+        << QString("C::T C::f(C::T t)");
+
+    QTest::newRow("what it says about itself comes along")
+        << QByteArray("struct C {\n"
+                      "    int $f() const noexcept;\n"
+                      "};\n"
+                      "$\n")
+        << QString("int C::f() const noexcept");
+
+    // A free function is written under its own name wherever it goes.
+    QTest::newRow("a free function")
+        << QByteArray("void $f(int a);\n"
+                      "$\n")
+        << QString("void f(int a)");
+
+    // The "template<...>" is part of a definition written apart from its
+    // declaration, and this does not write one -- so it hands back rather
+    // than writing half of it.
+    QTest::newRow("a function under a template")
+        << QByteArray("template<typename T>\n"
+                      "struct C {\n"
+                      "    void $f(T t);\n"
+                      "};\n"
+                      "$\n")
+        << QString();
+
+    QTest::newRow("a position on no function")
+        << QByteArray("struct C {\n"
+                      "    int $m;\n"
+                      "};\n"
+                      "$\n")
+        << QString();
+}
+
+void tst_cxxfrontenddocument::definitionHeadAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, head);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 2);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.definitionHeadAt({{}, positions.first().line,
+                                        positions.first().column},
+                                       {{}, positions.last().line,
+                                        positions.last().column}),
+             head);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

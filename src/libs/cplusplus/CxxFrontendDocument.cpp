@@ -2310,6 +2310,54 @@ QString CxxFrontendDocument::declarationOfFunctionAt(const Place &function_,
         d->config.settings);
 }
 
+QString CxxFrontendDocument::definitionHeadAt(const Place &function_,
+                                              const Place &writtenAt) const
+{
+    const cxx::SourceLocation at = d->tokenAt(function_.line, function_.column,
+                                              function_.filePath);
+    if (!at)
+        return {};
+
+    cxx::FunctionSymbol *function = d->declaredFunctionAt(at);
+    if (!function)
+        function = d->definitionAround(at);
+    if (!function || !function->type())
+        return {};
+
+    // A template header is part of the definition and is not written here,
+    // so such a function is handed back rather than written out halfway.
+    // Either the function itself is a template or something it is written
+    // inside is: a member of a class template carries the class's header.
+    const auto isATemplate = [](cxx::Symbol *symbol) {
+        if (auto * const klass = dynamic_cast<cxx::ClassSymbol *>(symbol))
+            return klass->templateParameters() || klass->isSpecialization();
+        if (auto * const declared = dynamic_cast<cxx::FunctionSymbol *>(symbol))
+            return declared->templateParameters() || declared->isSpecialization();
+        return false;
+    };
+    for (cxx::Symbol *scope = function; scope; scope = scope->parent()) {
+        if (dynamic_cast<cxx::TemplateParametersSymbol *>(scope) || isATemplate(scope))
+            return {};
+    }
+
+    // The place need not be on a token: a definition is written into
+    // whitespace, and where there is nothing there the scope is the file's
+    // own, which is what a name written in full belongs to.
+    cxx::ScopeSymbol * const there = d->scopeWrittenAround(
+        d->tokenAt(writtenAt.line, writtenAt.column, writtenAt.filePath));
+
+    std::vector<std::string> parameterNames;
+    for (const QString &parameterName : d->parameterNamesOf(function))
+        parameterNames.push_back(parameterName.toStdString());
+
+    return applyStarBinding(
+        fromStd(cxx::to_string(function->type(),
+                               cxx::to_string(function, {.writtenIn = there}),
+                               {.writtenIn = there,
+                                .parameterNames = parameterNames})),
+        d->config.settings);
+}
+
 CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString &name,
                                                                   int parameterCount) const
 {
