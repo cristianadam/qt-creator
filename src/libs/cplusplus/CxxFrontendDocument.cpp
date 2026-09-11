@@ -127,6 +127,14 @@ QString applyStarBinding(const QString &declaration, const Overview &settings)
     // and an outline shows exactly that after the colon.
     static const QRegularExpression trailingStar(QStringLiteral(R"((\S)([*&]+)$)"));
     result.replace(trailingStar, QStringLiteral("\\1 \\2"));
+
+    // The same for a parameter nobody named, which is a type that ends where
+    // the next parameter or the list does rather than where the text does.
+    // Only after a name, so that the "(*" of a function pointer -- where the
+    // star belongs to what follows and not to what precedes it -- is left
+    // alone.
+    static const QRegularExpression unnamedStar(QStringLiteral(R"(([\w>])([*&]+)(?=[,)]))"));
+    result.replace(unnamedStar, QStringLiteral("\\1 \\2"));
     return result;
 }
 
@@ -2350,10 +2358,19 @@ QString CxxFrontendDocument::definitionHeadAt(const Place &function_,
     for (const QString &parameterName : d->parameterNamesOf(function))
         parameterNames.push_back(parameterName.toStdString());
 
+    // A constructor and a destructor have no return type to write. Neither
+    // do they have the exception specification this front end works out for
+    // them: a defaulted one is noexcept without anybody saying so, and a
+    // definition repeating that would be saying something the declaration
+    // does not.
+    const bool makesOrUnmakesTheObject = function->isConstructor() || function->isDestructor();
+
     return applyStarBinding(
         fromStd(cxx::to_string(function->type(),
                                cxx::to_string(function, {.writtenIn = there}),
-                               {.writtenIn = there,
+                               {.omitFunctionReturnType = makesOrUnmakesTheObject,
+                                .omitExceptionSpecification = makesOrUnmakesTheObject,
+                                .writtenIn = there,
                                 .parameterNames = parameterNames})),
         d->config.settings);
 }

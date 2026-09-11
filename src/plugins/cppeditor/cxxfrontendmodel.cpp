@@ -1209,6 +1209,41 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
                                  declared.column);
 }
 
+std::optional<QString> cxxFrontendDefinitionHeadFor(
+    const Snapshot &builtinSnapshot, const FilePath &filePath, int line, int column,
+    const FilePath &targetFilePath, int targetLine, int targetColumn)
+{
+    const auto answer = [](const QString &head) -> std::optional<QString> {
+        if (head.isEmpty())
+            return std::nullopt;
+        return head;
+    };
+
+    // The same file: the model has read it, so both places are in the one
+    // document it kept.
+    if (targetFilePath == filePath) {
+        const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+        const CxxFrontendDocument * const own
+            = model ? model->document(filePath.toFSPathString()) : nullptr;
+        if (!own)
+            return std::nullopt;
+        return answer(own->definitionHeadAt({{}, line, column},
+                                            {{}, targetLine, targetColumn}));
+    }
+
+    // Two files, and the one the text is going into reads the one the
+    // function is written in -- a source file and its header. Reading that
+    // source file gives the translation unit both places are in; the
+    // function's own place is then addressed by its file, since a header
+    // read into a file keeps its own lines.
+    const HoldingDocument holding = readWith(builtinSnapshot, CppModelManager::workingCopy(),
+                                             targetFilePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+    return answer(holding.document->definitionHeadAt(
+        {filePath.toFSPathString(), line, column}, {{}, targetLine, targetColumn}));
+}
+
 QList<CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const FilePath &filePath, int line, int column)
 {

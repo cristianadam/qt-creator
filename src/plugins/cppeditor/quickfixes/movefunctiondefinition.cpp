@@ -16,6 +16,17 @@
 #include <cplusplus/Overview.h>
 #include <projectexplorer/projectmanager.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/names.h>
+#include <cxx/translation_unit.h>
+#endif
+
 using namespace CPlusPlus;
 using namespace ProjectExplorer;
 using namespace TextEditor;
@@ -173,6 +184,226 @@ static MovableDefinition builtinMovableDefinition(const CppQuickFixInterface &in
     };
     return definition;
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The definition the cursor is on, as the cxx-frontend model reads it: the
+// node, and the class it is written in where it is written in one. The rules
+// are the built-in path's, said over this tree.
+struct CxxWrittenDefinition
+{
+    cxx::FunctionDefinitionAST *function = nullptr;
+    cxx::ClassSpecifierAST *writtenInClass = nullptr;
+
+    // "void C::f() {}" written at file scope: already outside its class, so
+    // the only move left is into the implementation file, and the whole of
+    // it goes rather than a declaration staying behind.
+    bool isOutsideMemberDefinition = false;
+};
+
+// The chunk of a declarator that makes it a function: its parameters and
+// everything written after them.
+cxx::FunctionDeclaratorChunkAST *cxxFunctionChunkOf(cxx::DeclaratorAST *declarator)
+{
+    if (!declarator)
+        return nullptr;
+    for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+        if (auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk))
+            return parameters;
+    }
+    return nullptr;
+}
+
+// Where the name of whatever a declarator declares is written, past the
+// scopes in front of it and past a destructor's tilde -- which is where
+// every front end records the thing it declares.
+cxx::SourceLocation cxxNameLocationOf(cxx::DeclaratorAST *declarator)
+{
+    auto * const id = declarator
+                          ? dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator)
+                          : nullptr;
+    if (!id || !id->unqualifiedId)
+        return {};
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id->unqualifiedId))
+        return destructor->id ? destructor->id->firstSourceLocation() : cxx::SourceLocation();
+    return id->unqualifiedId->firstSourceLocation();
+}
+
+std::optional<CxxWrittenDefinition> cxxWrittenDefinitionAt(
+    const CxxFrontendDocument &document, int line, int column)
+{
+    const QList<cxx::AST *> path = cxxAstPathAt(document, line, column);
+    if (path.isEmpty())
+        return {};
+
+    int index = -1;
+    for (int i = path.size() - 1; i >= 0; --i) {
+        if (dynamic_cast<cxx::FunctionDefinitionAST *>(path.at(i))) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0)
+        return {};
+    auto * const function = static_cast<cxx::FunctionDefinitionAST *>(path.at(index));
+
+    // A definition written apart from its declaration has to carry the
+    // "template<...>" of whatever it is written under, and writing one out
+    // is what this model cannot do -- so it is handed back here rather than
+    // offered and then answered with half a definition.
+    for (cxx::AST * const node : path) {
+        if (dynamic_cast<cxx::TemplateDeclarationAST *>(node))
+            return {};
+    }
+
+    // On the head of the definition, not in its body -- and not where the
+    // function is the innermost thing the cursor is in, which is on neither
+    // and is what "void a() @ {" is.
+    if (index == path.size() - 1)
+        return {};
+    if (function->functionBody && index + 1 < path.size()
+        && path.at(index + 1) == static_cast<cxx::AST *>(function->functionBody)) {
+        return {};
+    }
+
+    // "= delete" says where a function is not, so there is nothing to put
+    // anywhere else.
+    if (dynamic_cast<cxx::DeleteFunctionBodyAST *>(function->functionBody))
+        return {};
+
+    // A trailing return type is how somebody chose to write the declaration
+    // and the built-in path keeps it that way; printing from the type would
+    // write the other form, so this one is handed back.
+    if (cxx::FunctionDeclaratorChunkAST * const chunk
+        = cxxFunctionChunkOf(function->declarator);
+        chunk && chunk->trailingReturnType) {
+        return {};
+    }
+
+    // How much space stands in the name of an operator is how somebody
+    // wrote it, and this writes the name out of the front end's own
+    // spelling, which is one of the two.
+    if (auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(
+            function->declarator ? function->declarator->coreDeclarator : nullptr);
+        id && dynamic_cast<cxx::OperatorFunctionIdAST *>(id->unqualifiedId)) {
+        return {};
+    }
+
+    // A declarator a macro wrote part of: what stands in the text is the
+    // macro's name and what the front end read is its replacement, so
+    // neither the declaration left behind nor the definition written out
+    // would say what the author wrote.
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    if (function->declarator && unit) {
+        const unsigned first = function->declarator->firstSourceLocation().index();
+        const unsigned last = function->declarator->lastSourceLocation().index();
+        for (unsigned i = first; i < last; ++i) {
+            if (unit->tokenAt(cxx::SourceLocation{i}).macroGenerated())
+                return {};
+        }
+    }
+
+    // Error recovery moves where a construct ends, and this one takes text
+    // from one place to another.
+    if (cxxAstWasReadWithErrors(document, function))
+        return {};
+
+    CxxWrittenDefinition found;
+    found.function = function;
+    if (index > 0)
+        found.writtenInClass = dynamic_cast<cxx::ClassSpecifierAST *>(path.at(index - 1));
+    if (!found.writtenInClass) {
+        auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(
+            function->declarator ? function->declarator->coreDeclarator : nullptr);
+        found.isOutsideMemberDefinition = id && id->nestedNameSpecifier;
+    }
+    return found;
+}
+
+// The same, where the cursor is.
+std::optional<CxxWrittenDefinition> cxxWrittenDefinitionUnderCursor(
+    const CxxFrontendDocument &document, const CppQuickFixInterface &interface)
+{
+    // The editor counts from zero and the tree from one.
+    const QTextCursor cursor = interface.currentFile()->cursor();
+    return cxxWrittenDefinitionAt(document, cursor.blockNumber() + 1,
+                                  cursor.positionInBlock() + 1);
+}
+
+// What the cxx-frontend model says of the definition it read.
+std::optional<MovableDefinition> cxxMovableDefinition(const CppQuickFixInterface &interface,
+                                                      const CxxFrontendDocument &document,
+                                                      const CxxWrittenDefinition &written)
+{
+    const CppRefactoringFilePtr fromFile = interface.currentFile();
+    cxx::FunctionDefinitionAST * const function = written.function;
+
+    const CxxAstRange whole = cxxAstRangeOf(document, function);
+    const CxxAstRange head = cxxAstRangeOf(document, function->declarator);
+    const CxxAstRange name = cxxTokenRangeAt(document, cxxNameLocationOf(function->declarator));
+    if (!whole.isValid() || !head.isValid() || !name.isValid())
+        return {};
+
+    const auto positionOf = [&](int line, int column) {
+        return fromFile->position(line, column);
+    };
+
+    MovableDefinition definition;
+    definition.range = {positionOf(whole.startLine, whole.startColumn),
+                        positionOf(whole.endLine, whole.endColumn)};
+    definition.bodyStart = positionOf(head.endLine, head.endColumn);
+
+    if (auto * const defaulted
+        = dynamic_cast<cxx::DefaultFunctionBodyAST *>(function->functionBody)) {
+        const CxxAstRange keyword = cxxTokenRangeAt(document, defaulted->defaultLoc);
+        if (!keyword.isValid())
+            return {};
+        definition.bodyEnd = positionOf(keyword.endLine, keyword.endColumn);
+        definition.endsWithSemicolon = true;
+    } else {
+        definition.bodyEnd = positionOf(whole.endLine, whole.endColumn);
+    }
+
+    DeclarationToDefine &declaration = definition.declaration;
+    declaration.filePath = interface.filePath();
+    declaration.line = name.startLine;
+    declaration.column = name.startColumn;
+
+    // What it is written inside, outermost first, which decides the
+    // namespace the definition goes into. A class is written into the
+    // definition's own name rather than opened around it, so only the
+    // namespaces are what a file writing none of them has to be given.
+    for (cxx::AST * const node : cxxAstPathAt(document, name.startLine, name.startColumn)) {
+        auto * const enclosing = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);
+        if (!enclosing || !enclosing->identifier)
+            continue;
+        declaration.enclosingNames << QString::fromStdString(enclosing->identifier->name());
+        declaration.enclosingNamespaces << declaration.enclosingNames.last();
+    }
+
+    // Where a member's definition goes when nothing better is found: just
+    // past the ";" of the class it is written in.
+    if (written.writtenInClass) {
+        const CxxAstRange brace = cxxTokenRangeAt(document, written.writtenInClass->rbraceLoc);
+        if (brace.isValid()) {
+            declaration.afterItsClass.line = brace.endLine;
+            declaration.afterItsClass.column = brace.endColumn + 1; // Skipping the ";"
+        }
+    }
+
+    definition.writeSignature = [filePath = interface.filePath(), line = name.startLine,
+                                 column = name.startColumn](
+                                    const CppQuickFixOperation *op,
+                                    const InsertionLocation &at,
+                                    const CppRefactoringFilePtr &toFile) -> QString {
+        const std::optional<QString> head
+            = cxxFrontendDefinitionHeadFor(op->snapshot(), filePath, line, column,
+                                           toFile->filePath(), at.line(), at.column());
+        return head ? *head : QString();
+    };
+    return definition;
+}
+#endif
 
 class MoveFuncDefRefactoringHelper
 {
@@ -430,6 +661,61 @@ class MoveFuncDefOutside : public CppQuickFixFactory
 public:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        // C, where a struct is named with the word "struct" in front of it
+        // and writing the type out would leave that off. A header says
+        // nothing about which it is, so the file it goes with is what
+        // decides -- the same file the definition is going into.
+        const bool isC = ProjectFile::isC(
+            ProjectFile::classify(correspondingHeaderOrSource(interface.filePath())));
+        if (const CxxFrontendDocument * const document
+            = isC ? nullptr : cxxFrontendDocumentFor(interface)) {
+            if (const std::optional<CxxWrittenDefinition> written
+                = cxxWrittenDefinitionUnderCursor(*document, interface)) {
+                if (const std::optional<MovableDefinition> definition
+                    = cxxMovableDefinition(interface, *document, *written)) {
+                    offer(interface, result, *definition, written->writtenInClass != nullptr,
+                          written->isOutsideMemberDefinition);
+                    return;
+                }
+            }
+            // Where it declines -- a template, a construct it read with
+            // errors -- the built-in path answers as it did before.
+        }
+#endif
+        matchWithTheBuiltinModel(interface, result);
+    }
+
+private:
+    // Which of the moves are on offer, once a front end has read the
+    // definition: out of the class where it is written in one, and into the
+    // implementation file where this is a header.
+    static void offer(const CppQuickFixInterface &interface, QuickFixOperations &result,
+                      const MovableDefinition &definition, bool isWrittenInItsClass,
+                      bool isOutsideMemberDefinition)
+    {
+        bool isHeaderFile = false;
+        const FilePath cppFileName = correspondingHeaderOrSource(interface.filePath(),
+                                                                 &isHeaderFile);
+
+        if (isHeaderFile && !cppFileName.isEmpty()) {
+            const MoveFuncDefRefactoringHelper::MoveType type
+                = isOutsideMemberDefinition
+                      ? MoveFuncDefRefactoringHelper::MoveOutsideMemberToCppFile
+                      : MoveFuncDefRefactoringHelper::MoveToCppFile;
+            result << new MoveFuncDefOutsideOp(interface, type, definition, cppFileName);
+        }
+
+        if (isWrittenInItsClass) {
+            result << new MoveFuncDefOutsideOp(interface,
+                                               MoveFuncDefRefactoringHelper::MoveOutside,
+                                               definition, FilePath());
+        }
+    }
+
+    void matchWithTheBuiltinModel(const CppQuickFixInterface &interface,
+                                  QuickFixOperations &result)
+    {
         const QList<AST *> &path = interface.path();
         SimpleDeclarationAST *classAST = nullptr;
         FunctionDefinitionAST *funcAST = nullptr;
@@ -470,21 +756,7 @@ public:
         if (!definition.isValid())
             return;
 
-        bool isHeaderFile = false;
-        const FilePath cppFileName = correspondingHeaderOrSource(interface.filePath(), &isHeaderFile);
-
-        if (isHeaderFile && !cppFileName.isEmpty()) {
-            const MoveFuncDefRefactoringHelper::MoveType type = moveOutsideMemberDefinition
-                                                                    ? MoveFuncDefRefactoringHelper::MoveOutsideMemberToCppFile
-                                                                    : MoveFuncDefRefactoringHelper::MoveToCppFile;
-            result << new MoveFuncDefOutsideOp(interface, type, definition, cppFileName);
-        }
-
-        if (classAST)
-            result << new MoveFuncDefOutsideOp(interface, MoveFuncDefRefactoringHelper::MoveOutside,
-                                               definition, FilePath());
-
-        return;
+        offer(interface, result, definition, classAST != nullptr, moveOutsideMemberDefinition);
     }
 };
 
@@ -515,6 +787,34 @@ public:
         }
         if (definitions.isEmpty())
             return;
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // Where the other model has the file, the heads come from it -- and
+        // all of them or none, since a class whose definitions this partly
+        // answers for would be moved by two different readings at once.
+        if (const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface)) {
+            bool onTheModelThroughout = true;
+            QList<MovableDefinition> fromTheModel;
+            for (const MovableDefinition &definition : std::as_const(definitions)) {
+                const std::optional<CxxWrittenDefinition> written
+                    = cxxWrittenDefinitionAt(*document, definition.declaration.line,
+                                             definition.declaration.column);
+                const std::optional<MovableDefinition> onTheModel
+                    = written ? cxxMovableDefinition(interface, *document, *written)
+                              : std::nullopt;
+                if (!onTheModel) {
+                    // One of them it cannot write, so none of them are
+                    // taken: a class moved by two readings at once is not
+                    // something to offer. The built-in answers stand.
+                    onTheModelThroughout = false;
+                    break;
+                }
+                fromTheModel << *onTheModel;
+            }
+            if (onTheModelThroughout)
+                definitions = fromTheModel;
+        }
+#endif
 
         bool isHeaderFile = false;
         const FilePath cppFileName = correspondingHeaderOrSource(interface.filePath(), &isHeaderFile);

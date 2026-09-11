@@ -277,6 +277,26 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// The head of a definition of the function whose name is written at \a line
+// and \a column of \a filePath, for the place \a targetLine and \a
+// targetColumn of \a targetFilePath: everything it has to put in front of
+// its body there, each name in it written with as little in front of it as
+// still finds it from there.
+//
+// The two files may be two -- a definition goes from a header into the
+// source file that includes it -- and then that source file is read, since
+// reading it gives the one translation unit both places are in. Where they
+// are the same file the model's own document answers and nothing is read.
+//
+// Nothing where the model has not read the file, and nothing where it cannot
+// write the head: a definition under a template has to carry the
+// "template<...>", which it does not write. Declining rather than writing
+// half a definition is the rule for everything that moves text.
+std::optional<QString> cxxFrontendDefinitionHeadFor(
+    const CPlusPlus::Snapshot &builtinSnapshot, const Utils::FilePath &filePath,
+    int line, int column, const Utils::FilePath &targetFilePath,
+    int targetLine, int targetColumn);
+
 // The member functions the class at \a line and \a column of \a filePath,
 // both counted from one, declares without defining there.
 //
