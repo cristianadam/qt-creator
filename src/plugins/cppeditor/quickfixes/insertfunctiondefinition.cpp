@@ -50,16 +50,157 @@ enum class InsertDefsFromDeclsMode {
     User         // Normal interactive mode
 };
 
+// One declaration to give a definition to: what a definition of it has to
+// say, and the places writing one touches. What either front end fills in,
+// so that the writing itself reads no tree.
+struct MissingDefinition
+{
+    // What the locator needs in order to say where the definition goes.
+    DeclarationToDefine declaration;
+
+    // Whether the project defines the thing somewhere already, which is
+    // SymbolFinder's question and so is asked of a symbol. A second
+    // definition does not go where the first one's neighbours are.
+    bool alreadyDefined = false;
+
+    // What is being defined, which settles what is written after the head:
+    // a body for a function, "{}" for a variable, and a body plus the key
+    // it was named with and a ";" for a class named but never defined.
+    enum class Kind { Function, Variable, Class };
+    Kind kind = Kind::Function;
+
+    // "class", "struct" or "union" -- the word the class was named with,
+    // which a definition of it has to repeat. Empty for anything else.
+    QString classKey;
+
+    // Where " inline" goes for a variable being defined inside its class,
+    // which is after whatever says what it is.
+    int afterItsSpecifiers = 0;
+
+    // The head of the definition, for wherever it is going. The one thing
+    // that cannot be settled beforehand: a type is written with as little
+    // in front of it as still finds it from there, so it takes the place.
+    std::function<QString(const CppQuickFixOperation *op, const InsertionLocation &at,
+                          const CppRefactoringFilePtr &toFile)> writeHead;
+
+    bool isValid() const { return writeHead != nullptr; }
+};
+
+// What the built-in front end says of a declaration it read.
+static MissingDefinition builtinMissingDefinition(const CppQuickFixInterface &interface,
+                                                  SimpleDeclarationAST *declAST)
+{
+    if (!declAST->symbols || !declAST->symbols->value)
+        return {};
+    Symbol * const decl = declAST->symbols->value;
+    ForwardClassDeclaration * const forwardDecl = decl->asForwardClassDeclaration();
+    if (!forwardDecl && (!declAST->declarator_list || !declAST->declarator_list->value))
+        return {};
+
+    MissingDefinition definition;
+    definition.declaration = declarationToDefine(decl,
+                                                 CppRefactoringChanges(interface.snapshot()));
+
+    SymbolFinder symbolFinder;
+    definition.alreadyDefined
+        = decl->type()->asFunctionType()
+              ? symbolFinder.findMatchingDefinition(decl, interface.snapshot(), true) != nullptr
+              : symbolFinder.findMatchingVarDefinition(decl, interface.snapshot()) != nullptr;
+    if (forwardDecl)
+        definition.kind = MissingDefinition::Kind::Class;
+    else if (!decl->type()->asFunctionType())
+        definition.kind = MissingDefinition::Kind::Variable;
+
+    if (declAST->decl_specifier_list && declAST->decl_specifier_list->value) {
+        definition.afterItsSpecifiers
+            = interface.currentFile()->endOf(declAST->decl_specifier_list->value);
+        if (const ElaboratedTypeSpecifierAST * const spec
+            = declAST->decl_specifier_list->value->asElaboratedTypeSpecifier()) {
+            switch (interface.currentFile()->tokenAt(spec->classkey_token).kind()) {
+            case T_CLASS: definition.classKey = "class"; break;
+            case T_STRUCT: definition.classKey = "struct"; break;
+            case T_UNION: definition.classKey = "union"; break;
+            default: break;
+            }
+        }
+    }
+    if (definition.kind == MissingDefinition::Kind::Class && definition.classKey.isEmpty())
+        return {};
+
+    definition.writeHead = [declAST, decl, forwardDecl](const CppQuickFixOperation *op,
+                                                        const InsertionLocation &at,
+                                                        const CppRefactoringFilePtr &toFile) {
+        Overview oo = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+        oo.showFunctionSignatures = true;
+        oo.showReturnTypes = true;
+        oo.showArgumentNames = true;
+        oo.showEnclosingTemplate = true;
+        oo.showTemplateParameters = true;
+        if (!toFile->cppDocument()->languageFeatures().cxxEnabled)
+            oo.language = Language::C;
+
+        // TODO: Record this with the function instead? Then it would also
+        // work for e.g. function pointer parameters with different syntax.
+        oo.trailingReturnType = !forwardDecl
+                                && declAST->declarator_list->value->postfix_declarator_list
+                                && declAST->declarator_list->value->postfix_declarator_list->value
+                                && declAST->declarator_list->value->postfix_declarator_list
+                                       ->value->asFunctionDeclarator()
+                                && declAST->declarator_list->value->postfix_declarator_list
+                                       ->value->asFunctionDeclarator()->trailing_return_type;
+
+        // make target lookup context
+        Document::Ptr targetDoc = toFile->cppDocument();
+        Scope *targetScope = targetDoc->scopeAt(at.line(), at.column());
+
+        // Correct scope in case of a function try-block. See QTCREATORBUG-14661.
+        if (targetScope && targetScope->asBlock()) {
+            if (Class * const enclosingClass = targetScope->enclosingClass())
+                targetScope = enclosingClass;
+            else
+                targetScope = targetScope->enclosingNamespace();
+        }
+
+        LookupContext targetContext(targetDoc, op->snapshot());
+        ClassOrNamespace *targetCoN = targetContext.lookupType(targetScope);
+        if (!targetCoN)
+            targetCoN = targetContext.globalNamespace();
+
+        // setup rewriting to get minimally qualified names
+        SubstitutionEnvironment env;
+        env.setContext(op->context());
+        env.switchScope(decl->isFriend() ? decl->enclosingNamespace() : decl->enclosingScope()); // TODO: Do this in enclosingScope()?
+        UseMinimalNames q(targetCoN);
+        env.enter(&q);
+        Control *control = op->context().bindings()->control().get();
+
+        // rewrite the function type
+        const FullySpecifiedType tn = rewriteType(decl->type(), &env, control);
+
+        // rewrite the function name
+        if (nameIncludesOperatorName(decl->name())) {
+            const QString operatorNameText = op->currentFile()->textOf(
+                declAST->declarator_list->value->core_declarator);
+            oo.includeWhiteSpaceInOperatorName = operatorNameText.contains(QLatin1Char(' '));
+        }
+        const QString name = oo.prettyName(LookupContext::minimalName(decl, targetCoN, control));
+
+        return oo.prettyType(tn, name);
+    };
+    return definition;
+}
+
 class InsertDefOperation: public CppQuickFixOperation
 {
 public:
     // Make sure that either loc is valid or targetFileName is not empty.
-    InsertDefOperation(const CppQuickFixInterface &interface, SimpleDeclarationAST *declAST,
+    InsertDefOperation(const CppQuickFixInterface &interface,
+                       const MissingDefinition &definition,
                        const InsertionLocation &loc,
                        const DefPos defpos, const FilePath &targetFileName = {},
                        bool freeFunction = false)
         : CppQuickFixOperation(interface, 0)
-        , m_declAST(declAST)
+        , m_definition(definition)
         , m_loc(loc)
         , m_defpos(defpos)
         , m_targetFilePath(targetFileName)
@@ -84,54 +225,32 @@ public:
         const CppQuickFixOperation *op,
         InsertionLocation loc,
         DefPos defPos,
-        SimpleDeclarationAST *declAST,
+        const MissingDefinition &definition,
         const FilePath &targetFilePath,
         ChangeSet *changeSet = nullptr)
     {
-        QTC_ASSERT(declAST->symbols && declAST->symbols->value, return);
-        Symbol * const decl = declAST->symbols->value;
-
-        ForwardClassDeclaration * const forwardDecl = decl->asForwardClassDeclaration();
-
-        QTC_ASSERT(forwardDecl || (declAST->declarator_list && declAST->declarator_list->value),
-                   return);
+        QTC_ASSERT(definition.isValid(), return);
 
         CppRefactoringChanges refactoring(op->snapshot());
-        if (!loc.isValid())
-            loc = insertLocationForMethodDefinition(decl, true, NamespaceHandling::Ignore,
+        if (!loc.isValid()) {
+            loc = insertLocationForMethodDefinition(definition.declaration,
+                                                    definition.alreadyDefined,
+                                                    NamespaceHandling::Ignore,
                                                     refactoring, targetFilePath);
+        }
         QTC_ASSERT(loc.isValid(), return);
 
         CppRefactoringFilePtr targetFile = refactoring.cppFile(loc.filePath());
-        Overview oo = CppCodeStyleSettings::currentProjectCodeStyleOverview();
-        oo.showFunctionSignatures = true;
-        oo.showReturnTypes = true;
-        oo.showArgumentNames = true;
-        oo.showEnclosingTemplate = true;
-        oo.showTemplateParameters = true;
-        if (!targetFile->cppDocument()->languageFeatures().cxxEnabled)
-            oo.language = Language::C;
-
-        // TODO: Record this with the function instead? Then it would also work
-        // for e.g. function pointer parameters with different syntax.
-        oo.trailingReturnType = !forwardDecl
-                                && declAST->declarator_list->value->postfix_declarator_list
-                                && declAST->declarator_list->value->postfix_declarator_list->value
-                                && declAST->declarator_list->value->postfix_declarator_list
-                                       ->value->asFunctionDeclarator()
-                                && declAST->declarator_list->value->postfix_declarator_list
-                                       ->value->asFunctionDeclarator()->trailing_return_type;
 
         if (defPos == DefPosInsideClass) {
-            QTC_ASSERT(!forwardDecl, return);
+            QTC_ASSERT(definition.kind != MissingDefinition::Kind::Class, return);
             const int targetPos = targetFile->position(loc.line(), loc.column());
             ChangeSet localChangeSet;
             ChangeSet * const target = changeSet ? changeSet : &localChangeSet;
-            if (decl->type()->asFunctionType()) {
+            if (definition.kind == MissingDefinition::Kind::Function) {
                 target->replace(targetPos - 1, targetPos, QLatin1String("\n {\n\n}")); // replace ';'
             } else {
-                const int inlinePos = targetFile->endOf(declAST->decl_specifier_list->value);
-                target->insert(inlinePos, " inline");
+                target->insert(definition.afterItsSpecifiers, " inline");
                 target->insert(targetPos - 1, "{}");
             }
 
@@ -147,77 +266,25 @@ public:
                 op->editor()->setTextCursor(c);
             }
         } else {
-            // make target lookup context
-            Document::Ptr targetDoc = targetFile->cppDocument();
-            Scope *targetScope = targetDoc->scopeAt(loc.line(), loc.column());
-
-            // Correct scope in case of a function try-block. See QTCREATORBUG-14661.
-            if (targetScope && targetScope->asBlock()) {
-                if (Class * const enclosingClass = targetScope->enclosingClass())
-                    targetScope = enclosingClass;
-                else
-                    targetScope = targetScope->enclosingNamespace();
-            }
-
-            LookupContext targetContext(targetDoc, op->snapshot());
-            ClassOrNamespace *targetCoN = targetContext.lookupType(targetScope);
-            if (!targetCoN)
-                targetCoN = targetContext.globalNamespace();
-
-            // setup rewriting to get minimally qualified names
-            SubstitutionEnvironment env;
-            env.setContext(op->context());
-            env.switchScope(decl->isFriend() ? decl->enclosingNamespace() : decl->enclosingScope()); // TODO: Do this in enclosingScope()?
-            UseMinimalNames q(targetCoN);
-            env.enter(&q);
-            Control *control = op->context().bindings()->control().get();
-
-            // rewrite the function type
-            const FullySpecifiedType tn = rewriteType(decl->type(), &env, control);
-
-            // rewrite the function name
-            if (nameIncludesOperatorName(decl->name())) {
-                const QString operatorNameText = op->currentFile()->textOf(
-                    declAST->declarator_list->value->core_declarator);
-                oo.includeWhiteSpaceInOperatorName = operatorNameText.contains(QLatin1Char(' '));
-            }
-            const QString name = oo.prettyName(LookupContext::minimalName(decl, targetCoN,
-                                                                          control));
-
             const QString inlinePref = inlinePrefix(targetFilePath, [defPos] {
                 return defPos == DefPosOutsideClass;
             });
 
-            const QString prettyType = oo.prettyType(tn, name);
+            const QString head = definition.writeHead(op, loc, targetFile);
+            QTC_ASSERT(!head.isEmpty(), return);
 
             int index = 0;
-            if (prettyType.startsWith("template"))
-                index = prettyType.lastIndexOf(">\n") + 2;
+            if (head.startsWith("template"))
+                index = head.lastIndexOf(">\n") + 2;
 
-            QString defText = prettyType;
+            QString defText = head;
             defText.insert(index, inlinePref);
-            if (decl->type()->asFunctionType() || forwardDecl)
-                defText += QLatin1String("\n{\n\n}");
-            else
+            if (definition.kind == MissingDefinition::Kind::Variable)
                 defText += "{};";
-            if (forwardDecl) {
-                QTC_ASSERT(declAST->decl_specifier_list && declAST->decl_specifier_list->value, return);
-                const ElaboratedTypeSpecifierAST * const spec
-                    = declAST->decl_specifier_list->value->asElaboratedTypeSpecifier();
-                QTC_ASSERT(spec, return);
-                switch (op->currentFile()->tokenAt(spec->classkey_token).kind()) {
-                case T_CLASS:
-                    defText.prepend("class ");
-                    break;
-                case T_STRUCT:
-                    defText.prepend("struct ");
-                    break;
-                case T_UNION:
-                    defText.prepend("union ");
-                    break;
-                default:
-                    QTC_ASSERT(false, return);
-                }
+            else
+                defText += QLatin1String("\n{\n\n}");
+            if (definition.kind == MissingDefinition::Kind::Class) {
+                defText.prepend(definition.classKey + ' ');
                 defText.append(';');
             }
 
@@ -249,10 +316,10 @@ public:
 private:
     void perform() override
     {
-        insertDefinition(this, m_loc, m_defpos, m_declAST, m_targetFilePath);
+        insertDefinition(this, m_loc, m_defpos, m_definition, m_targetFilePath);
     }
 
-    SimpleDeclarationAST *m_declAST;
+    const MissingDefinition m_definition;
     InsertionLocation m_loc;
     const DefPos m_defpos;
     const FilePath m_targetFilePath;
@@ -492,9 +559,11 @@ private:
                 currentFile()->lineAndColumn(currentFile()->endOf(finder.decl()), &line, &column);
                 loc = InsertionLocation(filePath(), QString(), QString(), line, column);
             }
+            const MissingDefinition definition = builtinMissingDefinition(*this, finder.decl());
+            QTC_ASSERT(definition.isValid(), continue);
             ChangeSet &changeSet = changeSets[targetFilePath];
             InsertDefOperation::insertDefinition(
-                this, loc, setting.defPos, finder.decl(), targetFilePath, &changeSet);
+                this, loc, setting.defPos, definition, targetFilePath, &changeSet);
         }
         for (auto it = changeSets.cbegin(); it != changeSets.cend(); ++it)
             refactoring.cppFile(it.key())->apply(it.value());
@@ -593,6 +662,10 @@ private:
                 }
             }
 
+            const MissingDefinition definition = builtinMissingDefinition(interface, simpleDecl);
+            if (!definition.isValid())
+                return;
+
             // Insert Position: Implementation File
             InsertDefOperation *op = nullptr;
             if (isHeaderFile) {
@@ -621,7 +694,7 @@ private:
                         if (!source.isEmpty()) {
                             op = new InsertDefOperation(
                                 interface,
-                                simpleDecl,
+                                definition,
                                 InsertionLocation(),
                                 DefPosImplementationFile,
                                 source);
@@ -631,7 +704,7 @@ private:
                     } else {
                         op = new InsertDefOperation(
                             interface,
-                            simpleDecl,
+                            definition,
                             InsertionLocation(),
                             DefPosImplementationFile,
                             filePath);
@@ -653,7 +726,7 @@ private:
             if ((func || !isHeaderFile) && (!isFreeFunction || m_defPosOutsideClass)) {
                 result << new InsertDefOperation(
                     interface,
-                    simpleDecl,
+                    definition,
                     InsertionLocation(),
                     DefPosOutsideClass,
                     interface.filePath());
@@ -667,7 +740,7 @@ private:
             const InsertionLocation loc
                 = InsertionLocation(interface.filePath(), QString(), QString(), line, column);
             result << new InsertDefOperation(
-                interface, simpleDecl, loc, DefPosInsideClass, FilePath(), isFreeFunction);
+                interface, definition, loc, DefPosInsideClass, FilePath(), isFreeFunction);
             return;
         }
     }
