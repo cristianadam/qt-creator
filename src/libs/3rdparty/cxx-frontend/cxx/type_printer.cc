@@ -343,6 +343,15 @@ class TypePrinter {
         if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {
           found = injected->classSymbol();
         }
+        // A function is found through the set of its overloads, which is
+        // not something anybody writes: the name reaches the function if
+        // it is one of them.
+        if (auto overloads = symbol_cast<OverloadSetSymbol>(found)) {
+          for (auto function : overloads->declaredFunctions()) {
+            if (function == symbol) return true;
+          }
+          return false;
+        }
         return found == symbol;
       }
     }
@@ -353,12 +362,33 @@ class TypePrinter {
     if (options_.omitEnclosingScope) return;
     auto parent = symbol->parent();
     if (!parent) return;
-    while (symbol_cast<TemplateParametersSymbol>(parent)) {
+
+    // Neither of these is a scope a name is written through: a template's
+    // parameters belong to the declaration, and an overload set is how a
+    // class or a namespace keeps the functions of one name together.
+    while (symbol_cast<TemplateParametersSymbol>(parent) ||
+           symbol_cast<OverloadSetSymbol>(parent)) {
       parent = parent->parent();
     }
+    if (!parent) return;
+
     if (options_.writtenIn && isReachedByItsOwnName(symbol)) return;
     accept(parent->type());
     specifiers_.append("::");
+  }
+
+  // The name \a symbol is declared under, with as little in front of it as
+  // still finds this very symbol from where the answer is going.
+  auto operator()(Symbol* symbol) -> std::string {
+    specifiers_.clear();
+    ptrOps_.clear();
+    declarator_.clear();
+
+    if (!symbol || !symbol->name()) return {};
+
+    appendEnclosingScope(symbol);
+    specifiers_.append(to_string(symbol->name()));
+    return specifiers_;
   }
 
   void operator()(const ClassType* type) {
@@ -536,5 +566,9 @@ auto to_string(const Type* type, const std::string& id,
 auto to_string(const Type* type, const Name* name, TypePrintOptions options)
     -> std::string {
   return TypePrinter{options}(type, to_string(name));
+}
+
+auto to_string(Symbol* symbol, TypePrintOptions options) -> std::string {
+  return TypePrinter{options}(symbol);
 }
 }  // namespace cxx

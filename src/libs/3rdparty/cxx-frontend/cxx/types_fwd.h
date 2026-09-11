@@ -29,6 +29,7 @@
 namespace cxx {
 class Name;
 class ScopeSymbol;
+class Symbol;
 
 #define CXX_FOR_EACH_TYPE_KIND(V) \
   V(Void)                         \
@@ -197,6 +198,21 @@ struct TypePrintOptions {
 
 auto to_string(const Type* type, const std::string& id = "",
                TypePrintOptions options = {}) -> std::string;
+// The name \a symbol is declared under, written as somebody standing where
+// the answer is going would write it: as little in front of it as still
+// finds this very symbol from there, by the same rule writtenIn applies to
+// the names inside a type.
+//
+// This is the other half of writing a declaration into another file. The
+// types in it are written for the place by printing them with writtenIn;
+// what the declaration is *of* is this -- "C::f" written outside the class
+// and "f" within it -- and a caller cannot work it out without redoing the
+// search this does.
+//
+// Without writtenIn the answer is the whole path, which is what the option
+// means everywhere else.
+auto to_string(Symbol* symbol, TypePrintOptions options = {}) -> std::string;
+
 auto to_string(const Type* type, const Name* name,
                TypePrintOptions options = {}) -> std::string;
 }  // namespace cxx
