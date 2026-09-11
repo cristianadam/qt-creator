@@ -774,6 +774,32 @@ static CMakeLang::Documentation documentationFor(const QString &name,
     return {};
 }
 
+// What the arguments of a command mean.  A command that hands its arguments
+// on to another says nothing about them itself: what that one says about
+// them is what they mean, which is how extend_qtc_plugin() takes the
+// arguments of extend_qtc_target().
+static QList<CMakeLang::ArgumentDoc> argumentsOf(const CMakeLang::Documentation &documentation,
+                                                 const PerformInputDataPtr &data,
+                                                 const CMakeLang::DocumentPtr &document,
+                                                 const CMakeLang::SignatureTable &local)
+{
+    const QList<CMakeLang::ArgumentDoc> arguments = documentation.arguments();
+    if (!arguments.isEmpty() || documentation.name.isEmpty())
+        return arguments;
+
+    QStringList forwarded = data->signatures.forwardsTo(documentation.name);
+    forwarded += local.forwardsTo(documentation.name);
+    forwarded.removeDuplicates();
+
+    for (const QString &command : forwarded) {
+        const QList<CMakeLang::ArgumentDoc> forwardedArguments
+            = documentationFor(command, data, document).arguments();
+        if (!forwardedArguments.isEmpty())
+            return forwardedArguments;
+    }
+    return {};
+}
+
 IAssistProposal *CMakeFileCompletionAssist::perform()
 {
     IAssistProposal *result = immediateProposal();
@@ -816,6 +842,9 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
                                                        : documentationFor(functionName, data,
                                                                           document);
 
+    CMakeLang::SignatureTable localSignatures;
+    localSignatures.addDocument(document);
+
     // Right behind the parenthesis that opens a call, what the reader is
     // after is how the command is called, not which keywords it takes.
     if (!functionName.isEmpty() && interface()->characterAt(interface()->position() - 1) == '(') {
@@ -829,14 +858,11 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
                 signatures.append(signature);
         }
         if (!signatures.isEmpty()) {
-            FunctionHintProposalModelPtr model(
-                new CMakeFunctionHintModel(signatures, documentation.arguments()));
+            FunctionHintProposalModelPtr model(new CMakeFunctionHintModel(
+                signatures, argumentsOf(documentation, data, document, localSignatures)));
             return new FunctionHintProposal(interface()->position(), model);
         }
     }
-
-    CMakeLang::SignatureTable localSignatures;
-    localSignatures.addDocument(document);
 
     CMakeLang::Signature signature = data->signatures.signature(functionName);
     signature.add(localSignatures.signature(functionName));
@@ -930,7 +956,9 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
         QStringList functionSymbols = data->keywords.functionArgs.value(functionName);
         functionSymbols += signature.keywords();
         functionSymbols.removeDuplicates();
-        items.append(generateList(functionSymbols, m_argsIcon, documentation.arguments()));
+        items.append(generateList(functionSymbols,
+                                  m_argsIcon,
+                                  argumentsOf(documentation, data, document, localSignatures)));
     } else if (functionName.isEmpty()) {
         // On a new line we just want functions
         items.append(generateList(data->keywords.functions, m_functionIcon));

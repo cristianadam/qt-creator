@@ -35,6 +35,7 @@
 #include <nanotrace/nanotrace.h>
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QMutex>
 #include <QStandardPaths>
 
@@ -417,19 +418,36 @@ static QList<CMakeLang::Documentation> readDocumentation(const FilePath &file)
     return result;
 }
 
+// A file of a project is written while it is being read, so what was read of
+// it holds only for as long as it stands the way it was read.
+class DocumentationKey
+{
+public:
+    FilePath file;
+    QDateTime written;
+
+private:
+    friend bool operator==(const DocumentationKey &, const DocumentationKey &) = default;
+    friend size_t qHash(const DocumentationKey &key, size_t seed = 0)
+    {
+        return qHashMulti(seed, key.file, key.written);
+    }
+};
+
 CMakeLang::Documentation CMakeToolManager::documentation(const QString &name,
                                                          const FilePath &file)
 {
     if (file.isEmpty())
         return {};
 
-    static QHash<FilePath, QList<CMakeLang::Documentation>> map;
+    static QHash<DocumentationKey, QList<CMakeLang::Documentation>> map;
     static QMutex mutex;
     QMutexLocker locker(&mutex);
 
-    auto documentation = map.constFind(file);
+    const DocumentationKey key{file, file.lastModified()};
+    auto documentation = map.constFind(key);
     if (documentation == map.cend())
-        documentation = map.insert(file, readDocumentation(file));
+        documentation = map.insert(key, readDocumentation(file));
 
     for (const CMakeLang::Documentation &candidate : *documentation) {
         if (candidate.isNamed(name))

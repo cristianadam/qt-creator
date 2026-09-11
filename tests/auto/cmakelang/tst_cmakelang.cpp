@@ -204,6 +204,7 @@ private slots:
     void signatures();
     void signatureKeywords();
     void signaturesNeedTheSource();
+    void signaturesForwarded();
     void argumentGroups_data();
     void argumentGroups();
     void rewriterReplacesValues();
@@ -772,6 +773,48 @@ static QString groupsOf(const QString &definition, const QString &call)
         dumped << '(' + parts.join(u' ') + ')';
     }
     return dumped.join(u' ');
+}
+
+// A command that hands its arguments on takes what the command it hands them
+// to says about them, so whoever reads the documentation has to be told where
+// they went.
+void tst_CMakeLang::signaturesForwarded()
+{
+    const QString source = R"(function(inner)
+  cmake_parse_arguments(_arg "OPTION" "" "SOURCES" ${ARGN})
+endfunction()
+
+function(middle target)
+  inner(${ARGN})
+endfunction()
+
+function(outer target)
+  middle(${ARGN})
+endfunction()
+
+function(alone target)
+  cmake_parse_arguments(_arg "" "" "FILES" ${ARGN})
+endfunction()
+)";
+
+    SignatureTable signatures;
+    signatures.addDocument(Document::fromSource(source));
+
+    // The keywords of the command at the end of the chain are the keywords
+    // of every command along it.
+    QCOMPARE(signatures.signature("outer").keywords(), QStringList({"OPTION", "SOURCES"}));
+
+    // Where they went, in the order they were handed on.
+    QCOMPARE(signatures.forwardsTo("outer"), QStringList({"middle", "inner"}));
+    QCOMPARE(signatures.forwardsTo("middle"), QStringList("inner"));
+    QCOMPARE(signatures.forwardsTo("inner"), QStringList());
+    QCOMPARE(signatures.forwardsTo("alone"), QStringList());
+
+    // A command the documents do not define hands nothing on.
+    QCOMPARE(signatures.forwardsTo("nowhere"), QStringList());
+
+    // A name is read the way CMake reads it.
+    QCOMPARE(signatures.forwardsTo("OUTER"), QStringList({"middle", "inner"}));
 }
 
 void tst_CMakeLang::argumentGroups_data()
