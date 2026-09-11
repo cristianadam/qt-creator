@@ -47,7 +47,7 @@ using PerformInputDataPtr = std::shared_ptr<PerformInputData>;
 class CMakeFileCompletionAssist : public AsyncProcessor
 {
 public:
-    CMakeFileCompletionAssist();
+    explicit CMakeFileCompletionAssist(bool functionHintOnly = false);
 
     IAssistProposal *perform() final;
     IAssistProposal *performAsync() final { return nullptr; }
@@ -67,10 +67,17 @@ public:
 
 private:
     IAssistProposal *doPerform(const PerformInputDataPtr &data);
+    IAssistProposal *functionHint(const QString &functionName,
+                                  const PerformInputDataPtr &data,
+                                  const CMakeLang::DocumentPtr &document,
+                                  const CMakeLang::SignatureTable &local);
     PerformInputDataPtr generatePerformInputData() const;
+
+    // Whoever asks for the signature of a call is asking for that alone.
+    const bool m_functionHintOnly;
 };
 
-CMakeFileCompletionAssist::CMakeFileCompletionAssist()
+CMakeFileCompletionAssist::CMakeFileCompletionAssist(bool functionHintOnly)
     : m_variableIcon(CodeModelIcon::iconForType(CodeModelIcon::VarPublic))
     , m_projectVariableIcon(CodeModelIcon::iconForType(CodeModelIcon::VarPublicStatic))
     , m_functionIcon(CodeModelIcon::iconForType(CodeModelIcon::FuncPublic))
@@ -89,6 +96,7 @@ CMakeFileCompletionAssist::CMakeFileCompletionAssist()
                                .icon())
     , m_snippetCollector(Constants::CMAKE_SNIPPETS_GROUP_ID,
                          FileIconProvider::icon(FilePath::fromString(Constants::CMAKE_LISTS_TXT)))
+    , m_functionHintOnly(functionHintOnly)
 {}
 
 static bool isInComment(const AssistInterface *interface)
@@ -133,6 +141,20 @@ static int findFunctionStart(const AssistInterface *interface)
     }
 
     return pos;
+}
+
+// Where the arguments of the call the cursor stands in begin, which is
+// behind the parenthesis that opens it.
+static int findArgumentsStart(const AssistInterface *interface)
+{
+    int pos = interface->position();
+
+    QChar chr;
+    do {
+        chr = interface->characterAt(--pos);
+    } while (pos > 0 && chr != '(');
+
+    return chr == '(' ? pos + 1 : interface->position();
 }
 
 static int findFunctionEnd(const AssistInterface *interface)
@@ -811,6 +833,35 @@ IAssistProposal *CMakeFileCompletionAssist::perform()
     return result;
 }
 
+// How the command is called, with what the argument that is being written
+// means.
+IAssistProposal *CMakeFileCompletionAssist::functionHint(
+    const QString &functionName,
+    const PerformInputDataPtr &data,
+    const CMakeLang::DocumentPtr &document,
+    const CMakeLang::SignatureTable &local)
+{
+    if (functionName.isEmpty())
+        return nullptr;
+
+    const CMakeLang::Documentation documentation = documentationFor(functionName, data, document);
+    QStringList signatures = documentation.signatures();
+    if (signatures.isEmpty()) {
+        // A function the project defines and does not document still spells
+        // its parameters out.
+        const QString signature = CMakeLang::definitionSignature(
+            definitionOf(document, functionName));
+        if (!signature.isEmpty())
+            signatures.append(signature);
+    }
+    if (signatures.isEmpty())
+        return nullptr;
+
+    FunctionHintProposalModelPtr model(
+        new CMakeFunctionHintModel(signatures, argumentsOf(documentation, data, document, local)));
+    return new FunctionHintProposal(findArgumentsStart(interface()), model);
+}
+
 IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr &data)
 {
     if (isInComment(interface()))
@@ -845,24 +896,8 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
     CMakeLang::SignatureTable localSignatures;
     localSignatures.addDocument(document);
 
-    // Right behind the parenthesis that opens a call, what the reader is
-    // after is how the command is called, not which keywords it takes.
-    if (!functionName.isEmpty() && interface()->characterAt(interface()->position() - 1) == '(') {
-        QStringList signatures = documentation.signatures();
-        if (signatures.isEmpty()) {
-            // A function the project defines and does not document still
-            // spells its parameters out.
-            const QString signature = CMakeLang::definitionSignature(
-                definitionOf(document, functionName));
-            if (!signature.isEmpty())
-                signatures.append(signature);
-        }
-        if (!signatures.isEmpty()) {
-            FunctionHintProposalModelPtr model(new CMakeFunctionHintModel(
-                signatures, argumentsOf(documentation, data, document, localSignatures)));
-            return new FunctionHintProposal(interface()->position(), model);
-        }
-    }
+    if (m_functionHintOnly)
+        return functionHint(functionName, data, document, localSignatures);
 
     CMakeLang::Signature signature = data->signatures.signature(functionName);
     signature.add(localSignatures.signature(functionName));
@@ -952,6 +987,16 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
 
     const bool knowsArguments = data->keywords.functionArgs.contains(functionName)
                                 || !signature.isEmpty();
+
+    // Right behind the parenthesis that opens a call of a command that takes
+    // no keywords, what the reader is after is how the command is called.
+    // Where it takes keywords, those are what is being written, and the
+    // proposal of one says what it is for.
+    if (!knowsArguments && interface()->characterAt(interface()->position() - 1) == '(') {
+        if (IAssistProposal *hint = functionHint(functionName, data, document, localSignatures))
+            return hint;
+    }
+
     if (knowsArguments && !onlyFileItems()) {
         QStringList functionSymbols = data->keywords.functionArgs.value(functionName);
         functionSymbols += signature.keywords();
@@ -989,6 +1034,27 @@ IAssistProposal *CMakeFileCompletionAssist::doPerform(const PerformInputDataPtr 
 IAssistProcessor *CMakeFileCompletionAssistProvider::createProcessor(const AssistInterface *) const
 {
     return new CMakeFileCompletionAssist;
+}
+
+IAssistProcessor *CMakeFunctionHintAssistProvider::createProcessor(const AssistInterface *) const
+{
+    return new CMakeFileCompletionAssist(/*functionHintOnly=*/true);
+}
+
+int CMakeFunctionHintAssistProvider::activationCharSequenceLength() const
+{
+    return 1;
+}
+
+bool CMakeFunctionHintAssistProvider::isActivationCharSequence(const QString &sequence) const
+{
+    return sequence.endsWith("(");
+}
+
+CompletionAssistProvider &cmakeFunctionHintAssistProvider()
+{
+    static CMakeFunctionHintAssistProvider theProvider;
+    return theProvider;
 }
 
 int CMakeFileCompletionAssistProvider::activationCharSequenceLength() const

@@ -422,6 +422,7 @@ CMakeTextDocument::CMakeTextDocument()
     setId(Constants::CMAKE_EDITOR_ID);
     setMimeType(Utils::Constants::CMAKE_MIMETYPE);
     setQuickFixAssistProvider(&cmakeQuickFixAssistProvider());
+    setFunctionHintAssistProvider(&cmakeFunctionHintAssistProvider());
     setupCMakeQuickFixMarkers(this);
 }
 
