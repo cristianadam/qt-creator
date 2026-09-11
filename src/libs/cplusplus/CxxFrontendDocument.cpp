@@ -2039,6 +2039,279 @@ QList<CxxFrontendDocument::Extent> CxxFrontendDocument::partsOfClass(
     return parts;
 }
 
+namespace {
+
+// The path somebody would have to write to reach \a symbol, outermost
+// first: the scopes it is in, less the ones a name reaches through without
+// naming them -- a template's parameter list, an overload set, an inline
+// namespace, and the enumeration an unscoped enumerator belongs to, which
+// puts its values in the scope around it as well.
+QStringList reachablePathOf(cxx::Symbol *symbol)
+{
+    QStringList parts;
+    for (cxx::Symbol *s = symbol; s; s = s->parent()) {
+        if (!s->name())
+            continue;
+        if (s != symbol) {
+            if (dynamic_cast<cxx::TemplateParametersSymbol *>(s)
+                || dynamic_cast<cxx::OverloadSetSymbol *>(s)
+                || dynamic_cast<cxx::EnumSymbol *>(s)) {
+                continue;
+            }
+            if (auto * const ns = dynamic_cast<cxx::NamespaceSymbol *>(s); ns && ns->isInline())
+                continue;
+        }
+        parts.prepend(fromStd(cxx::to_string(s->name())));
+    }
+    return parts;
+}
+
+// The name a using directive names, as it is written: "N", or "A::B" where
+// it says so.
+QStringList nameWrittenInUsingDirective(cxx::UsingDirectiveAST *directive)
+{
+    QStringList parts;
+    for (cxx::NestedNameSpecifierAST *specifier = directive->nestedNameSpecifier; specifier;) {
+        auto * const simple = dynamic_cast<cxx::SimpleNestedNameSpecifierAST *>(specifier);
+        if (!simple || !simple->identifier)
+            return {};
+        parts.prepend(fromStd(simple->identifier->name()));
+        specifier = simple->nestedNameSpecifier;
+    }
+    if (!directive->unqualifiedId || !directive->unqualifiedId->identifier)
+        return {};
+    parts.append(fromStd(directive->unqualifiedId->identifier->name()));
+    return parts;
+}
+
+// A block or a body that a using directive's effect ends with. A class is
+// not one: a directive cannot be written in a class.
+bool isAScopeAUsingDirectiveEndsWith(cxx::AST *node)
+{
+    return dynamic_cast<cxx::CompoundStatementAST *>(node)
+           || dynamic_cast<cxx::NamespaceDefinitionAST *>(node)
+           || dynamic_cast<cxx::LinkageSpecificationAST *>(node)
+           || dynamic_cast<cxx::ExportCompoundDeclarationAST *>(node);
+}
+
+// Where the name of an unqualified-id is written. A destructor is written
+// with a tilde in front of it, and what a namespace goes in front of is
+// the name after it.
+cxx::SourceLocation locationOfWrittenName(cxx::UnqualifiedIdAST *id)
+{
+    if (!id)
+        return {};
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id))
+        return destructor->id ? destructor->id->firstSourceLocation() : cxx::SourceLocation{};
+    return id->firstSourceLocation();
+}
+
+} // namespace
+
+CxxFrontendDocument::UsingDirectives CxxFrontendDocument::usingDirectivesOf(
+    const QString &namespaceName, int afterLine, int afterColumn,
+    bool everyOneAtGlobalScope) const
+{
+    UsingDirectives answer;
+    const QStringList namespaceParts = namespaceName.split("::", Qt::SkipEmptyParts);
+    if (namespaceParts.isEmpty() || !d->unit.ast())
+        return answer;
+
+    const auto mainFileId = std::uint32_t(d->unit.preprocessor()->mainSourceFileId());
+    const auto isThisFile = [&](cxx::SourceLocation location) {
+        return location && d->unit.tokenAt(location).fileId() == mainFileId;
+    };
+
+    // Everything is compared in tokens, so the place to start after becomes
+    // one: the first token this file wrote past it. Nothing to start after
+    // means the file's own directive, found on the way.
+    const bool searchForTheDirective = afterLine <= 0;
+    unsigned startToken = 0;
+    if (!searchForTheDirective) {
+        for (unsigned i = 0; i < d->unit.tokenCount(); ++i) {
+            const cxx::SourceLocation location{i};
+            if (!isThisFile(location))
+                continue;
+            const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+            if (int(position.line) > afterLine
+                || (int(position.line) == afterLine && int(position.column) >= afterColumn)) {
+                startToken = i;
+                break;
+            }
+        }
+        if (!startToken)
+            return answer;
+    }
+
+    // Whether a node ends exactly at the place given, which is what tells
+    // the directive being taken away from one that merely stands before
+    // the place reading starts at -- an #include, a line above.
+    const auto endsAt = [&](cxx::SourceLocation lastLocation, int line, int column) {
+        if (!lastLocation || lastLocation.index() == 0)
+            return false;
+        const cxx::SourcePosition end
+            = d->unit.tokenEndPosition(cxx::SourceLocation{lastLocation.index() - 1});
+        return int(end.line) == line && int(end.column) == column;
+    };
+
+    const auto extentOf = [&](cxx::AST *node) {
+        const CxxAstRange range = cxxAstRangeOf(*this, node);
+        return Extent{range.startLine, range.startColumn, range.endLine, range.endColumn};
+    };
+
+    // The scopes the walk is inside, as the token each of them ends at.
+    QList<unsigned> openScopes;
+    bool started = false;
+    bool haveTheScope = false;
+    unsigned theScopeEnd = 0;      // where the directive stops being in force
+    unsigned skipUntil = 0;        // a subtree that says nothing: namespace N, or before the start
+    bool shadowed = false;         // another directive for the namespace is in force
+    unsigned shadowEnd = 0;        // and it is in force until here
+
+    // A name needs the namespace written in front of it when what it
+    // resolves to is reached through that namespace and nothing else.
+    const auto consider = [&](cxx::SourceLocation location, cxx::Symbol *symbol) {
+        if (!symbol || !isThisFile(location) || d->unit.tokenAt(location).macroGenerated())
+            return;
+        const QString written = fromStd(d->unit.tokenText(location));
+        if (written.isEmpty())
+            return;
+        if (reachablePathOf(symbol) != namespaceParts + QStringList(written))
+            return;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        answer.placesNeedingTheNamespace.append(
+            Place{QString(), int(position.line), int(position.column)});
+    };
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        cxx::AST * const node = *slot;
+        const cxx::SourceLocation first = node->firstSourceLocation();
+        const cxx::SourceLocation last = node->lastSourceLocation();
+        if (!isThisFile(first) || !last)
+            continue;
+        if (skipUntil && first.index() < skipUntil)
+            continue;
+        skipUntil = 0;
+
+        // Leaving a scope: the directive's effect ends with the one it is
+        // written in, and another directive's ends with its own.
+        bool leftTheDirectivesScope = false;
+        while (!openScopes.isEmpty() && first.index() >= openScopes.last()) {
+            leftTheDirectivesScope = leftTheDirectivesScope
+                                     || (started && haveTheScope
+                                         && openScopes.last() == theScopeEnd);
+            openScopes.removeLast();
+            if (shadowed && first.index() >= shadowEnd)
+                shadowed = false;
+        }
+        if (leftTheDirectivesScope)
+            break;
+
+        if (auto * const directive = dynamic_cast<cxx::UsingDirectiveAST *>(node)) {
+            if (nameWrittenInUsingDirective(directive) == namespaceParts) {
+                if (searchForTheDirective && !started) {
+                    // The file's own directive: start after it, and it is
+                    // the one that goes.
+                    started = true;
+                    haveTheScope = !openScopes.isEmpty();
+                    theScopeEnd = haveTheScope ? openScopes.last() : 0;
+                    answer.directivesToRemove.append(extentOf(directive));
+                    continue;
+                }
+                if (!started) {
+                    if (endsAt(last, afterLine, afterColumn)) {
+                        // The one being taken away, which the caller
+                        // removes: what it is needed for here is the scope
+                        // it is in.
+                        haveTheScope = !openScopes.isEmpty();
+                        theScopeEnd = haveTheScope ? openScopes.last() : 0;
+                        continue;
+                    }
+                    if (!everyOneAtGlobalScope) {
+                        // The file says it itself, so taking the other one
+                        // away changes nothing here.
+                        break;
+                    }
+                    answer.directivesToRemove.append(extentOf(directive));
+                    continue;
+                }
+                if (everyOneAtGlobalScope && openScopes.isEmpty()) {
+                    answer.directivesToRemove.append(extentOf(directive));
+                } else {
+                    // It keeps the namespace in force where it is written,
+                    // so nothing there has to say it.
+                    shadowed = true;
+                    shadowEnd = openScopes.isEmpty() ? d->unit.tokenCount() : openScopes.last();
+                }
+                continue;
+            }
+        }
+
+        if (!started && !searchForTheDirective) {
+            // A node written wholly before the start says nothing about
+            // what comes after it, and neither does anything inside it.
+            if (last.index() <= startToken) {
+                skipUntil = last.index();
+                continue;
+            }
+            // The first token past the place given is where reading
+            // starts, so a node beginning there is already part of it.
+            if (first.index() >= startToken)
+                started = true;
+        }
+
+        if (isAScopeAUsingDirectiveEndsWith(node)) {
+            if (!started) {
+                haveTheScope = true;
+                theScopeEnd = last.index();
+            }
+            openScopes.append(last.index());
+        }
+
+        if (!started || shadowed)
+            continue;
+
+        // Inside the namespace itself nothing has to name it.
+        if (auto * const ns = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);
+            ns && ns->identifier && fromStd(ns->identifier->name()) == namespaceParts.last()) {
+            skipUntil = last.index();
+            openScopes.removeLast();
+            continue;
+        }
+
+        // The first component of a written name is the only one the
+        // directive can have found: what stands after a :: is looked up in
+        // what stands before it.
+        if (auto * const nested = dynamic_cast<cxx::SimpleNestedNameSpecifierAST *>(node);
+            nested && !nested->nestedNameSpecifier) {
+            consider(nested->identifierLoc, nested->symbol);
+            continue;
+        }
+        if (auto * const nested = dynamic_cast<cxx::TemplateNestedNameSpecifierAST *>(node);
+            nested && !nested->nestedNameSpecifier && nested->templateId) {
+            consider(nested->templateId->firstSourceLocation(), nested->symbol);
+            continue;
+        }
+        if (auto * const id = dynamic_cast<cxx::IdExpressionAST *>(node);
+            id && !id->nestedNameSpecifier) {
+            consider(locationOfWrittenName(id->unqualifiedId), id->symbol);
+            continue;
+        }
+        if (auto * const named = dynamic_cast<cxx::NamedTypeSpecifierAST *>(node);
+            named && !named->nestedNameSpecifier) {
+            consider(locationOfWrittenName(named->unqualifiedId), named->symbol);
+            continue;
+        }
+    }
+
+    answer.isGlobalUsingNamespace = !haveTheScope;
+    answer.foundGlobalUsingNamespace = shadowed;
+    return answer;
+}
+
 CxxFrontendDocument::LiteralInAFunction CxxFrontendDocument::literalInAFunctionAt(
     int line, int column) const
 {

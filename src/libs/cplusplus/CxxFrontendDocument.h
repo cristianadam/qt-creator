@@ -620,6 +620,40 @@ public:
     // would be left behind.
     QList<Extent> partsOfClass(const QString &qualifiedName) const;
 
+    // What taking "using namespace \a namespaceName" out of this file comes
+    // down to: the directives for it whose lines go away, and every place
+    // that has to write the namespace out once they are gone.
+    //
+    // Reading starts after \a afterLine and \a afterColumn -- a name written
+    // before the directive never leaned on it -- and stops where the
+    // directive's effect stops, at the end of the block or namespace body it
+    // is written in. Zero for both means "after this file's own directive
+    // for it at global scope", which is what a file that merely includes the
+    // one holding it is asked.
+    //
+    // \a everyOneAtGlobalScope is the second thing there is to offer: every
+    // directive for the namespace written at global scope goes, rather than
+    // the one at the position.
+    //
+    // Which places need the namespace is the question only a front end that
+    // resolves names can answer, and it is asked of the *first* component of
+    // each name written: what stands after a :: is looked up in what stands
+    // before it, so that is the only part a using directive can have found.
+    struct UsingDirectives
+    {
+        QList<Extent> directivesToRemove;
+        QList<Place> placesNeedingTheNamespace;
+
+        // Whether the directive reaches whatever includes this file -- it
+        // is written at global scope rather than in a block -- and whether
+        // another one for the same namespace is still in force here once
+        // this one is gone.
+        bool isGlobalUsingNamespace = false;
+        bool foundGlobalUsingNamespace = false;
+    };
+    UsingDirectives usingDirectivesOf(const QString &namespaceName, int afterLine,
+                                      int afterColumn, bool everyOneAtGlobalScope) const;
+
     // A literal written inside a function, which "extract it as a parameter"
     // works on: its type, and every place that function writes the same
     // literal -- they all say the same thing, which is what makes them one

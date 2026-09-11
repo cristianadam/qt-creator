@@ -220,6 +220,8 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void usingDirectives_data();
+    void usingDirectives();
 
     void literalInAFunction_data();
     void literalInAFunction();
@@ -1586,6 +1588,174 @@ void tst_cxxfrontenddocument::partsOfAClass()
                              .arg(part.endLine).arg(part.endColumn));
     }
     QCOMPARE(described, expected);
+}
+
+// What taking a using directive away comes down to: which directives go,
+// and which names have to say the namespace once they are gone.
+void tst_cxxfrontenddocument::usingDirectives_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("namespaceName");
+    QTest::addColumn<bool>("everyOneAtGlobalScope");
+    QTest::addColumn<QString>("expected");
+
+    // The marker stands just after the directive being taken away, which
+    // is where the reading starts.
+    QTest::newRow("a type and a value")
+        << QByteArray("namespace N { struct C {}; int i; void f(); }\n"
+                      "using namespace N;$\n"
+                      "C c;\n"
+                      "int j = i;\n"
+                      "void g() { f(); }\n")
+        << QString("N") << false
+        << QString(" | 3:1, 4:9, 5:12 | global | clear");
+
+    // What stands after a :: is looked up in what stands before it, so the
+    // first component is the only one the directive can have found.
+    QTest::newRow("a qualified name")
+        << QByteArray("namespace N { struct C { static int i; }; }\n"
+                      "using namespace N;$\n"
+                      "int j = C::i;\n")
+        << QString("N") << false
+        << QString(" | 3:9 | global | clear");
+
+    // An unscoped enumeration puts its values in the scope around it too,
+    // so the namespace is what stands in front of them.
+    QTest::newRow("an enumerator")
+        << QByteArray("namespace N { enum E {E1, E2}; }\n"
+                      "using namespace N;$\n"
+                      "E val = E1;\n")
+        << QString("N") << false
+        << QString(" | 3:1, 3:9 | global | clear");
+
+    // Nobody writes an inline namespace's name, so it is not part of the
+    // path either.
+    QTest::newRow("a class in an inline namespace")
+        << QByteArray("namespace N { inline namespace V { struct C {}; } }\n"
+                      "using namespace N;$\n"
+                      "C c;\n")
+        << QString("N") << false
+        << QString(" | 3:1 | global | clear");
+
+    QTest::newRow("a name that already says the namespace")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;$\n"
+                      "N::C c;\n")
+        << QString("N") << false
+        << QString(" |  | global | clear");
+
+    QTest::newRow("a name of something else")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "struct D {};\n"
+                      "using namespace N;$\n"
+                      "D d;\n")
+        << QString("N") << false
+        << QString(" |  | global | clear");
+
+    // Inside the namespace itself nothing has to name it.
+    QTest::newRow("written in the namespace itself")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;$\n"
+                      "namespace N { C c; }\n")
+        << QString("N") << false
+        << QString(" |  | global | clear");
+
+    // A name written before the directive never leaned on it.
+    QTest::newRow("written before the directive")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using N::C;\n"
+                      "C before;\n"
+                      "using namespace N;$\n"
+                      "C after;\n")
+        << QString("N") << false
+        << QString(" | 5:1 | global | clear");
+
+    // Another directive keeps the namespace in force, so nothing under it
+    // has to say it -- and the files that include this one are none the
+    // wiser either.
+    QTest::newRow("a second directive at global scope")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;$\n"
+                      "C first;\n"
+                      "using namespace N;\n"
+                      "C second;\n")
+        << QString("N") << false
+        << QString(" | 3:1 | global | shadowed");
+
+    // Both of them go, and then everything does have to say it.
+    QTest::newRow("every one at global scope")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;$\n"
+                      "C first;\n"
+                      "using namespace N;\n"
+                      "C second;\n")
+        << QString("N") << true
+        << QString("4:1-4:19 | 3:1, 5:1 | global | clear");
+
+    // A directive in a block is in force until the block ends, and it
+    // reaches nothing that includes the file.
+    QTest::newRow("a directive in a block")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "void f() {\n"
+                      "using namespace N;$\n"
+                      "C inside;\n"
+                      "}\n"
+                      "N::C outside;\n")
+        << QString("N") << false
+        << QString(" | 4:1 | scoped | clear");
+
+    // Nothing to start after: find the file's own directive, take it away
+    // and read on. What a file that merely includes the header is asked.
+    QTest::newRow("find the directive")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;\n"
+                      "C c;\n")
+        << QString("N") << false
+        << QString("2:1-2:19 | 3:1 | global | clear");
+
+    // The file says it itself, so taking it out of the header changes
+    // nothing here.
+    QTest::newRow("a directive of its own before the start")
+        << QByteArray("namespace N { struct C {}; }\n"
+                      "using namespace N;\n"
+                      "$C c;\n")
+        << QString("N") << false
+        << QString(" |  | global | clear");
+}
+
+void tst_cxxfrontenddocument::usingDirectives()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, namespaceName);
+    QFETCH(bool, everyOneAtGlobalScope);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QVERIFY(positions.size() <= 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::UsingDirectives read = document.usingDirectivesOf(
+        namespaceName,
+        positions.isEmpty() ? 0 : positions.first().line,
+        positions.isEmpty() ? 0 : positions.first().column,
+        everyOneAtGlobalScope);
+
+    QStringList directives;
+    for (const CxxFrontendDocument::Extent &directive : read.directivesToRemove) {
+        directives.append(QString("%1:%2-%3:%4").arg(directive.startLine)
+                              .arg(directive.startColumn)
+                              .arg(directive.endLine).arg(directive.endColumn));
+    }
+    QStringList places;
+    for (const CxxFrontendDocument::Place &place : read.placesNeedingTheNamespace)
+        places.append(QString("%1:%2").arg(place.line).arg(place.column));
+
+    QCOMPARE(QString("%1 | %2 | %3 | %4")
+                 .arg(directives.join(", "), places.join(", "),
+                      read.isGlobalUsingNamespace ? "global" : "scoped",
+                      read.foundGlobalUsingNamespace ? "shadowed" : "clear"),
+             expected);
 }
 
 // A literal inside a function: its type, and every place that function
