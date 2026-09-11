@@ -203,6 +203,11 @@ private slots:
     void signatureWritesAReturnTypeForOutsideTheFunction();
     void noSignatureOffAFunction();
     void signatureOfADeclarationInAHeader();
+
+    void switchOverAnEnum_data();
+    void switchOverAnEnum();
+    void noSwitchToComplete_data();
+    void noSwitchToComplete();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -1207,6 +1212,105 @@ void tst_cxxfrontenddocument::signatureOfADeclarationInAHeader()
         = document.signatureAt({{}, 3, 9}, {"h.h", 2, 18});
     QVERIFY(back.isValid());
     QCOMPARE(back.writeParameter(0, "t"), QString("N::T t"));
+}
+
+// Which values a switch over an enumeration does not handle, and how each
+// has to be written where the switch is -- the two halves of one question,
+// since telling a handled value from a missing one means naming both the
+// same way.
+void tst_cxxfrontenddocument::switchOverAnEnum_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QStringList>("expectedValues");
+
+    QTest::newRow("an unscoped enum, named where it is written")
+        << QByteArray("enum E { V1, V2 };\n"
+                      "void f(E e) { $switch (e) { } }\n")
+        << QStringList({"V1", "V2"});
+
+    QTest::newRow("a scoped enum, named under itself")
+        << QByteArray("enum class E { V1, V2 };\n"
+                      "void f(E e) { $switch (e) { } }\n")
+        << QStringList({"E::V1", "E::V2"});
+
+    QTest::newRow("an unscoped enum in a namespace")
+        << QByteArray("namespace N { enum E { V1, V2 }; }\n"
+                      "void f(N::E e) { $switch (e) { } }\n")
+        << QStringList({"N::V1", "N::V2"});
+
+    QTest::newRow("a scoped enum in a namespace")
+        << QByteArray("namespace N { enum class E { V1, V2 }; }\n"
+                      "void f(N::E e) { $switch (e) { } }\n")
+        << QStringList({"N::E::V1", "N::E::V2"});
+
+    QTest::newRow("the values it already handles are left out")
+        << QByteArray("enum E { V1, V2, V3 };\n"
+                      "void f(E e) { $switch (e) { case V2: break; } }\n")
+        << QStringList({"V1", "V3"});
+
+    // A case of a switch of its own is that switch's, not this one's.
+    QTest::newRow("a case of a switch nested inside it")
+        << QByteArray("enum E { V1, V2 };\n"
+                      "void f(E e, E o) {\n"
+                      "    $switch (e) {\n"
+                      "    default:\n"
+                      "        switch (o) { case V1: break; }\n"
+                      "    }\n"
+                      "}\n")
+        << QStringList({"V1", "V2"});
+
+    QTest::newRow("an enum with nothing left to handle")
+        << QByteArray("enum E { V1 };\n"
+                      "void f(E e) { $switch (e) { case V1: break; } }\n")
+        << QStringList();
+}
+
+void tst_cxxfrontenddocument::switchOverAnEnum()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expectedValues);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::Switch found
+        = document.switchAt(positions.first().line, positions.first().column);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.missingValues, expectedValues);
+}
+
+void tst_cxxfrontenddocument::noSwitchToComplete_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+
+    QTest::newRow("a position in no switch")
+        << QByteArray("enum E { V1 };\nvoid f(E e) { $int x = 1; }\n");
+    QTest::newRow("a switch over something that is not an enum")
+        << QByteArray("void f(int i) { $switch (i) { } }\n");
+    // "switch (e) case V1: ;" has no block to write a case into.
+    QTest::newRow("a switch whose body is not a block")
+        << QByteArray("enum E { V1, V2 };\nvoid f(E e) { $switch (e) case V1: ; }\n");
+    // A variable named like its own enumeration, which C++ says wins as an
+    // expression. This front end does not resolve the name at all there, so
+    // the condition has no type and there is nothing to read -- on
+    // unsupportedQueries(), and the built-in front end answers these.
+    QTest::newRow("a variable named like its own enum")
+        << QByteArray("enum class E { V1, V2 };\n"
+                      "void f() { enum E E; $switch (E) { } }\n");
+}
+
+void tst_cxxfrontenddocument::noSwitchToComplete()
+{
+    QFETCH(QByteArray, marked);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(!document.switchAt(positions.first().line, positions.first().column).isValid());
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

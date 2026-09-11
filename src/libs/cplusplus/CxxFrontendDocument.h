@@ -243,6 +243,29 @@ public:
     };
     Counterpart counterpartAt(int line, int column) const;
 
+    // The switch statement written around a position: where its body opens,
+    // and which values of the enumeration its condition has it does not
+    // handle yet, each written the way a case label has to write it.
+    //
+    // One question rather than two, because which values are missing and how
+    // each is written are the same question asked twice -- and how an
+    // enumerator is written is the whole difference a scoped enumeration
+    // makes: the values of an unscoped one are named in the scope around it,
+    // of a scoped one under the enumeration itself.
+    //
+    // Nothing where the position is in no switch, where the switch's body is
+    // not a block, or where its condition is not of an enumeration -- which
+    // is the answer "there is nothing to complete here".
+    struct Switch
+    {
+        int bodyLine = 0; // just after the '{', one-based
+        int bodyColumn = 0;
+        QStringList missingValues;
+
+        bool isValid() const { return bodyLine > 0; }
+    };
+    Switch switchAt(int line, int column) const;
+
     // What the function declaration at a position says, and how each of its
     // types has to be written where another declaration in this file stands.
     //

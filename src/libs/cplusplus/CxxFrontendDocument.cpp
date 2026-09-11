@@ -1675,6 +1675,149 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
     return counterpart;
 }
 
+namespace {
+
+// The enumeration a type is, or nothing where it is not one.
+cxx::ScopeSymbol *enumerationOf(const cxx::Type *type, bool *isScoped)
+{
+    if (auto * const unscoped = cxx::type_cast<cxx::EnumType>(type)) {
+        *isScoped = false;
+        return unscoped->symbol();
+    }
+    if (auto * const scoped = cxx::type_cast<cxx::ScopedEnumType>(type)) {
+        *isScoped = true;
+        return scoped->symbol();
+    }
+    return nullptr;
+}
+
+// Past the conversions a condition's expression is wrapped in: what a switch
+// wants there is a value, so what stands in the tree is a cast of the name
+// somebody wrote.
+cxx::ExpressionAST *written(cxx::ExpressionAST *expression)
+{
+    while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(expression))
+        expression = cast->expression;
+    return expression;
+}
+
+// How a case label has to write an enumerator: under the enumeration where
+// it is scoped, and in the scope around it otherwise, since that is where an
+// unscoped enumeration's values are named.
+QString caseLabelFor(cxx::ScopeSymbol *enumeration, bool isScoped, cxx::Symbol *enumerator)
+{
+    if (!enumerator->name())
+        return {};
+    const QString name = fromStd(cxx::to_string(enumerator->name()));
+    const QString scope = qualifiedNameOf(isScoped ? static_cast<cxx::Symbol *>(enumeration)
+                                                   : enumeration->parent());
+    return scope.isEmpty() ? name : scope + "::" + name;
+}
+
+} // namespace
+
+CxxFrontendDocument::Switch CxxFrontendDocument::switchAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    const auto holds = [&](cxx::AST *node, cxx::SourceLocation what) {
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return what.index() >= first && what.index() < last;
+    };
+
+    // Innermost wins, and the walk reaches an outer one first.
+    cxx::SwitchStatementAST *innermost = nullptr;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto * const statement = dynamic_cast<cxx::SwitchStatementAST *>(*slot);
+            statement && holds(statement, location)) {
+            innermost = statement;
+        }
+    }
+    if (!innermost || !innermost->condition)
+        return {};
+
+    // "switch (t) case A: ;" has no block to write a case into.
+    auto * const body = dynamic_cast<cxx::CompoundStatementAST *>(innermost->statement);
+    if (!body || !body->lbraceLoc)
+        return {};
+
+    // The type as it was written, not as the switch wants it: an unscoped
+    // enumeration is promoted to an integer on the way in, so the condition's
+    // own type says int and the name somebody wrote says E.
+    bool isScoped = false;
+    cxx::ExpressionAST * const condition = written(innermost->condition);
+    cxx::ScopeSymbol * const enumeration = condition ? enumerationOf(condition->type, &isScoped)
+                                                     : nullptr;
+    if (!enumeration)
+        return {};
+
+    QList<cxx::Symbol *> missing;
+    for (cxx::Symbol *member : enumeration->members()) {
+        if (dynamic_cast<cxx::EnumeratorSymbol *>(member))
+            missing.append(member);
+    }
+
+    // What it already writes a case for. A case inside a switch of its own
+    // belongs to that one, so those are stepped over.
+    QList<cxx::SwitchStatementAST *> nested;
+    for (cxx::ASTCursor cursor(body, "body"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto * const statement = dynamic_cast<cxx::SwitchStatementAST *>(*slot))
+            nested.append(statement);
+    }
+    for (cxx::ASTCursor cursor(body, "body"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        auto * const label = dynamic_cast<cxx::CaseStatementAST *>(*slot);
+        if (!label || !label->expression)
+            continue;
+        const bool belongsToANestedSwitch
+            = std::any_of(nested.cbegin(), nested.cend(),
+                          [&](cxx::SwitchStatementAST *statement) {
+                              return holds(statement, label->caseLoc);
+                          });
+        if (belongsToANestedSwitch)
+            continue;
+        auto * const id = dynamic_cast<cxx::IdExpressionAST *>(written(label->expression));
+        if (!id || !id->symbol || !id->symbol->name())
+            continue;
+        // By its own name, which is unique in an enumeration: the front end
+        // records an unscoped enumeration's values twice, once where they
+        // are written and once in the scope around them, and either may be
+        // what a case resolved to.
+        const QString name = fromStd(cxx::to_string(id->symbol->name()));
+        const auto handled = std::find_if(missing.cbegin(), missing.cend(),
+                                          [&](cxx::Symbol *enumerator) {
+                                              return enumerator->name()
+                                                     && fromStd(cxx::to_string(
+                                                            enumerator->name()))
+                                                            == name;
+                                          });
+        if (handled != missing.cend())
+            missing.erase(handled);
+    }
+
+    Switch answer;
+    const cxx::SourcePosition opens = d->unit.tokenEndPosition(body->lbraceLoc);
+    answer.bodyLine = int(opens.line);
+    answer.bodyColumn = int(opens.column);
+    for (cxx::Symbol *enumerator : std::as_const(missing)) {
+        const QString label = caseLabelFor(enumeration, isScoped, enumerator);
+        if (!label.isEmpty())
+            answer.missingValues.append(label);
+    }
+    return answer;
+}
+
 // What a signature answers from: a function of this unit, and the scopes
 // another declaration in it stands in.
 class CxxFrontendDocument::Signature::Private
@@ -2660,6 +2803,13 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // halves of a ternary. namesIn() answers for names, and those are
         // punctuation or macros.
         "where the labels and the angle brackets are",
+        // What a name means where a variable of the same name shadows the
+        // type it is of: "enum E E;" and then "E" as an expression, which
+        // C++ says is the variable. The parser resolves that name to
+        // nothing and leaves the expression without a type, so anything
+        // read off the type -- what a switch over it switches over, for one
+        // -- cannot be answered.
+        "a name a variable of the same name shadows",
         // Which way a function's exception specification was written. The
         // front end records whether it throws and nothing else, so a
         // throw() and a noexcept(expr) both come back as noexcept -- which

@@ -230,6 +230,16 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// The switch statement written around \a line and \a column of \a filePath,
+// both counted from one: where to write new cases, and which values of the
+// enumeration its condition has it does not handle yet.
+//
+// Nothing where the model has no such file, and then the caller answers the
+// way it did before. An invalid answer is an answer: the position is in no
+// switch, or in one there is nothing to complete.
+std::optional<CPlusPlus::CxxFrontendDocument::Switch> cxxFrontendSwitchAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 // A comment a file writes: where it stands, and which of the four ways it
 // is written -- which is what tells one run of comments from the next.
 struct CxxFrontendComment

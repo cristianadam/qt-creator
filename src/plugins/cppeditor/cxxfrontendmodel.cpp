@@ -1141,6 +1141,18 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     return link;
 }
 
+std::optional<CxxFrontendDocument::Switch> cxxFrontendSwitchAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+    return document->switchAt(line, column);
+}
+
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const FilePath &filePath, int line, int column)
