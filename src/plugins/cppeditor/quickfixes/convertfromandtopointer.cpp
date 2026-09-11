@@ -6,10 +6,21 @@
 #include "../cppeditortr.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
+#include "cppquickfixhelpers.h"
 
 #include <cplusplus/ASTPath.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/types.h>
+#endif
 
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
@@ -68,10 +79,12 @@ struct WrittenInitializer
     ChangeSet::Range range;
 
     // Of a new expression: where the type it names begins, so that the "new"
-    // in front of it can be taken away, and the arguments written after it
-    // if there are any -- a value made without them still needs its "()".
+    // in front of it can be taken away, and the "(...)" or "{...}" written
+    // after it if there is one -- a value made without one still needs its
+    // "()", and one made with nothing in it is not worth carrying over.
     int typeStart = 0;
     std::optional<ChangeSet::Range> arguments;
+    bool argumentsAreEmpty = false;
 };
 
 // The declaration this fix turns round, and every place the function writes
@@ -137,7 +150,7 @@ private:
                 if (!initializer.arguments)
                     changes.insert(initializer.range.end, "()");
                 changes.remove(initializer.range.start, initializer.typeStart);
-            } else if (initializer.arguments) {
+            } else if (initializer.arguments && !initializer.argumentsAreEmpty) {
                 // The type stands in the declaration already, so what is left
                 // of the initializer is its arguments: "S *s = new S(1)"
                 // becomes "S s(1)".
@@ -302,8 +315,8 @@ WrittenInitializer builtinInitializerOf(const CppQuickFixInterface &interface,
         written.kind = WrittenInitializer::Kind::New;
         written.typeStart = made->new_type_id ? file->startOf(made->new_type_id)
                                               : written.range.end;
-        ExpressionListAST *arguments = nullptr;
         if (made->new_initializer) {
+            ExpressionListAST *arguments = nullptr;
             if (ExpressionListParenAST *parenthesized = made->new_initializer
                                                             ->asExpressionListParen()) {
                 arguments = parenthesized->expression_list;
@@ -311,10 +324,9 @@ WrittenInitializer builtinInitializerOf(const CppQuickFixInterface &interface,
                                                           ->asBracedInitializer()) {
                 arguments = braced->expression_list;
             }
-            if (arguments) {
-                written.arguments = ChangeSet::Range(file->startOf(made->new_initializer),
-                                                     file->endOf(made->new_initializer));
-            }
+            written.arguments = ChangeSet::Range(file->startOf(made->new_initializer),
+                                                 file->endOf(made->new_initializer));
+            written.argumentsAreEmpty = !arguments;
         }
     } else if (initializer->asIdExpression()) {
         written.kind = WrittenInitializer::Kind::Name;
@@ -440,6 +452,325 @@ std::optional<WrittenVariable> builtinVariableAt(const CppQuickFixInterface &int
     return variable;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The expression as it stands in the file, past the conversions the place it
+// stands in asked for.
+cxx::ExpressionAST *cxxWritten(cxx::ExpressionAST *expression)
+{
+    while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(expression))
+        expression = cast->expression;
+    return expression;
+}
+
+// A place in the file as the editor counts it, or nothing where the file
+// does not write it -- which is where these fixes hand back.
+std::optional<ChangeSet::Range> cxxRangeOfNode(const CxxFrontendDocument &document,
+                                               const CppRefactoringFilePtr &file,
+                                               cxx::AST *node)
+{
+    const CxxAstRange range = cxxAstRangeOf(document, node);
+    if (!range.isValid())
+        return {};
+    return ChangeSet::Range(file->position(range.startLine, range.startColumn),
+                            file->position(range.endLine, range.endColumn));
+}
+
+std::optional<ChangeSet::Range> cxxRangeOfToken(const CxxFrontendDocument &document,
+                                                const CppRefactoringFilePtr &file,
+                                                cxx::SourceLocation location)
+{
+    const CxxAstRange range = cxxTokenRangeAt(document, location);
+    if (!range.isValid())
+        return {};
+    return ChangeSet::Range(file->position(range.startLine, range.startColumn),
+                            file->position(range.endLine, range.endColumn));
+}
+
+// Every place the function writes the variable, as the cxx-frontend model
+// read them: what stands around each one is what the tree there says.
+//
+// Nothing where one of them cannot be read -- a place left as it is would
+// leave the file saying something else, so the fix hands back instead.
+std::optional<QList<WrittenUse>> cxxUsesOf(const CxxFrontendDocument &document,
+                                           const CppRefactoringFilePtr &file,
+                                           const QList<CxxFrontendDocument::Occurrence> &places,
+                                           cxx::AST *declaration)
+{
+    QList<WrittenUse> written;
+    for (const CxxFrontendDocument::Occurrence &place : places) {
+        const QList<cxx::AST *> path = cxxAstPathAt(document, place.line, place.column);
+        if (path.isEmpty())
+            return {};
+
+        WrittenUse one;
+        const int start = file->position(place.line, place.column);
+        one.name = ChangeSet::Range(start, start + place.length);
+
+        for (int i = path.size() - 2; i >= 0; --i) {
+            cxx::AST * const node = path.at(i);
+            if (node == declaration) {
+                one.isTheDeclaration = true;
+                break;
+            }
+            if (auto * const member = dynamic_cast<cxx::MemberExpressionAST *>(node)) {
+                if (one.memberAccess)
+                    continue;
+                const std::optional<ChangeSet::Range> at
+                    = cxxRangeOfToken(document, file, member->accessLoc);
+                if (!at)
+                    return {};
+                one.memberAccess = at;
+                one.memberAccessIsArrow = member->accessOp == cxx::TokenKind::T_MINUS_GREATER;
+                if (one.memberAccessIsArrow)
+                    break;
+            } else if (auto * const deleted = dynamic_cast<cxx::DeleteExpressionAST *>(node)) {
+                const std::optional<ChangeSet::Range> at
+                    = cxxRangeOfToken(document, file, deleted->deleteLoc);
+                if (!at)
+                    return {};
+                one.deletedAt = at->start;
+                break;
+            } else if (auto * const unary = dynamic_cast<cxx::UnaryExpressionAST *>(node)) {
+                if (unary->op != cxx::TokenKind::T_STAR && unary->op != cxx::TokenKind::T_AMP)
+                    continue;
+                const std::optional<ChangeSet::Range> at
+                    = cxxRangeOfToken(document, file, unary->opLoc);
+                if (!at)
+                    return {};
+                if (unary->op == cxx::TokenKind::T_STAR) {
+                    if (!one.star)
+                        one.star = at;
+                } else {
+                    one.ampersand = at;
+                }
+            } else if (dynamic_cast<cxx::FunctionDefinitionAST *>(node)) {
+                break;
+            }
+        }
+        written << one;
+    }
+    return written;
+}
+
+// The initializer of a declaration, as the cxx-frontend model read it.
+std::optional<WrittenInitializer> cxxInitializerOf(const CxxFrontendDocument &document,
+                                                   const CppRefactoringFilePtr &file,
+                                                   cxx::InitDeclaratorAST *declared)
+{
+    if (!declared->initializer)
+        return WrittenInitializer{};
+
+    // "= x" is a node of its own here, and what the fix works on is what
+    // stands after the "=".
+    cxx::ExpressionAST *initializer = declared->initializer;
+    if (auto * const equals = dynamic_cast<cxx::EqualInitializerAST *>(initializer))
+        initializer = equals->expression;
+    initializer = cxxWritten(initializer);
+    if (!initializer)
+        return WrittenInitializer{};
+
+    const std::optional<ChangeSet::Range> range = cxxRangeOfNode(document, file, initializer);
+    if (!range)
+        return {};
+
+    WrittenInitializer written;
+    written.range = *range;
+    if (auto * const made = dynamic_cast<cxx::NewExpressionAST *>(initializer)) {
+        written.kind = WrittenInitializer::Kind::New;
+        written.typeStart = range->end;
+        for (auto *specifier : cxx::ListView{made->typeSpecifierList}) {
+            const std::optional<ChangeSet::Range> type
+                = cxxRangeOfNode(document, file, specifier);
+            if (!type)
+                return {};
+            written.typeStart = type->start;
+            break;
+        }
+        if (made->newInitalizer) {
+            const std::optional<ChangeSet::Range> arguments
+                = cxxRangeOfNode(document, file, made->newInitalizer);
+            if (!arguments)
+                return {};
+            written.arguments = arguments;
+            if (auto * const parenthesized
+                = dynamic_cast<cxx::NewParenInitializerAST *>(made->newInitalizer)) {
+                written.argumentsAreEmpty = !parenthesized->expressionList;
+            } else if (auto * const braced = dynamic_cast<cxx::NewBracedInitializerAST *>(
+                           made->newInitalizer)) {
+                written.argumentsAreEmpty = !braced->bracedInitList
+                                            || !braced->bracedInitList->expressionList;
+            }
+        }
+    } else if (dynamic_cast<cxx::IdExpressionAST *>(initializer)) {
+        written.kind = WrittenInitializer::Kind::Name;
+    } else if (dynamic_cast<cxx::CallExpressionAST *>(initializer)
+               || dynamic_cast<cxx::TypeConstructionAST *>(initializer)) {
+        // Making a value of a type is a node of its own here; the built-in
+        // tree calls both of them a call.
+        written.kind = WrittenInitializer::Kind::Call;
+    } else if (dynamic_cast<cxx::ParenInitializerAST *>(initializer)) {
+        written.kind = WrittenInitializer::Kind::Parentheses;
+    } else if (dynamic_cast<cxx::BracedInitListAST *>(initializer)) {
+        written.kind = WrittenInitializer::Kind::Braces;
+    }
+    return written;
+}
+
+// The local variable the cursor is on, as the cxx-frontend model read it.
+//
+// Nothing where it has not read the file, where the cursor is on something
+// other than the name of a function-local variable, or where any part of
+// what the fix rewrites could not be read; the built-in path then answers,
+// as it did before.
+std::optional<WrittenVariable> cxxVariableAt(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+
+    // The editor counts from zero and the tree from one.
+    const QTextCursor cursor = file->cursor();
+    const int line = cursor.blockNumber() + 1;
+    const int column = cursor.positionInBlock() + 1;
+    const QList<cxx::AST *> path = cxxAstPathAt(*document, line, column);
+    if (path.isEmpty())
+        return {};
+
+    auto * const name = dynamic_cast<cxx::NameIdAST *>(path.last());
+    if (!name || !name->identifier)
+        return {};
+
+    // What declares it, and whether that is a variable of a function rather
+    // than a member of a class written inside one.
+    cxx::InitDeclaratorAST *declared = nullptr;
+    cxx::SimpleDeclarationAST *declaration = nullptr;
+    bool isFunctionLocal = false;
+    bool isClassLocal = false;
+    for (int i = path.size() - 2; i >= 0; --i) {
+        cxx::AST * const node = path.at(i);
+        if (!declared && (declared = dynamic_cast<cxx::InitDeclaratorAST *>(node)))
+            continue;
+        if (!declaration && (declaration = dynamic_cast<cxx::SimpleDeclarationAST *>(node)))
+            continue;
+        if (declared && declaration) {
+            if (dynamic_cast<cxx::ClassSpecifierAST *>(node)) {
+                isClassLocal = true;
+            } else if (dynamic_cast<cxx::FunctionDefinitionAST *>(node) && !isClassLocal) {
+                isFunctionLocal = true;
+                break;
+            }
+        }
+    }
+    if (!isFunctionLocal || !declared || !declaration || !declared->declarator)
+        return {};
+
+    // Not something to rewrite: where the front end stumbled inside the
+    // declaration its tree does not match the text.
+    if (cxxAstWasReadWithErrors(*document, declaration))
+        return {};
+
+    WrittenVariable variable;
+
+    // The "*" or "&" of the declarator, whether or not it is what says which
+    // way round the variable is written.
+    cxx::PtrOperatorAST *pointerOperator = nullptr;
+    for (auto *op : cxx::ListView{declared->declarator->ptrOpList}) {
+        if (pointerOperator)
+            return {}; // A pointer to a pointer is more than this fix says.
+        pointerOperator = op;
+    }
+    Written written = Written::Value;
+    if (pointerOperator) {
+        cxx::SourceLocation at;
+        if (auto * const star = dynamic_cast<cxx::PointerOperatorAST *>(pointerOperator)) {
+            written = Written::Pointer;
+            at = star->starLoc;
+        } else if (auto * const reference
+                   = dynamic_cast<cxx::ReferenceOperatorAST *>(pointerOperator)) {
+            written = Written::Reference;
+            at = reference->refLoc;
+        }
+        const std::optional<ChangeSet::Range> range = cxxRangeOfToken(*document, file, at);
+        if (!range)
+            return {};
+        // One character of it, which is what an "&&" is left half of, as the
+        // built-in path leaves it too.
+        variable.pointerOperator = ChangeSet::Range(range->start, range->start + 1);
+    }
+
+    // An auto says which way round it is with its initializer, not with a
+    // star, so the type the front end deduced is what answers.
+    for (auto *specifier : cxx::ListView{declaration->declSpecifierList}) {
+        if (dynamic_cast<cxx::AutoTypeSpecifierAST *>(specifier))
+            variable.isAuto = true;
+    }
+    if (variable.isAuto) {
+        if (!declared->initializer || !declared->symbol)
+            return {};
+        if (cxx::type_cast<cxx::PointerType>(declared->symbol->type()))
+            written = Written::Pointer;
+        else
+            written = Written::Value;
+    }
+    variable.written = written;
+
+    // The name the type is written under, which only a declaration that
+    // writes one as a plain name has.
+    for (auto *specifier : cxx::ListView{declaration->declSpecifierList}) {
+        if (auto * const named = dynamic_cast<cxx::NamedTypeSpecifierAST *>(specifier)) {
+            const std::optional<ChangeSet::Range> type
+                = cxxRangeOfNode(*document, file, named);
+            if (!type)
+                return {};
+            variable.typeName = file->textOf(*type);
+        }
+        break;
+    }
+
+    const std::optional<ChangeSet::Range> nameRange = cxxRangeOfNode(*document, file, name);
+    if (!nameRange)
+        return {};
+    variable.nameEnd = nameRange->end;
+
+    const std::optional<WrittenInitializer> initializer
+        = cxxInitializerOf(*document, file, declared);
+    if (!initializer)
+        return {};
+    variable.initializer = *initializer;
+
+    // Which of the function's locals this is: two variables of the same name
+    // in blocks of their own are two locals, each with the places that write
+    // it.
+    for (const CxxFrontendDocument::Local &local : document->localsAt(line, column)) {
+        const bool isTheOne = Utils::anyOf(local.places,
+                                           [&](const CxxFrontendDocument::Occurrence &place) {
+                                               return file->position(place.line, place.column)
+                                                      == nameRange->start;
+                                           });
+        if (!isTheOne)
+            continue;
+        const std::optional<QList<WrittenUse>> uses
+            = cxxUsesOf(*document, file, local.places, declared);
+        if (!uses)
+            return {};
+        variable.uses = *uses;
+        return variable;
+    }
+    return {};
+}
+#endif
+
+std::optional<WrittenVariable> variableAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<WrittenVariable> variable = cxxVariableAt(interface))
+        return variable;
+#endif
+    return builtinVariableAt(interface);
+}
+
 /*!
   Converts the selected variable to a pointer if it is a stack variable or reference, or vice versa.
   Activates on variable declarations.
@@ -448,7 +779,7 @@ class ConvertFromAndToPointer : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const std::optional<WrittenVariable> variable = builtinVariableAt(interface);
+        const std::optional<WrittenVariable> variable = variableAt(interface);
         if (!variable)
             return;
 
