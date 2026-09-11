@@ -156,6 +156,67 @@ void TypeHierarchyBuilderTest::test_data()
             "      D\n"
             "    C2\n"
             );
+
+    // A base named through an alias is the class it stands for, which is
+    // what followTypedef is for and what nothing pinned before.
+    QTest::newRow("through-a-typedef")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "class A {};\n"
+                            "typedef A AA;\n"
+                            "using AAA = AA;\n"
+                            "class B : public AA {};\n"
+                            "class C : public AAA {};\n"))
+        << QString::fromLatin1("A\n  B\n  C\n");
+
+    QTest::newRow("in-a-namespace")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "namespace N {\n"
+                            "class A {};\n"
+                            "class B : public A {};\n"
+                            "}\n"
+                            "class C : public N::A {};\n"))
+        << QString::fromLatin1("A\n  B\n  C\n");
+
+    // Two classes of one name are two classes: what derives from the one in
+    // the namespace does not derive from the one outside it.
+    QTest::newRow("a-name-that-means-something-else-elsewhere")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "class A {};\n"
+                            "namespace N {\n"
+                            "class A {};\n"
+                            "class B : public A {};\n"
+                            "}\n"
+                            "class C : public A {};\n"))
+        << QString::fromLatin1("A\n  C\n");
+
+    // A class with a base of its own besides the one being asked about,
+    // which is what the cache of other bases is about.
+    QTest::newRow("a-class-with-another-base-as-well")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "class A {};\n"
+                            "class Other {};\n"
+                            "class B : public Other, public A {};\n"))
+        << QString::fromLatin1("A\n  B\n");
+
+    // How a class inherits says nothing about whether it derives.
+    QTest::newRow("private-inheritance")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "class A {};\n"
+                            "class B : private A {};\n"
+                            "class C : protected A {};\n"))
+        << QString::fromLatin1("A\n  B\n  C\n");
+
+    QTest::newRow("a-template-deriving-from-it")
+        << (QList<CppTestDocument>()
+            << CppTestDocument("a.h",
+                            "class A {};\n"
+                            "template<typename T> class B : public A {};\n"))
+        << QString::fromLatin1("A\n  B\n");
 }
 
 void TypeHierarchyBuilderTest::test()
