@@ -1762,6 +1762,66 @@ cxx::UnqualifiedIdAST *calledNameOf(cxx::ExpressionAST *expression)
 
 } // namespace
 
+QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsAt(
+    int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    const auto holds = [](cxx::AST *node, cxx::SourceLocation what) {
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return what.index() >= first && what.index() < last;
+    };
+
+    // Innermost wins: a nested class's members are its own.
+    cxx::ClassSpecifierAST *cls = nullptr;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+            specifier && holds(specifier, location)) {
+            cls = specifier;
+        }
+    }
+    if (!cls)
+        return {};
+
+    QList<MemberFunction> functions;
+    for (auto *member : cxx::ListView{cls->declarationList}) {
+        // A template member is declared under its template.
+        cxx::DeclarationAST *declaration = member;
+        while (auto * const templated = dynamic_cast<cxx::TemplateDeclarationAST *>(declaration))
+            declaration = templated->declaration;
+
+        auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
+        if (!simple)
+            continue;
+        for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
+            auto * const function = dynamic_cast<cxx::FunctionSymbol *>(declared->symbol);
+            if (!function || !declared->declarator)
+                continue;
+            // Defined right here, so its definition is where its
+            // declaration is and there is nothing to put in order.
+            if (function->definition() == function)
+                continue;
+
+            const cxx::SourceLocation at
+                = d->nameLocationOfDeclarator(declared->declarator);
+            if (!at || d->unit.tokenAt(at).macroGenerated())
+                continue;
+
+            const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+            functions.append({qualifiedNameOf(function),
+                              int(d->parameterCountOf(function)),
+                              int(position.line), int(position.column)});
+        }
+    }
+    return functions;
+}
+
 CxxFrontendDocument::LiteralInAFunction CxxFrontendDocument::literalInAFunctionAt(
     int line, int column) const
 {

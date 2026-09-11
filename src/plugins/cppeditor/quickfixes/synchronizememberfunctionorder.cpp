@@ -16,6 +16,12 @@
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 
+#include <utils/textutils.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
+
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -324,6 +330,61 @@ QList<MemberFunctionDeclaration> builtinMemberFunctionsAt(
     return declarations;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same, off the cxx-frontend model, which reads the files itself and so
+// has every answer before the fix is performed.
+//
+// Handed over through the event loop even so. The callers of this seam are
+// written for an answer that arrives later -- the built-in front end forces
+// queued execution for the same reason -- and one that arrives while
+// perform() is still running is an answer nobody is listening for yet.
+FindTheDefinitions modelFindTheDefinitions(const CppQuickFixInterface &interface,
+                                           const QList<MemberFunctionDeclaration> &declarations)
+{
+    QList<CxxFrontendDocument::MemberFunction> asked;
+    for (const MemberFunctionDeclaration &declaration : declarations) {
+        asked.append({declaration.name, declaration.parameterCount,
+                      declaration.at.line, declaration.at.column});
+    }
+
+    return [snapshot = interface.snapshot(), filePath = interface.filePath(), asked]
+        (std::function<void(const Definitions &)> whenDone) {
+        const QList<CxxFrontendFunctionDeclaration> defined = cxxFrontendDefinitionsOf(
+            snapshot, CppModelManager::workingCopy(), filePath, asked);
+
+        Definitions definitions;
+        for (int i = 0; i < defined.size(); ++i) {
+            const CxxFrontendFunctionDeclaration &where = defined.at(i);
+            if (!where.isValid() || !where.isDefinition)
+                continue;
+            definitions.append({i, where.filePath,
+                                {where.nameLine, where.nameColumn},
+                                {where.startLine, where.startColumn},
+                                {where.endLine, where.endColumn}});
+        }
+
+        const auto hand = [whenDone, definitions] { whenDone(definitions); };
+        QMetaObject::invokeMethod(CppModelManager::instance(), hand, Qt::QueuedConnection);
+    };
+}
+#endif
+
+// Which front end answered the declarations has to decide which one looks
+// for the definitions: the two lists are read together, and a declaration
+// is only an index into the first of them.
+FindTheDefinitions findTheDefinitions(const CppQuickFixInterface &interface,
+                                       const QList<MemberFunctionDeclaration> &declarations,
+                                       bool fromTheModel)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (fromTheModel)
+        return modelFindTheDefinitions(interface, declarations);
+#else
+    Q_UNUSED(fromTheModel)
+#endif
+    return builtinFindTheDefinitions(interface, declarations);
+}
+
 //! Ensures relative order of member function implementations is the same as declaration order.
 class SynchronizeMemberFunctionOrder : public CppQuickFixFactory
 {
@@ -335,12 +396,33 @@ public:
 private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+        const QList<MemberFunctionDeclaration> fromTheModel = [&] {
+#ifdef QTC_WITH_CXX_FRONTEND
+            const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
+                interface.textDocument(), interface.position());
+            const QList<CxxFrontendDocument::MemberFunction> found
+                = cxxFrontendMemberFunctionsAt(interface.filePath(), at.line, at.column + 1);
+            QList<MemberFunctionDeclaration> declarations;
+            for (const CxxFrontendDocument::MemberFunction &function : found) {
+                const QStringList parts = function.name.split("::", Qt::SkipEmptyParts);
+                declarations.append({function.name,
+                                     parts.isEmpty() ? QString() : parts.last(),
+                                     function.parameterCount,
+                                     {function.line, function.column}});
+            }
+            return declarations;
+#else
+            return QList<MemberFunctionDeclaration>();
+#endif
+        }();
+
         const QList<MemberFunctionDeclaration> declarations
-            = builtinMemberFunctionsAt(interface);
+            = fromTheModel.isEmpty() ? builtinMemberFunctionsAt(interface) : fromTheModel;
         if (declarations.isEmpty())
             return;
         result << new SynchronizeMemberFunctionOrderOp(
-            interface, declarations, builtinFindTheDefinitions(interface, declarations));
+            interface, declarations,
+            findTheDefinitions(interface, declarations, !fromTheModel.isEmpty()));
     }
 };
 

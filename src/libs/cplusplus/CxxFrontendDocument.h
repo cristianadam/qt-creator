@@ -488,6 +488,26 @@ public:
     };
     QList<Occurrence> occurrencesOf(const QString &name) const;
 
+    // The member functions the class written around a position declares
+    // without defining there, in the order they are written -- which is
+    // what "put the definitions in the same order" compares against.
+    //
+    // A function a macro's replacement declared is not among them: nobody
+    // wrote it where it stands, so there is no order to keep it in. Neither
+    // is one defined inside the class, which is already where its
+    // declaration is.
+    struct MemberFunction
+    {
+        QString name; // written out in full, the scopes included
+        int parameterCount = 0;
+
+        // Where its own name stands, one-based, which is what a search for
+        // its definition starts from.
+        int line = 0;
+        int column = 0;
+    };
+    QList<MemberFunction> memberFunctionsAt(int line, int column) const;
+
     // A literal written inside a function, which "extract it as a parameter"
     // works on: its type, and every place that function writes the same
     // literal -- they all say the same thing, which is what makes them one

@@ -204,6 +204,9 @@ private slots:
     void noSignatureOffAFunction();
     void signatureOfADeclarationInAHeader();
 
+    void memberFunctionsOfAClass_data();
+    void memberFunctionsOfAClass();
+
     void literalInAFunction_data();
     void literalInAFunction();
     void noLiteralToExtract_data();
@@ -1222,6 +1225,75 @@ void tst_cxxfrontenddocument::signatureOfADeclarationInAHeader()
         = document.signatureAt({{}, 3, 9}, {"h.h", 2, 18});
     QVERIFY(back.isValid());
     QCOMPARE(back.writeParameter(0, "t"), QString("N::T t"));
+}
+
+// The member functions a class declares without defining, in the order they
+// are written: what putting their definitions in the same order works from.
+void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("declarations in the order they are written")
+        << QByteArray("struct $S {\n"
+                      "    void b();\n"
+                      "    int a(int, int);\n"
+                      "};\n")
+        << QStringList({"S::b/0 @2:10", "S::a/2 @3:9"});
+
+    // Defined here, so its definition is already where its declaration is.
+    QTest::newRow("a function defined inside the class")
+        << QByteArray("struct $S {\n"
+                      "    void b() {}\n"
+                      "    void c();\n"
+                      "};\n")
+        << QStringList("S::c/0 @3:10");
+
+    QTest::newRow("a template member")
+        << QByteArray("struct $S {\n"
+                      "    template<typename T> void t(T);\n"
+                      "};\n")
+        << QStringList("S::t/1 @2:31");
+
+    // Nobody wrote it where it stands, so there is no order to keep it in.
+    QTest::newRow("a function a macro declared")
+        << QByteArray("#define DECL void m();\n"
+                      "struct $S {\n"
+                      "    DECL\n"
+                      "    void n();\n"
+                      "};\n")
+        << QStringList("S::n/0 @4:10");
+
+    QTest::newRow("the innermost class wins")
+        << QByteArray("struct Outer {\n"
+                      "    void o();\n"
+                      "    struct $Inner { void i(); };\n"
+                      "};\n")
+        << QStringList("Outer::Inner::i/0 @3:25");
+
+    QTest::newRow("a position in no class")
+        << QByteArray("$void f();\n") << QStringList();
+}
+
+void tst_cxxfrontenddocument::memberFunctionsOfAClass()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    const QList<CxxFrontendDocument::MemberFunction> functions
+        = document.memberFunctionsAt(positions.first().line, positions.first().column);
+    for (const CxxFrontendDocument::MemberFunction &function : functions) {
+        described.append(QString("%1/%2 @%3:%4").arg(function.name)
+                             .arg(function.parameterCount)
+                             .arg(function.line).arg(function.column));
+    }
+    QCOMPARE(described, expected);
 }
 
 // A literal inside a function: its type, and every place that function

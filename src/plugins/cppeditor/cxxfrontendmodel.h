@@ -217,6 +217,14 @@ struct CxxFrontendFunctionDeclaration
 
     int startLine = 0;
     int startColumn = 0;
+
+    // And where it stops, so that the whole of it can be moved: the
+    // template it is declared under is part of it, the documentation
+    // written above it is not -- that is a question about comments, and
+    // commentsForDeclaration() answers it.
+    int endLine = 0;
+    int endColumn = 0;
+
     bool isDefinition = false;
 
     // Just before the ')' of its parameter list, which is where another
@@ -241,6 +249,18 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// Where each of \a functions is defined, in the same order, with an invalid
+// answer where one is not defined anywhere the search reached.
+//
+// Asked of all of them at once rather than one at a time, because reading a
+// file is the expensive part: the files are read once each and asked about
+// every name still outstanding. This file's own translation unit first, which
+// already holds a function defined in the header it is declared in.
+QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath,
+    const QList<CPlusPlus::CxxFrontendDocument::MemberFunction> &functions);
+
 // Where the function at a position is *declared*, when that is somewhere
 // other than the position itself -- which is what appending a parameter to a
 // definition has to change as well.
@@ -255,6 +275,15 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
 // place there is.
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, int line, int column);
+
+// The member functions the class at \a line and \a column of \a filePath,
+// both counted from one, declares without defining there.
+//
+// Empty where the model has no such file and where the position is in no
+// class, which a caller cannot tell apart -- and need not: with nothing to
+// put in order there is nothing to offer either way.
+QList<CPlusPlus::CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const Utils::FilePath &filePath, int line, int column);
 
 // A literal at \a line and \a column of \a filePath, both counted from one,

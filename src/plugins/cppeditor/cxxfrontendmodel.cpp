@@ -21,6 +21,7 @@
 #include <cxx/names.h>
 #include <cxx/translation_unit.h>
 
+#include <utils/algorithm.h>
 #include <utils/environment.h>
 
 #include <QHash>
@@ -1186,6 +1187,18 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
                                  declared.column);
 }
 
+QList<CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return {};
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return {};
+    return document->memberFunctionsAt(line, column);
+}
+
 std::optional<CxxFrontendDocument::LiteralInAFunction> cxxFrontendLiteralInAFunctionAt(
     const FilePath &filePath, int line, int column)
 {
@@ -1222,6 +1235,49 @@ std::optional<CxxFrontendDocument::Switch> cxxFrontendSwitchAt(
     return document->switchAt(line, column);
 }
 
+namespace {
+
+// The function declared at a place in a document already in hand, which is
+// what the batch below has: reading a file is the expensive part of all of
+// this, and it must not happen once per name.
+CxxFrontendFunctionDeclaration functionIn(const CxxFrontendDocument &document,
+                                          const FilePath &filePath, int line, int column)
+{
+    const QList<cxx::AST *> path = cxxAstPathAt(document, line, column);
+    if (path.isEmpty())
+        return {};
+
+    const DeclarationAtAPlace function = declarationOnPath(path, false);
+    if (!function.isValid() || !function.name())
+        return {};
+
+    bool isParameter = false;
+    cxx::AST * const outermost = declarationAround(path, &isParameter);
+    if (!outermost)
+        return {};
+
+    const CxxAstRange name = cxxAstRangeOf(document, unqualifiedNameOf(function.name()));
+    const CxxAstRange start = cxxAstRangeOf(document, outermost);
+    const CxxAstRange rparen = cxxTokenRangeAt(document, function.parameters->rparenLoc);
+    if (!name.isValid() || !start.isValid() || !rparen.isValid())
+        return {};
+
+    const auto * const clause = function.parameters->parameterDeclarationClause;
+    const bool hasParameters = clause && clause->parameterDeclarationList
+                               && clause->parameterDeclarationList->value;
+
+    return CxxFrontendFunctionDeclaration{filePath,
+                                          name.startLine, name.startColumn,
+                                          name.endLine, name.endColumn,
+                                          start.startLine, start.startColumn,
+                                          start.endLine, start.endColumn,
+                                          function.isDefinition,
+                                          rparen.startLine, rparen.startColumn,
+                                          hasParameters};
+}
+
+} // namespace
+
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const FilePath &filePath, int line, int column)
@@ -1244,38 +1300,76 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     if (!holding.document)
         return std::nullopt;
 
-    const QList<cxx::AST *> path = cxxAstPathAt(*holding.document, line, column);
-    if (path.isEmpty())
-        return CxxFrontendFunctionDeclaration();
+    return functionIn(*holding.document, filePath, line, column);
+}
 
-    const DeclarationAtAPlace function = declarationOnPath(path, false);
-    if (!function.isValid() || !function.name())
-        return CxxFrontendFunctionDeclaration();
+QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const QList<CxxFrontendDocument::MemberFunction> &functions)
+{
+    QList<CxxFrontendFunctionDeclaration> found(functions.size());
+    if (!cxxFrontendModelRequested() || functions.isEmpty())
+        return found;
 
-    bool isParameter = false;
-    cxx::AST * const outermost = declarationAround(path, &isParameter);
-    if (!outermost)
-        return CxxFrontendFunctionDeclaration();
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return found;
+    const CxxFrontendDocument * const own = model->document(filePath.toFSPathString());
+    if (!own)
+        return found;
 
-    const CxxAstRange name = cxxAstRangeOf(*holding.document,
-                                           unqualifiedNameOf(function.name()));
-    const CxxAstRange start = cxxAstRangeOf(*holding.document, outermost);
-    const CxxAstRange rparen = cxxTokenRangeAt(*holding.document,
-                                               function.parameters->rparenLoc);
-    if (!name.isValid() || !start.isValid() || !rparen.isValid())
-        return CxxFrontendFunctionDeclaration();
+    // This file's own translation unit first: a function defined in the
+    // header that declares it, or in a file that reads that header, is
+    // already here.
+    QList<int> left;
+    for (int i = 0; i < functions.size(); ++i) {
+        const CxxFrontendDocument::Counterpart counterpart
+            = own->counterpartAt(functions.at(i).line, functions.at(i).column);
+        if (counterpart.isValid() && counterpart.isDefinition) {
+            found[i] = functionIn(*own, FilePath::fromUserInput(counterpart.filePath),
+                                  counterpart.line, counterpart.column);
+            continue;
+        }
+        if (counterpart.namesAFunction())
+            left.append(i);
+    }
 
-    const auto *clause = function.parameters->parameterDeclarationClause;
-    const bool hasParameters = clause && clause->parameterDeclarationList
-                               && clause->parameterDeclarationList->value;
+    // The rest are in other files, and each file is read once and asked
+    // about every name still outstanding: reading it is the expensive part,
+    // and doing that once per name is what makes this unusable.
+    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+        if (left.isEmpty())
+            break;
+        if (candidate == filePath)
+            continue;
 
-    return CxxFrontendFunctionDeclaration{filePath,
-                                          name.startLine, name.startColumn,
-                                          name.endLine, name.endColumn,
-                                          start.startLine, start.startColumn,
-                                          function.isDefinition,
-                                          rparen.startLine, rparen.startColumn,
-                                          hasParameters};
+        const bool worthReading = Utils::anyOf(left, [&](int i) {
+            return mayWrite(builtinSnapshot, candidate, functions.at(i).name);
+        });
+        if (!worthReading)
+            continue;
+
+        const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, candidate,
+                                                 {}, {});
+        if (!holding.document)
+            continue;
+
+        QList<int> stillLeft;
+        for (const int i : std::as_const(left)) {
+            const CxxFrontendDocument::Counterpart definition
+                = holding.document->definitionOf(functions.at(i).name,
+                                                 functions.at(i).parameterCount);
+            if (!definition.isValid()) {
+                stillLeft.append(i);
+                continue;
+            }
+            found[i] = functionIn(*holding.document, candidate, definition.line,
+                                  definition.column);
+        }
+        left = stillLeft;
+    }
+
+    return found;
 }
 
 std::optional<QList<CxxFrontendComment>> cxxFrontendCommentsIn(
