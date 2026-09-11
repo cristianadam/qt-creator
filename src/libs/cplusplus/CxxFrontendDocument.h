@@ -806,6 +806,46 @@ public:
     // type. Empty in the same cases typeAt() is.
     QString declarationOfTypeAt(int line, int column, const QString &name) const;
 
+    // The type of the local declared at \a line and \a column, written for
+    // the place \a writtenAt: what a function handing that local back has
+    // to put in front of its own name, which may stand somewhere that
+    // needs more of the type's path than where the local does.
+    //
+    // Empty where nothing is declared at the position -- a name that
+    // declares something is not a use of it, so this asks the declaration
+    // rather than what stands there.
+    QString typeOfLocalAt(int line, int column, const Place &writtenAt) const;
+
+    // The function written around a position, as a reader about to write
+    // another one beside it needs it.
+    struct EnclosingFunction
+    {
+        QString name; // as written, without its scopes
+        Place namePlace;
+
+        // The whole definition: what the new one is written in front of.
+        Extent definition;
+
+        bool isConst = false;
+
+        // The class it is a member of, where it is one: what stands in
+        // front of its name today -- "NS::C::", which the new function
+        // writes as well -- and where that class writes its own name, so
+        // that a declaration can be put in its body.
+        bool isMemberFunction = false;
+        Extent writtenQualifier;
+        Place classNamePlace;
+
+        // Whether the definition is written inside the class's own body,
+        // where a second definition needs no qualification at all and the
+        // declaration it would be given is a second one. Nothing reads
+        // this yet but to hand back.
+        bool isWrittenInAClass = false;
+
+        bool isValid() const { return definition.isValid(); }
+    };
+    EnclosingFunction enclosingFunctionAt(int line, int column) const;
+
     // What could be written where Config asked. The parser works this out on
     // its way past the position, so a document built without asking has
     // nothing here.

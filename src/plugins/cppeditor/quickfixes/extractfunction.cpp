@@ -22,6 +22,16 @@
 
 #include <functional>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+
+#include <cxx/ast.h>
+#include <cxx/names.h>
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
@@ -657,6 +667,388 @@ std::optional<ExtractionSite> builtinExtractionSite(const CppQuickFixInterface &
     return site;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The statements the selection covers, as the cxx-frontend model reads
+// them, and the declarations seen on the way. The rules are the built-in
+// analyser's, said over this tree: a statement is taken whole or not at
+// all, and a return inside what is taken means there is nothing to offer.
+class ModelExtractionAnalyser
+{
+public:
+    ModelExtractionAnalyser(const CxxFrontendDocument &document,
+                            const CppRefactoringFilePtr &file, int selStart, int selEnd)
+        : m_document(document), m_file(file), m_selStart(selStart), m_selEnd(selEnd)
+    {}
+
+    bool operator()(cxx::FunctionDefinitionAST *definition)
+    {
+        visit(bodyOf(definition->functionBody));
+        if (!m_failed && m_extractionStart == m_extractionEnd)
+            m_failed = true;
+        return !m_failed;
+    }
+
+    // What a declaration of each name looks like where it is written
+    // today, for the declarations this walk saw.
+    QHash<QString, QString> m_knownDecls;
+    int m_extractionStart = 0;
+    int m_extractionEnd = 0;
+
+    void collectDeclaration(cxx::DeclarationAST *declaration)
+    {
+        auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
+        if (!simple || !simple->declSpecifierList || !simple->initDeclaratorList)
+            return;
+        const QString specifiers = textFromTo(simple->firstSourceLocation(),
+                                              endOf(lastOf(simple->declSpecifierList)));
+        for (auto *declared : cxx::ListView{simple->initDeclaratorList})
+            collectDeclarator(specifiers, declared ? declared->declarator : nullptr);
+    }
+
+    // A parameter is declared the same way, with its specifiers written in
+    // front of the one declarator rather than of a list of them.
+    void collectParameter(cxx::ParameterDeclarationAST *parameter)
+    {
+        if (!parameter || !parameter->typeSpecifierList)
+            return;
+        collectDeclarator(textFromTo(parameter->firstSourceLocation(),
+                                     endOf(lastOf(parameter->typeSpecifierList))),
+                          parameter->declarator);
+    }
+
+private:
+    template<typename T>
+    static cxx::AST *lastOf(cxx::List<T *> *list)
+    {
+        cxx::AST *last = nullptr;
+        for (auto *value : cxx::ListView{list}) {
+            if (value)
+                last = value;
+        }
+        return last;
+    }
+
+    static cxx::StatementAST *bodyOf(cxx::FunctionBodyAST *body)
+    {
+        auto * const compound = dynamic_cast<cxx::CompoundStatementFunctionBodyAST *>(body);
+        return compound ? compound->statement : nullptr;
+    }
+
+    static cxx::SourceLocation endOf(cxx::AST *node)
+    {
+        return node ? node->lastSourceLocation() : cxx::SourceLocation{};
+    }
+
+    int startOf(const CxxAstRange &range) const
+    {
+        return m_file->position(range.startLine, range.startColumn);
+    }
+
+    int endOf(const CxxAstRange &range) const
+    {
+        return m_file->position(range.endLine, range.endColumn);
+    }
+
+    QString textFromTo(cxx::SourceLocation first, cxx::SourceLocation last) const
+    {
+        const CxxAstRange start = cxxTokenRangeAt(m_document, first);
+        if (!start.isValid() || !last || last.index() == 0)
+            return {};
+        // A node's last location is the one after it, as cxx keeps them.
+        const CxxAstRange end = cxxTokenRangeAt(m_document, cxx::SourceLocation{last.index() - 1});
+        if (!end.isValid())
+            return {};
+        return m_file->textOf(startOf(start), endOf(end));
+    }
+
+    void collectDeclarator(const QString &specifiers, cxx::DeclaratorAST *declarator)
+    {
+        if (specifiers.isEmpty() || !declarator || !declarator->coreDeclarator)
+            return;
+        auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator);
+        if (!id || !id->unqualifiedId)
+            return;
+        auto * const name = dynamic_cast<cxx::NameIdAST *>(id->unqualifiedId);
+        if (!name || !name->identifier)
+            return;
+
+        // Up to the core: an initializer or an array extent follows it,
+        // and neither belongs in a declaration written somewhere else.
+        const QString declaratorText = textFromTo(declarator->firstSourceLocation(),
+                                                  endOf(declarator->coreDeclarator));
+        if (declaratorText.isEmpty())
+            return;
+        QString completeDecl = specifiers;
+        if (!declaratorText.contains(QLatin1Char(' ')))
+            completeDecl.append(QLatin1Char(' ') + declaratorText);
+        else
+            completeDecl.append(declaratorText);
+        m_knownDecls.insert(QString::fromStdString(name->identifier->name()), completeDecl);
+    }
+
+    void statement(cxx::StatementAST *stmt)
+    {
+        if (!stmt || m_done)
+            return;
+        const CxxAstRange range = cxxAstRangeOf(m_document, stmt);
+        if (!range.isValid())
+            return;
+        const int stmtStart = startOf(range);
+        const int stmtEnd = endOf(range);
+
+        if (stmtStart >= m_selEnd || (m_extractionStart && stmtEnd > m_selEnd)) {
+            m_done = true;
+            return;
+        }
+
+        if (stmtStart >= m_selStart && !m_extractionStart)
+            m_extractionStart = stmtStart;
+        if (stmtEnd > m_extractionEnd && m_extractionStart)
+            m_extractionEnd = stmtEnd;
+
+        visit(stmt);
+    }
+
+    void visit(cxx::StatementAST *stmt)
+    {
+        if (!stmt || m_done)
+            return;
+
+        if (auto * const compound = dynamic_cast<cxx::CompoundStatementAST *>(stmt)) {
+            for (auto *inner : cxx::ListView{compound->statementList}) {
+                statement(inner);
+                if (m_done)
+                    break;
+            }
+            return;
+        }
+        if (auto * const ifStatement = dynamic_cast<cxx::IfStatementAST *>(stmt)) {
+            statement(ifStatement->statement);
+            if (!m_done)
+                statement(ifStatement->elseStatement);
+            return;
+        }
+        if (auto * const loop = dynamic_cast<cxx::WhileStatementAST *>(stmt)) {
+            statement(loop->statement);
+            return;
+        }
+        if (auto * const loop = dynamic_cast<cxx::DoStatementAST *>(stmt)) {
+            statement(loop->statement);
+            return;
+        }
+        if (auto * const loop = dynamic_cast<cxx::ForStatementAST *>(stmt)) {
+            statement(loop->initializer);
+            if (!m_done)
+                statement(loop->statement);
+            return;
+        }
+        if (auto * const loop = dynamic_cast<cxx::ForRangeStatementAST *>(stmt)) {
+            statement(loop->statement);
+            return;
+        }
+        if (auto * const tried = dynamic_cast<cxx::TryBlockStatementAST *>(stmt)) {
+            statement(tried->statement);
+            for (auto *handler : cxx::ListView{tried->handlerList}) {
+                if (handler)
+                    statement(handler->statement);
+                if (m_done)
+                    break;
+            }
+            return;
+        }
+
+        // The declarations seen before the extraction or inside it may be
+        // needed as a parameter or as what is handed back, and keeping
+        // what somebody wrote is the point of collecting them.
+        if (auto * const declaration = dynamic_cast<cxx::DeclarationStatementAST *>(stmt)) {
+            collectDeclaration(declaration->declaration);
+            return;
+        }
+
+        if (dynamic_cast<cxx::ReturnStatementAST *>(stmt)) {
+            if (m_extractionStart) {
+                m_done = true;
+                m_failed = true;
+            }
+            return;
+        }
+    }
+
+    const CxxFrontendDocument &m_document;
+    const CppRefactoringFilePtr m_file;
+    const int m_selStart;
+    const int m_selEnd;
+    bool m_done = false;
+    bool m_failed = false;
+};
+
+// What the cxx-frontend model says about extracting the selection.
+std::optional<ExtractionSite> modelExtractionSite(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return std::nullopt;
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QTextCursor cursor = file->cursor();
+    int selStart = cursor.selectionStart();
+    int selEnd = cursor.selectionEnd();
+    if (selStart > selEnd)
+        std::swap(selStart, selEnd);
+
+    int line = 0;
+    int column = 0;
+    file->lineAndColumn(selStart, &line, &column);
+    const CxxFrontendDocument::EnclosingFunction function
+        = document->enclosingFunctionAt(line, column);
+    if (!function.isValid() || function.name.isEmpty())
+        return std::nullopt;
+
+    // A function defined inside its class would have the new one written
+    // into the class body, and the declaration put there as well would be
+    // a second declaration of the same thing. Left to the other model,
+    // which is what decides that today.
+    if (function.isWrittenInAClass)
+        return std::nullopt;
+
+    // The definition itself, which the walk over the statements needs.
+    cxx::FunctionDefinitionAST *definition = nullptr;
+    for (cxx::AST * const node : cxxAstPathAt(*document, line, column)) {
+        if (auto * const found = dynamic_cast<cxx::FunctionDefinitionAST *>(node))
+            definition = found;
+    }
+    if (!definition || !definition->declarator || cxxAstWasReadWithErrors(*document, definition))
+        return std::nullopt;
+
+    ModelExtractionAnalyser analyser(*document, file, selStart, selEnd);
+    if (!analyser(definition))
+        return std::nullopt;
+
+    // The parameters of the function it comes out of are declarations too,
+    // and one of them used inside makes it a parameter of the new function
+    // as well.
+    QSet<QString> referenceParameters;
+    for (auto *chunk : cxx::ListView{definition->declarator->declaratorChunkList}) {
+        auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+        if (!parameters || !parameters->parameterDeclarationClause)
+            continue;
+        for (auto *parameter :
+             cxx::ListView{parameters->parameterDeclarationClause->parameterDeclarationList}) {
+            if (!parameter || !parameter->identifier)
+                continue;
+            analyser.collectParameter(parameter);
+            referenceParameters.insert(QString::fromStdString(parameter->identifier->name()));
+        }
+    }
+
+    // What the extracted function takes and what it hands back, read off
+    // where each local of this function is written.
+    QString returnValue;
+    int returnValueLine = 0;
+    int returnValueColumn = 0;
+    QList<QPair<QString, QString>> relevantDecls;
+    for (const CxxFrontendDocument::Local &local : document->localsAt(line, column)) {
+        bool usedBeforeExtraction = false;
+        bool usedAfterExtraction = false;
+        bool usedInsideExtraction = false;
+        for (const CxxFrontendDocument::Occurrence &place : local.places) {
+            const int position = file->position(place.line, place.column);
+            if (position < analyser.m_extractionStart)
+                usedBeforeExtraction = true;
+            else if (position >= analyser.m_extractionEnd)
+                usedAfterExtraction = true;
+            else
+                usedInsideExtraction = true;
+        }
+
+        if ((usedBeforeExtraction && usedInsideExtraction)
+            || (usedInsideExtraction && referenceParameters.contains(local.name))) {
+            if (!analyser.m_knownDecls.contains(local.name))
+                return std::nullopt;
+            relevantDecls.push_back({local.name, analyser.m_knownDecls.value(local.name)});
+        }
+
+        // We assume that the first use of a local corresponds to its declaration.
+        if (usedInsideExtraction && usedAfterExtraction && !usedBeforeExtraction) {
+            if (!returnValue.isEmpty())
+                return std::nullopt; // Would require multiple returns.
+            if (!analyser.m_knownDecls.contains(local.name) || local.places.isEmpty())
+                return std::nullopt;
+            // The return, if any, is stored as the first item in the list.
+            relevantDecls.push_front({local.name, analyser.m_knownDecls.value(local.name)});
+            returnValue = local.name;
+            returnValueLine = local.places.first().line;
+            returnValueColumn = local.places.first().column;
+        }
+    }
+
+    ExtractionSite site;
+    site.extractionStart = analyser.m_extractionStart;
+    site.extractionEnd = analyser.m_extractionEnd;
+    site.functionStart = file->position(function.definition.startLine,
+                                        function.definition.startColumn);
+    site.functionName = function.name;
+    site.functionPosition = {function.namePlace.line, function.namePlace.column - 1};
+    site.functionIsConst = function.isConst;
+    site.relevantDeclarations = relevantDecls;
+    site.handsBackAValue = !returnValue.isEmpty();
+
+    // The type of what is handed back, written for each of the two places
+    // it is written at: in front of the definition's name, which stands
+    // outside the class, and in the class, where what the class declares
+    // needs nothing in front of it.
+    if (site.handsBackAValue) {
+        site.returnTypeInTheDefinition = document->typeOfLocalAt(
+            returnValueLine, returnValueColumn,
+            {{}, function.definition.startLine, function.definition.startColumn});
+        // Inside the class, where what the class itself declares needs
+        // nothing in front of it. Where the declaration's text stands is
+        // no answer to that: a member is defined outside its class as a
+        // rule, and there the class's own names need their path.
+        site.returnTypeInTheClass
+            = function.isMemberFunction
+                  ? document->typeOfLocalAt(returnValueLine, returnValueColumn,
+                                            function.classNamePlace)
+                  : site.returnTypeInTheDefinition;
+        if (site.returnTypeInTheDefinition.isEmpty() || site.returnTypeInTheClass.isEmpty())
+            return std::nullopt;
+    }
+
+    // What the definition writes in front of its own name is what the new
+    // one writes too: nothing is printed, so the author's spelling stands.
+    if (function.isMemberFunction) {
+        site.isMemberFunction = true;
+        site.classFile = function.classNamePlace.filePath.isEmpty()
+                             ? interface.filePath()
+                             : FilePath::fromUserInput(function.classNamePlace.filePath);
+        site.classLine = function.classNamePlace.line;
+        site.classColumn = function.classNamePlace.column;
+        if (function.writtenQualifier.isValid()) {
+            site.classQualification
+                = file->textOf(file->position(function.writtenQualifier.startLine,
+                                              function.writtenQualifier.startColumn),
+                               file->position(function.writtenQualifier.endLine,
+                                              function.writtenQualifier.endColumn));
+        }
+    }
+
+    return site;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+// What extracting the selection comes to, read by whichever front end can
+// read it.
+std::optional<ExtractionSite> extractionSite(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<ExtractionSite> onTheModel = modelExtractionSite(interface))
+        return onTheModel;
+#endif
+    return builtinExtractionSite(interface);
+}
+
 //! Extracts the selected code and puts it to a function
 class ExtractFunction : public CppQuickFixFactory
 {
@@ -671,7 +1063,7 @@ class ExtractFunction : public CppQuickFixFactory
         if (!interface.currentFile()->cursor().hasSelection())
             return;
 
-        const std::optional<ExtractionSite> site = builtinExtractionSite(interface);
+        const std::optional<ExtractionSite> site = extractionSite(interface);
         if (!site || !site->isValid())
             return;
 

@@ -220,6 +220,10 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void enclosingFunction_data();
+    void enclosingFunction();
+    void typeOfALocal_data();
+    void typeOfALocal();
     void usingDirectiveAt_data();
     void usingDirectiveAt();
     void usingDirectives_data();
@@ -1590,6 +1594,167 @@ void tst_cxxfrontenddocument::partsOfAClass()
                              .arg(part.endLine).arg(part.endColumn));
     }
     QCOMPARE(described, expected);
+}
+
+// The function written around a position, as a reader about to write
+// another one beside it needs it.
+void tst_cxxfrontenddocument::enclosingFunction_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("a free function")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    $g();\n"
+                      "}\n")
+        << QString("f @1:6 1:1-4:2 ");
+
+    QTest::newRow("a const member defined outside its class")
+        << QByteArray("namespace NS {\n"
+                      "class C { void f() const; };\n"
+                      "}\n"
+                      "void NS::C::f() const\n"
+                      "{\n"
+                      "    $g();\n"
+                      "}\n")
+        << QString("f @4:13 4:1-7:2 const NS::C:: @2:7");
+
+    // Written in its class, where a second definition needs no
+    // qualification at all.
+    QTest::newRow("a member defined in its class")
+        << QByteArray("class C {\n"
+                      "    void f() { $g(); }\n"
+                      "};\n")
+        << QString("f @2:10 2:5-2:22 inside  @1:7");
+
+    QTest::newRow("a position in no function") << QByteArray("$int i;\n") << QString();
+}
+
+void tst_cxxfrontenddocument::enclosingFunction()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::EnclosingFunction function
+        = document.enclosingFunctionAt(positions.first().line, positions.first().column);
+    if (expected.isEmpty()) {
+        QVERIFY(!function.isValid());
+        return;
+    }
+    QVERIFY(function.isValid());
+
+    QString described = QString("%1 @%2:%3 %4:%5-%6:%7")
+                            .arg(function.name)
+                            .arg(function.namePlace.line).arg(function.namePlace.column)
+                            .arg(function.definition.startLine)
+                            .arg(function.definition.startColumn)
+                            .arg(function.definition.endLine).arg(function.definition.endColumn);
+    described += function.isConst ? " const" : (function.isWrittenInAClass ? " inside" : "");
+    described += ' ';
+    if (function.writtenQualifier.isValid()) {
+        described += QString::fromUtf8(source).sliced(
+            0, 0); // keep the line count of the source out of the answer
+        const QStringList lines = QString::fromUtf8(source).split('\n');
+        const QString line = lines.at(function.writtenQualifier.startLine - 1);
+        described += line.sliced(function.writtenQualifier.startColumn - 1,
+                                 function.writtenQualifier.endColumn
+                                     - function.writtenQualifier.startColumn);
+    }
+    if (function.isMemberFunction) {
+        described += QString(" @%1:%2").arg(function.classNamePlace.line)
+                         .arg(function.classNamePlace.column);
+    }
+    QCOMPARE(described, expected);
+}
+
+// The type of a local, written for somewhere else: a function handing it
+// back has to say it where its own name stands.
+void tst_cxxfrontenddocument::typeOfALocal_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    // The first marker is the local, the second the place it is written
+    // for.
+    QTest::newRow("an int")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    int $i = 1;\n"
+                      "}\n"
+                      "$")
+        << QString("int");
+
+    QTest::newRow("a class of a namespace, written outside it")
+        << QByteArray("namespace NS {\n"
+                      "class C {};\n"
+                      "void f()\n"
+                      "{\n"
+                      "    C $c;\n"
+                      "}\n"
+                      "}\n"
+                      "$")
+        << QString("NS::C");
+
+    QTest::newRow("the same, written inside the namespace")
+        << QByteArray("namespace NS {\n"
+                      "class C {};\n"
+                      "void f()\n"
+                      "{\n"
+                      "    C $c;\n"
+                      "    $\n"
+                      "}\n"
+                      "}\n")
+        << QString("C");
+
+    // The body of a member defined outside its class hangs off the
+    // definition, not off the declaration the class holds.
+    QTest::newRow("in a member defined outside its class")
+        << QByteArray("namespace NS {\n"
+                      "class C { void f(); };\n"
+                      "}\n"
+                      "void NS::C::f()\n"
+                      "{\n"
+                      "    C $c2;\n"
+                      "}\n"
+                      "$")
+        << QString("NS::C");
+
+    QTest::newRow("a parameter")
+        << QByteArray("void f(const char *$p)\n"
+                      "{\n"
+                      "}\n"
+                      "$")
+        << QString("const char *");
+
+    QTest::newRow("a position that declares nothing")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    int i = 1;\n"
+                      "    $i = 2;\n"
+                      "}\n"
+                      "$")
+        << QString();
+}
+
+void tst_cxxfrontenddocument::typeOfALocal()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 2);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.typeOfLocalAt(positions.first().line, positions.first().column,
+                                    {{}, positions.last().line, positions.last().column}),
+             expected);
 }
 
 // The using directive at the cursor.

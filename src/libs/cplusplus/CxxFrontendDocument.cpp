@@ -3679,6 +3679,131 @@ QString CxxFrontendDocument::declarationOfTypeAt(int line, int column,
         d->config.settings);
 }
 
+QString CxxFrontendDocument::typeOfLocalAt(int line, int column, const Place &writtenAt) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::ScopeSymbol * const global = d->unit.globalScope();
+    if (!location || !global)
+        return {};
+
+    // The local declared there, found by where its name is written: a name
+    // that declares something is not a use of it, so there is nothing at
+    // the position to read a type off. Searched from the top rather than
+    // from the function around the place, because a parameter is written
+    // in front of the body and so stands outside it.
+    cxx::Symbol *local = nullptr;
+    const std::function<void(cxx::ScopeSymbol *)> find = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            if (local)
+                return;
+            if ((dynamic_cast<cxx::ParameterSymbol *>(member)
+                 || dynamic_cast<cxx::VariableSymbol *>(member))
+                && member->location() == location) {
+                local = member;
+                return;
+            }
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::FunctionSymbol *nested : overloadSet->declaredFunctions()) {
+                    find(nested);
+                    // A member defined outside its class keeps its body on
+                    // the definition, while the class holds the
+                    // declaration: the locals are the definition's.
+                    if (cxx::FunctionSymbol * const defined = nested->definition();
+                        defined && defined != nested) {
+                        find(defined);
+                    }
+                }
+                continue;
+            }
+            if (cxx::ScopeSymbol * const inner = member->asScopeSymbol())
+                find(inner);
+        }
+    };
+    find(global);
+    if (!local || !local->type())
+        return {};
+
+    const cxx::SourceLocation there = d->tokenAt(writtenAt.line, writtenAt.column,
+                                                 writtenAt.filePath);
+    return applyStarBinding(fromStd(cxx::to_string(local->type(), "",
+                                                   {.writtenIn = d->scopeWrittenAround(there)})),
+                            d->config.settings);
+}
+
+CxxFrontendDocument::EnclosingFunction CxxFrontendDocument::enclosingFunctionAt(int line,
+                                                                                int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    // The innermost definition the position is in, which is the one a
+    // reader has the cursor in.
+    const QList<cxx::AST *> path = cxxAstPathAt(*this, line, column);
+    cxx::FunctionDefinitionAST *definition = nullptr;
+    int definitionIndex = -1;
+    for (int index = 0; index < path.size(); ++index) {
+        if (auto * const found = dynamic_cast<cxx::FunctionDefinitionAST *>(path.at(index))) {
+            definition = found;
+            definitionIndex = index;
+        }
+    }
+    // A class around the definition rather than one written inside it,
+    // which is what the order on the path says.
+    bool insideAClass = false;
+    for (int index = 0; index < definitionIndex; ++index) {
+        if (dynamic_cast<cxx::ClassSpecifierAST *>(path.at(index)))
+            insideAClass = true;
+    }
+    if (!definition || !definition->symbol || !definition->declarator)
+        return {};
+
+    auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(definition->declarator->coreDeclarator);
+    if (!id || !id->unqualifiedId)
+        return {};
+    const CxxAstRange whole = cxxAstRangeOf(*this, definition);
+    const CxxAstRange name = cxxAstRangeOf(*this, id->unqualifiedId);
+    if (!whole.isValid() || !name.isValid())
+        return {};
+
+    EnclosingFunction answer;
+    answer.name = definition->symbol->name() ? fromStd(cxx::to_string(definition->symbol->name()))
+                                             : QString();
+    answer.namePlace = {{}, name.startLine, name.startColumn};
+    answer.definition = {whole.startLine, whole.startColumn, whole.endLine, whole.endColumn};
+    if (auto * const type = cxx::type_cast<cxx::FunctionType>(definition->symbol->type())) {
+        const cxx::CvQualifiers cv = type->cvQualifiers();
+        answer.isConst = cv == cxx::CvQualifiers::kConst
+                         || cv == cxx::CvQualifiers::kConstVolatile;
+    }
+    answer.isWrittenInAClass = insideAClass;
+
+    // The class it belongs to, which is not the same question as where it
+    // is written: a member is defined outside its class as a rule.
+    cxx::ClassSymbol *cls = nullptr;
+    for (cxx::Symbol *s = definition->symbol->parent(); s && !cls; s = s->parent())
+        cls = dynamic_cast<cxx::ClassSymbol *>(s);
+    if (!cls)
+        return answer;
+
+    const cxx::SourceLocation classNameLocation = d->classBodyNameOf(cls);
+    if (!classNameLocation)
+        return answer;
+    const cxx::SourcePosition classNamePosition = d->unit.tokenStartPosition(classNameLocation);
+
+    answer.isMemberFunction = true;
+    answer.classNamePlace = {d->fileOf(classNameLocation), int(classNamePosition.line),
+                             int(classNamePosition.column)};
+    if (id->nestedNameSpecifier) {
+        const CxxAstRange qualifier = cxxAstRangeOf(*this, id->nestedNameSpecifier);
+        if (qualifier.isValid()) {
+            answer.writtenQualifier = {qualifier.startLine, qualifier.startColumn,
+                                       qualifier.endLine, qualifier.endColumn};
+        }
+    }
+    return answer;
+}
+
 QStringList CxxFrontendDocument::qualifierAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);

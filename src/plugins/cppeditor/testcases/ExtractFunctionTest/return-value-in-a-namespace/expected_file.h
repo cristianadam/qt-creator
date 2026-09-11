@@ -16,5 +16,5 @@ inline NS::C NS::C::extracted()
 void NS::C::f()
 {
     C c2 = extracted();
-    g(c2);
+    C c3 = c2;
 }

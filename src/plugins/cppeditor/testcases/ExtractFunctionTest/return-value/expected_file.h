@@ -7,6 +7,7 @@ inline int extracted()
 
 void f()
 {
+    int j = 0;
     int i = extracted();
-    g(i);
+    j = i;
 }

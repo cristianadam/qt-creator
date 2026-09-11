@@ -6,5 +6,5 @@ class C {
 void NS::C::f()
 {
     @{start}C c2;@{end}
-    g(c2);
+    C c3 = c2;
 }
