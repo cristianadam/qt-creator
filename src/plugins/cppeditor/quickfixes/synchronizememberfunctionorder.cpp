@@ -5,6 +5,7 @@
 
 #include "../cppeditortr.h"
 #include "../cppeditorwidget.h"
+#include "../cppmodelmanager.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
 #include "cppquickfixhelpers.h"
@@ -12,6 +13,11 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <cplusplus/ASTPath.h>
 #include <cplusplus/declarationcomments.h>
+#include <cplusplus/LookupContext.h>
+#include <cplusplus/Overview.h>
+
+#include <utils/algorithm.h>
+#include <utils/qtcassert.h>
 
 #include <QList>
 #include <QHash>
@@ -32,93 +38,237 @@ using namespace Utils;
 namespace CppEditor::Internal {
 namespace {
 
+// A place in a file, both counted from one, as the code models count.
+class Place
+{
+public:
+    int line = 0;
+    int column = 0;
+
+    bool isValid() const { return line > 0; }
+};
+
+// A member function a class declares without defining there, in the order
+// the class declares them -- which is the order this fix puts the
+// definitions into.
+class MemberFunctionDeclaration
+{
+public:
+    QString name;      // written out in full, the scopes included
+    QString shortName; // its own name, which its documentation is found by
+    int parameterCount = 0;
+    Place at;          // where its name stands
+};
+
+// Where one of them is defined, and how much of the file that definition
+// takes up: the template it is written under is part of it, the
+// documentation above it is not -- that is a question about comments, and
+// commentsForDeclaration() answers it.
+class DefinitionOf
+{
+public:
+    int declaration = 0; // an index into the declarations, i.e. their order
+    FilePath filePath;
+    Place at;
+    Place begins;
+    Place ends;
+
+    bool isValid() const { return at.isValid() && begins.isValid() && ends.isValid(); }
+
+    // Which declaration it belongs to is what tells two of them apart: one
+    // definition per declaration, and that is what is being ordered.
+    bool operator==(const DefinitionOf &other) const
+    {
+        return declaration == other.declaration;
+    }
+};
+
+// Finds where each declaration is defined and hands the lot over. A
+// function because the built-in front end answers by following each
+// declaration in turn, which it does on the event loop, while another model
+// reads them off the files it has -- and the rest of this fix, the sorting
+// and the moving, is the same either way.
+using Definitions = QList<DefinitionOf>;
+using FindTheDefinitions = std::function<void(std::function<void(const Definitions &)>)>;
+
+// Puts the definitions of \a declarations into the order the declarations
+// are in, one file at a time.
+void reorder(const QList<MemberFunctionDeclaration> &declarations,
+             const Definitions &definitions)
+{
+    CppRefactoringChanges factory{CppModelManager::snapshot()};
+
+    QHash<FilePath, Definitions> byFile;
+    for (const DefinitionOf &definition : definitions) {
+        if (definition.isValid())
+            byFile[definition.filePath].append(definition);
+    }
+
+    for (auto it = byFile.cbegin(); it != byFile.cend(); ++it) {
+        const CppRefactoringFilePtr file = factory.cppFile(it.key());
+        if (!file->isValid())
+            continue;
+
+        // Where each definition begins: the comments above it belong to it
+        // and move with it.
+        const auto rangeOf = [&](const DefinitionOf &definition) {
+            const int begins = file->position(definition.begins.line,
+                                              definition.begins.column);
+            const int ends = file->position(definition.ends.line, definition.ends.column);
+            const QList<CommentRange> comments = commentsForDeclaration(
+                declarations.at(definition.declaration).shortName,
+                {definition.at.line, definition.at.column - 1},
+                *file->document(), file->cppDocument());
+            return ChangeSet::Range{comments.isEmpty() ? begins : comments.first().start, ends};
+        };
+
+        // As they stand in the file, and as the class declares them.
+        const Definitions actualOrder = Utils::sorted(
+            it.value(), [](const DefinitionOf &a, const DefinitionOf &b) {
+                if (a.begins.line != b.begins.line)
+                    return a.begins.line < b.begins.line;
+                return a.begins.column < b.begins.column;
+            });
+        const Definitions expectedOrder = Utils::sorted(
+            actualOrder, [](const DefinitionOf &a, const DefinitionOf &b) {
+                return a.declaration < b.declaration;
+            });
+        if (expectedOrder == actualOrder)
+            continue;
+
+        ChangeSet changes;
+        for (int i = 0; i < actualOrder.size(); ++i) {
+            int expectedPos = -1;
+            for (int j = 0; j < expectedOrder.size(); ++j) {
+                if (expectedOrder[j].declaration == actualOrder[i].declaration) {
+                    expectedPos = j;
+                    break;
+                }
+            }
+            if (expectedPos == i)
+                continue;
+            const ChangeSet::Range actualRange = rangeOf(actualOrder[i]);
+            const ChangeSet::Range expectedRange = rangeOf(actualOrder[expectedPos]);
+            if (actualRange.end > actualRange.start && expectedRange.end > expectedRange.start)
+                changes.move(actualRange, expectedRange.start);
+        }
+        QTC_ASSERT(!changes.hadErrors(), continue);
+        file->setChangeSet(changes);
+        file->apply();
+    }
+}
+
 class SynchronizeMemberFunctionOrderOp : public CppQuickFixOperation
 {
 public:
-    SynchronizeMemberFunctionOrderOp(
-        const CppQuickFixInterface &interface, const QList<Symbol *> &decls)
-        : CppQuickFixOperation(interface), m_state(std::make_shared<State>())
+    SynchronizeMemberFunctionOrderOp(const CppQuickFixInterface &interface,
+                                     const QList<MemberFunctionDeclaration> &declarations,
+                                     const FindTheDefinitions &findTheDefinitions)
+        : CppQuickFixOperation(interface)
+        , m_declarations(declarations)
+        , m_findTheDefinitions(findTheDefinitions)
     {
         setDescription(
             Tr::tr("Re-order Member Function Definitions According to Declaration Order"));
-        m_state->decls = decls;
-        m_state->currentFile = currentFile();
     }
 
 private:
-    struct DefLocation {
-        Symbol *decl = nullptr;
-        Link defLoc;
-        bool operator==(const DefLocation &other) const
-        {
-            return decl == other.decl && defLoc == other.defLoc;
-        }
-    };
-    using DefLocations = QList<DefLocation>;
-    struct State {
-        using Ptr = std::shared_ptr<State>;
-
-        void insertSorted(Symbol *decl, const Link &link) {
-            DefLocations &dl = defLocations[link.targetFilePath];
-            DefLocation newElem{decl, link};
-            const auto cmp = [](const DefLocation &elem, const DefLocation &value) {
-                if (elem.defLoc.target.line < value.defLoc.target.line)
-                    return true;
-                if (elem.defLoc.target.line > value.defLoc.target.line)
-                    return false;
-                return elem.defLoc.target.column < value.defLoc.target.column;
-            };
-            dl.insert(std::lower_bound(dl.begin(), dl.end(), newElem, cmp), newElem);
-        }
-
-        QList<Symbol *> decls;
-        QHash<FilePath, DefLocations> defLocations;
-        CppRefactoringFilePtr currentFile;
-        int remainingFollowSymbolOps = 0;
-    };
-
     void perform() override
     {
-        for (Symbol * const decl : std::as_const(m_state->decls)) {
-            QTextCursor cursor(currentFile()->document()->begin());
-            TranslationUnit * const tu = currentFile()->cppDocument()->translationUnit();
-            const int declPos = tu->getTokenPositionInDocument(decl->sourceLocation(),
-                                                               currentFile()->document());
+        m_findTheDefinitions([declarations = m_declarations](const Definitions &definitions) {
+            reorder(declarations, definitions);
+        });
+    }
+
+    const QList<MemberFunctionDeclaration> m_declarations;
+    const FindTheDefinitions m_findTheDefinitions;
+};
+
+// The definitions, as the built-in front end finds them: each declaration
+// is followed to wherever it leads, and the answers arrive one at a time.
+FindTheDefinitions builtinFindTheDefinitions(
+    const CppQuickFixInterface &interface, const QList<MemberFunctionDeclaration> &declarations)
+{
+    const CppRefactoringFilePtr file = interface.currentFile();
+    return [file, declarations](std::function<void(const Definitions &)> whenDone) {
+        // The definitions found so far, and how many answers are still
+        // outstanding: the last one to arrive hands the lot over.
+        class State
+        {
+        public:
+            Definitions definitions;
+            int remaining = 0;
+        };
+        const auto state = std::make_shared<State>();
+
+        for (int i = 0; i < declarations.size(); ++i) {
+            const MemberFunctionDeclaration &declaration = declarations.at(i);
+            const int declPos = file->position(declaration.at.line, declaration.at.column);
+            QTextCursor cursor(const_cast<QTextDocument *>(file->document()));
             cursor.setPosition(declPos);
             const CursorInEditor cursorInEditor(
                 cursor,
-                decl->filePath(),
-                qobject_cast<CppEditorWidget *>(currentFile()->editor()),
-                currentFile()->editor()->textDocument(),
-                currentFile()->cppDocument());
+                file->filePath(),
+                qobject_cast<CppEditorWidget *>(file->editor()),
+                file->editor()->textDocument(),
+                file->cppDocument());
 
-            const auto callback = [decl, declPos, doc = cursor.document(), state = m_state](
-                                      const Link &link) {
+            const auto callback = [i, declPos, file, state, whenDone](const Link &link) {
                 class FinishedChecker
                 {
                 public:
-                    FinishedChecker(const State::Ptr &state) : m_state(state)
+                    FinishedChecker(const std::shared_ptr<State> &state,
+                                    const std::function<void(const Definitions &)> &whenDone)
+                        : m_state(state), m_whenDone(whenDone)
                     {}
                     ~FinishedChecker()
                     {
-                        if (--m_state->remainingFollowSymbolOps == 0)
-                            finish(m_state);
-                    };
+                        if (--m_state->remaining == 0)
+                            m_whenDone(m_state->definitions);
+                    }
                 private:
-                    const State::Ptr &m_state;
-                } finishedChecker(state);
+                    const std::shared_ptr<State> &m_state;
+                    const std::function<void(const Definitions &)> &m_whenDone;
+                } finishedChecker(state, whenDone);
 
                 if (!link.hasValidTarget())
                     return;
-                if (decl->filePath() == link.targetFilePath) {
-                    const int linkPos = link.target.toPositionInDocument(doc);
-                    if (linkPos == declPos)
-                        return;
+                if (file->filePath() == link.targetFilePath
+                    && link.target.toPositionInDocument(file->document()) == declPos) {
+                    return;
                 }
-                state->insertSorted(decl, link);
+
+                // How much of the file the definition takes up, which is
+                // the outermost declaration written around its name.
+                CppRefactoringChanges factory{CppModelManager::snapshot()};
+                const CppRefactoringFilePtr target = factory.cppFile(link.targetFilePath);
+                if (!target->isValid())
+                    return;
+                const QList<AST *> astPath = ASTPath(target->cppDocument())(
+                    link.target.line, link.target.column + 1);
+                for (auto it = astPath.rbegin(); it != astPath.rend(); ++it) {
+                    if (!(*it)->asFunctionDefinition())
+                        continue;
+                    AST *ast = *it;
+                    for (auto next = std::next(it);
+                         next != astPath.rend() && (*next)->asTemplateDeclaration();
+                         ++next) {
+                        ast = *next;
+                    }
+                    DefinitionOf definition;
+                    definition.declaration = i;
+                    definition.filePath = link.targetFilePath;
+                    definition.at = {link.target.line, link.target.column + 1};
+                    target->lineAndColumn(target->startOf(ast), &definition.begins.line,
+                                          &definition.begins.column);
+                    target->lineAndColumn(target->endOf(ast), &definition.ends.line,
+                                          &definition.ends.column);
+                    state->definitions.append(definition);
+                    break;
+                }
             };
 
-            ++m_state->remainingFollowSymbolOps;
+            ++state->remaining;
 
             // Force queued execution, as the built-in editor can run the callback synchronously.
             const auto followSymbol = [cursorInEditor, callback] {
@@ -126,73 +276,53 @@ private:
                 CppModelManager::followSymbol(
                     cursorInEditor, callback, true, false, FollowSymbolMode::Exact);
             };
-            QMetaObject::invokeMethod(CppModelManager::instance(), followSymbol, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(CppModelManager::instance(), followSymbol,
+                                      Qt::QueuedConnection);
         }
+        if (state->remaining == 0)
+            whenDone({});
+    };
+}
+
+// The member functions of the class at the cursor, as the built-in front end
+// reads them.
+QList<MemberFunctionDeclaration> builtinMemberFunctionsAt(
+    const CppQuickFixInterface &interface)
+{
+    ClassSpecifierAST * const classAst = astForClassOperations(interface);
+    if (!classAst || !classAst->symbol)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const TranslationUnit * const tu = file->cppDocument()->translationUnit();
+    QList<MemberFunctionDeclaration> declarations;
+    for (int i = 0; i < classAst->symbol->memberCount(); ++i) {
+        Symbol *member = classAst->symbol->memberAt(i);
+
+        // Skip macros
+        if (tu->tokenAt(member->sourceLocation()).expanded())
+            continue;
+
+        if (const auto templ = member->asTemplate())
+            member = templ->declaration();
+        if (!member->type()->asFunctionType() || member->asFunction())
+            continue;
+
+        MemberFunctionDeclaration declaration;
+        declaration.name = Overview().prettyName(
+            LookupContext::fullyQualifiedName(member));
+        const QStringList parts = declaration.name.split("::", Qt::SkipEmptyParts);
+        declaration.shortName = parts.isEmpty() ? QString() : parts.last();
+        if (const auto type = member->type()->asFunctionType())
+            declaration.parameterCount = type->argumentCount();
+        int line = 0;
+        int column = 0;
+        tu->getTokenPosition(member->sourceLocation(), &line, &column);
+        declaration.at = {line, column};
+        declarations.append(declaration);
     }
-
-    static void finish(const State::Ptr &state)
-    {
-        CppRefactoringChanges factory{CppModelManager::snapshot()};
-
-        const auto findAstRange = [](const CppRefactoringFile &file, const DefLocation &defLoc) {
-            const QList<AST *> astPath = ASTPath(
-                file.cppDocument())(defLoc.defLoc.target.line, defLoc.defLoc.target.column + 1);
-            for (auto it = astPath.rbegin(); it != astPath.rend(); ++it) {
-                if (const auto funcDef = (*it)->asFunctionDefinition()) {
-                    AST *ast = funcDef;
-                    for (auto next = std::next(it);
-                         next != astPath.rend() && (*next)->asTemplateDeclaration();
-                         ++next) {
-                        ast = *next;
-                    }
-                    const QList<CommentRange> comments = commentsForDeclaration(
-                        defLoc.decl, ast, *file.document(), file.cppDocument());
-                    const int start = comments.isEmpty() ? file.startOf(ast)
-                                                         : comments.first().start;
-                    return ChangeSet::Range{start, file.endOf(ast)};
-                }
-            }
-            return ChangeSet::Range();
-        };
-
-        for (auto it = state->defLocations.cbegin(); it != state->defLocations.cend(); ++it) {
-            const DefLocations &defLocsActualOrder = it.value();
-            const DefLocations defLocsExpectedOrder = Utils::sorted(
-                defLocsActualOrder, [](const DefLocation &loc1, const DefLocation &loc2) {
-                    return loc1.decl->sourceLocation() < loc2.decl->sourceLocation();
-                });
-            if (defLocsExpectedOrder == defLocsActualOrder)
-                continue;
-
-            CppRefactoringFilePtr file = it.key() == state->currentFile->filePath()
-                                             ? state->currentFile
-                                             : factory.cppFile(it.key());
-            ChangeSet changes;
-            for (int i = 0; i < defLocsActualOrder.size(); ++i) {
-                const DefLocation &actualLoc = defLocsActualOrder[i];
-                int expectedPos = -1;
-                for (int j = 0; j < defLocsExpectedOrder.size(); ++j) {
-                    if (defLocsExpectedOrder[j].decl == actualLoc.decl) {
-                        expectedPos = j;
-                        break;
-                    }
-                }
-                if (expectedPos == i)
-                    continue;
-                const ChangeSet::Range actualRange = findAstRange(*file, actualLoc);
-                const ChangeSet::Range expectedRange
-                    = findAstRange(*file, defLocsActualOrder[expectedPos]);
-                if (actualRange.end > actualRange.start && expectedRange.end > expectedRange.start)
-                    changes.move(actualRange, expectedRange.start);
-            }
-            QTC_ASSERT(!changes.hadErrors(), continue);
-            file->setChangeSet(changes);
-            file->apply();
-        }
-    }
-
-    const State::Ptr m_state;
-};
+    return declarations;
+}
 
 //! Ensures relative order of member function implementations is the same as declaration order.
 class SynchronizeMemberFunctionOrder : public CppQuickFixFactory
@@ -205,27 +335,12 @@ public:
 private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        ClassSpecifierAST * const classAst = astForClassOperations(interface);
-        if (!classAst || !classAst->symbol)
+        const QList<MemberFunctionDeclaration> declarations
+            = builtinMemberFunctionsAt(interface);
+        if (declarations.isEmpty())
             return;
-
-        QList<Symbol *> memberFunctions;
-        const TranslationUnit * const tu
-            = interface.currentFile()->cppDocument()->translationUnit();
-        for (int i = 0; i < classAst->symbol->memberCount(); ++i) {
-            Symbol *member = classAst->symbol->memberAt(i);
-
-            // Skip macros
-            if (tu->tokenAt(member->sourceLocation()).expanded())
-                continue;
-
-            if (const auto templ = member->asTemplate())
-                member = templ->declaration();
-            if (member->type()->asFunctionType() && !member->asFunction())
-                memberFunctions << member;
-        }
-        if (!memberFunctions.isEmpty())
-            result << new SynchronizeMemberFunctionOrderOp(interface, memberFunctions);
+        result << new SynchronizeMemberFunctionOrderOp(
+            interface, declarations, builtinFindTheDefinitions(interface, declarations));
     }
 };
 
