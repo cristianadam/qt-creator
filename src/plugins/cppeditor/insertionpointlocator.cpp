@@ -15,6 +15,18 @@
 #include <utils/qtcassert.h>
 #include <utils/textutils.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#include <cxx/translation_unit.h>
+#endif
+
+#include <optional>
+
 using namespace CPlusPlus;
 using namespace Utils;
 
@@ -227,6 +239,99 @@ QList<AccessRun> builtinAccessRuns(const CPlusPlus::TranslationUnit *tu,
     return runs;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The runs of the class written around a position, as the cxx-frontend model
+// reads it.
+//
+// Nothing where the model has not read the file, where the position is in no
+// class, or where the class says its accesses in a way this front end cannot
+// read: "signals:" and "slots:" are macros to it, and an access specifier
+// nobody wrote where it stands is one this cannot tell from the ones
+// Q_OBJECT brings in. The built-in path, whose lexer knows those words,
+// answers for such a class as it did before.
+std::optional<QList<AccessRun>> cxxAccessRuns(const CxxFrontendDocument &document,
+                                              int line, int column)
+{
+    const QList<cxx::AST *> path = cxxAstPathAt(document, line, column);
+    cxx::ClassSpecifierAST *clazz = nullptr;
+    for (cxx::AST * const node : path) {
+        if (auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(node))
+            clazz = specifier;
+    }
+    if (!clazz || !clazz->lbraceLoc || !clazz->rbraceLoc)
+        return {};
+
+    // A class this front end stumbled inside of says nothing reliable about
+    // its runs -- and a Qt class is one of those: Q_OBJECT, "signals:" and
+    // "slots:" are words it does not know, so what it makes of the body is
+    // not what is written there.
+    if (cxxAstWasReadWithErrors(document, clazz))
+        return {};
+
+    cxx::TranslationUnit * const unit = document.translationUnit();
+    if (!unit)
+        return {};
+
+    const auto startOf = [&](cxx::SourceLocation at) {
+        const cxx::SourcePosition position = unit->tokenStartPosition(at);
+        return Utils::Text::Position{int(position.line), int(position.column)};
+    };
+    const auto endOf = [&](cxx::SourceLocation at) {
+        const cxx::SourcePosition position = unit->tokenEndPosition(at);
+        return Utils::Text::Position{int(position.line), int(position.column)};
+    };
+
+    // What a class body is under before it says otherwise.
+    const InsertionPointLocator::AccessSpec initialXs
+        = clazz->classKey == cxx::TokenKind::T_CLASS ? InsertionPointLocator::Private
+                                                     : InsertionPointLocator::Public;
+
+    struct Bounds
+    {
+        cxx::SourceLocation contentStart;
+        cxx::SourceLocation end;
+        AccessRun run;
+    };
+    QList<Bounds> bounds;
+    bounds.append({clazz->lbraceLoc.next(), clazz->rbraceLoc,
+                   {initialXs, {}, endOf(clazz->lbraceLoc), {}, false}});
+
+    for (auto *declaration : cxx::ListView{clazz->declarationList}) {
+        auto * const access = dynamic_cast<cxx::AccessDeclarationAST *>(declaration);
+        if (!access || !access->accessLoc)
+            continue;
+        if (unit->tokenAt(access->accessLoc).macroGenerated())
+            return {};
+
+        InsertionPointLocator::AccessSpec newXsSpec = initialXs;
+        switch (access->accessSpecifier) {
+        case cxx::TokenKind::T_PUBLIC: newXsSpec = InsertionPointLocator::Public; break;
+        case cxx::TokenKind::T_PROTECTED: newXsSpec = InsertionPointLocator::Protected; break;
+        case cxx::TokenKind::T_PRIVATE: newXsSpec = InsertionPointLocator::Private; break;
+        default: break;
+        }
+
+        if (newXsSpec != bounds.last().run.access || bounds.size() == 1) {
+            bounds.last().end = access->accessLoc;
+            const cxx::SourceLocation colon = access->colonLoc ? access->colonLoc
+                                                               : access->accessLoc;
+            bounds.append({colon.next(), clazz->rbraceLoc,
+                           {newXsSpec, {}, endOf(colon), {}, false}});
+        }
+    }
+    bounds.last().end = clazz->rbraceLoc;
+
+    QList<AccessRun> runs;
+    for (Bounds &one : bounds) {
+        one.run.end = startOf(one.end);
+        one.run.beforeEnd = endOf(cxx::SourceLocation{one.end.index() - 1});
+        one.run.isEmpty = one.contentStart.index() == one.end.index();
+        runs.append(one.run);
+    }
+    return runs;
+}
+#endif
+
 // What an insertion point amounts to for whoever writes the declaration: a
 // place in a file, with the access specifier and the blank lines it needs
 // written around it.
@@ -296,6 +401,24 @@ InsertionLocation InsertionPointLocator::methodDeclarationInClass(
     AccessSpec xsSpec,
     ForceAccessSpec forceAccessSpec) const
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    // A class is named where its name is written, and that is the one thing
+    // both front ends agree on -- so that is what the other model is asked
+    // about.
+    if (const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(filePath)) {
+        if (const CxxFrontendDocument * const document
+            = model->document(filePath.toFSPathString())) {
+            if (const std::optional<QList<AccessRun>> runs
+                = cxxAccessRuns(*document, clazz->line(), clazz->column())) {
+                return insertionLocation(
+                    filePath,
+                    findMatch(*runs, xsSpec, AccessSpecEnd, forceAccessSpec),
+                    xsSpec);
+            }
+        }
+    }
+#endif
+
     const Document::Ptr doc = m_refactoringChanges.cppFile(filePath)->cppDocument();
     if (doc) {
         FindInClass find(doc->translationUnit(), clazz);

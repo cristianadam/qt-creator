@@ -6,6 +6,10 @@
 #include "cpptoolstestcase.h"
 #include "insertionpointlocator.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <utils/qtcassert.h>
 #include <utils/temporarydirectory.h>
 
@@ -36,6 +40,18 @@ static Document::Ptr createDocument(const FilePath &filePath, const QByteArray &
     document->check();
     QTC_ASSERT(document->diagnosticMessages().isEmpty(), return Document::Ptr());
     QTC_ASSERT(document->globalSymbolCount() == expectedGlobalSymbolCount, return Document::Ptr());
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // What the editor's parser does when the other model is asked for: run it
+    // over the file, so that the locator finds it and reads that tree
+    // instead. The cases below are the same either way -- which tree answers
+    // is decided by the environment, exactly as in the editor.
+    if (cxxFrontendModelRequested()) {
+        WorkingCopy workingCopy;
+        workingCopy.insert(filePath, text);
+        updateCxxFrontendModel({}, filePath, {}, workingCopy);
+    }
+#endif
 
     return document;
 }
