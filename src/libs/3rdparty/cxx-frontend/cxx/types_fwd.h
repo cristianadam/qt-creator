@@ -27,6 +27,7 @@
 
 namespace cxx {
 class Name;
+class ScopeSymbol;
 
 #define CXX_FOR_EACH_TYPE_KIND(V) \
   V(Void)                         \
@@ -168,6 +169,18 @@ struct TypePrintOptions {
   // what tells one declaration from another, and whether a function throws
   // is not part of that.
   bool omitExceptionSpecification = false;
+
+  // Where the answer is going to be written. A class, enum or namespace is
+  // then named with as little in front of it as still finds it from there:
+  // plain C inside the namespace that declares it, N::C outside, and the
+  // whole path where nothing shorter reaches it.
+  //
+  // This is what a tool writing a declaration into another file needs, and
+  // it is neither of the two the options above offer: the path is right
+  // nowhere in particular, the bare name only where the reader happens to be
+  // standing in the right scope. Ignored when omitEnclosingScope is set,
+  // which is the stronger instruction.
+  ScopeSymbol* writtenIn = nullptr;
 };
 
 auto to_string(const Type* type, const std::string& id = "",

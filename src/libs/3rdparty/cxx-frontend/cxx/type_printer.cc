@@ -20,6 +20,7 @@
 
 #include <cxx/ast.h>
 #include <cxx/ast_pretty_printer.h>
+#include <cxx/name_lookup.h>
 #include <cxx/names.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
@@ -305,6 +306,27 @@ class TypePrinter {
     if (!options_.omitFunctionReturnType) accept(type->returnType());
   }
 
+  // Whether writing \a symbol's own name where the answer is going finds
+  // this very symbol. If it does, nothing has to stand in front of it.
+  //
+  // The lookup walks the scope the caller named and the scopes around it,
+  // which is unqualified lookup over the symbol chain rather than over the
+  // lexical one: a type is printed long after the file was read, and the
+  // lexical scopes belong to the reading.
+  [[nodiscard]] auto isReachedByItsOwnName(Symbol* symbol) const -> bool {
+    const Name* name = symbol->name();
+    if (!name) return false;
+    for (auto scope = options_.writtenIn; scope; scope = scope->parent()) {
+      auto found = qualifiedLookup(scope, name);
+      if (!found) continue;
+      if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {
+        found = injected->classSymbol();
+      }
+      return found == symbol;
+    }
+    return false;
+  }
+
   void appendEnclosingScope(Symbol* symbol) {
     if (options_.omitEnclosingScope) return;
     auto parent = symbol->parent();
@@ -312,6 +334,7 @@ class TypePrinter {
     while (symbol_cast<TemplateParametersSymbol>(parent)) {
       parent = parent->parent();
     }
+    if (options_.writtenIn && isReachedByItsOwnName(symbol)) return;
     accept(parent->type());
     specifiers_.append("::");
   }
