@@ -239,6 +239,11 @@ struct CxxFrontendFunctionDeclaration
     // body, so the ";" that closed it has to be written after it.
     bool endsWithSemicolon = false;
 
+    // Written inside a class rather than at namespace scope. What decides
+    // whether a definition put in its place has to say "inline": a member
+    // defined in its class is inline already and a free function is not.
+    bool isWrittenInAClass = false;
+
     // Just before the ')' of its parameter list, which is where another
     // parameter is appended, and whether it has any -- which decides
     // whether a comma goes in front of the new one.

@@ -1343,6 +1343,12 @@ CxxFrontendFunctionDeclaration functionIn(const CxxFrontendDocument &document,
             return {};
     }
 
+    bool isWrittenInAClass = false;
+    for (cxx::AST * const node : path) {
+        if (dynamic_cast<cxx::ClassSpecifierAST *>(node))
+            isWrittenInAClass = true;
+    }
+
     return CxxFrontendFunctionDeclaration{filePath,
                                           name.startLine, name.startColumn,
                                           name.endLine, name.endColumn,
@@ -1352,6 +1358,7 @@ CxxFrontendFunctionDeclaration functionIn(const CxxFrontendDocument &document,
                                           bodyStart.endLine, bodyStart.endColumn,
                                           bodyEnd.endLine, bodyEnd.endColumn,
                                           endsWithSemicolon,
+                                          isWrittenInAClass,
                                           rparen.startLine, rparen.startColumn,
                                           hasParameters};
 }

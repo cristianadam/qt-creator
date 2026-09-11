@@ -635,6 +635,64 @@ std::optional<DefinitionAndItsDeclaration> cxxDefinitionOf(
 }
 #endif
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// Where the declaration of the function defined at \a line and \a column is,
+// as the cxx-frontend model reads it: which file, what is replaced, and what
+// it says without the ";" that closes it.
+//
+// Only the declaration's side of the move is filled in. Nothing where the
+// model has not read the file, where it finds no declaration -- a
+// constructor nobody declared is the case, since what every class declares
+// for itself stands where the class is named -- or where what it finds
+// defines the function after all.
+std::optional<DefinitionAndItsDeclaration> cxxDeclarationOf(
+    const CppQuickFixInterface &interface, int line, int column)
+{
+    const std::optional<Link> other = cxxFrontendCounterpart(interface.snapshot(),
+                                                             interface.filePath(), line, column);
+    if (!other || !other->hasValidTarget())
+        return {};
+
+    // A link counts columns from zero and the model from one.
+    const CxxFrontendFunctionDeclaration found
+        = cxxFrontendFunctionAt(interface.snapshot(), CppModelManager::workingCopy(),
+                                other->targetFilePath, other->target.line,
+                                other->target.column + 1)
+              .value_or(CxxFrontendFunctionDeclaration());
+    if (!found.isValid() || found.isDefinition)
+        return {};
+
+    // A free function's declaration is pushed into the header beside this
+    // file and nowhere else, which is what the built-in path allows too.
+    if (!found.isWrittenInAClass) {
+        bool isHeaderFile = false;
+        const FilePath beside = correspondingHeaderOrSource(interface.filePath(), &isHeaderFile);
+        if (isHeaderFile || beside != found.filePath)
+            return {};
+    }
+
+    const CppRefactoringChanges refactoring(interface.snapshot());
+    const CppRefactoringFilePtr file = refactoring.cppFile(found.filePath);
+    if (!file->isValid())
+        return {};
+
+    DefinitionAndItsDeclaration move;
+    move.declarationFile = found.filePath;
+    move.declarationRange = {file->position(found.startLine, found.startColumn),
+                             file->position(found.endLine, found.endColumn)};
+    move.declarationText = file->textOf(move.declarationRange.start, move.declarationRange.end);
+    if (!move.declarationText.endsWith(QLatin1Char(';')))
+        return {};
+    move.declarationText.chop(1);
+
+    // A member defined in its class is inline already; a free function put
+    // in a header is not, and has to say so.
+    if (!found.isWrittenInAClass)
+        move.declarationText.prepend(inlinePrefix(found.filePath));
+    return move;
+}
+#endif
+
 class MoveFuncDefToDeclOp : public CppQuickFixOperation
 {
 public:
@@ -984,6 +1042,28 @@ private:
         move.declarationFile = declFilePath;
         move.declarationRange = declRange;
         move.declarationText = declText;
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // Where the declaration is, on the other model where it has read
+        // this file. Its counterpart search subsumes the walk above: what
+        // that is looking for is the other side of this very function.
+        //
+        // Where it declines the built-in answer stands. This move carries
+        // text rather than writing a declaration out, so there is nothing
+        // the other reading could get wrong that this one does not.
+        if (cxxFrontendDocumentFor(interface)) {
+            // The editor counts from zero and the model from one.
+            const QTextCursor cursor = interface.currentFile()->cursor();
+            if (const std::optional<DefinitionAndItsDeclaration> onTheModel
+                = cxxDeclarationOf(interface, cursor.blockNumber() + 1,
+                                   cursor.positionInBlock() + 1)) {
+                move.declarationFile = onTheModel->declarationFile;
+                move.declarationRange = onTheModel->declarationRange;
+                move.declarationText = onTheModel->declarationText;
+            }
+        }
+#endif
+
         if (move.isValid())
             result << new MoveFuncDefToDeclOp(interface, move, MoveFuncDefToDeclOp::Push);
     }
