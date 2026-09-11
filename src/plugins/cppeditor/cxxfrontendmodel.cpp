@@ -1099,6 +1099,64 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     return link;
 }
 
+std::optional<QList<CxxFrontendComment>> cxxFrontendCommentsIn(
+    const FilePath &filePath, const QTextDocument &textDoc, int start, int end)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    // Space at either end is not part of what was asked about, the same way
+    // the built-in path trims it before looking for a token.
+    while (start < end && textDoc.characterAt(start).isSpace())
+        ++start;
+    while (end > start && textDoc.characterAt(end).isSpace())
+        --end;
+
+    const auto styleOf = [](CxxFrontendDocument::CommentKind kind) {
+        switch (kind) {
+        case CxxFrontendDocument::CommentKind::CppStyle: return CommentStyle::CppStyle;
+        case CxxFrontendDocument::CommentKind::CStyleDoxygen: return CommentStyle::CStyleDoxygen;
+        case CxxFrontendDocument::CommentKind::CppStyleDoxygen:
+            return CommentStyle::CppStyleDoxygen;
+        case CxxFrontendDocument::CommentKind::CStyle: break;
+        }
+        return CommentStyle::CStyle;
+    };
+
+    QList<CxxFrontendComment> covered;
+    for (const CxxFrontendDocument::Comment &comment : document->comments()) {
+        const CommentRange range{positionOf(textDoc, comment.line, comment.column),
+                                 positionOf(textDoc, comment.endLine, comment.endColumn)};
+        if (range.end <= start || range.start > end)
+            continue;
+        covered.append({range, styleOf(comment.kind)});
+    }
+    if (covered.isEmpty())
+        return QList<CxxFrontendComment>();
+
+    // Everything the run covers has to be one of them, or the space between
+    // them: a run that holds anything else is not a run of comments, and
+    // whether it does is what a token stream would say.
+    int reaches = start;
+    for (const CxxFrontendComment &comment : std::as_const(covered)) {
+        for (int i = reaches; i < comment.range.start; ++i) {
+            if (!textDoc.characterAt(i).isSpace())
+                return QList<CxxFrontendComment>();
+        }
+        reaches = std::max(reaches, comment.range.end);
+    }
+    for (int i = reaches; i <= end; ++i) {
+        if (!textDoc.characterAt(i).isSpace())
+            return QList<CxxFrontendComment>();
+    }
+
+    return covered;
+}
+
 std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const FilePath &filePath,
                                                            int line, int column)
 {

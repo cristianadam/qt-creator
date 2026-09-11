@@ -10,6 +10,7 @@
 #include "semantichighlighter.h"
 
 #include <cplusplus/CxxFrontendDocument.h>
+#include <cplusplus/declarationcomments.h>
 
 #include <texteditor/semantichighlighter.h>
 
@@ -181,6 +182,25 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     const CPlusPlus::Snapshot &builtinSnapshot, const Utils::FilePath &filePath,
     int line, int column, const WorkingCopy &workingCopy,
     const CxxFrontendFileText &textOf);
+
+// A comment a file writes: where it stands, and which of the four ways it
+// is written -- which is what tells one run of comments from the next.
+struct CxxFrontendComment
+{
+    CPlusPlus::CommentRange range;
+    CPlusPlus::CommentStyle style = CPlusPlus::CommentStyle::CStyle;
+};
+
+// The comments of \a filePath that the run from \a start to \a end covers,
+// in the order they are written.
+//
+// Nothing where the model has no such file, and then the caller answers the
+// way it did before. An empty list is an answer: the run is on no comment,
+// or something other than a comment is in it -- and something other than a
+// comment is read off the text, since this model hands out no token stream:
+// whatever is neither one of these comments nor space is something else.
+std::optional<QList<CxxFrontendComment>> cxxFrontendCommentsIn(
+    const Utils::FilePath &filePath, const QTextDocument &textDoc, int start, int end);
 
 // A local variable of a function: its name, whether it is one of the
 // function's parameters, the class its type names where it names one, and

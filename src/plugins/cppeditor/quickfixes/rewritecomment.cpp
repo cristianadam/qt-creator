@@ -10,9 +10,14 @@
 
 #include <cplusplus/ASTPath.h>
 #include <cplusplus/declarationcomments.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
 #include <projectexplorer/editorconfiguration.h>
 #include <texteditor/tabsettings.h>
 #include <texteditor/textdocument.h>
+#include <utils/algorithm.h>
 
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
@@ -25,16 +30,28 @@ using namespace Utils;
 namespace CppEditor::Internal {
 namespace {
 
+// A comment somebody is standing on: where it stands, and which of the four
+// ways it is written. All this fix needs of a front end -- it rewrites the
+// text between those two places, and the way it was written decides into
+// what.
+class WrittenComment
+{
+public:
+    CommentRange range;
+    CommentStyle style = CommentStyle::CStyle;
+};
+
 class ConvertCommentStyleOp : public CppQuickFixOperation
 {
 public:
-    ConvertCommentStyleOp(const CppQuickFixInterface &interface, const QList<Token> &tokens,
-                          Kind kind)
+    ConvertCommentStyleOp(const CppQuickFixInterface &interface,
+                          const QList<CommentRange> &comments, CommentStyle style)
         : CppQuickFixOperation(interface),
-        m_tokens(tokens),
-        m_kind(kind),
-        m_wasCxxStyle(m_kind == T_CPP_COMMENT || m_kind == T_CPP_DOXY_COMMENT),
-        m_isDoxygen(m_kind == T_DOXY_COMMENT || m_kind == T_CPP_DOXY_COMMENT)
+        m_comments(comments),
+        m_wasCxxStyle(style == CommentStyle::CppStyle
+                      || style == CommentStyle::CppStyleDoxygen),
+        m_isDoxygen(style == CommentStyle::CStyleDoxygen
+                    || style == CommentStyle::CppStyleDoxygen)
     {
         setDescription(m_wasCxxStyle ? Tr::tr("Convert Comment to C-Style")
                                      : Tr::tr("Convert Comment to C++-Style"));
@@ -57,16 +74,15 @@ private:
     // it anyway in C++ to C mode.
     void perform() override
     {
-        TranslationUnit * const tu = currentFile()->cppDocument()->translationUnit();
         const QString newCommentStart = getNewCommentStart();
         ChangeSet changeSet;
         int endCommentColumn = -1;
         const QChar oldFillChar = m_wasCxxStyle ? '/' : '*';
         const QChar newFillChar = m_wasCxxStyle ? '*' : '/';
 
-        for (const Token &token : m_tokens) {
-            const int startPos = tu->getTokenPositionInDocument(token, textDocument());
-            const int endPos = tu->getTokenEndPositionInDocument(token, textDocument());
+        for (const CommentRange &comment : m_comments) {
+            const int startPos = comment.start;
+            const int endPos = comment.end;
 
             if (m_wasCxxStyle && m_isDoxygen) {
                 // Replace "///" characters with whitespace (to keep alignment).
@@ -191,10 +207,8 @@ private:
         }
 
         if (m_wasCxxStyle && m_isDoxygen) {
-            const int startPos = tu->getTokenPositionInDocument(m_tokens.first(), textDocument());
-            const int endPos = tu->getTokenEndPositionInDocument(m_tokens.last(), textDocument());
-            changeSet.insert(startPos, "/*!\n");
-            changeSet.insert(endPos, "\n*/");
+            changeSet.insert(m_comments.first().start, "/*!\n");
+            changeSet.insert(m_comments.last().end, "\n*/");
         }
 
         changeSet.apply(textDocument());
@@ -212,8 +226,7 @@ private:
         return "//";
     }
 
-    const QList<Token> m_tokens;
-    const Kind m_kind;
+    const QList<CommentRange> m_comments;
     const bool m_wasCxxStyle;
     const bool m_isDoxygen;
 };
@@ -374,38 +387,84 @@ private:
 };
 
 //! Converts C-style to C++-style comments and vice versa
+// The comments the cursor covers, as the built-in front end's token stream
+// has them. Empty where anything else is in there, which is what a run of
+// tokens says outright.
+QList<WrittenComment> builtinCommentsForCursor(const CppQuickFixInterface &interface)
+{
+    // If there's a selection, then it must entirely consist of comment tokens.
+    // If there's no selection, the cursor must be on a comment.
+    const QList<Token> cursorTokens = interface.currentFile()->tokensForCursor();
+    if (cursorTokens.empty() || !cursorTokens.front().isComment())
+        return {};
+
+    TranslationUnit * const tu = interface.currentFile()->cppDocument()->translationUnit();
+    const auto styleOf = [](const Token &token) {
+        switch (token.kind()) {
+        case T_CPP_COMMENT: return CommentStyle::CppStyle;
+        case T_DOXY_COMMENT: return CommentStyle::CStyleDoxygen;
+        case T_CPP_DOXY_COMMENT: return CommentStyle::CppStyleDoxygen;
+        default: return CommentStyle::CStyle;
+        }
+    };
+
+    QList<WrittenComment> comments;
+    for (const Token &token : cursorTokens) {
+        if (!token.isComment())
+            return {};
+        comments.append({{tu->getTokenPositionInDocument(token, interface.textDocument()),
+                          tu->getTokenEndPositionInDocument(token, interface.textDocument())},
+                         styleOf(token)});
+    }
+    return comments;
+}
+
+QList<WrittenComment> commentsForCursor(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const QTextCursor cursor = interface.currentFile()->cursor();
+    if (const std::optional<QList<CxxFrontendComment>> found = cxxFrontendCommentsIn(
+            interface.currentFile()->filePath(), *interface.textDocument(),
+            cursor.selectionStart(), cursor.selectionEnd())) {
+        return Utils::transform<QList<WrittenComment>>(*found,
+                                                       [](const CxxFrontendComment &comment) {
+                                                           return WrittenComment{comment.range,
+                                                                                 comment.style};
+                                                       });
+    }
+#endif
+    return builtinCommentsForCursor(interface);
+}
+
 class ConvertCommentStyle : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface,
                  TextEditor::QuickFixOperations &result) override
     {
-        // If there's a selection, then it must entirely consist of comment tokens.
-        // If there's no selection, the cursor must be on a comment.
-        const QList<Token> &cursorTokens = interface.currentFile()->tokensForCursor();
-        if (cursorTokens.empty())
-            return;
-        if (!cursorTokens.front().isComment())
+        const QList<WrittenComment> comments = commentsForCursor(interface);
+        if (comments.isEmpty())
             return;
 
-        // All tokens must be the same kind of comment, but we make an exception for doxygen comments
-        // that start with "///", as these are often not intended to be doxygen. For our purposes,
-        // we treat them as normal comments.
-        const auto effectiveKind = [&interface](const Token &token) {
-            if (token.kind() != T_CPP_DOXY_COMMENT)
-                return token.kind();
-            TranslationUnit * const tu = interface.currentFile()->cppDocument()->translationUnit();
-            const int startPos = tu->getTokenPositionInDocument(token, interface.textDocument());
-            const QString commentStart = interface.textAt(startPos, 3);
-            return commentStart == "///" ? T_CPP_COMMENT : T_CPP_DOXY_COMMENT;
+        // All comments must be written the same way, but we make an exception for
+        // doxygen comments that start with "///", as these are often not intended to
+        // be doxygen. For our purposes, we treat them as normal comments.
+        const auto effectiveStyle = [&interface](const WrittenComment &comment) {
+            if (comment.style != CommentStyle::CppStyleDoxygen)
+                return comment.style;
+            return interface.textAt(comment.range.start, 3) == "///"
+                       ? CommentStyle::CppStyle
+                       : CommentStyle::CppStyleDoxygen;
         };
-        const Kind kind = effectiveKind(cursorTokens.first());
-        for (int i = 1; i < cursorTokens.count(); ++i) {
-            if (effectiveKind(cursorTokens.at(i)) != kind)
+        const CommentStyle style = effectiveStyle(comments.first());
+        for (const WrittenComment &comment : comments) {
+            if (effectiveStyle(comment) != style)
                 return;
         }
 
-        // Ok, all tokens are of same(ish) comment type, offer quickfix.
-        result << new ConvertCommentStyleOp(interface, cursorTokens, kind);
+        result << new ConvertCommentStyleOp(
+            interface,
+            Utils::transform<QList<CommentRange>>(comments, &WrittenComment::range),
+            style);
     }
 };
 
