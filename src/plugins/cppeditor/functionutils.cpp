@@ -15,7 +15,14 @@
 
 #include <cplusplus/TypePrettyPrinter.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
+
 #ifdef WITH_TESTS
+#include "cppworkingcopy.h"
 #include "cpptoolsreuse.h"
 #include <utils/textutils.h>
 #include <QTest>
@@ -136,18 +143,88 @@ static bool isVirtualFunction_helper(const Function *function,
     return res == True;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The function whose name is written at a place, as the file's own parse has
+// it: a place is what either front end can say, and a Function is what this
+// one's callers take.
+static const Function *functionWrittenAt(
+    const LookupContext &context, const CPlusPlus::CxxFrontendDocument::Place &place)
+{
+    const Utils::FilePath filePath = place.filePath.isEmpty()
+                                         ? context.thisDocument()->filePath()
+                                         : Utils::FilePath::fromUserInput(place.filePath);
+    const Document::Ptr document = filePath == context.thisDocument()->filePath()
+                                       ? context.thisDocument()
+                                       : context.snapshot().document(filePath);
+    if (!document || !document->translationUnit())
+        return nullptr;
+
+    Control * const control = document->translationUnit()->control();
+    for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
+        const Function * const candidate = (*it)->asFunction();
+        if (candidate && candidate->line() == place.line && candidate->column() == place.column)
+            return candidate;
+    }
+    return nullptr;
+}
+
+// The same question on the cxx-frontend model, and nothing where it cannot
+// answer in the terms this one's callers take -- a Function of the file's
+// own parse for each place it names.
+static std::optional<bool> virtualityOnTheModel(const Function *function,
+                                                const LookupContext &context,
+                                                VirtualType virtualType,
+                                                QList<const Function *> *firstVirtuals)
+{
+    if (!function || !context.thisDocument())
+        return std::nullopt;
+    const std::optional<CPlusPlus::CxxFrontendDocument::Virtuality> read
+        = cxxFrontendVirtualityAt(function->filePath(), function->line(), function->column());
+    if (!read)
+        return std::nullopt;
+
+    QList<const Function *> found;
+    for (const CPlusPlus::CxxFrontendDocument::Place &place : read->firstVirtuals) {
+        const Function * const at = functionWrittenAt(context, place);
+        if (!at)
+            return std::nullopt;
+        found.append(at);
+    }
+
+    if (firstVirtuals) {
+        firstVirtuals->clear();
+        *firstVirtuals = found;
+    }
+    return virtualType == PureVirtual ? read->isPureVirtual : read->isVirtual;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
+static bool isVirtualFunction(const Function *function, const LookupContext &context,
+                              VirtualType virtualType, QList<const Function *> *firstVirtuals)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<bool> onTheModel
+        = virtualityOnTheModel(function, context, virtualType, firstVirtuals)) {
+        return *onTheModel;
+    }
+#endif
+    return isVirtualFunction_helper(function, context, virtualType, firstVirtuals);
+}
+
 bool FunctionUtils::isVirtualFunction(const Function *function,
                                       const LookupContext &context,
                                       QList<const Function *> *firstVirtuals)
 {
-    return isVirtualFunction_helper(function, context, Virtual, firstVirtuals);
+    return Internal::isVirtualFunction(function, context, Virtual, firstVirtuals);
 }
 
 bool FunctionUtils::isPureVirtualFunction(const Function *function,
                                           const LookupContext &context,
                                           QList<const Function *> *firstVirtuals)
 {
-    return isVirtualFunction_helper(function, context, PureVirtual, firstVirtuals);
+    return Internal::isVirtualFunction(function, context, PureVirtual, firstVirtuals);
 }
 
 QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsClass,
@@ -222,7 +299,12 @@ void FunctionUtilsTest::testVirtualFunctions()
     QFETCH(VirtualityList, virtualityList);
     QFETCH(QList<int>, firstVirtualList);
     Document::Ptr document = Document::create(Utils::FilePath::fromPathPart(u"virtuals"));
-    document->setUtf8Source(source);
+
+    // With no marker to anchor on, the built-in front end counts this
+    // document's lines from zero -- which is no place any other front end
+    // can be asked about.
+    const QByteArray anchoredSource = "#line 1 \"virtuals\"\n" + source;
+    document->setUtf8Source(anchoredSource);
     document->check(); // calls parse();
     QCOMPARE(document->diagnosticMessages().size(), 0);
     QVERIFY(document->translationUnit()->ast());
@@ -233,6 +315,19 @@ void FunctionUtilsTest::testVirtualFunctions()
     Snapshot snapshot;
     snapshot.insert(document);
     const LookupContext context(document, snapshot);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // What the editor's parser does when the other model is asked for: run
+    // it over the file, so that the question is answered by that tree
+    // instead. The rows are the same either way.
+    if (cxxFrontendModelRequested()) {
+        WorkingCopy workingCopy;
+        // The source itself, with no marker in front of it: that model
+        // counts lines from the text it is given.
+        workingCopy.insert(document->filePath(), source);
+        updateCxxFrontendModel({}, document->filePath(), {}, workingCopy);
+    }
+#endif
     Control *control = document->translationUnit()->control();
     Symbol **end = control->lastSymbol();
     for (Symbol **it = control->firstSymbol(); it != end; ++it) {

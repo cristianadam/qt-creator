@@ -306,6 +306,15 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// Whether the function whose name is written at a position is virtual, and
+// where that was said. Nothing where this model has not read the file.
+//
+// Asked of the store only: whoever wants this is following a name in a file
+// the editor is running over, and a class's bases are read into that file,
+// so no other file has to be read to answer it.
+std::optional<CPlusPlus::CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 // Every place \a filePath names what is declared at \a declaration, and
 // nothing where this model cannot read the file -- which is then a file for
 // the other one to read rather than one to leave out of a search.

@@ -1443,6 +1443,22 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     return parts;
 }
 
+std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Virtuality virtuality = document->virtualityAt(line, column);
+    if (!virtuality.namesAFunction)
+        return std::nullopt;
+    return virtuality;
+}
+
 std::optional<QList<CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
     const CxxFrontendDocument::Place &declaration)
