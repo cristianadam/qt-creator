@@ -24,6 +24,7 @@
 
 #include <cxx/ast.h>
 #include <cxx/names.h>
+#include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
 #endif
 
@@ -334,6 +335,217 @@ std::optional<QList<AccessRun>> cxxAccessRuns(const CxxFrontendDocument &documen
 }
 #endif
 
+InsertionPointLocator::AccessSpec symbolsAccessSpec(Symbol *symbol)
+{
+    if (symbol->isPrivate())
+        return InsertionPointLocator::Private;
+    if (symbol->isProtected())
+        return InsertionPointLocator::Protected;
+    if (symbol->isPublic())
+        return InsertionPointLocator::Public;
+    return InsertionPointLocator::Invalid;
+}
+
+// The constructors a class declares under one access, gathered by how many
+// parameters they take: the two places a new one goes around them -- just
+// after the last of that many, and just in front of the first, which is the
+// end of whatever stands before it so that a comment written above it stays
+// above it.
+struct WrittenConstructor
+{
+    int parameterCount = 0;
+    Utils::Text::Position after;
+    Utils::Text::Position before;
+};
+
+// Where a constructor taking \a parameterCount parameters goes among them:
+// after the last one that takes no more than it does, and otherwise in front
+// of the first one that takes more. Nothing where the class declares none
+// under that access, and then it is a declaration like any other.
+std::optional<Utils::Text::Position> placeForConstructor(
+    const QList<WrittenConstructor> &constructors, int parameterCount)
+{
+    if (constructors.isEmpty())
+        return {};
+
+    auto found = std::find_if(constructors.cbegin(), constructors.cend(),
+                              [&](const WrittenConstructor &one) {
+                                  return one.parameterCount >= parameterCount;
+                              });
+    // Only ones taking fewer: the last of them is the one to follow.
+    if (found == constructors.cend())
+        --found;
+
+    return found->parameterCount <= parameterCount ? found->after : found->before;
+}
+
+// Gathers what either front end read of a class's constructors, in the order
+// of how many parameters they take.
+class ConstructorsByParameterCount
+{
+public:
+    void add(int parameterCount, const Utils::Text::Position &before,
+             const Utils::Text::Position &after)
+    {
+        for (WrittenConstructor &one : m_constructors) {
+            if (one.parameterCount == parameterCount) {
+                one.after = after; // the last one of that many wins
+                return;
+            }
+        }
+        m_constructors.append({parameterCount, after, before});
+    }
+
+    QList<WrittenConstructor> sorted() const
+    {
+        QList<WrittenConstructor> sorted = m_constructors;
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const WrittenConstructor &a, const WrittenConstructor &b) {
+                      return a.parameterCount < b.parameterCount;
+                  });
+        return sorted;
+    }
+
+private:
+    QList<WrittenConstructor> m_constructors;
+};
+
+// The class's constructors under \a xsSpec, as the built-in front end reads
+// them.
+QList<WrittenConstructor> builtinWrittenConstructors(const CPlusPlus::TranslationUnit *tu,
+                                                     const ClassSpecifierAST *clazz,
+                                                     InsertionPointLocator::AccessSpec xsSpec)
+{
+    const auto endOf = [tu](unsigned token) {
+        Utils::Text::Position position;
+        tu->getTokenEndPosition(token, &position.line, &position.column);
+        return position;
+    };
+
+    ConstructorsByParameterCount constructors;
+    for (DeclarationAST *rootDecl : clazz->member_specifier_list) {
+        SimpleDeclarationAST * const ast = rootDecl->asSimpleDeclaration();
+        if (!ast || !ast->symbols)
+            continue;
+        if (symbolsAccessSpec(ast->symbols->value) != xsSpec)
+            continue;
+        if (ast->symbols->value->name() != clazz->name->name)
+            continue;
+        for (DeclaratorAST *d : ast->declarator_list) {
+            for (PostfixDeclaratorAST *decl : d->postfix_declarator_list) {
+                FunctionDeclaratorAST * const func = decl->asFunctionDeclarator();
+                if (!func)
+                    continue;
+                int params = 0;
+                if (func->parameter_declaration_clause) {
+                    params = size(func->parameter_declaration_clause->parameter_declaration_list);
+                }
+                // The end of the token before it rather than its own start,
+                // so that a comment written above it stays above it.
+                constructors.add(params, endOf(rootDecl->firstToken() - 1),
+                                 endOf(rootDecl->lastToken() - 1));
+            }
+        }
+    }
+    return constructors.sorted();
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The class's constructors under \a xsSpec, as the cxx-frontend model reads
+// them -- which it does by name: a constructor is written under the name of
+// its class.
+//
+// Nothing where that model has not read the file, where the class is not one
+// it can read (see cxxAccessRuns), or where the access asked about is one of
+// the Qt kinds, which no constructor is written under.
+std::optional<QList<WrittenConstructor>> cxxWrittenConstructors(
+    const FilePath &filePath, const CPlusPlus::TranslationUnit *tu,
+    const ClassSpecifierAST *clazz, InsertionPointLocator::AccessSpec xsSpec)
+{
+    cxx::AccessSpecifier wanted = cxx::AccessSpecifier::kPublic;
+    switch (xsSpec) {
+    case InsertionPointLocator::Public: wanted = cxx::AccessSpecifier::kPublic; break;
+    case InsertionPointLocator::Protected: wanted = cxx::AccessSpecifier::kProtected; break;
+    case InsertionPointLocator::Private: wanted = cxx::AccessSpecifier::kPrivate; break;
+    default: return {};
+    }
+
+    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(filePath);
+    if (!model)
+        return {};
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return {};
+
+    // The class the built-in tree found, named where its name is written --
+    // the one place both front ends agree on.
+    int line = 0, column = 0;
+    tu->getTokenPosition(clazz->name->firstToken(), &line, &column);
+    const QList<cxx::AST *> path = cxxAstPathAt(*document, line, column);
+    cxx::ClassSpecifierAST *onTheModel = nullptr;
+    for (cxx::AST * const node : path) {
+        if (auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(node))
+            onTheModel = specifier;
+    }
+    auto * const className = onTheModel ? dynamic_cast<cxx::NameIdAST *>(onTheModel->unqualifiedId)
+                                       : nullptr;
+    if (!onTheModel || !className || !className->identifier || !onTheModel->lbraceLoc)
+        return {};
+    if (cxxAstWasReadWithErrors(*document, onTheModel))
+        return {};
+
+    cxx::TranslationUnit * const unit = document->translationUnit();
+    const auto endOf = [unit](cxx::SourceLocation at) {
+        const cxx::SourcePosition position = unit->tokenEndPosition(at);
+        return Utils::Text::Position{int(position.line), int(position.column)};
+    };
+
+    ConstructorsByParameterCount constructors;
+    for (auto *declaration : cxx::ListView{onTheModel->declarationList}) {
+        auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
+        if (!simple)
+            continue;
+        for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
+            if (!declared->declarator || !declared->symbol)
+                continue;
+            if (declared->symbol->accessSpecifier() != wanted)
+                continue;
+
+            // Written under the class's own name, which is what makes it a
+            // constructor rather than a member.
+            auto * const core
+                = dynamic_cast<cxx::IdDeclaratorAST *>(declared->declarator->coreDeclarator);
+            auto * const name = core ? dynamic_cast<cxx::NameIdAST *>(core->unqualifiedId)
+                                     : nullptr;
+            if (!name || name->identifier != className->identifier)
+                continue;
+
+            for (auto *chunk : cxx::ListView{declared->declarator->declaratorChunkList}) {
+                auto * const function = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+                if (!function)
+                    continue;
+                int params = 0;
+                if (function->parameterDeclarationClause) {
+                    for (auto *parameter :
+                         cxx::ListView{function->parameterDeclarationClause
+                                           ->parameterDeclarationList}) {
+                        Q_UNUSED(parameter)
+                        ++params;
+                    }
+                }
+                const cxx::SourceLocation first = declaration->firstSourceLocation();
+                const cxx::SourceLocation last = declaration->lastSourceLocation();
+                if (!first || !last)
+                    continue;
+                constructors.add(params, endOf(cxx::SourceLocation{first.index() - 1}),
+                                 endOf(cxx::SourceLocation{last.index() - 1}));
+            }
+        }
+    }
+    return constructors.sorted();
+}
+#endif
+
 // What an insertion point amounts to for whoever writes the declaration: a
 // place in a file, with the access specifier and the blank lines it needs
 // written around it.
@@ -448,68 +660,28 @@ InsertionLocation InsertionPointLocator::methodDeclarationInClass(const Translat
     return insertionLocation(FilePath::fromString(fileName), point, xsSpec);
 }
 
-static InsertionPointLocator::AccessSpec symbolsAccessSpec(Symbol *symbol)
-{
-    if (symbol->isPrivate())
-        return InsertionPointLocator::Private;
-    if (symbol->isProtected())
-        return InsertionPointLocator::Protected;
-    if (symbol->isPublic())
-        return InsertionPointLocator::Public;
-    return InsertionPointLocator::Invalid;
-}
-
 InsertionLocation InsertionPointLocator::constructorDeclarationInClass(
     const CPlusPlus::TranslationUnit *tu,
     const ClassSpecifierAST *clazz,
     InsertionPointLocator::AccessSpec xsSpec,
     int constructorArgumentCount) const
 {
-    std::map<int, std::pair<DeclarationAST *, DeclarationAST *>> constructors;
-    for (DeclarationAST *rootDecl : clazz->member_specifier_list) {
-        if (SimpleDeclarationAST *ast = rootDecl->asSimpleDeclaration()) {
-            if (!ast->symbols)
-                continue;
-            if (symbolsAccessSpec(ast->symbols->value) != xsSpec)
-                continue;
-            if (ast->symbols->value->name() != clazz->name->name)
-                continue;
-            for (DeclaratorAST *d : ast->declarator_list) {
-                for (PostfixDeclaratorAST *decl : d->postfix_declarator_list) {
-                    if (FunctionDeclaratorAST *func = decl->asFunctionDeclarator()) {
-                        int params = 0;
-                        if (func->parameter_declaration_clause) {
-                            params = size(
-                                func->parameter_declaration_clause->parameter_declaration_list);
-                        }
-                        auto &entry = constructors[params];
-                        if (!entry.first)
-                            entry.first = rootDecl;
-                        entry.second = rootDecl;
-                    }
-                }
-            }
-        }
-    }
-    if (constructors.empty())
-        return methodDeclarationInClass(tu, clazz, xsSpec, AccessSpecBegin);
-
-    auto iter = constructors.lower_bound(constructorArgumentCount);
-    if (iter == constructors.end()) {
-        // we have a constructor with x arguments but there are only ones with < x arguments
-        --iter; // select greatest one (in terms of argument count)
-    }
     const FilePath filePath =
             FilePath::fromString(QString::fromUtf8(tu->fileName(), tu->fileNameLength()));
-    int line, column;
-    if (iter->first <= constructorArgumentCount) {
-        tu->getTokenEndPosition(iter->second.second->lastToken() - 1, &line, &column);
-        return InsertionLocation(filePath, "\n", "", line, column);
-    }
-    // before iter
-    // end pos of firstToken-1 instead of start pos of firstToken to skip leading commend
-    tu->getTokenEndPosition(iter->second.first->firstToken() - 1, &line, &column);
-    return InsertionLocation(filePath, "\n", "", line, column);
+
+    std::optional<QList<WrittenConstructor>> constructors;
+#ifdef QTC_WITH_CXX_FRONTEND
+    constructors = cxxWrittenConstructors(filePath, tu, clazz, xsSpec);
+#endif
+    if (!constructors)
+        constructors = builtinWrittenConstructors(tu, clazz, xsSpec);
+
+    const std::optional<Utils::Text::Position> at
+        = placeForConstructor(*constructors, constructorArgumentCount);
+    if (!at)
+        return methodDeclarationInClass(tu, clazz, xsSpec, AccessSpecBegin);
+
+    return InsertionLocation(filePath, "\n", "", at->line, at->column);
 }
 
 namespace {
