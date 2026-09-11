@@ -163,6 +163,8 @@ private slots:
 
     void declarationAt_data();
     void declarationAt();
+    void declarationSaysWhatItIs_data();
+    void declarationSaysWhatItIs();
 
     void typeAt_data();
     void typeAt();
@@ -394,6 +396,84 @@ void tst_cxxfrontenddocument::declarationAt()
     QCOMPARE(found.name, name);
     QCOMPARE(found.line, declaration.line);
     QCOMPARE(found.column, declaration.column);
+}
+
+// What a declaration is and what its type says, for a reader asking "what
+// is this": the words are the caller's, these are the distinctions made.
+void tst_cxxfrontenddocument::declarationSaysWhatItIs_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("a function")
+        << QByteArray("int add(int a, int b);\n"
+                      "int f() { return $add(1, 2); }\n")
+        << QString("function int add(int, int)");
+
+    QTest::newRow("a variable")
+        << QByteArray("int count;\nvoid f() { $count = 1; }\n") << QString("variable int count");
+
+    QTest::newRow("a pointer variable")
+        << QByteArray("char *s;\nvoid f() { $s = nullptr; }\n")
+        << QString("variable char *s");
+
+    QTest::newRow("a class")
+        << QByteArray("class C {};\n$C c;\n") << QString("class");
+
+    QTest::newRow("a member")
+        << QByteArray("struct S { int m; };\nvoid f(S &s) { s.$m = 1; }\n")
+        << QString("field int m");
+
+    QTest::newRow("an enum and one of its values")
+        << QByteArray("enum Color { Red };\nColor c = $Red;\n")
+        << QString("enumerator Color Red");
+
+    QTest::newRow("a namespace")
+        << QByteArray("namespace N { int i; }\nint j = $N::i;\n") << QString("namespace");
+
+    QTest::newRow("an alias")
+        << QByteArray("using Number = int;\n$Number n;\n") << QString("alias int Number");
+
+    // A class template is a class here: its parameters are something it has
+    // rather than something it is.
+    QTest::newRow("a class template")
+        << QByteArray("template<typename T> class C {};\n$C<int> c;\n") << QString("class");
+}
+
+void tst_cxxfrontenddocument::declarationSaysWhatItIs()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::Declaration found
+        = document.declarationAt(positions.first().line, positions.first().column);
+    QVERIFY(found.isValid());
+
+    using Kind = CxxFrontendDocument::Declaration::Kind;
+    const auto kind = [&] {
+        switch (found.kind) {
+        case Kind::Class: return "class";
+        case Kind::Enum: return "enum";
+        case Kind::Enumerator: return "enumerator";
+        case Kind::Namespace: return "namespace";
+        case Kind::Function: return "function";
+        case Kind::Variable: return "variable";
+        case Kind::Field: return "field";
+        case Kind::TypeAlias: return "alias";
+        case Kind::Unknown: break;
+        }
+        return "unknown";
+    }();
+
+    QString described = kind;
+    if (!found.type.isEmpty())
+        described += ' ' + found.type;
+    QCOMPARE(described, expected);
 }
 
 // The type of the expression at a position: what a tooltip shows, and what

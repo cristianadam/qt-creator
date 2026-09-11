@@ -287,6 +287,34 @@ QString qualifiedNameOf(cxx::Symbol *symbol)
     return parts.join("::");
 }
 
+// What kind of thing a symbol is, in the distinctions a reader asking "what
+// is this" cares about.
+CxxFrontendDocument::Declaration::Kind kindOf(cxx::Symbol *symbol)
+{
+    using Kind = CxxFrontendDocument::Declaration::Kind;
+    if (dynamic_cast<cxx::ClassSymbol *>(symbol))
+        return Kind::Class;
+    if (dynamic_cast<cxx::EnumSymbol *>(symbol) || dynamic_cast<cxx::ScopedEnumSymbol *>(symbol))
+        return Kind::Enum;
+    if (dynamic_cast<cxx::EnumeratorSymbol *>(symbol))
+        return Kind::Enumerator;
+    if (dynamic_cast<cxx::NamespaceSymbol *>(symbol))
+        return Kind::Namespace;
+    if (dynamic_cast<cxx::FunctionSymbol *>(symbol)
+        || dynamic_cast<cxx::OverloadSetSymbol *>(symbol)) {
+        return Kind::Function;
+    }
+    if (dynamic_cast<cxx::TypeAliasSymbol *>(symbol))
+        return Kind::TypeAlias;
+    if (dynamic_cast<cxx::FieldSymbol *>(symbol))
+        return Kind::Field;
+    if (dynamic_cast<cxx::VariableSymbol *>(symbol)
+        || dynamic_cast<cxx::ParameterSymbol *>(symbol)) {
+        return Kind::Variable;
+    }
+    return Kind::Unknown;
+}
+
 } // namespace
 
 class CxxFrontendDocument::Private
@@ -618,6 +646,9 @@ public:
     // of the files this unit read. A name that declares something is not a
     // use of it, so resolvedSymbolAt has nothing to say about such a place.
     [[nodiscard]] cxx::Symbol *declaredAt(cxx::SourceLocation location) const;
+    // The type of \a symbol with its name in it, the way an outline or a
+    // tooltip shows it. Empty for what has no type of its own.
+    [[nodiscard]] QString describeType(cxx::Symbol *symbol) const;
 
     // The token at a position, or an invalid location if there is none. A
     // scope's extent is in tokens, and a position is in the text.
@@ -1430,6 +1461,22 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
             }
         },
         context);
+}
+
+QString CxxFrontendDocument::Private::describeType(cxx::Symbol *symbol) const
+{
+    if (!symbol || !symbol->type() || dynamic_cast<cxx::ClassSymbol *>(symbol)
+        || dynamic_cast<cxx::NamespaceSymbol *>(symbol)) {
+        return {};
+    }
+    // Written for where the thing itself stands, which is what a reader
+    // asking about it there would write: an enumerator's type is the
+    // enumeration's own name and not the path to it.
+    const std::string name = symbol->name() ? cxx::to_string(symbol->name()) : std::string();
+    return applyStarBinding(
+        fromStd(cxx::to_string(symbol->type(), name,
+                               {.writtenIn = scopeWrittenAround(symbol->location())})),
+        config.settings);
 }
 
 cxx::Symbol *CxxFrontendDocument::Private::declaredAt(cxx::SourceLocation location) const
@@ -3203,6 +3250,8 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
+    declaration.kind = kindOf(symbol);
+    declaration.type = d->describeType(symbol);
 
     if (const cxx::SourceLocation location = definition.location ? definition.location
                                                                  : symbol->location()) {
@@ -4260,6 +4309,8 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
+    declaration.kind = kindOf(symbol);
+    declaration.type = d->describeType(symbol);
     const cxx::SourcePosition position = d->unit.tokenStartPosition(
         definition.location ? definition.location : symbol->location());
     declaration.line = int(position.line);

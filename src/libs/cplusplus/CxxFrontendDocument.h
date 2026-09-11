@@ -476,6 +476,29 @@ public:
         int line = 0;
         int column = 0;
 
+        // What kind of thing it is, for a reader that has to say so. The
+        // words are the consumer's; these are the distinctions this model
+        // makes, and a template is not among them -- a class template is a
+        // class here, its parameters being something it has rather than
+        // something it is.
+        enum class Kind {
+            Unknown,
+            Class,
+            Enum,
+            Enumerator,
+            Namespace,
+            Function,
+            Variable,
+            Field,
+            TypeAlias
+        };
+        Kind kind = Kind::Unknown;
+
+        // Its type, printed the way an outline or a tooltip shows it: the
+        // type with the name in it, so a function reads as its signature.
+        // Empty for what has no type -- a namespace, a class.
+        QString type;
+
         // Whether this place defines the thing, rather than only declaring
         // it. A class forward declared here and defined elsewhere, or a
         // function declared here and defined in another file, answers false
