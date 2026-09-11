@@ -82,6 +82,7 @@ private slots:
     void whichFileDefinesAFunction();
     void twoOverloadsOfOneCountAreNotToldApart();
     void noCounterpartOffAFunction();
+    void noCounterpartWhereNobodyWroteTheOtherSide();
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
     void aMacroCrossesFromAHeader();
@@ -1092,6 +1093,29 @@ void tst_cxxfrontendsnapshot::noCounterpartOffAFunction()
 
     QVERIFY(!document.counterpartAt(1, 5).isValid());
     QVERIFY(!document.counterpartAt(2, 6).isValid());
+}
+
+// Every class declares a constructor and a destructor whether or not
+// anybody writes one, and a definition written for one of those has no other
+// *written* place: what the front end declared for the class stands where
+// the class is named, and there is nothing there to point at.
+void tst_cxxfrontendsnapshot::noCounterpartWhereNobodyWroteTheOtherSide()
+{
+    const CxxFrontendDocument document("struct C {};\nC::C() {}\nC::~C() {}\n", "a.cpp");
+
+    const CxxFrontendDocument::Counterpart constructor = document.counterpartAt(2, 4);
+    QVERIFY(constructor.namesAFunction());
+    QVERIFY(!constructor.isValid());
+
+    const CxxFrontendDocument::Counterpart destructor = document.counterpartAt(3, 5);
+    QVERIFY(destructor.namesAFunction());
+    QVERIFY(!destructor.isValid());
+
+    // One somebody did write still answers.
+    const CxxFrontendDocument written("struct C { C(); };\nC::C() {}\n", "a.cpp");
+    const CxxFrontendDocument::Counterpart declaration = written.counterpartAt(2, 4);
+    QVERIFY(declaration.isValid());
+    QCOMPARE(declaration.line, 1);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)

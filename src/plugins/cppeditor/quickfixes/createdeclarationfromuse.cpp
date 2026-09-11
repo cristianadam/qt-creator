@@ -435,16 +435,11 @@ std::optional<MissingDeclaration> cxxMissingDeclarationAt(const CppQuickFixInter
     if (!missing)
         return {};
 
-    // Declared already, and then there is nothing to add -- but a member the
-    // front end declared for the class itself, the constructor every class
-    // has, is recorded where the class is *named*, and nobody wrote it there.
-    const CxxFrontendDocument::Counterpart declared = document->counterpartAt(line, column);
-    const bool isWritten = declared.isValid()
-                           && !(declared.line == missing->classLine
-                                && declared.column == missing->classColumn
-                                && FilePath::fromUserInput(declared.filePath)
-                                       == missing->classFilePath);
-    if (isWritten)
+    // Declared already, and then there is nothing to add. A member the
+    // front end declared for the class itself -- the constructor every
+    // class has -- is not one of those: counterpartAt() answers with a
+    // place only where somebody wrote one.
+    if (document->counterpartAt(line, column).isValid())
         return MissingDeclaration{};
 
     // What it says: the text in front of the body, with the qualifier taken

@@ -1660,7 +1660,15 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
     if (!other || other == function)
         return counterpart;
 
+    // A member the front end declared for the class itself -- the
+    // constructor and the destructor every class has whether or not
+    // anybody wrote one -- is recorded where the class is *named*, and
+    // there is nothing written there to point at. Nothing declares it, so
+    // nothing declares it anywhere this could send a reader.
     auto * const otherFunction = dynamic_cast<cxx::FunctionSymbol *>(other);
+    if (otherFunction && !d->declaratorOf(otherFunction))
+        return counterpart;
+
     const cxx::SourceLocation otherLocation = otherFunction ? d->nameLocationOf(otherFunction)
                                                             : other->location();
     if (!otherLocation)
