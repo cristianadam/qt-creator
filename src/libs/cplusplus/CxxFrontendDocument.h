@@ -243,6 +243,74 @@ public:
     };
     Counterpart counterpartAt(int line, int column) const;
 
+    // What the function declaration at a position says, and how each of its
+    // types has to be written where another declaration in this file stands.
+    //
+    // The two places are both in this file, which is what a function's
+    // declaration and its definition are whenever one translation unit holds
+    // them: a header is read into the file that includes it, so the source
+    // file that defines a function holds the header's declaration as well.
+    // Where they are in two files and neither reads the other, this is not
+    // the document to ask -- read the one that holds both.
+    //
+    // An object rather than plain data, because writing a type means writing
+    // it under a name, and which name is the caller's choice, made after it
+    // has compared what the two sides say. It reads the document it came
+    // from, so it may not outlive it.
+    class Signature
+    {
+    public:
+        Signature();
+        Signature(Signature &&other) noexcept;
+        Signature &operator=(Signature &&other) noexcept;
+        ~Signature();
+
+        bool isValid() const;
+
+        // The name it is declared under, the qualifier included: the C::f of
+        // a definition written outside its class.
+        QString name() const;
+
+        // Canonical spellings, which are only ever compared: what tells one
+        // type here from another.
+        QString returnType() const;
+        int parameterCount() const;
+        QString parameterName(int index) const; // empty where it is unnamed
+        QString parameterType(int index) const;
+
+        bool isConst() const;
+        bool isVolatile() const;
+
+        // "noexcept", or empty where the function has no exception
+        // specification. Which of the ways of writing one was used is not
+        // recorded, so a throw() comes back as noexcept -- on
+        // unsupportedQueries() with the rest.
+        QString exceptionSpecification() const;
+
+        // Written for the other place: as little in front of each name as
+        // still finds it from there. The return type is written under \a
+        // name, since a return type is written in front of the name and
+        // replaced along with it; a parameter under its own, empty for one
+        // that is to stay unnamed.
+        QString writeReturnType(const QString &name) const;
+        QString writeParameter(int index, const QString &name) const;
+
+        // The canonical spelling of that same parameter type, so that what
+        // would be written there can be told from what is written there now.
+        QString writtenParameterType(int index) const;
+
+    private:
+        friend class CxxFrontendDocument;
+        class Private;
+        std::unique_ptr<Private> d;
+    };
+
+    // \a line and \a column are on the function being read, \a writtenAtLine
+    // and \a writtenAtColumn on the declaration its types are to be written
+    // at. Both are one-based, and both name a function this file declares.
+    Signature signatureAt(int line, int column,
+                          int writtenAtLine, int writtenAtColumn) const;
+
     // Where this file defines \a name -- written out in full, as
     // Counterpart::name is -- taking \a parameterCount parameters, or
     // nothing where it does not define it.

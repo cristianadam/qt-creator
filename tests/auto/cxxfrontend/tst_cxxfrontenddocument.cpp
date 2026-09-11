@@ -196,6 +196,12 @@ private slots:
     void commentKinds_data();
     void commentKinds();
     void commentsOfAHeaderAreItsOwn();
+
+    void signatureOfADeclaration();
+    void signatureWritesATypeForTheOtherPlace();
+    void signatureWritesAsLittleAsTheOtherPlaceNeeds();
+    void signatureWritesAReturnTypeForOutsideTheFunction();
+    void noSignatureOffAFunction();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -1070,6 +1076,98 @@ void tst_cxxfrontenddocument::commentsOfAHeaderAreItsOwn()
                                        "<stdin>", config);
 
     QCOMPARE(describeComments(document.comments()), QStringList("cpp-style @2:1-2:8"));
+}
+
+// What one side of a function says. The names and the types come back as
+// they are written here, which is what tells one signature from another.
+void tst_cxxfrontenddocument::signatureOfADeclaration()
+{
+    const QByteArray source =
+        "struct C {\n"
+        "    int f(int a, const char *b) const noexcept;\n"
+        "};\n"
+        "int C::f(int a, const char *b) const noexcept { return a; }\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // The declaration, written for where the definition stands.
+    const CxxFrontendDocument::Signature signature = document.signatureAt(2, 9, 4, 8);
+    QVERIFY(signature.isValid());
+    QCOMPARE(signature.name(), QString("C::f"));
+    QCOMPARE(signature.returnType(), QString("int"));
+    QCOMPARE(signature.parameterCount(), 2);
+    QCOMPARE(signature.parameterName(0), QString("a"));
+    QCOMPARE(signature.parameterType(0), QString("int"));
+    QCOMPARE(signature.parameterName(1), QString("b"));
+    QCOMPARE(signature.parameterType(1), QString("const char*"));
+    QVERIFY(signature.isConst());
+    QVERIFY(!signature.isVolatile());
+    QCOMPARE(signature.exceptionSpecification(), QString("noexcept"));
+}
+
+// The point of asking a signature where its answer is going: a type named in
+// one scope has to be named again in the other, and how much of the name has
+// to be written is what differs.
+void tst_cxxfrontenddocument::signatureWritesATypeForTheOtherPlace()
+{
+    const QByteArray source =
+        "namespace N { struct T {}; }\n"
+        "struct C {\n"
+        "    void f(N::T t);\n"
+        "};\n"
+        "void C::f(N::T t) {}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Signature signature = document.signatureAt(3, 10, 5, 9);
+    QVERIFY(signature.isValid());
+    QCOMPARE(signature.writeParameter(0, "t"), QString("N::T t"));
+    QCOMPARE(signature.writeParameter(0, QString()), QString("N::T"));
+    QCOMPARE(signature.writtenParameterType(0), QString("N::T"));
+}
+
+void tst_cxxfrontenddocument::signatureWritesAsLittleAsTheOtherPlaceNeeds()
+{
+    const QByteArray source =
+        "namespace N {\n"
+        "struct T {};\n"
+        "struct C {\n"
+        "    void f(T t);\n"
+        "};\n"
+        "void C::f(T t) {}\n"
+        "} // namespace N\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // The definition is inside N, so T is reached there and nothing has to
+    // stand in front of it.
+    const CxxFrontendDocument::Signature signature = document.signatureAt(4, 10, 6, 9);
+    QVERIFY(signature.isValid());
+    QCOMPARE(signature.writeParameter(0, "t"), QString("T t"));
+}
+
+// A return type is written in front of the name, which is outside the
+// function, and a parameter inside it -- so the two are read in different
+// scopes and can come out spelled differently.
+void tst_cxxfrontenddocument::signatureWritesAReturnTypeForOutsideTheFunction()
+{
+    const QByteArray source =
+        "struct C {\n"
+        "    struct T {};\n"
+        "    T f(T t);\n"
+        "};\n"
+        "C::T C::f(C::T t) { return t; }\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Signature signature = document.signatureAt(3, 7, 5, 9);
+    QVERIFY(signature.isValid());
+    QCOMPARE(signature.writeReturnType("C::f"), QString("C::T C::f"));
+    QCOMPARE(signature.writeParameter(0, "t"), QString("T t"));
+}
+
+void tst_cxxfrontenddocument::noSignatureOffAFunction()
+{
+    const CxxFrontendDocument document("int global;\nvoid f() {}\n", "<stdin>");
+
+    QVERIFY(!document.signatureAt(1, 5, 2, 6).isValid());
+    QVERIFY(!document.signatureAt(2, 6, 1, 5).isValid());
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

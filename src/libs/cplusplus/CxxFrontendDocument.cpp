@@ -558,6 +558,18 @@ public:
     [[nodiscard]] static cxx::SourceLocation nameLocationOfDeclarator(
         cxx::DeclaratorAST *declarator);
 
+    // The declarator \a function is declared by, whichever of its two places
+    // this unit holds.
+    [[nodiscard]] cxx::DeclaratorAST *declaratorOf(cxx::FunctionSymbol *function) const;
+
+    // The names \a function's parameters are written under, in order, empty
+    // where one is unnamed.
+    [[nodiscard]] QStringList parameterNamesOf(cxx::FunctionSymbol *function) const;
+
+    // The namespace or class a declaration written at \a location stands in,
+    // which is the file itself where it stands in none.
+    [[nodiscard]] cxx::ScopeSymbol *scopeWrittenAround(cxx::SourceLocation location) const;
+
     // The parameters and block variables of \a function, each with every
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
@@ -876,6 +888,82 @@ cxx::SourceLocation CxxFrontendDocument::Private::nameLocationOfDeclarator(
     }
 
     return id->unqualifiedId->firstSourceLocation();
+}
+
+cxx::DeclaratorAST *CxxFrontendDocument::Private::declaratorOf(
+    cxx::FunctionSymbol *function) const
+{
+    if (!unit.ast())
+        return nullptr;
+    for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+            definition && definition->symbol == function) {
+            return definition->declarator;
+        }
+        if (auto *declared = dynamic_cast<cxx::InitDeclaratorAST *>(*slot);
+            declared && declared->symbol == function) {
+            return declared->declarator;
+        }
+    }
+    return nullptr;
+}
+
+QStringList CxxFrontendDocument::Private::parameterNamesOf(
+    cxx::FunctionSymbol *function) const
+{
+    // Read off the declarator rather than off the function's members: a
+    // function that is only declared has no parameter symbols to read a name
+    // from, and the name stands in the declarator either way.
+    QStringList names;
+    cxx::DeclaratorAST * const declarator = declaratorOf(function);
+    if (!declarator)
+        return names;
+    for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+        auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+        if (!parameters || !parameters->parameterDeclarationClause)
+            continue;
+        for (auto *parameter :
+             cxx::ListView{parameters->parameterDeclarationClause->parameterDeclarationList}) {
+            names.append(parameter->identifier
+                             ? fromStd(cxx::to_string(parameter->identifier))
+                             : QString());
+        }
+        break;
+    }
+    return names;
+}
+
+cxx::ScopeSymbol *CxxFrontendDocument::Private::scopeWrittenAround(
+    cxx::SourceLocation location) const
+{
+    cxx::ScopeSymbol * const global = unit.globalScope();
+    if (!global || !location)
+        return global;
+
+    // Innermost wins, and a function is not one of them: what is wanted is
+    // the scope a declaration's *text* stands in, and the text of a
+    // definition written under a qualified name stands outside the class the
+    // function belongs to -- which is why its return type has to be written
+    // with the class in front of it while its parameters do not.
+    cxx::ScopeSymbol *found = global;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            if (!dynamic_cast<cxx::NamespaceSymbol *>(member)
+                && !dynamic_cast<cxx::ClassSymbol *>(member)) {
+                continue;
+            }
+            cxx::ScopeSymbol * const inner = member->asScopeSymbol();
+            if (!inner || !inner->contains(location))
+                continue;
+            found = inner;
+            walk(inner);
+        }
+    };
+    walk(global);
+    return found;
 }
 
 cxx::SourceLocation CxxFrontendDocument::Private::nameLocationOf(
@@ -1570,6 +1658,162 @@ CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
     counterpart.column = int(position.column);
     counterpart.isDefinition = otherIsDefinition;
     return counterpart;
+}
+
+// What a signature answers from: a function of this unit, and the scopes
+// another declaration in it stands in.
+class CxxFrontendDocument::Signature::Private
+{
+public:
+    const Overview *settings = nullptr;
+    cxx::FunctionSymbol *function = nullptr;
+    const cxx::FunctionType *type = nullptr;
+    QStringList parameterNames;
+
+    // Where the answer is going, in the two scopes the halves of a
+    // declaration are read in: a return type stands outside the function, a
+    // parameter inside it.
+    cxx::ScopeSymbol *aroundTheOtherSide = nullptr;
+    cxx::ScopeSymbol *insideTheOtherSide = nullptr;
+
+    QString write(const cxx::Type *type, const QString &name,
+                  cxx::ScopeSymbol *scope) const
+    {
+        if (!type)
+            return name;
+        const QString declaration = fromStd(
+            cxx::to_string(type, name.toStdString(), {.writtenIn = scope}));
+        return applyStarBinding(declaration, *settings);
+    }
+
+    const cxx::Type *parameterTypeAt(int index) const
+    {
+        if (!type || index < 0 || index >= int(type->parameterTypes().size()))
+            return nullptr;
+        return type->parameterTypes().at(index);
+    }
+};
+
+CxxFrontendDocument::Signature::Signature() = default;
+CxxFrontendDocument::Signature::Signature(Signature &&other) noexcept = default;
+CxxFrontendDocument::Signature &CxxFrontendDocument::Signature::operator=(
+    Signature &&other) noexcept = default;
+CxxFrontendDocument::Signature::~Signature() = default;
+
+bool CxxFrontendDocument::Signature::isValid() const
+{
+    return d && d->function && d->type;
+}
+
+QString CxxFrontendDocument::Signature::name() const
+{
+    return isValid() ? qualifiedNameOf(d->function) : QString();
+}
+
+QString CxxFrontendDocument::Signature::returnType() const
+{
+    return isValid() ? fromStd(cxx::to_string(d->type->returnType())) : QString();
+}
+
+int CxxFrontendDocument::Signature::parameterCount() const
+{
+    return isValid() ? int(d->type->parameterTypes().size()) : 0;
+}
+
+QString CxxFrontendDocument::Signature::parameterName(int index) const
+{
+    if (!isValid() || index < 0 || index >= d->parameterNames.size())
+        return {};
+    return d->parameterNames.at(index);
+}
+
+QString CxxFrontendDocument::Signature::parameterType(int index) const
+{
+    const cxx::Type * const type = isValid() ? d->parameterTypeAt(index) : nullptr;
+    return type ? fromStd(cxx::to_string(type)) : QString();
+}
+
+bool CxxFrontendDocument::Signature::isConst() const
+{
+    if (!isValid())
+        return false;
+    const cxx::CvQualifiers cv = d->type->cvQualifiers();
+    return cv == cxx::CvQualifiers::kConst || cv == cxx::CvQualifiers::kConstVolatile;
+}
+
+bool CxxFrontendDocument::Signature::isVolatile() const
+{
+    if (!isValid())
+        return false;
+    const cxx::CvQualifiers cv = d->type->cvQualifiers();
+    return cv == cxx::CvQualifiers::kVolatile || cv == cxx::CvQualifiers::kConstVolatile;
+}
+
+QString CxxFrontendDocument::Signature::exceptionSpecification() const
+{
+    return isValid() && d->type->isNoexcept() ? QStringLiteral("noexcept") : QString();
+}
+
+QString CxxFrontendDocument::Signature::writeReturnType(const QString &name) const
+{
+    if (!isValid())
+        return {};
+    return d->write(d->type->returnType(), name, d->aroundTheOtherSide);
+}
+
+QString CxxFrontendDocument::Signature::writeParameter(int index, const QString &name) const
+{
+    if (!isValid())
+        return {};
+    return d->write(d->parameterTypeAt(index), name, d->insideTheOtherSide);
+}
+
+QString CxxFrontendDocument::Signature::writtenParameterType(int index) const
+{
+    const cxx::Type * const type = isValid() ? d->parameterTypeAt(index) : nullptr;
+    if (!type)
+        return {};
+    return fromStd(cxx::to_string(type, "", {.writtenIn = d->insideTheOtherSide}));
+}
+
+CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
+    int line, int column, int writtenAtLine, int writtenAtColumn) const
+{
+    // Either side may be the declaration or the definition, and a position on
+    // the function's name reaches it in both cases.
+    const auto functionAt = [this](int line, int column) -> cxx::FunctionSymbol * {
+        const cxx::SourceLocation location = d->tokenAt(line, column);
+        if (!location)
+            return nullptr;
+        if (cxx::FunctionSymbol * const declared = d->declaredFunctionAt(location))
+            return declared;
+        return d->definitionAround(location);
+    };
+
+    cxx::FunctionSymbol * const function = functionAt(line, column);
+    cxx::FunctionSymbol * const other = functionAt(writtenAtLine, writtenAtColumn);
+    if (!function || !other)
+        return {};
+    auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
+    if (!type)
+        return {};
+
+    Signature signature;
+    signature.d = std::make_unique<Signature::Private>();
+    signature.d->settings = &d->config.settings;
+    signature.d->function = function;
+    signature.d->type = type;
+    signature.d->parameterNames = d->parameterNamesOf(function);
+
+    // A parameter of the other side stands inside it, so what its own scope
+    // reaches needs nothing written in front of it. Its return type stands
+    // in front of the name, which is wherever the declaration is written --
+    // for a definition under a qualified name, outside the class.
+    signature.d->insideTheOtherSide = other;
+    signature.d->aroundTheOtherSide
+        = d->scopeWrittenAround(d->nameLocationOf(other));
+
+    return signature;
 }
 
 CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString &name,
@@ -2400,6 +2644,12 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // halves of a ternary. namesIn() answers for names, and those are
         // punctuation or macros.
         "where the labels and the angle brackets are",
+        // Which way a function's exception specification was written. The
+        // front end records whether it throws and nothing else, so a
+        // throw() and a noexcept(expr) both come back as noexcept -- which
+        // is enough to tell a function that throws from one that does not,
+        // and not enough to write the specification back as it stood.
+        "how an exception specification was written",
     };
 }
 
