@@ -99,7 +99,7 @@ public:
 
         // Run the formatter
         PointerDeclarationFormatter formatter(cppRefactoringFile, overview, cursorHandling);
-        Utils::ChangeSet change = formatter.format(ast); // ChangeSet may be empty.
+        Utils::ChangeSet change = formatter.formatEverything(); // ChangeSet may be empty.
 
         // Apply change
         change.apply(qtextDocument);

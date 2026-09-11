@@ -75,7 +75,7 @@ static void applyRefactorings(QTextDocument *textDocument, TextEditorWidget *edi
         overview.starBindFlags |= Overview::BindToRightSpecifier;
 
     PointerDeclarationFormatter formatter(cppRefactoringFile, overview);
-    Utils::ChangeSet change = formatter.format(cppDocument->translationUnit()->ast());
+    Utils::ChangeSet change = formatter.formatEverything();
 
     // Apply change
     change.apply(textDocument);

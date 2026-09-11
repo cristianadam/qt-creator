@@ -3,6 +3,7 @@
 
 #include "cpppointerdeclarationformatter.h"
 
+#include <cplusplus/ASTPath.h>
 #include <cplusplus/Overview.h>
 
 #include <QDebug>
@@ -91,6 +92,83 @@ static unsigned firstTypeSpecifierWithoutFollowingAttribute(
     }
 
     return 0;
+}
+
+/*!
+    Filters the results of ASTPath: the constructs a reformatting activates
+    on, each of them once and innermost first, which is the order they are
+    offered in.
+*/
+static QList<AST *> constructsToFormat(const QList<AST *> &astPath)
+{
+    QList<AST *> filtered;
+    bool hasSimpleDeclaration = false;
+    bool hasFunctionDefinition = false;
+    bool hasParameterDeclaration = false;
+    bool hasIfStatement = false;
+    bool hasWhileStatement = false;
+    bool hasForStatement = false;
+    bool hasForeachStatement = false;
+
+    for (int i = astPath.size() - 1; i >= 0; --i) {
+        AST * const ast = astPath.at(i);
+        const auto take = [&](bool &seen) {
+            if (seen)
+                return;
+            seen = true;
+            filtered.append(ast);
+        };
+        if (ast->asSimpleDeclaration())
+            take(hasSimpleDeclaration);
+        else if (ast->asFunctionDefinition())
+            take(hasFunctionDefinition);
+        else if (ast->asParameterDeclaration())
+            take(hasParameterDeclaration);
+        else if (ast->asIfStatement())
+            take(hasIfStatement);
+        else if (ast->asWhileStatement())
+            take(hasWhileStatement);
+        else if (ast->asForStatement())
+            take(hasForStatement);
+        else if (ast->asForeachStatement())
+            take(hasForeachStatement);
+    }
+    return filtered;
+}
+
+Utils::ChangeSet PointerDeclarationFormatter::formatEverything()
+{
+    const Document::Ptr document = m_cppRefactoringFile->cppDocument();
+    AST * const ast = document && document->translationUnit()
+                          ? document->translationUnit()->ast()
+                          : nullptr;
+    return changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, read(ast));
+}
+
+Utils::ChangeSet PointerDeclarationFormatter::formatAt(const Utils::Text::Position &position)
+{
+    const Document::Ptr document = m_cppRefactoringFile->cppDocument();
+    if (!document)
+        return {};
+
+    // The first construct with anything to change, which is what a reader
+    // with the cursor in several of them is offered.
+    const QList<AST *> path = ASTPath(document)(position.line, position.column + 1);
+    for (AST * const construct : constructsToFormat(path)) {
+        const Utils::ChangeSet changes
+            = changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, read(construct));
+        if (!changes.isEmpty())
+            return changes;
+    }
+    return {};
+}
+
+QList<DeclarationToFormat> PointerDeclarationFormatter::read(AST *ast)
+{
+    m_declarations.clear();
+    if (ast)
+        accept(ast);
+    return m_declarations;
 }
 
 PointerDeclarationFormatter::PointerDeclarationFormatter(

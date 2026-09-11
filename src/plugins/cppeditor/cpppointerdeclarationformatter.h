@@ -8,6 +8,7 @@
 #include <cplusplus/ASTVisitor.h>
 
 #include <utils/changeset.h>
+#include <utils/textutils.h>
 
 namespace CPlusPlus { class Overview; }
 
@@ -66,16 +67,23 @@ public:
                                          CursorHandling cursorHandling = IgnoreCursor);
 
     /*!
-        Returns a ChangeSet for applying the formatting changes.
-        The ChangeSet is empty if it was not possible to rewrite anything.
+        Returns a ChangeSet for applying the formatting changes to everything
+        the file declares. The ChangeSet is empty if it was not possible to
+        rewrite anything.
+
+        Which front end reads the file is decided here, so a caller needs no
+        tree of either of them: what a reformatting rewrites is a declaration
+        and the text that says its type, and neither is a fact about a
+        particular syntax tree.
     */
-    Utils::ChangeSet format(AST *ast)
-    {
-        m_declarations.clear();
-        if (ast)
-            accept(ast);
-        return changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, m_declarations);
-    }
+    Utils::ChangeSet formatEverything();
+
+    /*!
+        The same for the declarations written around \a position, innermost
+        first: a reader asking for this has the cursor in one construct, and
+        what is offered is the first of them with anything to change.
+    */
+    Utils::ChangeSet formatAt(const Utils::Text::Position &position);
 
     /*!
         The changes to make for \a declarations, leaving out the ones that
@@ -89,6 +97,9 @@ public:
         const QList<DeclarationToFormat> &declarations);
 
 protected:
+    // What the built-in front end reads out of one node.
+    QList<DeclarationToFormat> read(AST *ast);
+
     bool visit(SimpleDeclarationAST *ast) override;
     bool visit(FunctionDefinitionAST *ast) override;
     bool visit(ParameterDeclarationAST *ast) override;

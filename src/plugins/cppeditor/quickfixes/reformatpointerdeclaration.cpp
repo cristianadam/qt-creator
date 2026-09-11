@@ -48,56 +48,6 @@ private:
     ChangeSet m_change;
 };
 
-/// Filter the results of ASTPath.
-/// The resulting list contains the supported AST types only once.
-/// For this, the results of ASTPath are iterated in reverse order.
-class ReformatPointerDeclarationASTPathResultsFilter
-{
-public:
-    QList<AST*> filter(const QList<AST*> &astPathList)
-    {
-        QList<AST*> filtered;
-
-        for (int i = astPathList.size() - 1; i >= 0; --i) {
-            AST *ast = astPathList.at(i);
-
-            if (!m_hasSimpleDeclaration && ast->asSimpleDeclaration()) {
-                m_hasSimpleDeclaration = true;
-                filtered.append(ast);
-            } else if (!m_hasFunctionDefinition && ast->asFunctionDefinition()) {
-                m_hasFunctionDefinition = true;
-                filtered.append(ast);
-            } else if (!m_hasParameterDeclaration && ast->asParameterDeclaration()) {
-                m_hasParameterDeclaration = true;
-                filtered.append(ast);
-            } else if (!m_hasIfStatement && ast->asIfStatement()) {
-                m_hasIfStatement = true;
-                filtered.append(ast);
-            } else if (!m_hasWhileStatement && ast->asWhileStatement()) {
-                m_hasWhileStatement = true;
-                filtered.append(ast);
-            } else if (!m_hasForStatement && ast->asForStatement()) {
-                m_hasForStatement = true;
-                filtered.append(ast);
-            } else if (!m_hasForeachStatement && ast->asForeachStatement()) {
-                m_hasForeachStatement = true;
-                filtered.append(ast);
-            }
-        }
-
-        return filtered;
-    }
-
-private:
-    bool m_hasSimpleDeclaration = false;
-    bool m_hasFunctionDefinition = false;
-    bool m_hasParameterDeclaration = false;
-    bool m_hasIfStatement = false;
-    bool m_hasWhileStatement = false;
-    bool m_hasForStatement = false;
-    bool m_hasForeachStatement = false;
-};
-
 /*!
   Reformats a pointer, reference or rvalue reference type/declaration.
 
@@ -117,7 +67,6 @@ public:
 private:
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
         CppRefactoringFilePtr file = interface.currentFile();
 
         Overview overview = CppCodeStyleSettings::currentProjectCodeStyleOverview();
@@ -125,29 +74,23 @@ private:
         overview.showReturnTypes = true;
 
         const QTextCursor cursor = file->cursor();
-        ChangeSet change;
         PointerDeclarationFormatter formatter(file, overview,
                                               PointerDeclarationFormatter::RespectCursor);
 
-        if (cursor.hasSelection()) {
-            // This will no work always as expected since this function is only called if
-            // interface-path() is not empty. If the user selects the whole document via
-            // ctrl-a and there is an empty line in the end, then the cursor is not on
-            // any AST and therefore no quick fix will be triggered.
-            change = formatter.format(file->cppDocument()->translationUnit()->ast());
-            if (!change.isEmpty())
-                result << new ReformatPointerDeclarationOp(interface, change);
-        } else {
-            const QList<AST *> suitableASTs
-                = ReformatPointerDeclarationASTPathResultsFilter().filter(path);
-            for (AST *ast : suitableASTs) {
-                change = formatter.format(ast);
-                if (!change.isEmpty()) {
-                    result << new ReformatPointerDeclarationOp(interface, change);
-                    return;
-                }
-            }
-        }
+        // A selection asks for everything in it, which the cursor rule
+        // sorts out; without one, the construct the cursor is in.
+        //
+        // This will not work always as expected since this function is only called if
+        // interface->path() is not empty. If the user selects the whole document via
+        // ctrl-a and there is an empty line in the end, then the cursor is not on
+        // any AST and therefore no quick fix will be triggered.
+        const ChangeSet change
+            = cursor.hasSelection()
+                  ? formatter.formatEverything()
+                  : formatter.formatAt(Utils::Text::Position::fromPositionInDocument(
+                        interface.textDocument(), interface.position()));
+        if (!change.isEmpty())
+            result << new ReformatPointerDeclarationOp(interface, change);
     }
 };
 
