@@ -594,6 +594,47 @@ static bool builtinDefinitionAt(const CppQuickFixInterface &interface, const Fil
     return false;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// Where the definition of the function declared at \a line and \a column is,
+// as the cxx-frontend model reads it: which file, how much of it comes over,
+// and where its body begins and ends.
+//
+// Only the definition's side of the move is filled in. Nothing where the
+// model has not read the file, where it finds no definition, or where what
+// it finds is a declaration after all.
+std::optional<DefinitionAndItsDeclaration> cxxDefinitionOf(
+    const CppQuickFixInterface &interface, int line, int column)
+{
+    const std::optional<Link> other = cxxFrontendCounterpart(interface.snapshot(),
+                                                             interface.filePath(), line, column);
+    if (!other || !other->hasValidTarget())
+        return {};
+
+    // A link counts columns from zero and the model from one.
+    const CxxFrontendFunctionDeclaration found
+        = cxxFrontendFunctionAt(interface.snapshot(), CppModelManager::workingCopy(),
+                                other->targetFilePath, other->target.line,
+                                other->target.column + 1)
+              .value_or(CxxFrontendFunctionDeclaration());
+    if (!found.isValid() || !found.isDefinition || found.bodyEndLine <= 0)
+        return {};
+
+    const CppRefactoringChanges refactoring(interface.snapshot());
+    const CppRefactoringFilePtr file = refactoring.cppFile(found.filePath);
+    if (!file->isValid())
+        return {};
+
+    DefinitionAndItsDeclaration move;
+    move.definitionFile = found.filePath;
+    move.definitionRange = {file->position(found.startLine, found.startColumn),
+                            file->position(found.endLine, found.endColumn)};
+    move.bodyStart = file->position(found.bodyStartLine, found.bodyStartColumn);
+    move.bodyEnd = file->position(found.bodyEndLine, found.bodyEndColumn);
+    move.endsWithSemicolon = found.endsWithSemicolon;
+    return move;
+}
+#endif
+
 class MoveFuncDefToDeclOp : public CppQuickFixOperation
 {
 public:
@@ -1016,10 +1057,29 @@ private:
             // Where the definition being pulled over is, which is read here
             // rather than while performing: what the operation is handed is
             // the places, and finding them is the reading.
-            move.definitionFile = funcDef->filePath();
-            if (!builtinDefinitionAt(interface, move.definitionFile, funcDef->line(),
-                                     funcDef->column(), &move)) {
-                return;
+            bool read = false;
+#ifdef QTC_WITH_CXX_FRONTEND
+            // Which file it is in and how much of it comes over, on the
+            // other model where it has read this one. Which declaration
+            // this is stays the built-in walk's answer: the fix declines a
+            // signal, and a Qt keyword is one of the things that front end
+            // does not have.
+            if (const std::optional<DefinitionAndItsDeclaration> onTheModel
+                = cxxDefinitionOf(interface, decl->line(), decl->column())) {
+                move.definitionFile = onTheModel->definitionFile;
+                move.definitionRange = onTheModel->definitionRange;
+                move.bodyStart = onTheModel->bodyStart;
+                move.bodyEnd = onTheModel->bodyEnd;
+                move.endsWithSemicolon = onTheModel->endsWithSemicolon;
+                read = true;
+            }
+#endif
+            if (!read) {
+                move.definitionFile = funcDef->filePath();
+                if (!builtinDefinitionAt(interface, move.definitionFile, funcDef->line(),
+                                         funcDef->column(), &move)) {
+                    return;
+                }
             }
 
             if (move.isValid())

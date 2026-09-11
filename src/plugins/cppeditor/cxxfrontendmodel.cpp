@@ -1323,12 +1323,35 @@ CxxFrontendFunctionDeclaration functionIn(const CxxFrontendDocument &document,
     const bool hasParameters = clause && clause->parameterDeclarationList
                                && clause->parameterDeclarationList->value;
 
+    // Where a definition's head stops and its body ends. The head stops
+    // where the declarator does, whichever way the body is written; what
+    // follows is either a body or the "= default" that stands for one.
+    CxxAstRange bodyStart;
+    CxxAstRange bodyEnd;
+    bool endsWithSemicolon = false;
+    if (auto * const definition
+        = dynamic_cast<cxx::FunctionDefinitionAST *>(function.declaration)) {
+        bodyStart = cxxAstRangeOf(document, definition->declarator);
+        if (auto * const defaulted
+            = dynamic_cast<cxx::DefaultFunctionBodyAST *>(definition->functionBody)) {
+            bodyEnd = cxxTokenRangeAt(document, defaulted->defaultLoc);
+            endsWithSemicolon = true;
+        } else {
+            bodyEnd = cxxAstRangeOf(document, definition->functionBody);
+        }
+        if (!bodyStart.isValid() || !bodyEnd.isValid())
+            return {};
+    }
+
     return CxxFrontendFunctionDeclaration{filePath,
                                           name.startLine, name.startColumn,
                                           name.endLine, name.endColumn,
                                           start.startLine, start.startColumn,
                                           start.endLine, start.endColumn,
                                           function.isDefinition,
+                                          bodyStart.endLine, bodyStart.endColumn,
+                                          bodyEnd.endLine, bodyEnd.endColumn,
+                                          endsWithSemicolon,
                                           rparen.startLine, rparen.startColumn,
                                           hasParameters};
 }

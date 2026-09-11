@@ -227,6 +227,18 @@ struct CxxFrontendFunctionDeclaration
 
     bool isDefinition = false;
 
+    // Where a definition's head stops and its body ends, so that the body
+    // can be written out again as it stands. Both zero for a declaration,
+    // which has none.
+    int bodyStartLine = 0;
+    int bodyStartColumn = 0;
+    int bodyEndLine = 0;
+    int bodyEndColumn = 0;
+
+    // A definition written "= default" is the one that does not end in a
+    // body, so the ";" that closed it has to be written after it.
+    bool endsWithSemicolon = false;
+
     // Just before the ')' of its parameter list, which is where another
     // parameter is appended, and whether it has any -- which decides
     // whether a comma goes in front of the new one.
