@@ -2296,9 +2296,17 @@ QString CxxFrontendDocument::declarationOfFunctionAt(const Place &function_,
     if (!there)
         return {};
 
+    // A parameter's name is not part of its type, so the printer is told
+    // them: a name is written *around* a parameter -- "void (*cb)(int)" --
+    // and nobody can put it in afterwards.
+    std::vector<std::string> parameterNames;
+    for (const QString &parameterName : d->parameterNamesOf(function))
+        parameterNames.push_back(parameterName.toStdString());
+
     return applyStarBinding(
         fromStd(cxx::to_string(function->type(), name.toStdString(),
-                               {.writtenIn = d->scopeWrittenAround(there)})),
+                               {.writtenIn = d->scopeWrittenAround(there),
+                                .parameterNames = parameterNames})),
         d->config.settings);
 }
 

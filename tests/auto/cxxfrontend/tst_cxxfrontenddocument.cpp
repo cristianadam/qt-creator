@@ -1697,14 +1697,14 @@ void tst_cxxfrontenddocument::declarationOfAFunctionAt_data()
                       "    void $f(int a);\n"
                       "    void $g();\n"
                       "};\n")
-        << QString("f") << QString("void f(int)");
+        << QString("f") << QString("void f(int a)");
 
     QTest::newRow("a member, written outside its class")
         << QByteArray("struct C {\n"
                       "    void $f(int a);\n"
                       "};\n"
                       "void C::$f(int a) {}\n")
-        << QString("C::f") << QString("void C::f(int)");
+        << QString("C::f") << QString("void C::f(int a)");
 
     QTest::newRow("what it says about itself comes along")
         << QByteArray("struct C {\n"
@@ -1730,6 +1730,22 @@ void tst_cxxfrontenddocument::declarationOfAFunctionAt_data()
                       "};\n"
                       "C::T C::$f() {}\n")
         << QString("C::f") << QString("C::T C::f()");
+
+    // A name is written around a parameter and not after its type, which
+    // is why the printer writes it rather than the caller.
+    QTest::newRow("a parameter whose name goes inside its declarator")
+        << QByteArray("struct C {\n"
+                      "    void $f(void (*cb)(int), int a[4]);\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString("void f(void (*cb)(int), int *a)");
+
+    QTest::newRow("a parameter the function leaves unnamed")
+        << QByteArray("struct C {\n"
+                      "    void $f(int a, double, char c);\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString("void f(int a, double, char c)");
 
     QTest::newRow("a position on no function")
         << QByteArray("struct C {\n"

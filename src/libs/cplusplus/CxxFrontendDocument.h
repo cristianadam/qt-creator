@@ -394,13 +394,19 @@ public:
     // where the thing is going: the same function is "f" written inside its
     // class and "C::f" written outside it.
     //
-    // Only what the type says, which is not everything a declaration writes.
-    // The names of the parameters are not part of a type, so they are not
-    // here -- Signature writes a parameter under a name, one at a time, for
-    // a caller that wants them. Neither is the template the function is
-    // declared under, nor anything that says something about the declaration
-    // rather than about the type: an "explicit", a "static", a default
-    // argument. Empty where the position is on no function.
+    // The parameters are written under the names the function gives them,
+    // which the printer is told: a name is written *around* a parameter --
+    // "void (*cb)(int)" -- so a caller cannot put it in afterwards. One the
+    // function leaves unnamed stays unnamed.
+    //
+    // What is not written is the template the function is declared under,
+    // and anything that says something about the declaration rather than
+    // about the function: an "explicit", a "static", a default argument.
+    // None of those may be repeated where a definition is written apart
+    // from its declaration, but a template header must be, so whoever writes
+    // one has to hand back for a template until this can say it.
+    //
+    // Empty where the position is on no function.
     QString declarationOfFunctionAt(const Place &function, const Place &writtenAt,
                                     const QString &name) const;
 
