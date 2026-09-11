@@ -670,15 +670,28 @@ public:
     }
 };
 
-DeclarationAtAPlace declarationAt(const CxxFrontendDocument &document,
-                                  const CxxFrontendDocument::Place &place)
+// Where a declarator's own name is written: past the scope in front of it,
+// and past a destructor's tilde -- which is where the built-in model records
+// a function too, and so where a link into one points.
+cxx::AST *unqualifiedNameOf(cxx::IdDeclaratorAST *id)
 {
-    const QList<cxx::AST *> path = cxxAstPathAt(document, place.line, place.column,
-                                                place.filePath);
+    if (!id || !id->unqualifiedId)
+        return nullptr;
+    if (auto * const destructor = dynamic_cast<cxx::DestructorIdAST *>(id->unqualifiedId))
+        return destructor->id;
+    return id->unqualifiedId;
+}
+
+// \a onlyTheSignature stops at a function's body: a reader asking what the
+// cursor is *on* means the signature, and the body is not part of it. A
+// reader asking which function the cursor is *in* means the whole thing.
+DeclarationAtAPlace declarationOnPath(const QList<cxx::AST *> &path,
+                                      bool onlyTheSignature = true)
+{
     DeclarationAtAPlace found;
     for (int i = path.size() - 1; i > 0; --i) {
         cxx::AST * const node = path.at(i);
-        if (dynamic_cast<cxx::CompoundStatementAST *>(node))
+        if (onlyTheSignature && dynamic_cast<cxx::CompoundStatementAST *>(node))
             break;
         if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(node)) {
             found.declaration = definition;
@@ -705,6 +718,13 @@ DeclarationAtAPlace declarationAt(const CxxFrontendDocument &document,
         }
     }
     return found.isValid() ? found : DeclarationAtAPlace{};
+}
+
+DeclarationAtAPlace declarationAt(const CxxFrontendDocument &document,
+                                  const CxxFrontendDocument::Place &place)
+{
+    return declarationOnPath(cxxAstPathAt(document, place.line, place.column,
+                                          place.filePath));
 }
 
 // Whether a specifier says what the declaration's type is, rather than
@@ -1119,6 +1139,53 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     };
 
     return link;
+}
+
+std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const FilePath &filePath, int line, int column)
+{
+    // Asked outright, because this one reads a file the editor has not been
+    // running over: everything else here answers nothing where the model was
+    // not asked for, since then there is nothing in the store to answer from.
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    // The one the editor is running over where there is one, and otherwise
+    // the file read here and now: the other side of a function is in a file
+    // nobody is editing.
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    const QList<cxx::AST *> path = cxxAstPathAt(*holding.document, line, column);
+    if (path.isEmpty())
+        return CxxFrontendFunctionDeclaration();
+
+    const DeclarationAtAPlace function = declarationOnPath(path, false);
+    if (!function.isValid() || !function.name())
+        return CxxFrontendFunctionDeclaration();
+
+    bool isParameter = false;
+    cxx::AST * const outermost = declarationAround(path, &isParameter);
+    if (!outermost)
+        return CxxFrontendFunctionDeclaration();
+
+    const CxxAstRange name = cxxAstRangeOf(*holding.document,
+                                           unqualifiedNameOf(function.name()));
+    const CxxAstRange start = cxxAstRangeOf(*holding.document, outermost);
+    if (!name.isValid() || !start.isValid())
+        return CxxFrontendFunctionDeclaration();
+
+    return CxxFrontendFunctionDeclaration{name.startLine, name.startColumn,
+                                          name.endLine, name.endColumn,
+                                          start.startLine, start.startColumn,
+                                          function.isDefinition};
 }
 
 std::optional<QList<CxxFrontendComment>> cxxFrontendCommentsIn(

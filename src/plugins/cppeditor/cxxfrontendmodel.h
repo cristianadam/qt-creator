@@ -190,6 +190,46 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     int line, int column, const WorkingCopy &workingCopy,
     const CxxFrontendFileText &textOf);
 
+// The function declared at a position: where its name stands, whether what
+// stands there is its definition rather than its declaration, and where the
+// declaration it belongs to begins -- which is where its documentation is
+// written above, and where documentation moved to it goes.
+//
+// The start is the outermost of the declarations written directly around it,
+// so that a template function's comment goes above the template and not
+// between it and the function.
+struct CxxFrontendFunctionDeclaration
+{
+    // The name it is declared under, without the scopes in front of it and
+    // past a destructor's tilde, which is where a link into a function
+    // points. Where it begins and where it ends, so that whoever has the
+    // text can read the name itself off it -- an operator is written under
+    // a name too, and spelling each kind out here would only be a second
+    // way of saying what the file says.
+    int nameLine = 0; // one-based, as the model counts
+    int nameColumn = 0;
+    int nameEndLine = 0;
+    int nameEndColumn = 0;
+
+    int startLine = 0;
+    int startColumn = 0;
+    bool isDefinition = false;
+
+    bool isValid() const { return nameLine > 0 && startLine > 0; }
+};
+
+// Nothing where the model cannot read \a filePath at all, and then the
+// caller answers the way it did before; an invalid answer where the position
+// is on no function declaration.
+//
+// A file the model has not been run over is read here and now, which the
+// editor's own questions must not do -- they are asked while somebody is
+// typing. This one is asked by a fix somebody has already chosen, and about
+// the other side of a function, which is a file nobody is editing.
+std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, int line, int column);
+
 // A comment a file writes: where it stands, and which of the four ways it
 // is written -- which is what tells one run of comments from the next.
 struct CxxFrontendComment

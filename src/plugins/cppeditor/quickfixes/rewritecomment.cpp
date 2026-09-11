@@ -5,10 +5,12 @@
 
 #include "../cppeditortr.h"
 #include "../cppeditorwidget.h"
+#include "../cppmodelmanager.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
 
 #include <cplusplus/ASTPath.h>
+#include <cplusplus/Overview.h>
 #include <cplusplus/declarationcomments.h>
 
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -231,13 +233,69 @@ private:
     const bool m_isDoxygen;
 };
 
+// The function the cursor is on: the name it is declared under, where that
+// name stands, and whether what stands there is its definition. All this fix
+// needs to know about the code -- its documentation is found by the name and
+// the place, and which way the documentation moves by which of the two sides
+// the cursor is on.
+class WrittenFunction
+{
+public:
+    QString name;                       // without the scopes in front of it
+    Utils::Text::Position namePosition;  // line one-based, column zero-based
+    bool isDefinition = false;
+};
+
+// Where the outermost declaration written directly around \a loc begins,
+// which is where documentation moved to it goes -- above a template rather
+// than between the template and the function it declares.
+std::optional<int> builtinDeclarationStartIn(const CppRefactoringFilePtr &targetFile,
+                                             const Link &loc)
+{
+    const Document::Ptr &targetCppDoc = targetFile->cppDocument();
+    const QList<AST *> targetAstPath = ASTPath(targetCppDoc)(loc.target.line,
+                                                             loc.target.column + 1);
+    if (targetAstPath.isEmpty())
+        return std::nullopt;
+    const AST *targetDeclAst = nullptr;
+    for (auto it = std::next(std::rbegin(targetAstPath)); it != std::rend(targetAstPath); ++it) {
+        AST * const node = *it;
+        if (node->asDeclaration()) {
+            targetDeclAst = node;
+            continue;
+        }
+        if (targetDeclAst)
+            break;
+    }
+    if (!targetDeclAst)
+        return std::nullopt;
+    return targetCppDoc->translationUnit()->getTokenPositionInDocument(
+        targetDeclAst->firstToken(), targetFile->document());
+}
+
+std::optional<int> declarationStartIn(const CppRefactoringFilePtr &targetFile, const Link &loc)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<CxxFrontendFunctionDeclaration> found = cxxFrontendFunctionAt(
+            CppModelManager::snapshot(), CppModelManager::workingCopy(), loc.targetFilePath,
+            loc.target.line, loc.target.column + 1)) {
+        if (!found->isValid())
+            return std::nullopt;
+        return targetFile->position(found->startLine, found->startColumn);
+    }
+#endif
+    return builtinDeclarationStartIn(targetFile, loc);
+}
+
 class MoveFunctionCommentsOp : public CppQuickFixOperation
 {
 public:
     enum class Direction { ToDecl, ToDef };
-    MoveFunctionCommentsOp(const CppQuickFixInterface &interface, const Symbol *symbol,
-                           const QList<CommentRange> &comments, Direction direction)
-        : CppQuickFixOperation(interface), m_symbol(symbol), m_comments(comments)
+    MoveFunctionCommentsOp(const CppQuickFixInterface &interface, int namePos,
+                           const Link &name, const QList<CommentRange> &comments,
+                           Direction direction)
+        : CppQuickFixOperation(interface), m_namePos(namePos), m_name(name),
+        m_comments(comments)
     {
         setDescription(direction == Direction::ToDecl
                            ? Tr::tr("Move Function Documentation to Declaration")
@@ -249,13 +307,11 @@ private:
     {
         const CppRefactoringFilePtr file = currentFile();
         const auto textDoc = const_cast<QTextDocument *>(file->document());
-        const int pos = file->cppDocument()->translationUnit()->getTokenPositionInDocument(
-            m_symbol->sourceLocation(), textDoc);
         QTextCursor cursor(textDoc);
-        cursor.setPosition(pos);
+        cursor.setPosition(m_namePos);
         const CursorInEditor cursorInEditor(cursor, file->filePath(), editor(),
                                             editor()->textDocument());
-        const auto callback = [symbolLoc = m_symbol->toLink(), comments = m_comments, file]
+        const auto callback = [symbolLoc = m_name, comments = m_comments, file]
             (const Link &link) {
                 moveComments(file, link, symbolLoc, comments);
             };
@@ -279,26 +335,10 @@ private:
             = targetLoc.targetFilePath == symbolLoc.targetFilePath
                   ? sourceFile
                   : changes.cppFile(targetLoc.targetFilePath);
-        const Document::Ptr &targetCppDoc = targetFile->cppDocument();
-        const QList<AST *> targetAstPath = ASTPath(targetCppDoc)(
-            targetLoc.target.line, targetLoc.target.column + 1);
-        if (targetAstPath.isEmpty())
+        const std::optional<int> declarationStart = declarationStartIn(targetFile, targetLoc);
+        if (!declarationStart)
             return;
-        const AST *targetDeclAst = nullptr;
-        for (auto it = std::next(std::rbegin(targetAstPath));
-             it != std::rend(targetAstPath); ++it) {
-            AST * const node = *it;
-            if (node->asDeclaration()) {
-                targetDeclAst = node;
-                continue;
-            }
-            if (targetDeclAst)
-                break;
-        }
-        if (!targetDeclAst)
-            return;
-        const int insertionPos = targetCppDoc->translationUnit()->getTokenPositionInDocument(
-            targetDeclAst->firstToken(), targetFile->document());
+        const int insertionPos = *declarationStart;
         const int sourceCommentStartPos = comments.first().start;
         const int sourceCommentEndPos = comments.last().end;
 
@@ -382,7 +422,8 @@ private:
         sourceFile->apply(sourceChangeSet);
     }
 
-    const Symbol * const m_symbol;
+    const int m_namePos;
+    const Link m_name;
     const QList<CommentRange> m_comments;
 };
 
@@ -468,49 +509,99 @@ class ConvertCommentStyle : public CppQuickFixFactory
     }
 };
 
+// The same, off the built-in syntax tree: the innermost function definition
+// or function declaration the cursor is in.
+std::optional<WrittenFunction> builtinFunctionAt(const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &astPath = interface.path();
+    if (astPath.isEmpty())
+        return std::nullopt;
+    const Symbol *symbol = nullptr;
+    bool isDefinition = false;
+    for (auto it = std::next(std::rbegin(astPath)); it != std::rend(astPath); ++it) {
+        if (const auto func = (*it)->asFunctionDefinition()) {
+            symbol = func->symbol;
+            isDefinition = true;
+            break;
+        }
+        const auto decl = (*it)->asSimpleDeclaration();
+        if (!decl || !decl->declarator_list)
+            continue;
+        for (auto it = decl->declarator_list->begin();
+             !symbol && it != decl->declarator_list->end(); ++it) {
+            PostfixDeclaratorListAST * const funcDecls = (*it)->postfix_declarator_list;
+            if (!funcDecls)
+                continue;
+            for (auto it = funcDecls->begin(); it != funcDecls->end(); ++it) {
+                if (const auto func = (*it)->asFunctionDeclarator()) {
+                    symbol = func->symbol;
+                    isDefinition = false;
+                    break;
+                }
+            }
+        }
+    }
+    if (!symbol)
+        return std::nullopt;
+
+    TranslationUnit * const unit = interface.currentFile()->cppDocument()->translationUnit();
+    Utils::Text::Position position;
+    unit->getTokenPosition(symbol->sourceLocation(), &position.line, &position.column);
+    --position.column;
+    const QStringList parts = Overview().prettyName(symbol->name())
+                                  .split("::", Qt::SkipEmptyParts);
+    if (parts.isEmpty())
+        return std::nullopt;
+    return WrittenFunction{parts.last(), position, isDefinition};
+}
+
+std::optional<WrittenFunction> functionAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QTextCursor cursor = file->cursor();
+    const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
+        file->document(), cursor.position());
+    if (const std::optional<CxxFrontendFunctionDeclaration> found = cxxFrontendFunctionAt(
+            CppModelManager::snapshot(), CppModelManager::workingCopy(), file->filePath(),
+            at.line, at.column + 1)) {
+        if (!found->isValid())
+            return std::nullopt;
+        const QString name = file->textOf(
+            file->position(found->nameLine, found->nameColumn),
+            file->position(found->nameEndLine, found->nameEndColumn));
+        return WrittenFunction{name, {found->nameLine, found->nameColumn - 1},
+                               found->isDefinition};
+    }
+#endif
+    return builtinFunctionAt(interface);
+}
+
 //! Moves function documentation between declaration and implementation.
 class MoveFunctionComments : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface,
                  TextEditor::QuickFixOperations &result) override
     {
-        const QList<AST *> &astPath = interface.path();
-        if (astPath.isEmpty())
-            return;
-        const Symbol *symbol = nullptr;
-        MoveFunctionCommentsOp::Direction direction = MoveFunctionCommentsOp::Direction::ToDecl;
-        for (auto it = std::next(std::rbegin(astPath)); it != std::rend(astPath); ++it) {
-            if (const auto func = (*it)->asFunctionDefinition()) {
-                symbol = func->symbol;
-                direction = MoveFunctionCommentsOp::Direction::ToDecl;
-                break;
-            }
-            const auto decl = (*it)->asSimpleDeclaration();
-            if (!decl || !decl->declarator_list)
-                continue;
-            for (auto it = decl->declarator_list->begin();
-                 !symbol && it != decl->declarator_list->end(); ++it) {
-                PostfixDeclaratorListAST * const funcDecls = (*it)->postfix_declarator_list;
-                if (!funcDecls)
-                    continue;
-                for (auto it = funcDecls->begin(); it != funcDecls->end(); ++it) {
-                    if (const auto func = (*it)->asFunctionDeclarator()) {
-                        symbol = func->symbol;
-                        direction = MoveFunctionCommentsOp::Direction::ToDef;
-                        break;
-                    }
-                }
-            }
-
-        }
-        if (!symbol)
+        const std::optional<WrittenFunction> function = functionAt(interface);
+        if (!function)
             return;
 
-        if (const QList<CommentRange> comments = commentsForDeclaration(
-                symbol, *interface.textDocument(), interface.currentFile()->cppDocument());
-            !comments.isEmpty()) {
-            result << new MoveFunctionCommentsOp(interface, symbol, comments, direction);
-        }
+        const QList<CommentRange> comments = commentsForDeclaration(
+            function->name, function->namePosition, *interface.textDocument(),
+            interface.currentFile()->cppDocument());
+        if (comments.isEmpty())
+            return;
+
+        const CppRefactoringFilePtr file = interface.currentFile();
+        const int namePos = file->position(function->namePosition.line,
+                                           function->namePosition.column + 1);
+        const Link link(file->filePath(), function->namePosition.line,
+                        function->namePosition.column);
+        result << new MoveFunctionCommentsOp(
+            interface, namePos, link, comments,
+            function->isDefinition ? MoveFunctionCommentsOp::Direction::ToDecl
+                                   : MoveFunctionCommentsOp::Direction::ToDef);
     }
 };
 
