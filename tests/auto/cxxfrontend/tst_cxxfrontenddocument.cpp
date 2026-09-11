@@ -1844,6 +1844,37 @@ void tst_cxxfrontenddocument::definitionHeadAt_data()
                       "$\n")
         << QString();
 
+    // The type records that a function is noexcept and not the expression
+    // somebody wrote in it, so a head written from the type would say
+    // something other than what the declaration says.
+    QTest::newRow("an exception specification with an expression in it")
+        << QByteArray("struct C {\n"
+                      "    void $f() noexcept(false);\n"
+                      "};\n"
+                      "$\n")
+        << QString();
+
+    // Plain noexcept is in the type and does come along.
+    QTest::newRow("a plain exception specification")
+        << QByteArray("struct C {\n"
+                      "    void $f() noexcept;\n"
+                      "};\n"
+                      "$\n")
+        << QString("void C::f() noexcept");
+
+    // A friend is written in a class without belonging to it, so the name
+    // it is declared under is not the class's -- and which name it is takes
+    // a lookup this does not do.
+    QTest::newRow("a friend")
+        << QByteArray("namespace N {\n"
+                      "void f();\n"
+                      "struct C {\n"
+                      "    friend void $f();\n"
+                      "};\n"
+                      "$\n"
+                      "}\n")
+        << QString();
+
     QTest::newRow("a position on no function")
         << QByteArray("struct C {\n"
                       "    int $m;\n"

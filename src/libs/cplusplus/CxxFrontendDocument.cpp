@@ -995,26 +995,9 @@ cxx::SourceLocation CxxFrontendDocument::Private::nameLocationOf(
     // destructor where its tilde is. The declarator says it exactly, so it
     // is read off the node that declares this function -- either the
     // definition or the declaration, whichever this unit holds.
-    if (unit.ast()) {
-        for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
-            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
-            if (!slot)
-                continue;
-
-            cxx::DeclaratorAST *declarator = nullptr;
-            if (auto *definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
-                definition && definition->symbol == function) {
-                declarator = definition->declarator;
-            } else if (auto *declared = dynamic_cast<cxx::InitDeclaratorAST *>(*slot);
-                       declared && declared->symbol == function) {
-                declarator = declared->declarator;
-            }
-            if (!declarator)
-                continue;
-
-            if (const cxx::SourceLocation location = nameLocationOfDeclarator(declarator))
-                return location;
-        }
+    if (const cxx::SourceLocation location
+        = nameLocationOfDeclarator(declaratorOf(function))) {
+        return location;
     }
     return function->location();
 }
@@ -2331,6 +2314,30 @@ QString CxxFrontendDocument::definitionHeadAt(const Place &function_,
         function = d->definitionAround(at);
     if (!function || !function->type())
         return {};
+
+    // A friend is written in a class without belonging to it, so the name
+    // it is declared under is not the class's -- and which name it is takes
+    // a lookup that reads what the enclosing namespace declares, which
+    // writing the name from the symbol's own parent does not do. Written
+    // out from here it would say "C::f", which names nothing.
+    if (function->isFriend())
+        return {};
+
+    // An exception specification with an expression in it: the type records
+    // only whether the function is noexcept, so the head would say
+    // something other than what the declaration says -- and a definition
+    // that disagrees with its declaration does not compile.
+    if (cxx::DeclaratorAST * const declarator = d->declaratorOf(function)) {
+        for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+            auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+            if (!parameters || !parameters->exceptionSpecifier)
+                continue;
+            auto * const specifier
+                = dynamic_cast<cxx::NoexceptSpecifierAST *>(parameters->exceptionSpecifier);
+            if (!specifier || specifier->expression)
+                return {};
+        }
+    }
 
     // A template header is part of the definition and is not written here,
     // so such a function is handed back rather than written out halfway.

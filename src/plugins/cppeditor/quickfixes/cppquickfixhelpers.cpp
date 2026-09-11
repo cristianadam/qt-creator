@@ -67,8 +67,21 @@ bool cxxCanWriteADefinitionOf(const CxxFrontendDocument &document,
 
     for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
         auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
-        if (parameters && parameters->trailingReturnType)
+        if (!parameters)
+            continue;
+        if (parameters->trailingReturnType)
             return false;
+
+        // An exception specification with an expression in it. A type
+        // records only whether a function is noexcept, so the expression
+        // would be lost -- and a definition whose exception specification
+        // disagrees with its declaration does not compile.
+        if (parameters->exceptionSpecifier) {
+            auto * const specifier
+                = dynamic_cast<cxx::NoexceptSpecifierAST *>(parameters->exceptionSpecifier);
+            if (!specifier || specifier->expression)
+                return false;
+        }
     }
 
     if (auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator);

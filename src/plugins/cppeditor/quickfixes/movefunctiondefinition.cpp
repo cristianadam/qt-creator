@@ -244,9 +244,18 @@ std::optional<CxxWrittenDefinition> cxxWrittenDefinitionAt(
         return {};
 
     // A trailing return type, an operator, a declarator a macro wrote part
-    // of: each one the built-in path keeps as written and this would not.
+    // of, an exception specification with an expression in it.
     if (!cxxCanWriteADefinitionOf(document, function->declarator))
         return {};
+
+    // A friend is written in a class without belonging to it, so the name
+    // it is declared under is the enclosing namespace's and not the
+    // class's. Which name that is takes a lookup the model does not do, and
+    // writing the class in front of it would name nothing.
+    for (auto *specifier : cxx::ListView{function->declSpecifierList}) {
+        if (dynamic_cast<cxx::FriendSpecifierAST *>(specifier))
+            return {};
+    }
 
     // Error recovery moves where a construct ends, and this one takes text
     // from one place to another.
@@ -382,6 +391,14 @@ public:
             return m_type == MoveOutside;
         });
         QString funcDec = definition.writeSignature(m_operation, l, m_toFile);
+
+        // Nothing is moved rather than a definition written without a head:
+        // whichever front end read this was meant to say beforehand that it
+        // could not write one, and if it did not, doing nothing is the
+        // answer that leaves the code as it was.
+        if (funcDec.isEmpty())
+            return;
+
         QString input = funcDec;
         int inlineIndex = 0;
         const QRegularExpression templateRegex("template\\s*<[^>]*>");

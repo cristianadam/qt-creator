@@ -34,11 +34,15 @@ Utils::Text::Position cxxNameOfDeclarator(const CPlusPlus::CxxFrontendDocument &
 // Whether a definition of what \a declarator declares can be written out of
 // what this front end knows, rather than by keeping the text somebody wrote.
 //
-// Three things say no, each because the built-in path keeps the written form
+// Four things say no. Three because the built-in path keeps the written form
 // and writing from the type would not: a trailing return type, which is one
 // of two ways of saying the same thing; an operator, whose name is spaced the
 // way it was written; and a declarator a macro wrote part of, where the text
-// says the macro's name and the front end read its replacement.
+// says the macro's name and the front end read its replacement. The fourth
+// because it would write something *other* than what was written: an
+// exception specification with an expression in it, which a type does not
+// record -- and a definition that disagrees with its declaration there does
+// not compile.
 //
 // Not asked here, because it is about what the declarator is written inside
 // rather than about the declarator: a template, whose "template<...>" a
