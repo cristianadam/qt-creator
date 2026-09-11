@@ -614,6 +614,10 @@ public:
     // The symbol the name at a position resolves to, as the parser resolved
     // it. Null if there is no name there, or if the parser could not say.
     [[nodiscard]] cxx::Symbol *resolvedSymbolAt(int line, int column) const;
+    // What the declarator whose name stands at \a location declares, in any
+    // of the files this unit read. A name that declares something is not a
+    // use of it, so resolvedSymbolAt has nothing to say about such a place.
+    [[nodiscard]] cxx::Symbol *declaredAt(cxx::SourceLocation location) const;
 
     // The token at a position, or an invalid location if there is none. A
     // scope's extent is in tokens, and a position is in the text.
@@ -1426,6 +1430,103 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
             }
         },
         context);
+}
+
+cxx::Symbol *CxxFrontendDocument::Private::declaredAt(cxx::SourceLocation location) const
+{
+    cxx::ScopeSymbol * const global = unit.globalScope();
+    if (!location || !global)
+        return nullptr;
+
+    // What is declared there, found by where its name is written: a name
+    // that declares something is not a use of it, so there is nothing at
+    // the position to read it off. Searched from the top rather than
+    // from the function around the place, because a parameter is written
+    // in front of the body and so stands outside it.
+    cxx::Symbol *declared = nullptr;
+    const std::function<void(cxx::Symbol *)> look = [&](cxx::Symbol *symbol) {
+        if (declared || !symbol)
+            return;
+
+        // An overload set is nothing anybody declared: it stands for the
+        // functions in it, and says their name and their place itself. A
+        // member defined outside its class keeps its body on the
+        // definition, while the class holds the declaration.
+        if (auto * const overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(symbol)) {
+            for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
+                look(function);
+                if (cxx::FunctionSymbol * const defined = function->definition();
+                    defined && defined != function) {
+                    look(defined);
+                }
+            }
+            return;
+        }
+
+        if (symbol->location() == location && symbol->name()) {
+            declared = symbol;
+            return;
+        }
+        if (cxx::ScopeSymbol * const scope = symbol->asScopeSymbol()) {
+            for (cxx::Symbol *member : scope->members())
+                look(member);
+        }
+    };
+    look(global);
+
+    // A function is not recorded where its name is written -- a definition
+    // is recorded where its declaration starts -- so the tree is what says
+    // which one a name belongs to.
+    if (!declared && unit.ast()) {
+        for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor && !declared; ++cursor) {
+            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+            if (!slot || !*slot)
+                continue;
+            cxx::DeclaratorAST *declarator = nullptr;
+            cxx::Symbol *symbol = nullptr;
+            if (auto * const init = dynamic_cast<cxx::InitDeclaratorAST *>(*slot)) {
+                declarator = init->declarator;
+                symbol = init->symbol;
+            } else if (auto * const definition
+                       = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot)) {
+                declarator = definition->declarator;
+                symbol = definition->symbol;
+            }
+            if (declarator && symbol && symbol->type()
+                && nameLocationOfDeclarator(declarator) == location) {
+                declared = symbol;
+                continue;
+            }
+
+            // A parameter of a function *type* -- the (char *s) of a
+            // pointer to a function -- declares nothing anybody can look
+            // up: its symbols hang off the clause that writes them rather
+            // than off a scope, so that is where they are found.
+            auto * const clause = dynamic_cast<cxx::ParameterDeclarationClauseAST *>(*slot);
+            if (!clause || !clause->functionParametersSymbol)
+                continue;
+            int index = 0;
+            for (auto *parameter : cxx::ListView{clause->parameterDeclarationList}) {
+                if (parameter && parameter->declarator
+                    && nameLocationOfDeclarator(parameter->declarator) == location) {
+                    const auto members = clause->functionParametersSymbol->members();
+                    int at = 0;
+                    for (cxx::Symbol *member : members) {
+                        if (at++ != index)
+                            continue;
+                        if (member && member->type())
+                            declared = member;
+                        break;
+                    }
+                    break;
+                }
+                ++index;
+            }
+        }
+    }
+
+
+    return declared;
 }
 
 cxx::Symbol *CxxFrontendDocument::Private::resolvedSymbolAt(int line, int column) const
@@ -3141,6 +3242,48 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int li
     return {};
 }
 
+QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
+    const Place &declaration) const
+{
+    const cxx::SourceLocation at = d->tokenAt(declaration.line, declaration.column,
+                                              declaration.filePath);
+    if (!at)
+        return {};
+    cxx::Symbol * const target = d->declaredAt(at);
+    if (!target)
+        return {};
+
+    // Written unqualified wherever it is used; whatever path stands in front
+    // of it is what this file resolved for itself.
+    const QString name = fromStd(d->unit.tokenText(at));
+    if (name.isEmpty())
+        return {};
+
+    // Where each of them was first declared, which is the one place a
+    // declaration and a definition apart from it agree on.
+    const auto canonical = [](cxx::Symbol *symbol) {
+        return symbol && symbol->canonical() ? symbol->canonical() : symbol;
+    };
+    cxx::Symbol * const wanted = canonical(target);
+
+    QList<NamedPlace> places;
+    for (const Occurrence &occurrence : occurrencesOf(name)) {
+        // A use first, since that is what most places are; failing that,
+        // whatever the place declares -- the definition of a function a
+        // header declared is a place nothing resolves at.
+        cxx::Symbol *symbol = d->resolvedSymbolAt(occurrence.line, occurrence.column);
+        bool isDeclaration = false;
+        if (!symbol) {
+            symbol = d->declaredAt(d->tokenAt(occurrence.line, occurrence.column));
+            isDeclaration = symbol != nullptr;
+        }
+        if (canonical(symbol) != wanted)
+            continue;
+        places.append({occurrence, isDeclaration});
+    }
+    return places;
+}
+
 QList<CxxFrontendDocument::Occurrence> CxxFrontendDocument::occurrencesOf(
     const QString &name) const
 {
@@ -3696,97 +3839,7 @@ QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString 
                                             const QStringList &parameterNames) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);
-    cxx::ScopeSymbol * const global = d->unit.globalScope();
-    if (!location || !global)
-        return {};
-
-    // What is declared there, found by where its name is written: a name
-    // that declares something is not a use of it, so there is nothing at
-    // the position to read a type off. Searched from the top rather than
-    // from the function around the place, because a parameter is written
-    // in front of the body and so stands outside it.
-    cxx::Symbol *declared = nullptr;
-    const std::function<void(cxx::Symbol *)> look = [&](cxx::Symbol *symbol) {
-        if (declared || !symbol)
-            return;
-
-        // An overload set is nothing anybody declared: it stands for the
-        // functions in it, and says their name and their place itself. A
-        // member defined outside its class keeps its body on the
-        // definition, while the class holds the declaration.
-        if (auto * const overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(symbol)) {
-            for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
-                look(function);
-                if (cxx::FunctionSymbol * const defined = function->definition();
-                    defined && defined != function) {
-                    look(defined);
-                }
-            }
-            return;
-        }
-
-        if (symbol->location() == location && symbol->type() && symbol->name()) {
-            declared = symbol;
-            return;
-        }
-        if (cxx::ScopeSymbol * const scope = symbol->asScopeSymbol()) {
-            for (cxx::Symbol *member : scope->members())
-                look(member);
-        }
-    };
-    look(global);
-
-    // A function is not recorded where its name is written -- a definition
-    // is recorded where its declaration starts -- so the tree is what says
-    // which one a name belongs to.
-    if (!declared && d->unit.ast()) {
-        for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor && !declared; ++cursor) {
-            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
-            if (!slot || !*slot)
-                continue;
-            cxx::DeclaratorAST *declarator = nullptr;
-            cxx::Symbol *symbol = nullptr;
-            if (auto * const init = dynamic_cast<cxx::InitDeclaratorAST *>(*slot)) {
-                declarator = init->declarator;
-                symbol = init->symbol;
-            } else if (auto * const definition
-                       = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot)) {
-                declarator = definition->declarator;
-                symbol = definition->symbol;
-            }
-            if (declarator && symbol && symbol->type()
-                && d->nameLocationOfDeclarator(declarator) == location) {
-                declared = symbol;
-                continue;
-            }
-
-            // A parameter of a function *type* -- the (char *s) of a
-            // pointer to a function -- declares nothing anybody can look
-            // up: its symbols hang off the clause that writes them rather
-            // than off a scope, so that is where they are found.
-            auto * const clause = dynamic_cast<cxx::ParameterDeclarationClauseAST *>(*slot);
-            if (!clause || !clause->functionParametersSymbol)
-                continue;
-            int index = 0;
-            for (auto *parameter : cxx::ListView{clause->parameterDeclarationList}) {
-                if (parameter && parameter->declarator
-                    && d->nameLocationOfDeclarator(parameter->declarator) == location) {
-                    const auto members = clause->functionParametersSymbol->members();
-                    int at = 0;
-                    for (cxx::Symbol *member : members) {
-                        if (at++ != index)
-                            continue;
-                        if (member && member->type())
-                            declared = member;
-                        break;
-                    }
-                    break;
-                }
-                ++index;
-            }
-        }
-    }
-
+    cxx::Symbol * const declared = d->declaredAt(location);
     if (!declared)
         return {};
 

@@ -538,6 +538,28 @@ public:
     };
     QList<Occurrence> occurrencesOf(const QString &name) const;
 
+    // Every place this file names what is declared at \a declaration, which
+    // may be in a header this file read: a header is read into the file that
+    // includes it, so one unit holds both.
+    //
+    // This is find usages asked of one file, which is what a search over the
+    // project asks of each file in turn. A name spelled the same and meaning
+    // something else is not among the answers: every place is resolved and
+    // compared with what was asked about by where the thing was first
+    // declared -- the one place a declaration and a definition apart from it
+    // agree on.
+    //
+    // The place asked about is among them where this file writes it, and a
+    // place this file declares the same thing at -- the definition of a
+    // function its header declares -- is too. Nothing where the position
+    // declares nothing.
+    struct NamedPlace
+    {
+        Occurrence place;
+        bool isDeclaration = false; // it declares the thing rather than using it
+    };
+    QList<NamedPlace> usagesOf(const Place &declaration) const;
+
     // The member functions the class written around a position declares
     // without defining there, in the order they are written -- which is
     // what "put the definitions in the same order" compares against.

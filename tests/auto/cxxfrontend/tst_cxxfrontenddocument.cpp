@@ -220,6 +220,8 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void usagesInAFile_data();
+    void usagesInAFile();
     void classesWithTheirBases_data();
     void classesWithTheirBases();
     void enclosingFunction_data();
@@ -1594,6 +1596,87 @@ void tst_cxxfrontenddocument::partsOfAClass()
     for (const CxxFrontendDocument::Extent &part : document.partsOfClass(className)) {
         described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
                              .arg(part.endLine).arg(part.endColumn));
+    }
+    QCOMPARE(described, expected);
+}
+
+// Find usages asked of one file, which is what a search over the project
+// asks of each file in turn. The first marker is the declaration asked
+// about, and the rest are the places expected to name it.
+void tst_cxxfrontenddocument::usagesInAFile_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("a variable")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    int $x = 0;\n"
+                      "    $x = 1;\n"
+                      "    int y = $x;\n"
+                      "}\n")
+        << QStringList({"3:9 declaration", "4:5", "5:13"});
+
+    // A name spelled the same and meaning something else is not a usage of
+    // this one.
+    QTest::newRow("a name that means something else")
+        << QByteArray("void f()\n"
+                      "{\n"
+                      "    int $x = 0;\n"
+                      "    $x = 1;\n"
+                      "}\n"
+                      "void g()\n"
+                      "{\n"
+                      "    int x = 0;\n"
+                      "    x = 1;\n"
+                      "}\n")
+        << QStringList({"3:9 declaration", "4:5"});
+
+    QTest::newRow("a function and its call")
+        << QByteArray("void $f();\n"
+                      "void g() { $f(); }\n")
+        << QStringList({"1:6 declaration", "2:12"});
+
+    // A definition written apart from its declaration declares the same
+    // thing, which is what the canonical place says.
+    QTest::newRow("a definition apart from its declaration")
+        << QByteArray("struct C { void $f(); };\n"
+                      "void C::$f() {}\n"
+                      "void g(C &c) { c.$f(); }\n")
+        << QStringList({"1:17 declaration", "2:9 declaration", "3:18"});
+
+    QTest::newRow("a class")
+        << QByteArray("class $C {};\n"
+                      "$C c;\n"
+                      "void f($C &) {}\n")
+        << QStringList({"1:7 declaration", "2:1", "3:8"});
+
+    // A member of another class of the same name is another member.
+    QTest::newRow("a member of another class")
+        << QByteArray("struct A { int $m; };\n"
+                      "struct B { int m; };\n"
+                      "void f(A &a, B &b) { a.$m = b.m; }\n")
+        << QStringList({"1:16 declaration", "3:24"});
+
+    QTest::newRow("a position that declares nothing")
+        << QByteArray("void f() { int x = 0; $x = 1; }\n") << QStringList();
+}
+
+void tst_cxxfrontenddocument::usagesInAFile()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QVERIFY(!positions.isEmpty());
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    for (const CxxFrontendDocument::NamedPlace &place :
+         document.usagesOf({{}, positions.first().line, positions.first().column})) {
+        described.append(QString("%1:%2%3").arg(place.place.line).arg(place.place.column)
+                             .arg(place.isDeclaration ? " declaration" : ""));
     }
     QCOMPARE(described, expected);
 }
