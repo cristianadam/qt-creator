@@ -13,6 +13,7 @@
 #include <cplusplus/Overview.h>
 
 #include <utils/qtcassert.h>
+#include <utils/textutils.h>
 
 using namespace CPlusPlus;
 using namespace Utils;
@@ -36,26 +37,32 @@ static int ordering(InsertionPointLocator::AccessSpec xsSpec)
     return order.indexOf(xsSpec);
 }
 
-struct AccessRange
+// One run of a class body under one access, as either front end reads it:
+// which access it is, whether anything is declared in it, and the three
+// places a declaration can be written -- at the end of the run, at its
+// beginning, and just in front of its end, which is where a new access
+// specifier goes when this run is the one to go before.
+//
+// Places rather than tokens, because which token is which depends on the
+// front end that read the class and where a declaration goes does not.
+struct AccessRun
 {
-    int start = 0;
-    int beforeStart = 0;
-    unsigned end = 0;
-    InsertionPointLocator::AccessSpec xsSpec = InsertionPointLocator::Invalid;
-    unsigned colonToken = 0;
+    InsertionPointLocator::AccessSpec access = InsertionPointLocator::Invalid;
+    Utils::Text::Position end;       // where the run ends, the "}" or the next access
+    Utils::Text::Position begin;     // just after "public:", or after the "{"
+    Utils::Text::Position beforeEnd; // just after whatever the run ends behind
+    bool isEmpty = false;
+};
 
-    AccessRange(unsigned start, unsigned end, InsertionPointLocator::AccessSpec xsSpec, unsigned colonToken)
-        : start(start)
-        , end(end)
-        , xsSpec(xsSpec)
-        , colonToken(colonToken)
-    {}
-
-    bool isEmpty() const
-    {
-        unsigned contentStart = 1 + (colonToken ? colonToken : start);
-        return contentStart == end;
-    }
+// Where a declaration of \a access goes, and what has to be written around
+// it: an access specifier of its own where the class has none to put it in,
+// an empty line in front of it, a newline behind it.
+struct InsertionPoint
+{
+    Utils::Text::Position at;
+    bool needsLeadingEmptyLine = false;
+    bool needsPrefix = false;
+    bool needsSuffix = false;
 };
 
 class FindInClass: public ASTVisitor
@@ -94,64 +101,73 @@ private:
     ClassSpecifierAST *_result = nullptr;
 };
 
-void findMatch(const QList<AccessRange> &ranges,
-               InsertionPointLocator::AccessSpec xsSpec,
-               InsertionPointLocator::Position positionInAccessSpec,
-               InsertionPointLocator::ForceAccessSpec forceAccessSpec,
-               unsigned &beforeToken,
-               bool &needsLeadingEmptyLine,
-               bool &needsPrefix,
-               bool &needsSuffix)
+InsertionPoint findMatch(const QList<AccessRun> &runs,
+                         InsertionPointLocator::AccessSpec xsSpec,
+                         InsertionPointLocator::Position positionInAccessSpec,
+                         InsertionPointLocator::ForceAccessSpec forceAccessSpec)
 {
-    QTC_ASSERT(!ranges.isEmpty(), return );
-    const int lastIndex = ranges.size() - 1;
+    QTC_ASSERT(!runs.isEmpty(), return {});
+    const int lastIndex = runs.size() - 1;
     const bool atEnd = positionInAccessSpec == InsertionPointLocator::AccessSpecEnd;
-    needsLeadingEmptyLine = false;
 
     // Try an exact match. Ignore the default access spec unless there is no explicit one.
-    const int firstIndex = ranges.size() == 1
+    const int firstIndex = runs.size() == 1
             && forceAccessSpec == InsertionPointLocator::ForceAccessSpec::No ? 0 : 1;
     for (int i = lastIndex; i >= firstIndex; --i) {
-        const AccessRange &range = ranges.at(i);
-        if (range.xsSpec == xsSpec) {
-            beforeToken = atEnd ? range.end : range.beforeStart;
-            needsLeadingEmptyLine = !atEnd;
-            needsPrefix = false;
-            needsSuffix = (i != lastIndex);
-            return;
-        }
+        const AccessRun &run = runs.at(i);
+        if (run.access == xsSpec)
+            return {atEnd ? run.end : run.begin, !atEnd, false, i != lastIndex};
     }
 
     // try to find a fitting access spec to insert XXX:
     for (int i = lastIndex; i > 0; --i) {
-        const AccessRange &current = ranges.at(i);
+        const AccessRun &current = runs.at(i);
 
-        if (ordering(xsSpec) > ordering(current.xsSpec)) {
-            beforeToken = atEnd ? current.end : current.end - 1;
-            needsLeadingEmptyLine = !atEnd;
-            needsPrefix = true;
-            needsSuffix = (i != lastIndex);
-            return;
-        }
+        if (ordering(xsSpec) > ordering(current.access))
+            return {atEnd ? current.end : current.beforeEnd, !atEnd, true, i != lastIndex};
     }
 
     // otherwise:
-    beforeToken = atEnd ? ranges.first().end : ranges.first().end - 1;
-    needsLeadingEmptyLine = !ranges.first().isEmpty();
-    needsPrefix = true;
-    needsSuffix = (ranges.size() != 1);
+    return {atEnd ? runs.first().end : runs.first().beforeEnd,
+            !runs.first().isEmpty, true, runs.size() != 1};
 }
 
-QList<AccessRange> collectAccessRanges(const CPlusPlus::TranslationUnit *tu,
-                                       DeclarationListAST *decls,
-                                       InsertionPointLocator::AccessSpec initialXs,
-                                       int firstRangeStart,
-                                       int lastRangeEnd)
+// The runs of a class body, as the built-in front end reads it. Each run is
+// closed by the next access specifier, and the last one by the "}".
+QList<AccessRun> builtinAccessRuns(const CPlusPlus::TranslationUnit *tu,
+                                   const ClassSpecifierAST *clazz)
 {
-    QList<AccessRange> ranges;
-    ranges.append(AccessRange(firstRangeStart, lastRangeEnd, initialXs, 0));
+    // What a class body is under before it says otherwise.
+    const InsertionPointLocator::AccessSpec initialXs
+        = tu->tokenKind(clazz->classkey_token) == T_CLASS ? InsertionPointLocator::Private
+                                                          : InsertionPointLocator::Public;
 
-    for (DeclarationListAST *iter = decls; iter; iter = iter->next) {
+    // Where a token begins and where it ends, which is what a run's three
+    // places are made of.
+    const auto startOf = [tu](unsigned token) {
+        Utils::Text::Position position;
+        tu->getTokenPosition(token, &position.line, &position.column);
+        return position;
+    };
+    const auto endOf = [tu](unsigned token) {
+        Utils::Text::Position position;
+        tu->getTokenEndPosition(token, &position.line, &position.column);
+        return position;
+    };
+
+    // What closes a run: the token the next one starts at, or the "}".
+    struct Bounds
+    {
+        int start = 0;      // the access specifier, or the "{"
+        int contentStart = 0;
+        int end = 0;
+        AccessRun run;
+    };
+    QList<Bounds> bounds;
+    bounds.append({clazz->lbrace_token, clazz->lbrace_token + 1, clazz->rbrace_token,
+                   {initialXs, {}, endOf(clazz->lbrace_token), {}, false}});
+
+    for (DeclarationListAST *iter = clazz->member_specifier_list; iter; iter = iter->next) {
         DeclarationAST *decl = iter->value;
 
         if (AccessDeclarationAST *xsDecl = decl->asAccessDeclaration()) {
@@ -182,7 +198,7 @@ QList<AccessRange> collectAccessRanges(const CPlusPlus::TranslationUnit *tu,
                 break;
 
             case T_Q_SLOTS: {
-                newXsSpec = (InsertionPointLocator::AccessSpec)(ranges.last().xsSpec
+                newXsSpec = (InsertionPointLocator::AccessSpec)(bounds.last().run.access
                                                                 | InsertionPointLocator::SlotBit);
                 break;
             }
@@ -191,17 +207,40 @@ QList<AccessRange> collectAccessRanges(const CPlusPlus::TranslationUnit *tu,
                 break;
             }
 
-            if (newXsSpec != ranges.last().xsSpec || ranges.size() == 1) {
-                ranges.last().end = token;
-                AccessRange r(token, lastRangeEnd, newXsSpec, xsDecl->colon_token);
-                r.beforeStart = xsDecl->lastToken() - 1;
-                ranges.append(r);
+            if (newXsSpec != bounds.last().run.access || bounds.size() == 1) {
+                bounds.last().end = token;
+                const unsigned colon = xsDecl->colon_token;
+                bounds.append({int(token), 1 + int(colon ? colon : token), clazz->rbrace_token,
+                               {newXsSpec, {}, endOf(xsDecl->lastToken() - 1), {}, false}});
             }
         }
     }
+    bounds.last().end = clazz->rbrace_token;
 
-    ranges.last().end = lastRangeEnd;
-    return ranges;
+    QList<AccessRun> runs;
+    for (Bounds &one : bounds) {
+        one.run.end = startOf(one.end);
+        one.run.beforeEnd = endOf(one.end - 1);
+        one.run.isEmpty = one.contentStart == one.end;
+        runs.append(one.run);
+    }
+    return runs;
+}
+
+// What an insertion point amounts to for whoever writes the declaration: a
+// place in a file, with the access specifier and the blank lines it needs
+// written around it.
+InsertionLocation insertionLocation(const FilePath &filePath, const InsertionPoint &point,
+                                    InsertionPointLocator::AccessSpec xsSpec)
+{
+    QString prefix;
+    if (point.needsLeadingEmptyLine)
+        prefix += QLatin1String("\n");
+    if (point.needsPrefix)
+        prefix += InsertionPointLocator::accessSpecToString(xsSpec) + QLatin1String(":\n");
+
+    const QString suffix = point.needsSuffix ? QString(QLatin1Char('\n')) : QString();
+    return InsertionLocation(filePath, prefix, suffix, point.at.line, point.at.column);
 }
 
 } // end of anonymous namespace
@@ -276,38 +315,12 @@ InsertionLocation InsertionPointLocator::methodDeclarationInClass(const Translat
 {
     if (!clazz)
         return {};
-    QList<AccessRange> ranges = collectAccessRanges(tu,
-                                                    clazz->member_specifier_list,
-                                                    tu->tokenKind(clazz->classkey_token) == T_CLASS
-                                                        ? InsertionPointLocator::Private
-                                                        : InsertionPointLocator::Public,
-                                                    clazz->lbrace_token,
-                                                    clazz->rbrace_token);
 
-    unsigned beforeToken = 0;
-    bool needsLeadingEmptyLine = false;
-    bool needsPrefix = false;
-    bool needsSuffix = false;
-    findMatch(ranges, xsSpec, pos, forceAccessSpec, beforeToken, needsLeadingEmptyLine,
-              needsPrefix, needsSuffix);
+    const InsertionPoint point
+        = findMatch(builtinAccessRuns(tu, clazz), xsSpec, pos, forceAccessSpec);
 
-    int line = 0, column = 0;
-    if (pos == InsertionPointLocator::AccessSpecEnd)
-        tu->getTokenPosition(beforeToken, &line, &column);
-    else
-        tu->getTokenEndPosition(beforeToken, &line, &column);
-
-    QString prefix;
-    if (needsLeadingEmptyLine)
-        prefix += QLatin1String("\n");
-    if (needsPrefix)
-        prefix += InsertionPointLocator::accessSpecToString(xsSpec) + QLatin1String(":\n");
-
-    QString suffix;
-    if (needsSuffix)
-        suffix = QLatin1Char('\n');
     const QString fileName = QString::fromUtf8(tu->fileName(), tu->fileNameLength());
-    return InsertionLocation(FilePath::fromString(fileName), prefix, suffix, line, column);
+    return insertionLocation(FilePath::fromString(fileName), point, xsSpec);
 }
 
 static InsertionPointLocator::AccessSpec symbolsAccessSpec(Symbol *symbol)
