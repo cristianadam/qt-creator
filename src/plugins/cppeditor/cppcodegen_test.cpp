@@ -69,7 +69,7 @@ static Document::Ptr createDocumentAndFile(TemporaryDir *temporaryDir,
 }
 
 /*!
-    Should insert at line 3, column 1, with "public:\n" as prefix and without suffix.
+    Should insert at line 4, column 1, with "public:\n" as prefix and without suffix.
  */
 void CodegenTest::testPublicInEmptyClass()
 {
@@ -102,7 +102,7 @@ void CodegenTest::testPublicInEmptyClass()
 }
 
 /*!
-    Should insert at line 3, column 1, without prefix and without suffix.
+    Should insert at line 4, column 1, without prefix and without suffix.
  */
 void CodegenTest::testPublicInNonemptyClass()
 {
@@ -136,7 +136,7 @@ void CodegenTest::testPublicInNonemptyClass()
 }
 
 /*!
-    Should insert at line 3, column 1, with "public:\n" as prefix and "\n suffix.
+    Should insert at line 4, column 1, with "public:\n" as prefix and "\n suffix.
  */
 void CodegenTest::testPublicBeforeProtected()
 {
@@ -170,7 +170,7 @@ void CodegenTest::testPublicBeforeProtected()
 }
 
 /*!
-    Should insert at line 4, column 1, with "private:\n" as prefix and without
+    Should insert at line 5, column 1, with "private:\n" as prefix and without
     suffix.
  */
 void CodegenTest::testPrivateAfterProtected()
@@ -205,7 +205,7 @@ void CodegenTest::testPrivateAfterProtected()
 }
 
 /*!
-    Should insert at line 4, column 1, with "protected:\n" as prefix and without
+    Should insert at line 5, column 1, with "protected:\n" as prefix and without
     suffix.
  */
 void CodegenTest::testProtectedInNonemptyClass()
@@ -240,7 +240,7 @@ void CodegenTest::testProtectedInNonemptyClass()
 }
 
 /*!
-    Should insert at line 4, column 1, with "protected\n" as prefix and "\n" suffix.
+    Should insert at line 5, column 1, with "protected\n" as prefix and "\n" suffix.
  */
 void CodegenTest::testProtectedBetweenPublicAndPrivate()
 {
@@ -275,7 +275,7 @@ void CodegenTest::testProtectedBetweenPublicAndPrivate()
 }
 
 /*!
-    Should insert at line 18, column 1, with "private slots:\n" as prefix and "\n"
+    Should insert at line 19, column 1, with "private slots:\n" as prefix and "\n"
     as suffix.
 
     This is the typical \QD case, with test-input like what the integration
@@ -685,6 +685,161 @@ void CodegenTest::testDefinitionMemberSpecificFile()
     QCOMPARE(loc.column(), 2);
     QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
     QCOMPARE(loc.suffix(), QString());
+}
+
+/*!
+    A definition goes inside the namespace the class is declared in, where the
+    file it is going into writes that namespace: just in front of its "}".
+ */
+void CodegenTest::testDefinitionInTheNamespaceTheSourceWrites()
+{
+    TemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+
+    const QByteArray headerText = "\n"
+            "namespace N {\n" // line 2
+            "class Foo\n"
+            "{\n"
+            "void foo();\n"   // line 5
+            "};\n"
+            "}\n";
+    Document::Ptr headerDocument = createDocumentAndFile(&temporaryDir, "file.h", headerText, 1);
+    QVERIFY(headerDocument);
+
+    const QByteArray sourceText = "\n"
+            "namespace N {\n" // line 2
+            "int x;\n"        // line 3
+            "}\n";            // line 4
+    Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 1);
+    QVERIFY(sourceDocument);
+
+    Snapshot snapshot;
+    snapshot.insert(headerDocument);
+    snapshot.insert(sourceDocument);
+
+    Namespace *ns = headerDocument->globalSymbolAt(0)->asNamespace();
+    QVERIFY(ns);
+    Class *foo = ns->memberAt(0)->asClass();
+    QVERIFY(foo);
+    Declaration *decl = foo->memberAt(0)->asDeclaration();
+    QVERIFY(decl);
+
+    CppRefactoringChanges changes(snapshot);
+    InsertionPointLocator find(changes);
+    const QList<InsertionLocation> locList
+        = find.methodDefinition(decl, true, sourceDocument->filePath());
+    QVERIFY(locList.size() == 1);
+    const InsertionLocation loc = locList.first();
+    QCOMPARE(loc.filePath(), sourceDocument->filePath());
+    QCOMPARE(loc.line(), 3);
+    QCOMPARE(loc.column(), 7);
+    QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
+    QCOMPARE(loc.suffix(), QLatin1String("\n"));
+}
+
+/*!
+    The innermost of the namespaces it is declared in that the file writes.
+ */
+void CodegenTest::testDefinitionInTheInnermostNamespaceTheSourceWrites()
+{
+    TemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+
+    const QByteArray headerText = "\n"
+            "namespace N {\n"
+            "namespace M {\n"
+            "class Foo\n"
+            "{\n"
+            "void foo();\n"
+            "};\n"
+            "}\n"
+            "}\n";
+    Document::Ptr headerDocument = createDocumentAndFile(&temporaryDir, "file.h", headerText, 1);
+    QVERIFY(headerDocument);
+
+    const QByteArray sourceText = "\n"
+            "namespace N {\n" // line 2
+            "namespace M {\n" // line 3
+            "int x;\n"        // line 4
+            "}\n"             // line 5
+            "}\n";            // line 6
+    Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 1);
+    QVERIFY(sourceDocument);
+
+    Snapshot snapshot;
+    snapshot.insert(headerDocument);
+    snapshot.insert(sourceDocument);
+
+    Namespace *outer = headerDocument->globalSymbolAt(0)->asNamespace();
+    QVERIFY(outer);
+    Namespace *inner = outer->memberAt(0)->asNamespace();
+    QVERIFY(inner);
+    Class *foo = inner->memberAt(0)->asClass();
+    QVERIFY(foo);
+    Declaration *decl = foo->memberAt(0)->asDeclaration();
+    QVERIFY(decl);
+
+    CppRefactoringChanges changes(snapshot);
+    InsertionPointLocator find(changes);
+    const QList<InsertionLocation> locList
+        = find.methodDefinition(decl, true, sourceDocument->filePath());
+    QVERIFY(locList.size() == 1);
+    const InsertionLocation loc = locList.first();
+    QCOMPARE(loc.filePath(), sourceDocument->filePath());
+    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.column(), 7);
+    QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
+    QCOMPARE(loc.suffix(), QLatin1String("\n"));
+}
+
+/*!
+    Where the file writes no such namespace there is nothing to go inside of,
+    so the definition goes at the end of it -- the caller writing the
+    namespace around it.
+ */
+void CodegenTest::testDefinitionWhereTheSourceWritesNoSuchNamespace()
+{
+    TemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+
+    const QByteArray headerText = "\n"
+            "namespace N {\n"
+            "class Foo\n"
+            "{\n"
+            "void foo();\n"
+            "};\n"
+            "}\n";
+    Document::Ptr headerDocument = createDocumentAndFile(&temporaryDir, "file.h", headerText, 1);
+    QVERIFY(headerDocument);
+
+    const QByteArray sourceText = "\n"
+            "int x;\n" // line 2
+            "\n";
+    Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 1);
+    QVERIFY(sourceDocument);
+
+    Snapshot snapshot;
+    snapshot.insert(headerDocument);
+    snapshot.insert(sourceDocument);
+
+    Namespace *ns = headerDocument->globalSymbolAt(0)->asNamespace();
+    QVERIFY(ns);
+    Class *foo = ns->memberAt(0)->asClass();
+    QVERIFY(foo);
+    Declaration *decl = foo->memberAt(0)->asDeclaration();
+    QVERIFY(decl);
+
+    CppRefactoringChanges changes(snapshot);
+    InsertionPointLocator find(changes);
+    const QList<InsertionLocation> locList
+        = find.methodDefinition(decl, true, sourceDocument->filePath());
+    QVERIFY(locList.size() == 1);
+    const InsertionLocation loc = locList.first();
+    QCOMPARE(loc.filePath(), sourceDocument->filePath());
+    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.column(), 1);
+    QCOMPARE(loc.prefix(), QLatin1String("\n"));
+    QCOMPARE(loc.suffix(), QLatin1String("\n"));
 }
 
 } // CppEditor::Internal

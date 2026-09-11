@@ -26,6 +26,9 @@ private slots:
     void testDefinitionMiddleMember();
     void testDefinitionMiddleMemberSurroundedByUndefined();
     void testDefinitionMemberSpecificFile();
+    void testDefinitionInTheNamespaceTheSourceWrites();
+    void testDefinitionInTheInnermostNamespaceTheSourceWrites();
+    void testDefinitionWhereTheSourceWritesNoSuchNamespace();
 };
 
 } // namespace CppEditor::Internal
