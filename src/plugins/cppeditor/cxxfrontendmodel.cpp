@@ -535,6 +535,102 @@ std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const FilePath 
 
 namespace {
 
+// Which of the four kinds an index holds something under, or nothing where
+// it holds it under none: a namespace is what other entries are found
+// under rather than an entry itself, which is how the built-in reading has
+// it too.
+std::optional<IndexItem::ItemType> indexItemTypeOf(CxxFrontendDocument::Kind kind)
+{
+    switch (kind) {
+    case CxxFrontendDocument::Kind::Class:
+        return IndexItem::Class;
+    case CxxFrontendDocument::Kind::Enum:
+        return IndexItem::Enum;
+    case CxxFrontendDocument::Kind::Function:
+        return IndexItem::Function;
+    case CxxFrontendDocument::Kind::Enumerator:
+    case CxxFrontendDocument::Kind::Variable:
+    case CxxFrontendDocument::Kind::Field:
+    case CxxFrontendDocument::Kind::TypeAlias:
+        return IndexItem::Declaration;
+    case CxxFrontendDocument::Kind::Namespace:
+    case CxxFrontendDocument::Kind::Unknown:
+        break;
+    }
+    return std::nullopt;
+}
+
+// How an index writes a name: an operator's without the space after the
+// word "operator", which is what the built-in reading writes (Overview's
+// includeWhiteSpaceInOperatorName, which a symbol search turns off). A
+// conversion function keeps its space, what follows it being a type rather
+// than an operator -- "operator bool" either way.
+QString indexNameOf(const QString &name)
+{
+    static const QLatin1String spelledWithASpace("operator ");
+    if (!name.startsWith(spelledWithASpace))
+        return name;
+
+    const QStringView rest = QStringView(name).sliced(spelledWithASpace.size());
+    const bool namesAnOperator = rest.isEmpty() || !rest.front().isLetter()
+                                 || rest.startsWith(u"new") || rest.startsWith(u"delete")
+                                 || rest.startsWith(u"co_await");
+    if (!namesAnOperator)
+        return name;
+    return name.left(spelledWithASpace.size() - 1) + rest.toString();
+}
+
+} // namespace
+
+std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const FilePath &filePath)
+{
+    // Objective-C is not a language this front end reads, and what it makes
+    // of a file written in it is a wrong answer rather than a short one.
+    if (ProjectFile::isObjC(filePath))
+        return std::nullopt;
+
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    QList<IndexItem::Ptr> items;
+    for (const CxxFrontendDocument::Symbol &symbol : document->symbols()) {
+        // Written by a macro's replacement rather than by the file: there is
+        // no text of its own to send a reader to, which is what an entry is.
+        if (symbol.isGenerated)
+            continue;
+        // A scope written without a name is nothing to look for by name. It
+        // stands in the path of what it holds, which is where an index has
+        // it, and the entries for those are made here all the same.
+        if (symbol.name.isEmpty())
+            continue;
+        const std::optional<IndexItem::ItemType> type = indexItemTypeOf(symbol.kind);
+        if (!type)
+            continue;
+
+        // What is written after the name: a function's parameter list, and
+        // anything else's type. An index writes the two in different places
+        // -- a function's after its name, a declaration's in front of it --
+        // so one field carries whichever this is.
+        const bool isFunction = symbol.kind == CxxFrontendDocument::Kind::Function;
+        items.append(IndexItem::create(indexNameOf(symbol.name),
+                                       isFunction ? symbol.signature : symbol.valueType,
+                                       symbol.qualified.join("::"),
+                                       *type,
+                                       filePath.toUrlishString(),
+                                       symbol.line,
+                                       symbol.column - 1, // An entry counts columns from zero.
+                                       Utils::CodeModelIcon::iconForType(symbol.icon),
+                                       isFunction && symbol.isDefinedHere));
+    }
+    return items;
+}
+
+namespace {
+
 // A file the model has read, and the document it made of it: the one
 // document that holds both sides of the function.
 class HoldingDocument

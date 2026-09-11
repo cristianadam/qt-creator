@@ -7,6 +7,7 @@
 #include "cppfunctiondecldeflink.h"
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
+#include "indexitem.h"
 #include "semantichighlighter.h"
 
 #include <cplusplus/CxxFrontendDocument.h>
@@ -548,6 +549,20 @@ struct CxxFrontendOutlineEntry
 // Objective-C, so a file written in it is declined rather than answered with
 // the little that parsed.
 std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::FilePath &filePath);
+
+// What \a filePath declares, as the entries a symbol index is made of --
+// the question SearchSymbols asks of a built-in document, answered off this
+// model. Nothing where the model has no such file, and nothing for
+// Objective-C, which this front end does not read.
+//
+// One entry per thing declared, at the place it is declared, where the
+// built-in reading has one per place a name is written: a function declared
+// in a class and defined below is one entry here and two there. Whoever
+// reads a list of the second kind drops the declaration of a function it
+// has exactly one definition of, so the two lists hold the same things --
+// they point at different ends of the same function, and this one points at
+// the declaration.
+std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const Utils::FilePath &filePath);
 
 // What the editor colours in \a filePath: every name it writes, with the
 // kind that decides the colour, in the order they are written. Nothing

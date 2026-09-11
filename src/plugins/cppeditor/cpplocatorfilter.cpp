@@ -7,6 +7,9 @@
 #include "cppeditortr.h"
 #include "cpplocatordata.h"
 #include "cppmodelmanager.h"
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
@@ -149,6 +152,16 @@ static QList<IndexItem::Ptr> itemsOfCurrentDocument(const FilePath &currentFileN
 {
     if (currentFileName.isEmpty())
         return {};
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // What one file declares is what a single document settles, and the
+    // editor is running over this one, so the other model has already read
+    // it -- nothing is parsed here.
+    if (const std::optional<QList<IndexItem::Ptr>> onTheModel
+        = cxxFrontendIndexItems(currentFileName)) {
+        return *onTheModel;
+    }
+#endif
 
     QList<IndexItem::Ptr> results;
     const Snapshot snapshot = CppModelManager::snapshot();
