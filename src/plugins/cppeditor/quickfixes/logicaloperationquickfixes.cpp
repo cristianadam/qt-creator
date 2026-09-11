@@ -6,6 +6,7 @@
 #include "../cppeditortr.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
+#include "cppquickfixhelpers.h"
 
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "../cxxfrontendmodel.h"
@@ -158,18 +159,6 @@ private:
 };
 
 #ifdef QTC_WITH_CXX_FRONTEND
-// What the model paths below all begin with: the file the cursor is in, as
-// the other front end read it, or nothing where it has not read it -- it is
-// off unless asked for. See cxxfrontendmodel.h.
-const CxxFrontendDocument *cxxFrontendDocumentFor(const CppQuickFixInterface &interface)
-{
-    const CppRefactoringFilePtr file = interface.currentFile();
-    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(file->filePath());
-    if (!model)
-        return nullptr;
-    return model->document(file->filePath().toFSPathString());
-}
-
 // The innermost binary expression the cursor is in, with the cursor on its
 // operator -- which is what all three fixes activate on -- and where in the
 // path it was found, since two of them read the nodes around it. Null

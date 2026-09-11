@@ -8,6 +8,7 @@
 #include "../cppeditorwidget.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
+#include "cppquickfixhelpers.h"
 
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
@@ -363,18 +364,6 @@ CxxControlStatements cxxControlStatementsUnderCursor(const CxxFrontendDocument &
     }
 
     return found;
-}
-
-// The file the cursor is in as the other front end read it, or nothing where
-// it has not read it -- the model is off unless asked for. See
-// cxxfrontendmodel.h.
-const CxxFrontendDocument *cxxFrontendDocumentFor(const CppQuickFixInterface &interface)
-{
-    const CppRefactoringFilePtr file = interface.currentFile();
-    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(file->filePath());
-    if (!model)
-        return nullptr;
-    return model->document(file->filePath().toFSPathString());
 }
 
 // The position just after a token, and just before it, as the editor counts

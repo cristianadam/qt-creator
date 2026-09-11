@@ -12,10 +12,27 @@
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendSnapshot.h>
+#endif
+
 using namespace CPlusPlus;
 using namespace Utils;
 
 namespace CppEditor::Internal {
+
+#ifdef QTC_WITH_CXX_FRONTEND
+const CxxFrontendDocument *cxxFrontendDocumentFor(const CppQuickFixInterface &interface)
+{
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(file->filePath());
+    if (!model)
+        return nullptr;
+    return model->document(file->filePath().toFSPathString());
+}
+#endif
 
 void insertNewIncludeDirective(
     const QString &include,

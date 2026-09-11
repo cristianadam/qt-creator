@@ -7,8 +7,18 @@
 
 #include <QStringList>
 
+namespace CPlusPlus { class CxxFrontendDocument; }
+
 namespace CppEditor::Internal {
 class CppQuickFixInterface;
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// What every model path begins with: the file the cursor is in, as the
+// cxx-frontend model read it, or nothing where it has not read it -- the
+// model is off unless asked for. See cxxfrontendmodel.h.
+const CPlusPlus::CxxFrontendDocument *cxxFrontendDocumentFor(
+    const CppQuickFixInterface &interface);
+#endif
 
 // These are generated functions that should not be offered in quickfixes.
 const QStringList magicQObjectFunctions();
