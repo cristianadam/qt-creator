@@ -443,6 +443,7 @@ private slots:
         QTest::newRow("already sorted") << "already-sorted" << false;
         QTest::newRow("different impl locations") << "different-locations" << true;
         QTest::newRow("templates") << "templates" << true;
+        QTest::newRow("in a namespace") << "in-a-namespace" << true;
     }
 
     void test()

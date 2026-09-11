@@ -192,6 +192,21 @@ int positionOf(const QTextDocument &textDoc, int line, int column)
     return textDoc.findBlockByNumber(line - 1).position() + column - 1;
 }
 
+// A declaration that holds a list of other declarations: a namespace, an
+// extern "C" block, an exported block. What is written inside one is not
+// part of it, so the walk below must not carry on out through it.
+//
+// The built-in tree says this by itself -- a namespace holds a body and the
+// body holds the declarations, so the run of declarations ends at the body.
+// This one puts the declarations straight in the namespace, so the rule has
+// to be written down.
+bool holdsDeclarations(cxx::AST *node)
+{
+    return dynamic_cast<cxx::NamespaceDefinitionAST *>(node)
+           || dynamic_cast<cxx::LinkageSpecificationAST *>(node)
+           || dynamic_cast<cxx::ExportCompoundDeclarationAST *>(node);
+}
+
 // The declaration the position is in, and whether the position is a parameter
 // of it -- the same rule the built-in path applies: the outermost of the
 // declarations that enclose the position directly, with a parameter looking
@@ -206,6 +221,13 @@ cxx::AST *declarationAround(const QList<cxx::AST *> &path, bool *isParameter)
             continue;
         }
         if (dynamic_cast<cxx::DeclarationAST *>(node)) {
+            // Still the answer where nothing inside it was found, which is
+            // what a position on the namespace's own name means.
+            if (holdsDeclarations(node)) {
+                if (!declaration)
+                    declaration = node;
+                break;
+            }
             declaration = node;
             continue;
         }
