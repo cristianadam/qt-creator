@@ -14,11 +14,15 @@ QtcLibrary {
     ])
     cpp.includePaths: base.concat([sourceDirectory])
 
+    Depends { name: "RstLang" }
+
     files: [
         "cmakeast.cpp",
         "cmakeast.h",
         "cmakeastvisitor.cpp",
         "cmakeastvisitor.h",
+        "cmakedoc.cpp",
+        "cmakedoc.h",
         "cmakedocument.cpp",
         "cmakedocument.h",
         "cmakeengine.cpp",

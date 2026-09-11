@@ -35,12 +35,13 @@ endif()
 set_source_files_properties(cmakelang.g PROPERTIES HEADER_FILE_ONLY ON)
 
 add_qtc_library(CMakeLang
-  DEPENDS Qt::Core
+  DEPENDS Qt::Core RstLang
   SOURCES
     cmakelang.g
     cmakelang.h
     cmakeast.cpp cmakeast.h
     cmakeastvisitor.cpp cmakeastvisitor.h
+    cmakedoc.cpp cmakedoc.h
     cmakedocument.cpp cmakedocument.h
     cmakeengine.cpp cmakeengine.h
     cmakeindentation.cpp cmakeindentation.h
