@@ -27,7 +27,12 @@ static Document::Ptr createDocument(const FilePath &filePath, const QByteArray &
                                     int expectedGlobalSymbolCount)
 {
     Document::Ptr document = Document::create(filePath);
-    document->setUtf8Source(text);
+
+    // With a #line marker in front, as the source processor's output has:
+    // without one the built-in translation unit counts lines from zero, and
+    // then every line these cases name is one less than the line the text
+    // has it on. The marker's own line is consumed by it.
+    document->setUtf8Source("#line 1 \"" + filePath.path().toUtf8() + "\"\n" + text);
     document->check();
     QTC_ASSERT(document->diagnosticMessages().isEmpty(), return Document::Ptr());
     QTC_ASSERT(document->globalSymbolCount() == expectedGlobalSymbolCount, return Document::Ptr());
@@ -62,7 +67,7 @@ void CodegenTest::testPublicInEmptyClass()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -76,7 +81,7 @@ void CodegenTest::testPublicInEmptyClass()
     QVERIFY(loc.isValid());
     QCOMPARE(loc.prefix(), QLatin1String("public:\n"));
     QVERIFY(loc.suffix().isEmpty());
-    QCOMPARE(loc.line(), 3);
+    QCOMPARE(loc.line(), 4);
     QCOMPARE(loc.column(), 1);
 }
 
@@ -96,7 +101,7 @@ void CodegenTest::testPublicInNonemptyClass()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -110,7 +115,7 @@ void CodegenTest::testPublicInNonemptyClass()
     QVERIFY(loc.isValid());
     QVERIFY(loc.prefix().isEmpty());
     QVERIFY(loc.suffix().isEmpty());
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
     QCOMPARE(loc.column(), 1);
 }
 
@@ -130,7 +135,7 @@ void CodegenTest::testPublicBeforeProtected()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -145,7 +150,7 @@ void CodegenTest::testPublicBeforeProtected()
     QCOMPARE(loc.prefix(), QLatin1String("public:\n"));
     QCOMPARE(loc.suffix(), QLatin1String("\n"));
     QCOMPARE(loc.column(), 1);
-    QCOMPARE(loc.line(), 3);
+    QCOMPARE(loc.line(), 4);
 }
 
 /*!
@@ -165,7 +170,7 @@ void CodegenTest::testPrivateAfterProtected()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -180,7 +185,7 @@ void CodegenTest::testPrivateAfterProtected()
     QCOMPARE(loc.prefix(), QLatin1String("private:\n"));
     QVERIFY(loc.suffix().isEmpty());
     QCOMPARE(loc.column(), 1);
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
 }
 
 /*!
@@ -200,7 +205,7 @@ void CodegenTest::testProtectedInNonemptyClass()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -215,7 +220,7 @@ void CodegenTest::testProtectedInNonemptyClass()
     QCOMPARE(loc.prefix(), QLatin1String("protected:\n"));
     QVERIFY(loc.suffix().isEmpty());
     QCOMPARE(loc.column(), 1);
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
 }
 
 /*!
@@ -235,7 +240,7 @@ void CodegenTest::testProtectedBetweenPublicAndPrivate()
 
     Class *foo = doc->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -250,7 +255,7 @@ void CodegenTest::testProtectedBetweenPublicAndPrivate()
     QCOMPARE(loc.prefix(), QLatin1String("protected:\n"));
     QCOMPARE(loc.suffix(), QLatin1String("\n"));
     QCOMPARE(loc.column(), 1);
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
 }
 
 /*!
@@ -291,7 +296,7 @@ void CodegenTest::testQtdesignerIntegration()
 
     Class *foo = doc->globalSymbolAt(1)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 10);
+    QCOMPARE(foo->line(), 11);
     QCOMPARE(foo->column(), 7);
 
     Snapshot snapshot;
@@ -305,7 +310,7 @@ void CodegenTest::testQtdesignerIntegration()
     QVERIFY(loc.isValid());
     QCOMPARE(loc.prefix(), QLatin1String("private slots:\n"));
     QCOMPARE(loc.suffix(), QLatin1String("\n"));
-    QCOMPARE(loc.line(), 18);
+    QCOMPARE(loc.line(), 19);
     QCOMPARE(loc.column(), 1);
 }
 
@@ -335,12 +340,12 @@ void CodegenTest::testDefinitionEmptyClass()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 1);
     Declaration *decl = foo->memberAt(0)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 3);
+    QCOMPARE(decl->line(), 4);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -349,9 +354,13 @@ void CodegenTest::testDefinitionEmptyClass()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
-    QCOMPARE(loc.suffix(), QString());
-    QCOMPARE(loc.line(), 3);
+    // One new line rather than two, the definition going at the end of the
+    // file. Which is what the editor has always written here: it asked about
+    // a document the source processor had put a #line marker in front of, and
+    // so about the line the text really has this on.
+    QCOMPARE(loc.prefix(), QLatin1String("\n"));
+    QCOMPARE(loc.suffix(), QLatin1String("\n"));
+    QCOMPARE(loc.line(), 4);
     QCOMPARE(loc.column(), 1);
 }
 
@@ -393,12 +402,12 @@ void CodegenTest::testDefinitionFirstMember()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 2);
     Declaration *decl = foo->memberAt(0)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 3);
+    QCOMPARE(decl->line(), 4);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -407,7 +416,7 @@ void CodegenTest::testDefinitionFirstMember()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
     QCOMPARE(loc.column(), 1);
     QCOMPARE(loc.suffix(), QLatin1String("\n\n"));
     QCOMPARE(loc.prefix(), QString());
@@ -452,12 +461,12 @@ void CodegenTest::testDefinitionLastMember()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 2);
     Declaration *decl = foo->memberAt(1)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 4);
+    QCOMPARE(decl->line(), 5);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -466,7 +475,7 @@ void CodegenTest::testDefinitionLastMember()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.line(), 7);
+    QCOMPARE(loc.line(), 8);
     QCOMPARE(loc.column(), 2);
     QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
     QCOMPARE(loc.suffix(), QString());
@@ -518,12 +527,12 @@ void CodegenTest::testDefinitionMiddleMember()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 3);
     Declaration *decl = foo->memberAt(1)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 4);
+    QCOMPARE(decl->line(), 5);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -532,7 +541,7 @@ void CodegenTest::testDefinitionMiddleMember()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.line(), 7);
+    QCOMPARE(loc.line(), 8);
     QCOMPARE(loc.column(), 2);
     QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
     QCOMPARE(loc.suffix(), QString());
@@ -578,12 +587,12 @@ void CodegenTest::testDefinitionMiddleMemberSurroundedByUndefined()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 4);
     Declaration *decl = foo->memberAt(1)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 4);
+    QCOMPARE(decl->line(), 5);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -592,7 +601,7 @@ void CodegenTest::testDefinitionMiddleMemberSurroundedByUndefined()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.line(), 4);
+    QCOMPARE(loc.line(), 5);
     QCOMPARE(loc.column(), 1);
     QCOMPARE(loc.prefix(), QString());
     QCOMPARE(loc.suffix(), QLatin1String("\n\n"));
@@ -641,12 +650,12 @@ void CodegenTest::testDefinitionMemberSpecificFile()
 
     Class *foo = headerDocument->globalSymbolAt(0)->asClass();
     QVERIFY(foo);
-    QCOMPARE(foo->line(), 1);
+    QCOMPARE(foo->line(), 2);
     QCOMPARE(foo->column(), 7);
     QCOMPARE(foo->memberCount(), 3);
     Declaration *decl = foo->memberAt(2)->asDeclaration();
     QVERIFY(decl);
-    QCOMPARE(decl->line(), 5);
+    QCOMPARE(decl->line(), 6);
     QCOMPARE(decl->column(), 6);
 
     CppRefactoringChanges changes(snapshot);
@@ -656,7 +665,7 @@ void CodegenTest::testDefinitionMemberSpecificFile()
     QVERIFY(locList.size() == 1);
     InsertionLocation loc = locList.first();
     QCOMPARE(loc.filePath(), sourceDocument->filePath());
-    QCOMPARE(loc.line(), 7);
+    QCOMPARE(loc.line(), 8);
     QCOMPARE(loc.column(), 2);
     QCOMPARE(loc.prefix(), QLatin1String("\n\n"));
     QCOMPARE(loc.suffix(), QString());
