@@ -999,8 +999,8 @@ std::optional<ExtractionSite> modelExtractionSite(const CppQuickFixInterface &in
     // outside the class, and in the class, where what the class declares
     // needs nothing in front of it.
     if (site.handsBackAValue) {
-        site.returnTypeInTheDefinition = document->typeOfLocalAt(
-            returnValueLine, returnValueColumn,
+        site.returnTypeInTheDefinition = document->typeDeclaredAt(
+            returnValueLine, returnValueColumn, {},
             {{}, function.definition.startLine, function.definition.startColumn});
         // Inside the class, where what the class itself declares needs
         // nothing in front of it. Where the declaration's text stands is
@@ -1008,8 +1008,8 @@ std::optional<ExtractionSite> modelExtractionSite(const CppQuickFixInterface &in
         // rule, and there the class's own names need their path.
         site.returnTypeInTheClass
             = function.isMemberFunction
-                  ? document->typeOfLocalAt(returnValueLine, returnValueColumn,
-                                            function.classNamePlace)
+                  ? document->typeDeclaredAt(returnValueLine, returnValueColumn, {},
+                                             function.classNamePlace)
                   : site.returnTypeInTheDefinition;
         if (site.returnTypeInTheDefinition.isEmpty() || site.returnTypeInTheClass.isEmpty())
             return std::nullopt;

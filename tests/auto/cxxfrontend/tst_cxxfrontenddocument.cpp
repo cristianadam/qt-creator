@@ -222,8 +222,8 @@ private slots:
     void partsOfAClass();
     void enclosingFunction_data();
     void enclosingFunction();
-    void typeOfALocal_data();
-    void typeOfALocal();
+    void typeDeclared_data();
+    void typeDeclared();
     void usingDirectiveAt_data();
     void usingDirectiveAt();
     void usingDirectives_data();
@@ -1673,11 +1673,13 @@ void tst_cxxfrontenddocument::enclosingFunction()
     QCOMPARE(described, expected);
 }
 
-// The type of a local, written for somewhere else: a function handing it
-// back has to say it where its own name stands.
-void tst_cxxfrontenddocument::typeOfALocal_data()
+// The type declared at a place, written for somewhere else -- a function
+// handing a local back has to say it where its own name stands -- or
+// written around a name, which is what rewriting the declaration needs.
+void tst_cxxfrontenddocument::typeDeclared_data()
 {
     QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("name");
     QTest::addColumn<QString>("expected");
 
     // The first marker is the local, the second the place it is written
@@ -1688,7 +1690,7 @@ void tst_cxxfrontenddocument::typeOfALocal_data()
                       "    int $i = 1;\n"
                       "}\n"
                       "$")
-        << QString("int");
+        << QString() << QString("int");
 
     QTest::newRow("a class of a namespace, written outside it")
         << QByteArray("namespace NS {\n"
@@ -1699,7 +1701,7 @@ void tst_cxxfrontenddocument::typeOfALocal_data()
                       "}\n"
                       "}\n"
                       "$")
-        << QString("NS::C");
+        << QString() << QString("NS::C");
 
     QTest::newRow("the same, written inside the namespace")
         << QByteArray("namespace NS {\n"
@@ -1710,7 +1712,7 @@ void tst_cxxfrontenddocument::typeOfALocal_data()
                       "    $\n"
                       "}\n"
                       "}\n")
-        << QString("C");
+        << QString() << QString("C");
 
     // The body of a member defined outside its class hangs off the
     // definition, not off the declaration the class holds.
@@ -1723,14 +1725,37 @@ void tst_cxxfrontenddocument::typeOfALocal_data()
                       "    C $c2;\n"
                       "}\n"
                       "$")
-        << QString("NS::C");
+        << QString() << QString("NS::C");
 
     QTest::newRow("a parameter")
         << QByteArray("void f(const char *$p)\n"
                       "{\n"
                       "}\n"
                       "$")
-        << QString("const char *");
+        << QString() << QString("const char *");
+
+    // Written around the name the caller hands over, which is how a
+    // declaration is rewritten where it stands: a declarator is written
+    // around a name and no amount of putting it after the type gets there.
+    QTest::newRow("a pointer, under another name")
+        << QByteArray("char *$s;\n$")
+        << QString("total") << QString("char *total");
+    QTest::newRow("a pointer to a function, under another name")
+        << QByteArray("void (*$p)(int);\n$")
+        << QString("total") << QString("void (*total)(int)");
+
+    // A function's own type is what it hands back: the part of it written
+    // in front of its name.
+    QTest::newRow("what a function hands back")
+        << QByteArray("char *$f(int);\n$")
+        << QString("f") << QString("char *f");
+
+    // The name as it is written, qualification and all, so that nothing of
+    // what somebody wrote is lost where the declaration is rewritten.
+    QTest::newRow("a member defined out of line, named as written")
+        << QByteArray("struct C { char *f(); };\n"
+                      "char *C::$f() { return nullptr; }\n$")
+        << QString("C::f") << QString("char *C::f");
 
     QTest::newRow("a position that declares nothing")
         << QByteArray("void f()\n"
@@ -1739,12 +1764,13 @@ void tst_cxxfrontenddocument::typeOfALocal_data()
                       "    $i = 2;\n"
                       "}\n"
                       "$")
-        << QString();
+        << QString() << QString();
 }
 
-void tst_cxxfrontenddocument::typeOfALocal()
+void tst_cxxfrontenddocument::typeDeclared()
 {
     QFETCH(QByteArray, marked);
+    QFETCH(QString, name);
     QFETCH(QString, expected);
 
     QList<Position> positions;
@@ -1752,8 +1778,8 @@ void tst_cxxfrontenddocument::typeOfALocal()
     QCOMPARE(positions.size(), 2);
 
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
-    QCOMPARE(document.typeOfLocalAt(positions.first().line, positions.first().column,
-                                    {{}, positions.last().line, positions.last().column}),
+    QCOMPARE(document.typeDeclaredAt(positions.first().line, positions.first().column, name,
+                                     {{}, positions.last().line, positions.last().column}),
              expected);
 }
 

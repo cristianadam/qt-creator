@@ -3679,53 +3679,89 @@ QString CxxFrontendDocument::declarationOfTypeAt(int line, int column,
         d->config.settings);
 }
 
-QString CxxFrontendDocument::typeOfLocalAt(int line, int column, const Place &writtenAt) const
+QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString &name,
+                                            const Place &writtenAt) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);
     cxx::ScopeSymbol * const global = d->unit.globalScope();
     if (!location || !global)
         return {};
 
-    // The local declared there, found by where its name is written: a name
+    // What is declared there, found by where its name is written: a name
     // that declares something is not a use of it, so there is nothing at
     // the position to read a type off. Searched from the top rather than
     // from the function around the place, because a parameter is written
     // in front of the body and so stands outside it.
-    cxx::Symbol *local = nullptr;
-    const std::function<void(cxx::ScopeSymbol *)> find = [&](cxx::ScopeSymbol *scope) {
-        for (cxx::Symbol *member : scope->members()) {
-            if (local)
-                return;
-            if ((dynamic_cast<cxx::ParameterSymbol *>(member)
-                 || dynamic_cast<cxx::VariableSymbol *>(member))
-                && member->location() == location) {
-                local = member;
-                return;
-            }
-            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
-                for (cxx::FunctionSymbol *nested : overloadSet->declaredFunctions()) {
-                    find(nested);
-                    // A member defined outside its class keeps its body on
-                    // the definition, while the class holds the
-                    // declaration: the locals are the definition's.
-                    if (cxx::FunctionSymbol * const defined = nested->definition();
-                        defined && defined != nested) {
-                        find(defined);
-                    }
+    cxx::Symbol *declared = nullptr;
+    const std::function<void(cxx::Symbol *)> look = [&](cxx::Symbol *symbol) {
+        if (declared || !symbol)
+            return;
+
+        // An overload set is nothing anybody declared: it stands for the
+        // functions in it, and says their name and their place itself. A
+        // member defined outside its class keeps its body on the
+        // definition, while the class holds the declaration.
+        if (auto * const overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(symbol)) {
+            for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions()) {
+                look(function);
+                if (cxx::FunctionSymbol * const defined = function->definition();
+                    defined && defined != function) {
+                    look(defined);
                 }
-                continue;
             }
-            if (cxx::ScopeSymbol * const inner = member->asScopeSymbol())
-                find(inner);
+            return;
+        }
+
+        if (symbol->location() == location && symbol->type() && symbol->name()) {
+            declared = symbol;
+            return;
+        }
+        if (cxx::ScopeSymbol * const scope = symbol->asScopeSymbol()) {
+            for (cxx::Symbol *member : scope->members())
+                look(member);
         }
     };
-    find(global);
-    if (!local || !local->type())
+    look(global);
+
+    // A function is not recorded where its name is written -- a definition
+    // is recorded where its declaration starts -- so the tree is what says
+    // which one a name belongs to.
+    if (!declared && d->unit.ast()) {
+        for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor && !declared; ++cursor) {
+            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+            if (!slot || !*slot)
+                continue;
+            cxx::DeclaratorAST *declarator = nullptr;
+            cxx::Symbol *symbol = nullptr;
+            if (auto * const init = dynamic_cast<cxx::InitDeclaratorAST *>(*slot)) {
+                declarator = init->declarator;
+                symbol = init->symbol;
+            } else if (auto * const definition
+                       = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot)) {
+                declarator = definition->declarator;
+                symbol = definition->symbol;
+            }
+            if (!declarator || !symbol || !symbol->type())
+                continue;
+            if (d->nameLocationOfDeclarator(declarator) == location)
+                declared = symbol;
+        }
+    }
+
+    if (!declared)
+        return {};
+
+    // A function's own type is what it hands back, which is the part of it
+    // written in front of its name.
+    const cxx::Type *type = declared->type();
+    if (auto * const function = cxx::type_cast<cxx::FunctionType>(type))
+        type = function->returnType();
+    if (!type)
         return {};
 
     const cxx::SourceLocation there = d->tokenAt(writtenAt.line, writtenAt.column,
                                                  writtenAt.filePath);
-    return applyStarBinding(fromStd(cxx::to_string(local->type(), "",
+    return applyStarBinding(fromStd(cxx::to_string(type, name.toStdString(),
                                                    {.writtenIn = d->scopeWrittenAround(there)})),
                             d->config.settings);
 }

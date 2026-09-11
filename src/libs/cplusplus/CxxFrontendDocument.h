@@ -806,15 +806,24 @@ public:
     // type. Empty in the same cases typeAt() is.
     QString declarationOfTypeAt(int line, int column, const QString &name) const;
 
-    // The type of the local declared at \a line and \a column, written for
-    // the place \a writtenAt: what a function handing that local back has
-    // to put in front of its own name, which may stand somewhere that
-    // needs more of the type's path than where the local does.
+    // The type declared at \a line and \a column -- where a declarator
+    // writes its name -- as a declaration of \a name, written for the place
+    // \a writtenAt. For a function it is the type it hands back, since that
+    // is the part written in front of its name.
     //
-    // Empty where nothing is declared at the position -- a name that
-    // declares something is not a use of it, so this asks the declaration
-    // rather than what stands there.
-    QString typeOfLocalAt(int line, int column, const Place &writtenAt) const;
+    // Two callers want two different things of it. One is about to write a
+    // declaration of the same thing somewhere else, and \a writtenAt is
+    // where: a type needs more of its path in one place than in another. The
+    // other is rewriting the declaration where it stands, and hands over the
+    // name as it is written -- the qualification in front of it and the
+    // spacing of an operator included -- so that nothing of what somebody
+    // wrote is lost.
+    //
+    // Empty where nothing is declared at the position: a name that declares
+    // something is not a use of it, so this asks the declaration rather than
+    // whatever stands there.
+    QString typeDeclaredAt(int line, int column, const QString &name,
+                           const Place &writtenAt) const;
 
     // The function written around a position, as a reader about to write
     // another one beside it needs it.
