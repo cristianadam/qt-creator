@@ -505,6 +505,11 @@ public:
         // its definition starts from.
         int line = 0;
         int column = 0;
+
+        // Declared with "= 0", which says that this class does not define it
+        // -- so whoever is looking for the definitions of a class's members
+        // is not looking for this one's.
+        bool isPureVirtual = false;
     };
     QList<MemberFunction> memberFunctionsAt(int line, int column) const;
 

@@ -1322,6 +1322,15 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "};\n")
         << QStringList("Outer::Inner::i/0 @3:25");
 
+    // Declared with "= 0", so this class does not define it -- said here so
+    // that whoever looks for the definitions is not looking for this one's.
+    QTest::newRow("a pure virtual function")
+        << QByteArray("struct $S {\n"
+                      "    virtual void p() = 0;\n"
+                      "    void q();\n"
+                      "};\n")
+        << QStringList({"S::p/0 @2:18 pure", "S::q/0 @3:10"});
+
     QTest::newRow("a position in no class")
         << QByteArray("$void f();\n") << QStringList();
 }
@@ -1340,9 +1349,10 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass()
     const QList<CxxFrontendDocument::MemberFunction> functions
         = document.memberFunctionsAt(positions.first().line, positions.first().column);
     for (const CxxFrontendDocument::MemberFunction &function : functions) {
-        described.append(QString("%1/%2 @%3:%4").arg(function.name)
+        described.append(QString("%1/%2 @%3:%4%5").arg(function.name)
                              .arg(function.parameterCount)
-                             .arg(function.line).arg(function.column));
+                             .arg(function.line).arg(function.column)
+                             .arg(function.isPureVirtual ? " pure" : ""));
     }
     QCOMPARE(described, expected);
 }

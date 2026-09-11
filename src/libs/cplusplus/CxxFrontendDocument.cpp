@@ -1823,7 +1823,8 @@ QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsA
             const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
             functions.append({qualifiedNameOf(function),
                               int(d->parameterCountOf(function)),
-                              int(position.line), int(position.column)});
+                              int(position.line), int(position.column),
+                              function->isPure()});
         }
     }
     return functions;
