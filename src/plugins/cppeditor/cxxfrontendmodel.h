@@ -172,7 +172,14 @@ struct CxxFrontendDeclDefLink
     // editor. Unlike every other question here it cannot be read off the
     // last parse: what is wanted is the text of this keystroke, so the file
     // that holds both sides is read again with it. The last reading is kept,
-    // so asking twice about the same text costs nothing.
+    // so asking again about text nobody has changed costs nothing.
+    //
+    // What it does cost, once per edit, is a parse of the file and
+    // everything it includes -- a third of a second for a translation unit
+    // of any size -- and the caller asks for it on the editor's own thread.
+    // That is the reason this whole model is behind an environment
+    // variable, and moving the reading off that thread is what it would
+    // take to offer it to anybody.
     std::function<std::shared_ptr<EditedDeclaration>(const QTextCursor &linkSelection,
                                                      const QTextCursor &nameSelection)>
         readEditedDeclaration;

@@ -1067,16 +1067,37 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     const CxxFrontendDocument::Place sourcePlace = sides.source;
     const CxxFrontendDocument::Place targetPlace = sides.target;
     const FilePath holdingFile = sides.holdingFile;
+
+    // The last reading, so that asking again about text nobody has changed
+    // costs nothing: changes() is asked on a timer, and a cursor moving
+    // inside the signature starts it as readily as a keystroke does, while
+    // reading the file again is a parse of everything it includes.
+    class LastReading
+    {
+    public:
+        QString text;
+        std::shared_ptr<EditedDeclaration> declaration;
+        bool answered = false;
+    };
+    const auto last = std::make_shared<LastReading>();
+
     link.readEditedDeclaration =
         [builtinSnapshot, workingCopy, filePath, holdingFile, sourcePlace, targetPlace,
-         targetName](const QTextCursor &, const QTextCursor &nameSelection)
+         targetName, last](const QTextCursor &, const QTextCursor &nameSelection)
         -> std::shared_ptr<EditedDeclaration> {
         const QTextDocument * const text = nameSelection.document();
         if (!text)
             return {};
 
+        const QString source = text->toPlainText();
+        if (last->answered && last->text == source)
+            return last->declaration;
+        last->text = source;
+        last->answered = true;
+        last->declaration = {};
+
         HoldingDocument holding = readWith(builtinSnapshot, workingCopy, holdingFile,
-                                           filePath, text->toPlainText());
+                                           filePath, source);
         if (!holding.document)
             return {};
 
@@ -1091,9 +1112,10 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
                                                                                  targetPlace);
         if (!signature.isValid())
             return {};
-        return std::make_shared<CxxFrontendEditedDeclaration>(
+        last->declaration = std::make_shared<CxxFrontendEditedDeclaration>(
             std::move(holding), std::move(signature), nameSelection.selectedText(),
             targetName);
+        return last->declaration;
     };
 
     return link;
