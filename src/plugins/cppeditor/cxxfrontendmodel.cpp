@@ -1443,6 +1443,50 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     return parts;
 }
 
+std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+
+    // A name that declares something is a way of pointing at it too, which
+    // is what a reader asking "what is this" means by the place.
+    CxxFrontendDocument::Declaration declaration = document->declarationAt(line, column);
+    if (!declaration.isValid())
+        declaration = document->declarationOfNameAt(line, column);
+    if (!declaration.isValid())
+        return std::nullopt;
+    return declaration;
+}
+
+std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    int line, int column)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    CxxFrontendDocument::Declaration declaration = holding.document->declarationAt(line, column);
+    if (!declaration.isValid())
+        declaration = holding.document->declarationOfNameAt(line, column);
+    if (!declaration.isValid())
+        return std::nullopt;
+    return declaration;
+}
+
 std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
     const FilePath &filePath, int line, int column)
 {

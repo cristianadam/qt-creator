@@ -3287,11 +3287,25 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int li
         if (column < symbol.column || column >= symbol.column + int(symbol.name.size()))
             continue;
 
+        cxx::Symbol * const declared = d->cxxSymbols.at(size_t(i));
         Declaration declaration;
-        declaration.name = qualifiedNameOf(d->cxxSymbols.at(size_t(i)));
+        declaration.name = qualifiedNameOf(declared);
         declaration.filePath = d->fileName;
         declaration.line = symbol.line;
         declaration.column = symbol.column;
+        declaration.kind = kindOf(declared);
+        declaration.type = d->describeType(declared);
+
+        // Where it was first declared, which is what tells one entity from
+        // another: a place that declares something is a place somebody can
+        // be asking about it from.
+        cxx::Symbol * const first = declared->canonical() ? declared->canonical() : declared;
+        if (const cxx::SourceLocation at = first->location()) {
+            const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+            declaration.canonicalFilePath = d->fileOf(at);
+            declaration.canonicalLine = int(position.line);
+            declaration.canonicalColumn = int(position.column);
+        }
         return declaration;
     }
     return {};

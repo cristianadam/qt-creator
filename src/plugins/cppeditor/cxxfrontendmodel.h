@@ -306,6 +306,24 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// What the name at a position means: where it was declared, what kind of
+// thing it is and what its type reads as. Nothing where this model has not
+// read the file or the position is on no name it resolved.
+//
+// The raw answer, without follow symbol's rules on top of it: whoever wants
+// to *go* somewhere asks cxxFrontendFollowSymbol(), and whoever wants to say
+// what something is asks this.
+std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
+    const Utils::FilePath &filePath, int line, int column);
+
+// The same for a file nobody has open, read here and now: what an answer
+// asked for out of band -- by the MCP server, say -- is about. One file read
+// per question is the cost, which is the trade for asking about a file the
+// editor is not running over.
+std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath, int line, int column);
+
 // Whether the function whose name is written at a position is virtual, and
 // where that was said. Nothing where this model has not read the file.
 //

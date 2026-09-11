@@ -9,6 +9,12 @@
 #include "cppindexingsupport.h"
 #include "cpplocatordata.h"
 #include "cppmodelmanager.h"
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendDocument.h>
+#endif
 #include "cpprefactoringchanges.h"
 #include "cppworkingcopy.h"
 #include "functionutils.h"
@@ -148,6 +154,74 @@ static QJsonObject limitProperty()
                                                "capped at %2).")
                                            .arg(defaultResultLimit).arg(maxResultLimit)}};
 }
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The words this server answers with, for what the other model says a
+// declaration is. A template is a class there -- its parameters being
+// something it has rather than something it is -- so nothing here says
+// "template".
+static QString declarationKind(CPlusPlus::CxxFrontendDocument::Declaration::Kind kind)
+{
+    using Kind = CPlusPlus::CxxFrontendDocument::Declaration::Kind;
+    switch (kind) {
+    case Kind::Class: return QStringLiteral("class");
+    case Kind::Enum: return QStringLiteral("enum");
+    case Kind::Namespace: return QStringLiteral("namespace");
+    case Kind::Function: return QStringLiteral("function");
+    case Kind::Enumerator:
+    case Kind::Variable:
+    case Kind::Field: return QStringLiteral("variable");
+    case Kind::TypeAlias: return QStringLiteral("declaration");
+    case Kind::Unknown: break;
+    }
+    return QStringLiteral("symbol");
+}
+
+// What the other model says about the name at a position, in the shape this
+// tool answers with, and nothing where it has not read the file.
+static std::optional<QJsonObject> symbolInfoOnTheModel(const Utils::FilePath &filePath, int line,
+                                                       int column)
+{
+    const std::optional<CPlusPlus::CxxFrontendDocument::Declaration> declaration
+        = cxxFrontendDeclarationIn(CppModelManager::snapshot(), CppModelManager::workingCopy(),
+                                   filePath, line, column);
+    if (!declaration)
+        return std::nullopt;
+
+    const auto place = [](const QString &file, int line, int column) {
+        return QJsonObject{{"file", Utils::FilePath::fromUserInput(file).toUserOutput()},
+                           {"line", line},
+                           {"column", column}};
+    };
+
+    QJsonObject result{{"name", declaration->name.split("::").last()},
+                       {"kind", declarationKind(declaration->kind)}};
+    if (!declaration->name.isEmpty())
+        result.insert("qualified_name", declaration->name);
+    if (!declaration->type.isEmpty())
+        result.insert("type", declaration->type);
+
+    // Where it was first declared, which is the declaration a reader is sent
+    // to; where it is defined is the other side of it, unless the place
+    // found is the definition itself.
+    if (declaration->canonicalLine != 0) {
+        result.insert("declaration", place(declaration->canonicalFilePath,
+                                           declaration->canonicalLine,
+                                           declaration->canonicalColumn));
+    }
+    if (declaration->isDefinition) {
+        result.insert("definition",
+                      place(declaration->filePath, declaration->line, declaration->column));
+    } else if (const std::optional<Utils::Link> other
+               = cxxFrontendCounterpart(CppModelManager::snapshot(), filePath, line, column)) {
+        result.insert("definition", place(other->targetFilePath.toFSPathString(),
+                                          other->target.line, other->target.column + 1));
+    }
+    return result;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
 
 static QString symbolKind(const CPlusPlus::Symbol *symbol)
 {
@@ -737,6 +811,13 @@ void registerMcpTools()
             }
 
             const FilePath filePath = FilePath::fromUserInput(file);
+#ifdef QTC_WITH_CXX_FRONTEND
+            if (const std::optional<QJsonObject> onTheModel
+                = symbolInfoOnTheModel(filePath, line, column)) {
+                return CallToolResult{}.isError(false).structuredContent(*onTheModel);
+            }
+#endif
+
             CPlusPlus::LookupContext context;
             CPlusPlus::Symbol *symbol = symbolAt(filePath, line, column, &context);
             if (!symbol) {
