@@ -50,23 +50,61 @@ public:
     InsertionPointLocator::AccessSpec access = InsertionPointLocator::Public;
 };
 
+// What extracting a piece of a function comes down to, as either front end
+// reads it: the text that moves, what has to be handed to it and handed
+// back, and where the new function goes.
+struct ExtractionSite
+{
+    // The statements the selection covers, which is the text that moves.
+    int extractionStart = 0;
+    int extractionEnd = 0;
+
+    // The function it is taken out of: where its declaration begins -- the
+    // new definition goes in front of that, and in front of its
+    // documentation where it has some -- what it is called, and whether it
+    // is const, which the extracted function has to be as well.
+    QString functionName;
+    Utils::Text::Position functionPosition;
+    int functionStart = 0;
+    bool functionIsConst = false;
+
+    // The class the function is a member of, where it is one: what the
+    // definition writes in front of the new function's name, and where the
+    // declaration of it goes.
+    QString classQualification; // "NS::C::", empty for a free function
+    Utils::FilePath classFile;
+    int classLine = 0;
+    int classColumn = 0;
+    bool isMemberFunction = false;
+
+    // What the extracted function takes, in the order it takes them: the
+    // name to write at the call, and the declaration as it is written
+    // today -- which is kept rather than printed, so that whoever wrote it
+    // recognises it.
+    //
+    // Where something is handed back, it is the first of them and is
+    // written as an assignment at the call instead.
+    QList<QPair<QString, QString>> relevantDeclarations;
+    bool handsBackAValue = false;
+
+    // The type of what is handed back, written twice: for the place the
+    // definition goes, and for inside the class where a declaration of it
+    // goes. "void" where nothing is handed back.
+    QString returnTypeInTheDefinition = "void";
+    QString returnTypeInTheClass = "void";
+
+    bool isValid() const { return extractionEnd > extractionStart; }
+};
+
 class ExtractFunctionOperation : public CppQuickFixOperation
 {
 public:
     ExtractFunctionOperation(
         const CppQuickFixInterface &interface,
-        int extractionStart,
-        int extractionEnd,
-        FunctionDefinitionAST *refFuncDef,
-        Symbol *funcReturn,
-        QList<QPair<QString, QString>> relevantDecls,
+        const ExtractionSite &site,
         FunctionNameGetter functionNameGetter = {})
         : CppQuickFixOperation(interface)
-        , m_extractionStart(extractionStart)
-        , m_extractionEnd(extractionEnd)
-        , m_refFuncDef(refFuncDef)
-        , m_funcReturn(funcReturn)
-        , m_relevantDecls(relevantDecls)
+        , m_site(site)
         , m_functionNameGetter(functionNameGetter)
     {
         setDescription(Tr::tr("Extract Function"));
@@ -74,7 +112,7 @@ public:
 
     void perform() override
     {
-        QTC_ASSERT(!m_funcReturn || !m_relevantDecls.isEmpty(), return);
+        QTC_ASSERT(!m_site.handsBackAValue || !m_site.relevantDeclarations.isEmpty(), return);
 
         CppRefactoringChanges refactoring(snapshot());
         ExtractFunctionOptions options;
@@ -87,102 +125,61 @@ public:
             return;
         const QString &funcName = options.funcName;
 
-        Function *refFunc = m_refFuncDef->symbol;
-
-        // We don't need to rewrite the type for declarations made inside the reference function,
-        // since their scope will remain the same. Then we preserve the original spelling style.
-        // However, we must do so for the return type in the definition.
-        SubstitutionEnvironment env;
-        env.setContext(context());
-        env.switchScope(refFunc);
-        ClassOrNamespace *targetCoN = context().lookupType(refFunc->enclosingScope());
-        if (!targetCoN)
-            targetCoN = context().globalNamespace();
-        UseMinimalNames subs(targetCoN);
-        env.enter(&subs);
-
-        Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
-        Control *control = context().bindings()->control().get();
         QString funcDef;
         QString funcDecl; // We generate a declaration only in the case of a member function.
         QString funcCall;
 
-        Class *matchingClass = isMemberFunction(context(), refFunc);
-
         // Write return type.
-        if (!m_funcReturn) {
-            funcDef.append(QLatin1String("void "));
-            if (matchingClass)
-                funcDecl.append(QLatin1String("void "));
-        } else {
-            const FullySpecifiedType &fullType = rewriteType(m_funcReturn->type(), &env, control);
-            funcDef.append(printer.prettyType(fullType) + QLatin1Char(' '));
-            funcDecl.append(printer.prettyType(m_funcReturn->type()) + QLatin1Char(' '));
-        }
+        funcDef.append(m_site.returnTypeInTheDefinition + ' ');
+        if (m_site.isMemberFunction)
+            funcDecl.append(m_site.returnTypeInTheClass + ' ');
 
         // Write class qualification, if any.
-        if (matchingClass) {
-            const Scope *current = matchingClass;
-            QList<const Name *> classes{matchingClass->name()};
-            while (current->enclosingScope()->asClass()) {
-                current = current->enclosingScope()->asClass();
-                classes.prepend(current->name());
-            }
-            while (current->enclosingScope() && current->enclosingScope()->asNamespace()) {
-                current = current->enclosingScope()->asNamespace();
-                if (current->name())
-                    classes.prepend(current->name());
-            }
-            for (const Name *n : classes) {
-                const Name *name = rewriteName(n, &env, control);
-                funcDef.append(printer.prettyName(name));
-                funcDef.append(QLatin1String("::"));
-            }
-        }
+        funcDef.append(m_site.classQualification);
 
         // Write the extracted function itself and its call.
         funcDef.append(funcName);
-        if (matchingClass)
+        if (m_site.isMemberFunction)
             funcDecl.append(funcName);
         funcCall.append(funcName);
         funcDef.append(QLatin1Char('('));
-        if (matchingClass)
+        if (m_site.isMemberFunction)
             funcDecl.append(QLatin1Char('('));
         funcCall.append(QLatin1Char('('));
-        for (int i = m_funcReturn ? 1 : 0; i < m_relevantDecls.length(); ++i) {
-            QPair<QString, QString> p = m_relevantDecls.at(i);
+        for (int i = m_site.handsBackAValue ? 1 : 0; i < m_site.relevantDeclarations.length(); ++i) {
+            QPair<QString, QString> p = m_site.relevantDeclarations.at(i);
             funcCall.append(p.first);
             funcDef.append(p.second);
-            if (matchingClass)
+            if (m_site.isMemberFunction)
                 funcDecl.append(p.second);
-            if (i < m_relevantDecls.length() - 1) {
+            if (i < m_site.relevantDeclarations.length() - 1) {
                 funcCall.append(QLatin1String(", "));
                 funcDef.append(QLatin1String(", "));
-                if (matchingClass)
+                if (m_site.isMemberFunction)
                     funcDecl.append(QLatin1String(", "));
             }
         }
         funcDef.append(QLatin1Char(')'));
-        if (matchingClass)
+        if (m_site.isMemberFunction)
             funcDecl.append(QLatin1Char(')'));
         funcCall.append(QLatin1Char(')'));
-        if (refFunc->isConst()) {
+        if (m_site.functionIsConst) {
             funcDef.append(QLatin1String(" const"));
             funcDecl.append(QLatin1String(" const"));
         }
         funcDef.append(QLatin1String("\n{\n"));
-        QString extract = currentFile()->textOf(m_extractionStart, m_extractionEnd);
+        QString extract = currentFile()->textOf(m_site.extractionStart, m_site.extractionEnd);
         extract.replace(QChar::ParagraphSeparator, QLatin1String("\n"));
-        if (!extract.endsWith(QLatin1Char('\n')) && m_funcReturn)
+        if (!extract.endsWith(QLatin1Char('\n')) && m_site.handsBackAValue)
             extract.append(QLatin1Char('\n'));
         funcDef.append(extract);
-        if (matchingClass)
+        if (m_site.isMemberFunction)
             funcDecl.append(QLatin1String(";\n"));
-        if (m_funcReturn) {
+        if (m_site.handsBackAValue) {
             funcDef.append(QLatin1String("\nreturn ")
-                           + m_relevantDecls.at(0).first
+                           + m_site.relevantDeclarations.at(0).first
                            + QLatin1Char(';'));
-            funcCall.prepend(m_relevantDecls.at(0).second + QLatin1String(" = "));
+            funcCall.prepend(m_site.relevantDeclarations.at(0).second + QLatin1String(" = "));
         }
         funcDef.append(QLatin1String("\n}\n\n"));
         funcDef.replace(QChar::ParagraphSeparator, QLatin1String("\n"));
@@ -190,25 +187,24 @@ public:
         funcCall.append(QLatin1Char(';'));
 
         // Do not insert right between the function and an associated comment.
-        int position = currentFile()->startOf(m_refFuncDef);
+        int position = m_site.functionStart;
         const QList<CommentRange> functionDoc = commentsForDeclaration(
-            m_refFuncDef->symbol, m_refFuncDef, *currentFile()->document(),
+            m_site.functionName, m_site.functionPosition, *currentFile()->document(),
             currentFile()->cppDocument());
         if (!functionDoc.isEmpty())
             position = functionDoc.first().start;
 
         ChangeSet change;
         change.insert(position, funcDef);
-        change.replace(m_extractionStart, m_extractionEnd, funcCall);
+        change.replace(m_site.extractionStart, m_site.extractionEnd, funcCall);
         currentFile()->apply(change);
 
         // Write declaration, if necessary.
-        if (matchingClass) {
+        if (m_site.isMemberFunction) {
             InsertionPointLocator locator(refactoring);
-            const FilePath filePath = FilePath::fromUtf8(matchingClass->fileName());
-            const InsertionLocation &location =
-                locator.methodDeclarationInClass(filePath, matchingClass, options.access);
-            CppRefactoringFilePtr declFile = refactoring.cppFile(filePath);
+            const InsertionLocation &location = locator.methodDeclarationInClass(
+                m_site.classFile, m_site.classLine, m_site.classColumn, options.access);
+            CppRefactoringFilePtr declFile = refactoring.cppFile(m_site.classFile);
             declFile->apply(ChangeSet::makeInsert(
                 declFile->position(location.line(), location.column()),
                 location.prefix() + funcDecl + location.suffix()));
@@ -269,11 +265,7 @@ public:
         return ExtractFunctionOptions();
     }
 
-    int m_extractionStart;
-    int m_extractionEnd;
-    FunctionDefinitionAST *m_refFuncDef;
-    Symbol *m_funcReturn;
-    QList<QPair<QString, QString> > m_relevantDecls;
+    const ExtractionSite m_site;
     FunctionNameGetter m_functionNameGetter;
 };
 
@@ -476,143 +468,220 @@ public:
     const Overview &m_printer;
 };
 
+// What the built-in front end says about extracting the selection.
+std::optional<ExtractionSite> builtinExtractionSite(const CppQuickFixInterface &interface)
+{
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QList<AST *> &path = interface.path();
+
+    // The "reference" function, which we will extract from.
+    FunctionDefinitionAST *refFuncDef = nullptr;
+    for (int i = path.size() - 1; i >= 0; --i) {
+        refFuncDef = path.at(i)->asFunctionDefinition();
+        if (refFuncDef)
+            break;
+    }
+
+    if (!refFuncDef
+        || !refFuncDef->function_body
+        || !refFuncDef->function_body->asCompoundStatement()
+        || !refFuncDef->function_body->asCompoundStatement()->statement_list
+        || !refFuncDef->symbol
+        || !refFuncDef->symbol->name()
+        || refFuncDef->symbol->enclosingScope()->asTemplate() /* TODO: Templates... */) {
+        return {};
+    }
+
+    // Adjust selection ends.
+    const QTextCursor cursor = file->cursor();
+    int selStart = cursor.selectionStart();
+    int selEnd = cursor.selectionEnd();
+    if (selStart > selEnd)
+        std::swap(selStart, selEnd);
+
+    Overview printer;
+
+    // Analyze the content to be extracted, which consists of determining the statements
+    // which are complete and collecting the declarations seen.
+    FunctionExtractionAnalyser analyser(interface.semanticInfo().doc->translationUnit(),
+                                        selStart, selEnd,
+                                        file,
+                                        printer);
+    if (!analyser(refFuncDef))
+        return {};
+
+    // We also need to collect the declarations of the parameters from the reference function.
+    QSet<QString> refFuncParams;
+    if (refFuncDef->declarator->postfix_declarator_list
+        && refFuncDef->declarator->postfix_declarator_list->value
+        && refFuncDef->declarator->postfix_declarator_list->value->asFunctionDeclarator()) {
+        FunctionDeclaratorAST *funcDecltr =
+            refFuncDef->declarator->postfix_declarator_list->value->asFunctionDeclarator();
+        if (funcDecltr->parameter_declaration_clause
+            && funcDecltr->parameter_declaration_clause->parameter_declaration_list) {
+            for (ParameterDeclarationListAST *it =
+                 funcDecltr->parameter_declaration_clause->parameter_declaration_list;
+                 it;
+                 it = it->next) {
+                ParameterDeclarationAST *paramDecl = it->value->asParameterDeclaration();
+                if (paramDecl->declarator) {
+                    const QString &specifiers =
+                        file->textOf(file->startOf(paramDecl),
+                                     file->endOf(paramDecl->type_specifier_list->lastValue()));
+                    const QPair<QString, QString> &p =
+                        assembleDeclarationData(specifiers, paramDecl->declarator,
+                                                file, printer);
+                    if (!p.first.isEmpty()) {
+                        analyser.m_knownDecls.insert(p.first, p.second);
+                        refFuncParams.insert(p.first);
+                    }
+                }
+            }
+        }
+    }
+
+    // Identify what would be parameters for the new function and its return value, if any.
+    Symbol *funcReturn = nullptr;
+    QList<QPair<QString, QString> > relevantDecls;
+    const SemanticInfo::LocalUseMap localUses = interface.semanticInfo().localUses;
+    for (auto it = localUses.cbegin(), end = localUses.cend(); it != end; ++it) {
+        bool usedBeforeExtraction = false;
+        bool usedAfterExtraction = false;
+        bool usedInsideExtraction = false;
+        const QList<SemanticInfo::Use> &uses = it.value();
+        for (const SemanticInfo::Use &use : uses) {
+            if (use.isInvalid())
+                continue;
+
+            const int position = file->position(use.line, use.column);
+            if (position < analyser.m_extractionStart)
+                usedBeforeExtraction = true;
+            else if (position >= analyser.m_extractionEnd)
+                usedAfterExtraction = true;
+            else
+                usedInsideExtraction = true;
+        }
+
+        const QString &name = printer.prettyName(it.key()->name());
+
+        if ((usedBeforeExtraction && usedInsideExtraction)
+            || (usedInsideExtraction && refFuncParams.contains(name))) {
+            QTC_ASSERT(analyser.m_knownDecls.contains(name), return {});
+            relevantDecls.push_back({name, analyser.m_knownDecls.value(name)});
+        }
+
+        // We assume that the first use of a local corresponds to its declaration.
+        if (usedInsideExtraction && usedAfterExtraction && !usedBeforeExtraction) {
+            if (!funcReturn) {
+                QTC_ASSERT(analyser.m_knownDecls.contains(name), return {});
+                // The return, if any, is stored as the first item in the list.
+                relevantDecls.push_front({name, analyser.m_knownDecls.value(name)});
+                funcReturn = it.key();
+            } else {
+                // Would require multiple returns. (Unless we do fancy things, as pointed below.)
+                return {};
+            }
+        }
+    }
+
+    ExtractionSite site;
+    site.extractionStart = analyser.m_extractionStart;
+    site.extractionEnd = analyser.m_extractionEnd;
+    site.functionStart = file->startOf(refFuncDef);
+    site.functionName = printer.prettyName(refFuncDef->symbol->name());
+    file->lineAndColumn(file->startOf(refFuncDef->symbol->sourceLocation()),
+                        &site.functionPosition.line, &site.functionPosition.column);
+    --site.functionPosition.column; // A Text::Position counts its columns from zero.
+    site.functionIsConst = refFuncDef->symbol->isConst();
+    site.relevantDeclarations = relevantDecls;
+    site.handsBackAValue = funcReturn != nullptr;
+
+    // The type of what is handed back. Inside the class it is written as
+    // it stands; where the definition goes, each name in it is written
+    // with as little in front of it as still finds it from there.
+    if (funcReturn) {
+        Function * const refFunc = refFuncDef->symbol;
+        SubstitutionEnvironment env;
+        env.setContext(interface.context());
+        env.switchScope(refFunc);
+        ClassOrNamespace *targetCoN = interface.context().lookupType(refFunc->enclosingScope());
+        if (!targetCoN)
+            targetCoN = interface.context().globalNamespace();
+        UseMinimalNames subs(targetCoN);
+        env.enter(&subs);
+        Control * const control = interface.context().bindings()->control().get();
+        const Overview definitionPrinter = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+        site.returnTypeInTheDefinition
+            = definitionPrinter.prettyType(rewriteType(funcReturn->type(), &env, control));
+        site.returnTypeInTheClass = definitionPrinter.prettyType(funcReturn->type());
+    }
+
+    // The class it is a member of, whose name the definition is written
+    // under and whose body a declaration of it goes into.
+    if (Class * const matchingClass = isMemberFunction(interface.context(), refFuncDef->symbol)) {
+        SubstitutionEnvironment env;
+        env.setContext(interface.context());
+        env.switchScope(refFuncDef->symbol);
+        ClassOrNamespace *targetCoN = interface.context().lookupType(
+            refFuncDef->symbol->enclosingScope());
+        if (!targetCoN)
+            targetCoN = interface.context().globalNamespace();
+        UseMinimalNames subs(targetCoN);
+        env.enter(&subs);
+        Control * const control = interface.context().bindings()->control().get();
+        const Overview definitionPrinter = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+
+        const Scope *current = matchingClass;
+        QList<const Name *> classes{matchingClass->name()};
+        while (current->enclosingScope()->asClass()) {
+            current = current->enclosingScope()->asClass();
+            classes.prepend(current->name());
+        }
+        while (current->enclosingScope() && current->enclosingScope()->asNamespace()) {
+            current = current->enclosingScope()->asNamespace();
+            if (current->name())
+                classes.prepend(current->name());
+        }
+        for (const Name *n : classes) {
+            site.classQualification.append(
+                definitionPrinter.prettyName(rewriteName(n, &env, control)));
+            site.classQualification.append(QLatin1String("::"));
+        }
+
+        site.isMemberFunction = true;
+        site.classFile = FilePath::fromUtf8(matchingClass->fileName());
+        site.classLine = matchingClass->line();
+        site.classColumn = matchingClass->column();
+    }
+
+    return site;
+}
+
 //! Extracts the selected code and puts it to a function
 class ExtractFunction : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const CppRefactoringFilePtr file = interface.currentFile();
-
         // TODO: Fix upstream and uncomment; see QTCREATORBUG-28030.
         //    if (CppModelManager::usesClangd(file->editor()->textDocument())
         //            && file->cppDocument()->languageFeatures().cxxEnabled) {
         //        return;
         //    }
 
-        QTextCursor cursor = file->cursor();
-        if (!cursor.hasSelection())
+        if (!interface.currentFile()->cursor().hasSelection())
             return;
 
-        const QList<AST *> &path = interface.path();
-        FunctionDefinitionAST *refFuncDef = nullptr; // The "reference" function, which we will extract from.
-        for (int i = path.size() - 1; i >= 0; --i) {
-            refFuncDef = path.at(i)->asFunctionDefinition();
-            if (refFuncDef)
-                break;
-        }
-
-        if (!refFuncDef
-            || !refFuncDef->function_body
-            || !refFuncDef->function_body->asCompoundStatement()
-            || !refFuncDef->function_body->asCompoundStatement()->statement_list
-            || !refFuncDef->symbol
-            || !refFuncDef->symbol->name()
-            || refFuncDef->symbol->enclosingScope()->asTemplate() /* TODO: Templates... */) {
-            return;
-        }
-
-        // Adjust selection ends.
-        int selStart = cursor.selectionStart();
-        int selEnd = cursor.selectionEnd();
-        if (selStart > selEnd)
-            std::swap(selStart, selEnd);
-
-        Overview printer;
-
-        // Analyze the content to be extracted, which consists of determining the statements
-        // which are complete and collecting the declarations seen.
-        FunctionExtractionAnalyser analyser(interface.semanticInfo().doc->translationUnit(),
-                                            selStart, selEnd,
-                                            file,
-                                            printer);
-        if (!analyser(refFuncDef))
+        const std::optional<ExtractionSite> site = builtinExtractionSite(interface);
+        if (!site || !site->isValid())
             return;
 
-        // We also need to collect the declarations of the parameters from the reference function.
-        QSet<QString> refFuncParams;
-        if (refFuncDef->declarator->postfix_declarator_list
-            && refFuncDef->declarator->postfix_declarator_list->value
-            && refFuncDef->declarator->postfix_declarator_list->value->asFunctionDeclarator()) {
-            FunctionDeclaratorAST *funcDecltr =
-                refFuncDef->declarator->postfix_declarator_list->value->asFunctionDeclarator();
-            if (funcDecltr->parameter_declaration_clause
-                && funcDecltr->parameter_declaration_clause->parameter_declaration_list) {
-                for (ParameterDeclarationListAST *it =
-                     funcDecltr->parameter_declaration_clause->parameter_declaration_list;
-                     it;
-                     it = it->next) {
-                    ParameterDeclarationAST *paramDecl = it->value->asParameterDeclaration();
-                    if (paramDecl->declarator) {
-                        const QString &specifiers =
-                            file->textOf(file->startOf(paramDecl),
-                                         file->endOf(paramDecl->type_specifier_list->lastValue()));
-                        const QPair<QString, QString> &p =
-                            assembleDeclarationData(specifiers, paramDecl->declarator,
-                                                    file, printer);
-                        if (!p.first.isEmpty()) {
-                            analyser.m_knownDecls.insert(p.first, p.second);
-                            refFuncParams.insert(p.first);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Identify what would be parameters for the new function and its return value, if any.
-        Symbol *funcReturn = nullptr;
-        QList<QPair<QString, QString> > relevantDecls;
-        const SemanticInfo::LocalUseMap localUses = interface.semanticInfo().localUses;
-        for (auto it = localUses.cbegin(), end = localUses.cend(); it != end; ++it) {
-            bool usedBeforeExtraction = false;
-            bool usedAfterExtraction = false;
-            bool usedInsideExtraction = false;
-            const QList<SemanticInfo::Use> &uses = it.value();
-            for (const SemanticInfo::Use &use : uses) {
-                if (use.isInvalid())
-                    continue;
-
-                const int position = file->position(use.line, use.column);
-                if (position < analyser.m_extractionStart)
-                    usedBeforeExtraction = true;
-                else if (position >= analyser.m_extractionEnd)
-                    usedAfterExtraction = true;
-                else
-                    usedInsideExtraction = true;
-            }
-
-            const QString &name = printer.prettyName(it.key()->name());
-
-            if ((usedBeforeExtraction && usedInsideExtraction)
-                || (usedInsideExtraction && refFuncParams.contains(name))) {
-                QTC_ASSERT(analyser.m_knownDecls.contains(name), return);
-                relevantDecls.push_back({name, analyser.m_knownDecls.value(name)});
-            }
-
-            // We assume that the first use of a local corresponds to its declaration.
-            if (usedInsideExtraction && usedAfterExtraction && !usedBeforeExtraction) {
-                if (!funcReturn) {
-                    QTC_ASSERT(analyser.m_knownDecls.contains(name), return);
-                    // The return, if any, is stored as the first item in the list.
-                    relevantDecls.push_front({name, analyser.m_knownDecls.value(name)});
-                    funcReturn = it.key();
-                } else {
-                    // Would require multiple returns. (Unless we do fancy things, as pointed below.)
-                    return;
-                }
-            }
-        }
-
-        // The current implementation doesn't try to be too smart since it preserves the original form
-        // of the declarations. This might be or not the desired effect. An improvement would be to
-        // let the user somehow customize the function interface.
+        // The current implementation doesn't try to be too smart since it preserves the original
+        // form of the declarations. This might be or not the desired effect. An improvement would
+        // be to let the user somehow customize the function interface.
         FunctionNameGetter nameGetter;
         if (testMode())
             nameGetter = []() { return QLatin1String("extracted"); };
-        result << new ExtractFunctionOperation(interface,
-                                               analyser.m_extractionStart,
-                                               analyser.m_extractionEnd,
-                                               refFuncDef, funcReturn, relevantDecls,
-                                               nameGetter);
+        result << new ExtractFunctionOperation(interface, *site, nameGetter);
     }
 };
 
