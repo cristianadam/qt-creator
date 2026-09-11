@@ -4029,6 +4029,140 @@ QStringList CxxFrontendDocument::basesAt(int line, int column) const
     });
 }
 
+namespace {
+
+// What a function's signature amounts to for "is this the same function
+// further up the hierarchy": the name, what it takes, and whether it may be
+// called on a const object. Not what it hands back, which cannot tell two
+// overrides apart.
+QString signatureOf(cxx::FunctionSymbol *function)
+{
+    auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
+    if (!type || !function->name())
+        return {};
+
+    QString signature = fromStd(cxx::to_string(function->name()));
+    signature += '(';
+    bool first = true;
+    for (const cxx::Type *parameter : type->parameterTypes()) {
+        if (!first)
+            signature += ',';
+        first = false;
+        signature += fromStd(cxx::to_string(parameter));
+    }
+    signature += ')';
+    const cxx::CvQualifiers cv = type->cvQualifiers();
+    if (cv == cxx::CvQualifiers::kConst || cv == cxx::CvQualifiers::kConstVolatile)
+        signature += " const";
+    return signature;
+}
+
+} // namespace
+
+CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+    auto * const function = dynamic_cast<cxx::FunctionSymbol *>(d->declaredAt(location));
+    if (!function)
+        return {};
+
+    // Whether "virtual" is written on it, which is not the same as being
+    // virtual: a function that overrides one is virtual whether it says so
+    // or not, and what a reader is offered is the declarations that say it.
+    const auto writesVirtual = [this](int line, int column) {
+        for (cxx::AST * const node : cxxAstPathAt(*this, line, column)) {
+            cxx::List<cxx::SpecifierAST *> *specifiers = nullptr;
+            if (auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(node))
+                specifiers = simple->declSpecifierList;
+            else if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(node))
+                specifiers = definition->declSpecifierList;
+            for (auto *specifier : cxx::ListView{specifiers}) {
+                if (dynamic_cast<cxx::VirtualSpecifierAST *>(specifier))
+                    return true;
+            }
+        }
+        return false;
+    };
+
+    Virtuality answer;
+    answer.namesAFunction = true;
+    answer.isVirtual = writesVirtual(line, column);
+    answer.isPureVirtual = function->isPure();
+
+    const QString signature = signatureOf(function);
+    if (signature.isEmpty())
+        return answer;
+
+    const auto placeOf = [&](cxx::Symbol *symbol) {
+        const cxx::SourceLocation at = symbol->location();
+        if (!at)
+            return Place{};
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+        return Place{d->fileOf(at), int(position.line), int(position.column)};
+    };
+
+    if (answer.isVirtual)
+        answer.firstVirtuals.append(placeOf(function));
+
+    cxx::ClassSymbol *cls = nullptr;
+    for (cxx::Symbol *s = function->parent(); s && !cls; s = s->parent())
+        cls = dynamic_cast<cxx::ClassSymbol *>(s);
+    if (!cls)
+        return answer;
+
+    // The classes above it, breadth first, so that the shallowest
+    // declarations are the ones kept.
+    int depthOfFirstVirtuals = answer.isVirtual ? 0 : -1;
+    QList<QPair<cxx::ClassSymbol *, int>> classes{{cls, 0}};
+    QSet<cxx::ClassSymbol *> visited{cls};
+    while (!classes.isEmpty()) {
+        const auto [current, depth] = classes.takeFirst();
+
+        for (cxx::Symbol *member : current->members()) {
+            auto * const overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member);
+            const auto candidates = overloadSet
+                                        ? std::vector<cxx::FunctionSymbol *>(
+                                              overloadSet->declaredFunctions().begin(),
+                                              overloadSet->declaredFunctions().end())
+                                        : std::vector<cxx::FunctionSymbol *>{
+                                              dynamic_cast<cxx::FunctionSymbol *>(member)};
+            for (cxx::FunctionSymbol * const candidate : candidates) {
+                if (!candidate || candidate == function)
+                    continue;
+                if (signatureOf(candidate) != signature)
+                    continue;
+
+                // Declared final, so nothing below it overrides anything.
+                if (candidate->isFinal())
+                    return answer;
+                if (!candidate->isVirtual())
+                    continue;
+
+                answer.isVirtual = true;
+                if (depth < depthOfFirstVirtuals && depthOfFirstVirtuals != -1)
+                    continue;
+                if (depth > depthOfFirstVirtuals) {
+                    answer.firstVirtuals.clear();
+                    depthOfFirstVirtuals = depth;
+                }
+                answer.firstVirtuals.append(placeOf(candidate));
+            }
+        }
+
+        for (const auto &base : current->baseClasses()) {
+            auto * const baseClass = base ? dynamic_cast<cxx::ClassSymbol *>(base->symbol())
+                                          : nullptr;
+            if (baseClass && !visited.contains(baseClass)) {
+                visited.insert(baseClass);
+                classes.append({baseClass, depth + 1});
+            }
+        }
+    }
+    return answer;
+}
+
 QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheirBases() const
 {
     QList<ClassWithBases> classes;

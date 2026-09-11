@@ -981,6 +981,33 @@ public:
     // that has followed a base here can go on to the next one.
     QStringList basesOf(const QString &className) const;
 
+    // Whether the function whose name is written at a position is virtual,
+    // and where the declarations that first made it so are written.
+    //
+    // "First" is by how far up the hierarchy they stand: what a reader
+    // following a virtual call is offered is the declarations furthest up
+    // that say "virtual", and the function itself where it is the one
+    // saying it. A base that declares it final ends the search, since
+    // nothing below it overrides anything.
+    //
+    // Said, not merely being: a function that overrides a virtual one is
+    // virtual whether it writes the word or not, and what is wanted here is
+    // where somebody wrote it.
+    //
+    // The bases are looked at rather than looked up: a class's bases are
+    // read into the file that writes it, so they are all in reach here.
+    struct Virtuality
+    {
+        bool isVirtual = false;
+        bool isPureVirtual = false;
+        QList<Place> firstVirtuals;
+
+        // Whether a function is written at the position at all, which is
+        // what tells "not virtual" from "nothing to say".
+        bool namesAFunction = false;
+    };
+    Virtuality virtualityAt(int line, int column) const;
+
     // Every class this file writes, with what each of its bases resolves to
     // written out in full: what a search for the classes deriving from a
     // particular one compares against.

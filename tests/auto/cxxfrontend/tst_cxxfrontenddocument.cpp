@@ -220,6 +220,8 @@ private slots:
     void classToMove();
     void partsOfAClass_data();
     void partsOfAClass();
+    void virtuality_data();
+    void virtuality();
     void usagesInAFile_data();
     void usagesInAFile();
     void classesWithTheirBases_data();
@@ -1597,6 +1599,102 @@ void tst_cxxfrontenddocument::partsOfAClass()
         described.append(QString("%1:%2-%3:%4").arg(part.startLine).arg(part.startColumn)
                              .arg(part.endLine).arg(part.endColumn));
     }
+    QCOMPARE(described, expected);
+}
+
+// Whether the function at a place is virtual, and where the declarations
+// that first made it so are written. The first marker is the function asked
+// about; the rest are the places expected to come back.
+void tst_cxxfrontenddocument::virtuality_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("not virtual at all")
+        << QByteArray("struct A { void $f(); };\n") << QString("plain");
+
+    QTest::newRow("virtual where it is declared")
+        << QByteArray("struct A { virtual void $f(); };\n") << QString("virtual @1:25");
+
+    QTest::newRow("pure virtual")
+        << QByteArray("struct A { virtual void $f() = 0; };\n") << QString("pure @1:25");
+
+    // The function is virtual because a base said so, and the base's
+    // declaration is what a reader is offered.
+    QTest::newRow("virtual because a base says so")
+        << QByteArray("struct A { virtual void f(); };\n"
+                      "struct B : A { void $f(); };\n")
+        << QString("virtual @1:25");
+
+    QTest::newRow("override written out")
+        << QByteArray("struct A { virtual void f(); };\n"
+                      "struct B : A { void $f() override; };\n")
+        << QString("virtual @1:25");
+
+    // The declarations furthest up are the ones kept: what the middle class
+    // says is not where it was first made virtual.
+    QTest::newRow("the base furthest up wins")
+        << QByteArray("struct A { virtual void f(); };\n"
+                      "struct B : A { virtual void f(); };\n"
+                      "struct C : B { void $f(); };\n")
+        << QString("virtual @1:25");
+
+    // Two bases declaring it, both as far up as the other.
+    QTest::newRow("two bases at the same height")
+        << QByteArray("struct A { virtual void f(); };\n"
+                      "struct B { virtual void f(); };\n"
+                      "struct C : A, B { void $f(); };\n")
+        << QString("virtual @1:25, @2:25");
+
+    // A base that declares it final ends the search: nothing below it
+    // overrides anything.
+    QTest::newRow("a base declares it final")
+        << QByteArray("struct A { virtual void f(); };\n"
+                      "struct B : A { void f() final; };\n"
+                      "struct C : B { void $f(); };\n")
+        << QString("plain");
+
+    // Same name, another signature: another function.
+    QTest::newRow("a base with another signature")
+        << QByteArray("struct A { virtual void f(int); };\n"
+                      "struct B : A { void $f(); };\n")
+        << QString("plain");
+
+    // Constness is part of it.
+    QTest::newRow("a base whose function is const")
+        << QByteArray("struct A { virtual void f() const; };\n"
+                      "struct B : A { void $f(); };\n")
+        << QString("plain");
+
+    QTest::newRow("a position on no function")
+        << QByteArray("struct A { int $i; };\n") << QString();
+}
+
+void tst_cxxfrontenddocument::virtuality()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::Virtuality virtuality
+        = document.virtualityAt(positions.first().line, positions.first().column);
+    if (expected.isEmpty()) {
+        QVERIFY(!virtuality.namesAFunction);
+        return;
+    }
+    QVERIFY(virtuality.namesAFunction);
+
+    QString described = virtuality.isPureVirtual ? "pure"
+                                                 : (virtuality.isVirtual ? "virtual" : "plain");
+    QStringList places;
+    for (const CxxFrontendDocument::Place &place : virtuality.firstVirtuals)
+        places.append(QString("@%1:%2").arg(place.line).arg(place.column));
+    if (!places.isEmpty())
+        described += ' ' + places.join(", ");
     QCOMPARE(described, expected);
 }
 
