@@ -4,6 +4,7 @@
 #pragma once
 
 #include "cppcursorinfo.h"
+#include "cppfunctiondecldeflink.h"
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
 #include "semantichighlighter.h"
@@ -16,6 +17,7 @@
 #include <utils/link.h>
 #include <utils/utilsicons.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -125,6 +127,60 @@ std::optional<Utils::Link> cxxFrontendCounterpart(const CPlusPlus::Snapshot &bui
                                                   const Utils::FilePath &filePath,
                                                   int line,
                                                   int column);
+
+// Reads a file the way the editor has it. The model works in lines and
+// columns and the decl/def link in the positions a QTextCursor counts, so
+// turning one into the other takes the text -- and which file the other side
+// of the function is in is what the call below is finding out, so the caller
+// cannot be asked for it beforehand.
+//
+// Nothing where the file cannot be read. What comes back has to outlive the
+// answer, which holds no text of its own.
+using CxxFrontendFileText = std::function<const QTextDocument *(const Utils::FilePath &)>;
+
+// The decl/def link on this model: what the two sides of the function at a
+// position say, where each part of the other side is written, and how to
+// read the side being edited as it now stands.
+//
+// One document answers all of it, because one translation unit holds both
+// sides: a header is read into the file that includes it, so the source file
+// that defines a function holds the header's declaration as well. Which
+// document that is depends on what is being edited -- a source file's own
+// will do, a header's will not, and then the source file that defines the
+// function is read instead, found the way cxxFrontendCounterpart() finds it.
+//
+// Nothing where the model has not read the file, where the position is on no
+// function, or where no file in the project defines it; the caller then
+// answers the way it did before.
+struct CxxFrontendDeclDefLink
+{
+    Utils::FilePath targetFilePath;
+
+    // Where the other side's own name stands, one-based as the model counts:
+    // where somebody jumping to it lands, and what its documentation is
+    // looked for above.
+    int targetNameLine = 0;
+    int targetNameColumn = 0;
+    QString targetShortName;
+
+    FunctionSignature sourceSignature;
+    FunctionSignature targetSignature;
+    WrittenDeclaration targetWritten;
+
+    // Reads the declaration the cursor covers as it now stands in the
+    // editor. Unlike every other question here it cannot be read off the
+    // last parse: what is wanted is the text of this keystroke, so the file
+    // that holds both sides is read again with it. The last reading is kept,
+    // so asking twice about the same text costs nothing.
+    std::function<std::shared_ptr<EditedDeclaration>(const QTextCursor &linkSelection,
+                                                     const QTextCursor &nameSelection)>
+        readEditedDeclaration;
+};
+
+std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
+    const CPlusPlus::Snapshot &builtinSnapshot, const Utils::FilePath &filePath,
+    int line, int column, const WorkingCopy &workingCopy,
+    const CxxFrontendFileText &textOf);
 
 // A local variable of a function: its name, whether it is one of the
 // function's parameters, the class its type names where it names one, and

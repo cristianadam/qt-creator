@@ -27,6 +27,10 @@
 #include "cppmodelmanager.h"
 #include "cpptoolstestcase.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <utils/changeset.h>
 #include <utils/fileutils.h>
 
@@ -102,6 +106,20 @@ public:
         m_snapshot.insert(document);
 
         m_targetSource = QString::fromUtf8(editingTheHeader ? sourceSource : headerSource);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // What the editor's parser does when the other model is asked for:
+        // run it over the file being edited, so that the finder has it and
+        // reads it instead. Which model answers is decided by the
+        // environment, exactly as in the editor, and the cases are the same
+        // either way -- that is the whole of what the comparison says.
+        if (cxxFrontendModelRequested()) {
+            const FilePath editedPath = editingTheHeader ? headerPath : sourcePath;
+            WorkingCopy workingCopy;
+            workingCopy.insert(editedPath, editingTheHeader ? headerSource : sourceSource);
+            updateCxxFrontendModel(m_snapshot, editedPath, {}, workingCopy);
+        }
+#endif
 
         m_text.setPlainText(QString::fromUtf8(editingTheHeader ? headerSource : sourceSource));
         QTextCursor cursor(&m_text);

@@ -255,8 +255,15 @@ public:
 
     // Reads the declaration as it now stands in the editor. Held as a
     // function because which front end reads it is settled when the link is
-    // found, and the text to read only exists once somebody has typed.
-    std::function<std::shared_ptr<EditedDeclaration>(const QString &text,
+    // found, and there is nothing to read until somebody has typed.
+    //
+    // Both cursors, because the two front ends need different things of the
+    // same edit: the text the declaration now says, and where its name now
+    // stands -- a model that resolves names has to read the file again and
+    // find the declaration in it, and the name is what it is found by. Both
+    // followed what was typed, which is why they are cursors.
+    std::function<std::shared_ptr<EditedDeclaration>(const QTextCursor &linkSelection,
+                                                     const QTextCursor &nameSelection,
                                                      const CPlusPlus::Snapshot &snapshot)>
         readEditedDeclaration;
 

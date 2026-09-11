@@ -8,9 +8,15 @@
 #include "cppeditortr.h"
 #include "cppeditorwidget.h"
 #include "cpplocalsymbols.h"
+#include "cppmodelmanager.h"
+#include "cppworkingcopy.h"
 #include "cpptoolsreuse.h"
 #include "quickfixes/cppquickfixassistant.h"
 #include "symbolfinder.h"
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
@@ -564,23 +570,93 @@ private:
     std::unique_ptr<UseMinimalNames> m_parameterNames;
 };
 
-// What the built-in finder found at the cursor, which is what it needs in
-// order to go looking for the other side.
-class BuiltinSource
+// What the finder found at the cursor, which is what it needs in order to go
+// looking for the other side.
+class LinkSource
 {
 public:
     Document::Ptr document;
     DeclarationAST *declaration = nullptr;
     FunctionDeclaratorAST *declarator = nullptr;
     Function *function = nullptr;
+
+    // Where the function's name stands, one-based. The other model is asked
+    // from there rather than from wherever the cursor happens to be, since
+    // a position on the name is what reaches a function in it.
+    int nameLine = 0;
+    int nameColumn = 0;
+
+    // Taken on the editor's own thread, because that is where the editors
+    // are, and read on the one that goes looking.
+    WorkingCopy workingCopy;
 };
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// Fills the link off the cxx-frontend model, or answers false and leaves it
+// alone where that model has nothing to say -- and then the built-in one
+// does the work, exactly as before.
+static bool findLinkOnTheModel(const std::shared_ptr<FunctionDeclDefLink> &link,
+                               const LinkSource &source, CppRefactoringChanges &changes)
+{
+    if (!cxxFrontendModelRequested())
+        return false;
+
+    // Held for as long as the model is reading them: what it is handed is the
+    // text, and the text belongs to the file.
+    QList<CppRefactoringFileConstPtr> read;
+    const auto textOf = [&](const FilePath &path) -> const QTextDocument * {
+        const CppRefactoringFileConstPtr file = changes.fileNoEditor(path);
+        if (!file || !file->isValid())
+            return nullptr;
+        read.append(file);
+        return file->document();
+    };
+
+    const std::optional<CxxFrontendDeclDefLink> found
+        = cxxFrontendDeclDefLink(changes.snapshot(), source.document->filePath(),
+                                 source.nameLine, source.nameColumn, source.workingCopy,
+                                 textOf);
+    if (!found)
+        return false;
+
+    const CppRefactoringFileConstPtr targetFile = changes.fileNoEditor(found->targetFilePath);
+    if (!targetFile->isValid())
+        return false;
+
+    link->targetFile = targetFile;
+    link->sourceSignature = found->sourceSignature;
+    link->targetSignature = found->targetSignature;
+    link->targetWritten = found->targetWritten;
+    link->targetNameLine = found->targetNameLine;
+    link->targetNameColumn = found->targetNameColumn;
+    link->targetShortName = found->targetShortName;
+    targetFile->lineAndColumn(link->targetWritten.start, &link->targetLine,
+                              &link->targetColumn);
+    link->targetInitial = targetFile->textOf(link->targetWritten.start,
+                                             link->targetWritten.end);
+
+    // The snapshot is the built-in model's and this one has no use for it.
+    const auto readEdited = found->readEditedDeclaration;
+    link->readEditedDeclaration = [readEdited](const QTextCursor &linkSelection,
+                                               const QTextCursor &nameSelection,
+                                               const Snapshot &) {
+        return readEdited(linkSelection, nameSelection);
+    };
+    return true;
+}
+#endif
+
 static std::shared_ptr<FunctionDeclDefLink> findLinkHelper(
-    std::shared_ptr<FunctionDeclDefLink> link, BuiltinSource source,
+    std::shared_ptr<FunctionDeclDefLink> link, LinkSource source,
     CppRefactoringChanges changes)
 {
     std::shared_ptr<FunctionDeclDefLink> noResult;
     const Snapshot &snapshot = changes.snapshot();
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (findLinkOnTheModel(link, source, changes))
+        return link;
+#endif
 
     // find the matching decl/def symbol
     Symbol *target = nullptr;
@@ -642,9 +718,11 @@ static std::shared_ptr<FunctionDeclDefLink> findLinkHelper(
     const Document::Ptr targetDocument = targetFile->cppDocument();
     link->readEditedDeclaration =
         [sourceDocument, sourceFunction, targetDocument, targetFunction](
-            const QString &text, const Snapshot &snapshot) {
+            const QTextCursor &linkSelection, const QTextCursor &, const Snapshot &snapshot)
+        -> std::shared_ptr<EditedDeclaration> {
             return std::make_shared<BuiltinEditedDeclaration>(
-                text, snapshot, sourceDocument, sourceFunction, targetDocument, targetFunction);
+                linkSelection.selectedText(), snapshot, sourceDocument, sourceFunction,
+                targetDocument, targetFunction);
         };
 
     return link;
@@ -693,11 +771,16 @@ void FunctionDeclDefLinkFinder::startFindLinkAt(
     result->nameInitial = m_nameSelection.selectedText();
     result->sourceDocument = doc;
 
-    BuiltinSource source;
+    LinkSource source;
     source.document = doc;
     source.declaration = parent;
     source.declarator = funcDecl;
     source.function = funcDecl->symbol;
+    sourceFile->lineAndColumn(written.nameStart, &source.nameLine, &source.nameColumn);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (cxxFrontendModelRequested())
+        source.workingCopy = CppModelManager::workingCopy();
+#endif
 
     // handle the rest in a thread
     const auto onSetup = [result, source, refactoringChanges](Async<ResultType> &task) {
@@ -883,7 +966,7 @@ ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffse
 
     QTC_ASSERT(readEditedDeclaration, return changes);
     const std::shared_ptr<EditedDeclaration> edited
-        = readEditedDeclaration(linkSelection.selectedText(), snapshot);
+        = readEditedDeclaration(linkSelection, nameSelection, snapshot);
     if (!edited || !edited->isValid())
         return changes;
     const FunctionSignature newSignature = edited->signature();
