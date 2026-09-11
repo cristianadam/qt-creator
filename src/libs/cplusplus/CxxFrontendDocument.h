@@ -592,6 +592,11 @@ public:
     {
         Occurrence place;
         bool isDeclaration = false; // it declares the thing rather than using it
+
+        // The function the place is written in, written out in full, and
+        // empty at file scope. What a list of call sites is grouped by, and
+        // what a usages view shows beside a line.
+        QString containingFunction;
     };
     QList<NamedPlace> usagesOf(const Place &declaration) const;
 

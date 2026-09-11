@@ -3379,7 +3379,8 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
         }
         if (canonical(symbol) != wanted)
             continue;
-        places.append({occurrence, isDeclaration});
+        places.append({occurrence, isDeclaration,
+                       functionAt(occurrence.line, occurrence.column)});
     }
     return places;
 }

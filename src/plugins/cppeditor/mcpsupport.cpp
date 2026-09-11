@@ -178,6 +178,53 @@ static QString declarationKind(CPlusPlus::CxxFrontendDocument::Kind kind)
     return QStringLiteral("symbol");
 }
 
+// Every place the project names the thing declared at a position, as the
+// other model reads it: the built-in snapshot says which files to look in
+// and which of them ever wrote the name, and each survivor is read and
+// asked. Nothing where the model cannot read a file, and then this server
+// searches with the other front end rather than leaving that file out.
+//
+// No tags: which place is a read and which a write is a reading this model
+// does not do, so a caller that needs to say so cannot use this.
+static std::optional<QList<CPlusPlus::Usage>> symbolUsagesOnTheModel(CPlusPlus::Symbol *symbol)
+{
+    if (!symbol || symbol->filePath().isEmpty() || !symbol->identifier())
+        return std::nullopt;
+
+    const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
+    const WorkingCopy workingCopy = CppModelManager::workingCopy();
+    const CPlusPlus::Identifier * const id = symbol->identifier();
+    const CPlusPlus::CxxFrontendDocument::Place declaration{
+        symbol->filePath().toFSPathString(), symbol->line(), symbol->column()};
+
+    QList<CPlusPlus::Usage> usages;
+    for (auto it = snapshot.begin(), end = snapshot.end(); it != end; ++it) {
+        const Utils::FilePath filePath = it.key();
+        if (!it.value()->control()->findIdentifier(id->chars(), id->size()))
+            continue; // The file does not mention the name at all.
+
+        const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
+            = cxxFrontendUsagesIn(snapshot, workingCopy, filePath, declaration);
+        if (!places)
+            return std::nullopt;
+
+        const QStringList lines = QString::fromUtf8(fileSource(filePath, workingCopy)).split('\n');
+        for (const CPlusPlus::CxxFrontendDocument::NamedPlace &place : *places) {
+            const QString lineText = place.place.line >= 1 && place.place.line <= lines.size()
+                                         ? lines.at(place.place.line - 1)
+                                         : QString();
+            CPlusPlus::Usage usage(filePath, lineText, place.containingFunction,
+                                   place.isDeclaration
+                                       ? CPlusPlus::Usage::Tags(
+                                             CPlusPlus::Usage::Tag::Declaration)
+                                       : CPlusPlus::Usage::Tags(),
+                                   place.place.line, place.place.column - 1, place.place.length);
+            usages.append(usage);
+        }
+    }
+    return usages;
+}
+
 // What the other model says a file declares, in the shape this tool answers
 // with, and nothing where it cannot read the file.
 //
@@ -1055,7 +1102,19 @@ void registerMcpTools()
             // points into a document that symbolUsages() has already destroyed.
             QStringList callerOrder;
             QHash<QString, QJsonArray> sitesByCaller;
-            const QList<CPlusPlus::Usage> usages = symbolUsages(symbol, context);
+
+            // Which place is a declaration is all this needs of a usage, and
+            // that the other model says.
+            QList<CPlusPlus::Usage> usages;
+#ifdef QTC_WITH_CXX_FRONTEND
+            if (const std::optional<QList<CPlusPlus::Usage>> onTheModel
+                = symbolUsagesOnTheModel(symbol)) {
+                usages = *onTheModel;
+            } else
+#endif
+            {
+                usages = symbolUsages(symbol, context);
+            }
             for (const CPlusPlus::Usage &u : usages) {
                 if (u.tags.testFlag(CPlusPlus::Usage::Tag::Declaration))
                     continue; // The function's own declaration/definition is not a call.

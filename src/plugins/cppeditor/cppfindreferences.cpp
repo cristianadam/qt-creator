@@ -260,8 +260,9 @@ public:
             const QString lineText = place.place.line >= 1 && place.place.line <= lines.size()
                                          ? lines.at(place.place.line - 1)
                                          : QString();
-            usages.append(CPlusPlus::Usage(filePath, lineText, {}, {}, place.place.line,
-                                           place.place.column - 1, place.place.length));
+            usages.append(CPlusPlus::Usage(filePath, lineText, place.containingFunction, {},
+                                           place.place.line, place.place.column - 1,
+                                           place.place.length));
         }
         return usages;
     }

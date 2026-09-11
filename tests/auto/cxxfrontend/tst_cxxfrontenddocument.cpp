@@ -266,6 +266,10 @@ void tst_cxxfrontenddocument::functionAt_data()
         << QByteArray("void f()\n{\n    $int x;\n}\n");
     QTest::newRow("outside any function")
         << QByteArray("$int g;\nvoid f() {}\n");
+    QTest::newRow("on a declaration right after a function")
+        << QByteArray("void f() {}\nint $x;\n");
+    QTest::newRow("after a destructor defined out of line")
+        << QByteArray("struct C { ~C(); };\nC::~C() {}\nC $c;\n");
     QTest::newRow("between two functions")
         << QByteArray("void a() {}\n$\nvoid b() {}\n");
     QTest::newRow("inside the second of two")
@@ -1987,7 +1991,7 @@ void tst_cxxfrontenddocument::usagesInAFile_data()
                       "    $x = 1;\n"
                       "    int y = $x;\n"
                       "}\n")
-        << QStringList({"3:9 declaration", "4:5", "5:13"});
+        << QStringList({"3:9 declaration", "4:5 in f", "5:13 in f"});
 
     // A name spelled the same and meaning something else is not a usage of
     // this one.
@@ -2002,12 +2006,12 @@ void tst_cxxfrontenddocument::usagesInAFile_data()
                       "    int x = 0;\n"
                       "    x = 1;\n"
                       "}\n")
-        << QStringList({"3:9 declaration", "4:5"});
+        << QStringList({"3:9 declaration", "4:5 in f"});
 
     QTest::newRow("a function and its call")
         << QByteArray("void $f();\n"
                       "void g() { $f(); }\n")
-        << QStringList({"1:6 declaration", "2:12"});
+        << QStringList({"1:6 declaration", "2:12 in g"});
 
     // A definition written apart from its declaration declares the same
     // thing, which is what the canonical place says.
@@ -2015,20 +2019,20 @@ void tst_cxxfrontenddocument::usagesInAFile_data()
         << QByteArray("struct C { void $f(); };\n"
                       "void C::$f() {}\n"
                       "void g(C &c) { c.$f(); }\n")
-        << QStringList({"1:17 declaration", "2:9 declaration", "3:18"});
+        << QStringList({"1:17 declaration", "2:9 declaration", "3:18 in g"});
 
     QTest::newRow("a class")
         << QByteArray("class $C {};\n"
                       "$C c;\n"
                       "void f($C &) {}\n")
-        << QStringList({"1:7 declaration", "2:1", "3:8"});
+        << QStringList({"1:7 declaration", "2:1", "3:8 in f"});
 
     // A member of another class of the same name is another member.
     QTest::newRow("a member of another class")
         << QByteArray("struct A { int $m; };\n"
                       "struct B { int m; };\n"
                       "void f(A &a, B &b) { a.$m = b.m; }\n")
-        << QStringList({"1:16 declaration", "3:24"});
+        << QStringList({"1:16 declaration", "3:24 in f"});
 
     // A constructor and a destructor are written under their class's name,
     // so a place naming one names the class -- which is what renaming a
@@ -2041,7 +2045,7 @@ void tst_cxxfrontenddocument::usagesInAFile_data()
                       "$C::~$C() {}\n"
                       "$C c;\n")
         << QStringList({"1:7 declaration", "2:5 declaration", "3:6 declaration",
-                        "5:1", "5:5 declaration", "6:1"});
+                        "5:1 in C::~C", "5:5 declaration", "6:1 in C::~C"});
 
     QTest::newRow("a position that declares nothing")
         << QByteArray("void f() { int x = 0; $x = 1; }\n") << QStringList();
@@ -2060,8 +2064,11 @@ void tst_cxxfrontenddocument::usagesInAFile()
     QStringList described;
     for (const CxxFrontendDocument::NamedPlace &place :
          document.usagesOf({{}, positions.first().line, positions.first().column})) {
-        described.append(QString("%1:%2%3").arg(place.place.line).arg(place.place.column)
-                             .arg(place.isDeclaration ? " declaration" : ""));
+        QString line = QString("%1:%2%3").arg(place.place.line).arg(place.place.column)
+                           .arg(place.isDeclaration ? " declaration" : "");
+        if (!place.containingFunction.isEmpty() && !place.isDeclaration)
+            line += " in " + place.containingFunction;
+        described.append(line);
     }
     QCOMPARE(described, expected);
 }
