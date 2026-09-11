@@ -1390,6 +1390,172 @@ ForLoopEdits builtinForLoopEdits(const CppQuickFixInterface &interface)
     return edits;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The names an initializer declares, which the hoisted variable must not be
+// called after: "int i = 0, total = 0" declares i and total.
+QStringList cxxNamesDeclaredBy(cxx::StatementAST *initializer)
+{
+    auto * const statement = dynamic_cast<cxx::DeclarationStatementAST *>(initializer);
+    if (!statement)
+        return {};
+    auto * const declaration
+        = dynamic_cast<cxx::SimpleDeclarationAST *>(statement->declaration);
+    if (!declaration)
+        return {};
+
+    QStringList names;
+    for (auto *declared : cxx::ListView{declaration->initDeclaratorList}) {
+        if (!declared->declarator)
+            continue;
+        auto * const core
+            = dynamic_cast<cxx::IdDeclaratorAST *>(declared->declarator->coreDeclarator);
+        auto * const name = core ? dynamic_cast<cxx::NameIdAST *>(core->unqualifiedId) : nullptr;
+        if (name && name->identifier)
+            names << QString::fromStdString(cxx::to_string(name->identifier));
+    }
+    return names;
+}
+
+// The type of the first variable an initializer declares, as the front end
+// prints it, and empty where it declares none. Compared with the type of the
+// variable the condition tests, which is how the fix tells that the loop
+// counts with what it declared.
+QString cxxTypeDeclaredBy(cxx::StatementAST *initializer)
+{
+    auto * const statement = dynamic_cast<cxx::DeclarationStatementAST *>(initializer);
+    if (!statement)
+        return {};
+    auto * const declaration
+        = dynamic_cast<cxx::SimpleDeclarationAST *>(statement->declaration);
+    if (!declaration)
+        return {};
+
+    for (auto *declared : cxx::ListView{declaration->initDeclaratorList}) {
+        if (declared->symbol && declared->symbol->type())
+            return QString::fromStdString(cxx::to_string(declared->symbol->type(), ""));
+    }
+    return {};
+}
+
+// Whether an expression says so little that holding it in a variable would
+// say no less: a literal, a name, a sign in front of either.
+bool cxxIsAsSimpleAsAVariable(cxx::ExpressionAST *expression)
+{
+    return dynamic_cast<cxx::IntLiteralExpressionAST *>(expression)
+           || dynamic_cast<cxx::FloatLiteralExpressionAST *>(expression)
+           || dynamic_cast<cxx::StringLiteralExpressionAST *>(expression)
+           || dynamic_cast<cxx::IdExpressionAST *>(expression)
+           || dynamic_cast<cxx::UnaryExpressionAST *>(expression);
+}
+
+// What there is to optimize about the for loop the cursor is on, as the
+// cxx-frontend model read it. Empty where it has not read the file, where it
+// read the loop with errors, and where the loop says nothing worth
+// rewriting -- in each case the built-in path answers.
+ForLoopEdits cxxForLoopEdits(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+
+    // The editor counts from zero and the tree from one.
+    const QTextCursor cursor = file->cursor();
+    const QList<cxx::AST *> path
+        = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+    if (path.isEmpty())
+        return {};
+
+    // On the loop itself, which is where its keyword is: inside its head or
+    // its body the cursor is on something of its own.
+    auto * const loop = dynamic_cast<cxx::ForStatementAST *>(path.last());
+    if (!loop)
+        return {};
+
+    // Not something to rewrite: where the front end stumbled inside the loop
+    // its tree does not match the text.
+    if (cxxAstWasReadWithErrors(*document, loop))
+        return {};
+
+    ForLoopEdits edits;
+
+    // The counting: "i++" says the same as "++i" and copies the value first.
+    if (auto * const counted = dynamic_cast<cxx::PostIncrExpressionAST *>(loop->expression);
+        counted && counted->baseExpression
+        && (counted->op == cxx::TokenKind::T_PLUS_PLUS
+            || counted->op == cxx::TokenKind::T_MINUS_MINUS)) {
+        const std::optional<ChangeSet::Range> operand
+            = rangeOfNode(*document, file, counted->baseExpression);
+        const std::optional<ChangeSet::Range> op = rangeAtToken(*document, file, counted->opLoc);
+        if (operand && op) {
+            edits.incrementOperand = operand;
+            edits.incrementOperator = op;
+        }
+    }
+
+    // The condition: one side names the variable the loop counts with, the
+    // other says what it counts up to, and that side is worked out again on
+    // every pass.
+    auto * const comparison = dynamic_cast<cxx::BinaryExpressionAST *>(cxxWritten(loop->condition));
+    if (!loop->initializer || !comparison)
+        return edits;
+
+    cxx::ExpressionAST * const left = cxxWritten(comparison->leftExpression);
+    cxx::ExpressionAST * const right = cxxWritten(comparison->rightExpression);
+    cxx::ExpressionAST *counter = dynamic_cast<cxx::IdExpressionAST *>(left);
+    cxx::ExpressionAST *comparedAgainst = counter ? right : left;
+    if (!counter)
+        counter = dynamic_cast<cxx::IdExpressionAST *>(right);
+    if (!counter || !comparedAgainst || cxxIsAsSimpleAsAVariable(comparedAgainst))
+        return edits;
+
+    const std::optional<ChangeSet::Range> initializer
+        = rangeOfNode(*document, file, loop->initializer);
+    const std::optional<ChangeSet::Range> compared
+        = rangeOfNode(*document, file, comparedAgainst);
+    const CxxAstRange counterAt = cxxAstRangeOf(*document, counter);
+    if (!initializer || !compared || !counterAt.isValid())
+        return edits;
+
+    // Nothing is declared there to hang another declarator on, so the type
+    // has to be written out; otherwise the variable the condition tests has
+    // to be the one declared there, which its type is what says.
+    const bool initializerIsEmpty = file->textOf(*initializer) == QLatin1String(";");
+    if (!initializerIsEmpty && (cxxTypeDeclaredBy(loop->initializer).isEmpty()
+                                || cxxTypeDeclaredBy(loop->initializer)
+                                       != QString::fromStdString(
+                                           cxx::to_string(counter->type, "")))) {
+        return edits;
+    }
+
+    const QString name = hoistedVariableName(cxxNamesDeclaredBy(loop->initializer));
+    if (initializerIsEmpty) {
+        const QString declaration
+            = document->declarationOfTypeAt(counterAt.startLine, counterAt.startColumn, name);
+        if (declaration.isEmpty())
+            return edits;
+        edits.declaration = declaration + " = ";
+    } else {
+        edits.declaration = ", " + name + " = ";
+    }
+    edits.comparedExpression = compared;
+    edits.declareAt = initializer->end - 1; // "-1" because of ";"
+    edits.variableName = name;
+
+    return edits;
+}
+#endif
+
+ForLoopEdits forLoopEdits(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const ForLoopEdits edits = cxxForLoopEdits(interface); !edits.isEmpty())
+        return edits;
+#endif
+    return builtinForLoopEdits(interface);
+}
+
 /*!
   Optimizes a for loop to avoid permanent condition check and forces to use preincrement
   or predecrement operators in the expression of the for loop.
@@ -1398,7 +1564,7 @@ class OptimizeForLoop : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const ForLoopEdits edits = builtinForLoopEdits(interface);
+        const ForLoopEdits edits = forLoopEdits(interface);
         if (edits.isEmpty())
             return;
 
