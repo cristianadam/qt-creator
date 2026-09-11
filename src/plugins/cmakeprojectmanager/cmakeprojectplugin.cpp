@@ -6,6 +6,7 @@
 #include "cmakebuildstep.h"
 #include "cmakebuildsystem.h"
 #include "cmakeeditor.h"
+#include "cmakefilecompletionassist.h"
 #include "cmakeformatter.h"
 #include "cmakeinstallstep.h"
 #include "cmakelocatorfilter.h"
@@ -83,6 +84,7 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
         addTestCreator(createCMakeAutogenParserTest);
         addTestCreator(createCMakeProjectImporterTest);
         addTestCreator(createCMakeQuickFixesTest);
+        addTestCreator(createCMakeFunctionHintTest);
         addTestCreator(createAddDependenciesTest);
         addTestCreator(createBinariesForSourceFileTest);
         addTestCreator(createConditionalSourcesTest);

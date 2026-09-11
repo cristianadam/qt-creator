@@ -5,6 +5,8 @@
 
 #include <texteditor/codeassist/completionassistprovider.h>
 
+#include <QObject>
+
 namespace CMakeProjectManager::Internal {
 
 class CMakeFileCompletionAssistProvider : public TextEditor::CompletionAssistProvider
@@ -14,5 +16,9 @@ public:
     int activationCharSequenceLength() const final;
     bool isActivationCharSequence(const QString &sequence) const final;
 };
+
+#ifdef WITH_TESTS
+QObject *createCMakeFunctionHintTest();
+#endif
 
 } // CMakeProjectManager::Internal

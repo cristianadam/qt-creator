@@ -15,6 +15,8 @@
 #include "cmakeusages.h"
 #include "cmakeutils.h"
 
+#include <cmakelang/cmakedoc.h>
+
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 
@@ -450,6 +452,20 @@ const CMakeKeywords &CMakeHoverHandler::keywords() const
     return m_keywords;
 }
 
+// What the file being edited says about one of the names it defines.
+static QString localDocumentation(const QString &source, const QString &name)
+{
+    if (!source.contains(".rst:"))
+        return {};
+
+    const CMakeLang::DocumentPtr document = CMakeLang::Document::fromSource(source);
+    for (const CMakeLang::Documentation &documentation : CMakeLang::documentation(document)) {
+        if (documentation.isNamed(name))
+            return documentation.markdown();
+    }
+    return {};
+}
+
 void CMakeHoverHandler::identifyMatch(TextEditorWidget *editorWidget,
                                       int pos,
                                       ReportPriority report)
@@ -485,12 +501,43 @@ void CMakeHoverHandler::identifyMatch(TextEditorWidget *editorWidget,
             break;
         }
     }
+
+    // CMake reads the name of a command without regard to its case, so a
+    // call that is written in another one names the same command.  A
+    // variable and a property are read the way they are written.
+    if (helpFile.isEmpty() && helpCategory.isEmpty()) {
+        const QMap<QString, FilePath> &functions = keywords().functions;
+        for (auto it = functions.cbegin(); it != functions.cend(); ++it) {
+            if (CMakeLang::isSameCommand(it.key(), word)) {
+                helpFile = it.value();
+                helpCategory = "command";
+                break;
+            }
+        }
+    }
     m_helpToolTip.clear();
-    if (!helpFile.isEmpty())
-        m_helpToolTip = CMakeToolManager::toolTipForRstHelpFile(helpFile);
+
+    // The documentation spells the name the way it is meant to be written,
+    // which is what the help is filed under.
+    QString helpName = word;
+    if (!helpFile.isEmpty()) {
+        const CMakeLang::Documentation documentation
+            = CMakeToolManager::documentation(word, helpFile);
+        m_helpToolTip = documentation.brief();
+        if (!documentation.name.isEmpty())
+            helpName = documentation.name;
+    }
+
+    // A function the file being edited defines documents itself in a
+    // ".rst:" comment of its own, the way the modules of CMake do.
+    if (m_helpToolTip.isEmpty())
+        m_helpToolTip = localDocumentation(editorWidget->document()->toPlainText(), word);
 
     m_contextHelp = QVariant::fromValue(
-        HelpItem({QString("%1/%2").arg(helpCategory, word), word}, {}, {}, HelpItem::Unknown));
+        HelpItem({QString("%1/%2").arg(helpCategory, helpName), helpName},
+                 {},
+                 {},
+                 HelpItem::Unknown));
 
     setPriority(!m_helpToolTip.isEmpty() ? Priority_Tooltip : Priority_None);
 }

@@ -6,8 +6,13 @@
 #include "cmakeprojectmanagertr.h"
 #include "cmaketoolmanager.h"
 
+#include <cmakelang/cmakedoc.h>
+
 #include <coreplugin/icore.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
+
+#include <rstlang/rstdocument.h>
+
 #include <utils/algorithm.h>
 #include <utils/datafromprocess.h>
 #include <utils/environment.h>
@@ -219,6 +224,36 @@ QList<CMakeTool::Generator> CMakeTool::supportedGenerators() const
     return isValid() ? m_introspection->m_capabilities.generators : QList<CMakeTool::Generator>();
 }
 
+// Which module documents which command.  A module of CMake carries the
+// documentation of what it provides in a ".rst:" comment of its own.  The
+// names are keyed the way CMake reads them, which is without regard to
+// their case: a module documents "check_cxx_source_compiles" and defines
+// "CHECK_CXX_SOURCE_COMPILES".
+static QMap<QString, FilePath> commandsOfModules(const FilePath &modules)
+{
+    QMap<QString, FilePath> result;
+    const FilePaths files = modules.dirEntries({{"*.cmake"}, DirFilterFlag::Files},
+                                               DirSortFlag::Name);
+    for (const FilePath &file : files) {
+        const Result<QByteArray> contents = file.fileContents();
+        if (!contents)
+            continue;
+
+        const QString source = QString::fromUtf8(*contents);
+        if (!source.contains(".rst:"))
+            continue;
+
+        for (const CMakeLang::DocComment &comment : CMakeLang::documentationComments(source)) {
+            const RstLang::DocumentPtr rst = RstLang::Document::fromSource(comment.text);
+            for (const CMakeLang::Documentation &documentation : CMakeLang::documentation(rst)) {
+                if (documentation.kind == CMakeLang::Documentation::Command)
+                    result.insert(documentation.name.toLower(), file);
+            }
+        }
+    }
+    return result;
+}
+
 CMakeKeywords CMakeTool::keywords()
 {
     if (!isValid())
@@ -295,9 +330,15 @@ CMakeKeywords CMakeTool::keywords()
                 m_introspection->m_keywords.includeStandardModules[fileName] = filePath;
         }
 
+        // The commands the modules provide have no file of their own in the
+        // Help: what they are is written in the module that provides them.
+        const QMap<QString, FilePath> moduleCommands = commandsOfModules(
+            cmakeRoot.pathAppended("Modules"));
+
         const QStringList moduleFunctions = parseSyntaxHighlightingXml();
         for (const auto &function : moduleFunctions)
-            m_introspection->m_keywords.functions[function] = FilePath();
+            m_introspection->m_keywords.functions[function]
+                = moduleCommands.value(function.toLower());
 
         m_introspection->m_haveKeywords = true;
     }

@@ -4,6 +4,7 @@ Project {
 
         Depends { name: "Qt.widgets" }
         Depends { name: "CMakeLang" }
+        Depends { name: "RstLang" }
         Depends { name: "McpServerLib" }
         Depends { name: "Utils" }
 
@@ -104,15 +105,6 @@ Project {
             "testpresetshelper.cpp",
             "testpresetshelper.h",
         ]
-
-        Group {
-            name: "3rdparty"
-            prefix: "3rdparty/"
-            files: [
-                "rstparser/rstparser.cc",
-                "rstparser/rstparser.h"
-            ]
-        }
 
         QtcTestResources { files: "testcases/**/*" }
     }
