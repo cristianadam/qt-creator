@@ -4,6 +4,7 @@
 #include "typehierarchybuilder.h"
 
 #include <cplusplus/LookupContext.h>
+#include <cplusplus/SymbolVisitor.h>
 
 #include <utils/algorithm.h>
 
@@ -34,7 +35,7 @@ public:
 
     bool visit(Class *) override;
 
-    const QList<Symbol *> &derived() { return _derived; }
+    const QList<DerivedClass> &derived() { return _derived; }
     const QSet<QString> otherBases() { return _otherBases; }
 
 private:
@@ -47,7 +48,7 @@ private:
     // full scope name to base symbol name to fully qualified base symbol name
     QHash<QString, QHash<QString, QString>> &_cache;
     QSet<QString> _otherBases;
-    QList<Symbol *> _derived;
+    QList<DerivedClass> _derived;
 };
 
 void DerivedHierarchyVisitor::execute(const Document::Ptr &doc,
@@ -84,10 +85,12 @@ bool DerivedHierarchyVisitor::visit(Class *symbol)
             _cache[fullScopeName].insert(baseName, fullBaseName);
         }
 
-        if (_qualifiedName == fullBaseName)
-            _derived.append(symbol);
-        else
+        if (_qualifiedName == fullBaseName) {
+            _derived.append({_overview.prettyName(LookupContext::fullyQualifiedName(symbol)),
+                             symbol->line(), symbol->column()});
+        } else {
             _otherBases.insert(fullBaseName);
+        }
     }
     return true;
 }
@@ -109,13 +112,43 @@ const QList<TypeHierarchy> &TypeHierarchy::hierarchy() const
     return _hierarchy;
 }
 
+// What the built-in front end says derives from a class: every class in the
+// file, with each of its bases resolved -- through an alias where one was
+// written -- and compared with the class being asked about.
+static DerivedFinder builtinDerivedFinder(const Snapshot &snapshot)
+{
+    // Full scope name to base symbol name to fully qualified base symbol
+    // name, and the other bases seen per file, which is what keeps a file
+    // from being read again for a class it cannot name.
+    struct Cache
+    {
+        QHash<QString, QHash<QString, QString>> bases;
+        QHash<Utils::FilePath, QSet<QString>> otherBases;
+    };
+    const auto cache = std::make_shared<Cache>();
+
+    return [snapshot, cache](const Utils::FilePath &filePath, const QString &qualifiedName) {
+        const Document::Ptr doc = snapshot.document(filePath);
+        if (!doc)
+            return QList<DerivedClass>();
+        if (cache->otherBases.contains(filePath)
+            && !cache->otherBases.value(filePath).contains(qualifiedName)) {
+            return QList<DerivedClass>();
+        }
+
+        DerivedHierarchyVisitor visitor(qualifiedName, cache->bases);
+        visitor.execute(doc, snapshot);
+        cache->otherBases.insert(filePath, visitor.otherBases());
+        return visitor.derived();
+    };
+}
+
 TypeHierarchy TypeHierarchyBuilder::buildDerivedTypeHierarchy(Symbol *symbol,
               const Snapshot &snapshot, const std::optional<QFuture<void>> &future)
 {
     TypeHierarchy hierarchy(symbol);
-    TypeHierarchyBuilder builder;
-    QHash<QString, QHash<QString, QString>> cache;
-    builder.buildDerived(future, &hierarchy, snapshot, cache);
+    TypeHierarchyBuilder builder(builtinDerivedFinder(snapshot));
+    builder.buildDerived(future, &hierarchy, snapshot);
     return hierarchy;
 }
 
@@ -166,38 +199,71 @@ static FilePaths filesDependingOn(const Snapshot &snapshot, Symbol *symbol)
     return FilePaths{file} + snapshot.filesDependingOn(file);
 }
 
+// The class written at \a line and \a column of \a document, which is how a
+// place handed back by either front end becomes the symbol the hierarchy
+// hands out.
+static Class *classWrittenAt(const Document::Ptr &document, const DerivedClass &derived)
+{
+    class Find : public SymbolVisitor
+    {
+    public:
+        Find(int line, int column) : _line(line), _column(column) {}
+
+        bool preVisit(Symbol *symbol) override
+        {
+            if (_found)
+                return false;
+            if (Class * const cls = symbol->asClass();
+                cls && cls->line() == _line && cls->column() == _column) {
+                _found = cls;
+                return false;
+            }
+            return true;
+        }
+
+        Class *found() const { return _found; }
+
+    private:
+        const int _line;
+        const int _column;
+        Class *_found = nullptr;
+    } find(derived.line, derived.column);
+
+    for (int i = 0; i < document->globalSymbolCount(); ++i)
+        find.accept(document->globalSymbolAt(i));
+    return find.found();
+}
+
 void TypeHierarchyBuilder::buildDerived(const std::optional<QFuture<void>> &future,
                                         TypeHierarchy *typeHierarchy,
-                                        const Snapshot &snapshot,
-                                        QHash<QString, QHash<QString, QString>> &cache)
+                                        const Snapshot &snapshot)
 {
     Symbol *symbol = typeHierarchy->_symbol;
     if (!Utils::insert(_visited, symbol))
         return;
 
     const QString &symbolName = _overview.prettyName(LookupContext::fullyQualifiedName(symbol));
-    DerivedHierarchyVisitor visitor(symbolName, cache);
-
     const FilePaths dependingFiles = filesDependingOn(snapshot, symbol);
 
     for (const FilePath &fileName : dependingFiles) {
         if (future && future->isCanceled())
             return;
-        Document::Ptr doc = snapshot.document(fileName);
-        if ((_candidates.contains(fileName) && !_candidates.value(fileName).contains(symbolName))
-                || !symbol->identifier()
-                || !doc->control()->findIdentifier(symbol->identifier()->chars(),
-                                                   symbol->identifier()->size())) {
+        const Document::Ptr doc = snapshot.document(fileName);
+
+        // A file that never wrote the name cannot name the class, which is
+        // what keeps this from reading the project.
+        if (!doc || !symbol->identifier()
+            || !doc->control()->findIdentifier(symbol->identifier()->chars(),
+                                               symbol->identifier()->size())) {
             continue;
         }
 
-        visitor.execute(doc, snapshot);
-        _candidates.insert(fileName, visitor.otherBases());
-
-        const QList<Symbol *> &derived = visitor.derived();
-        for (Symbol *s : derived) {
-            TypeHierarchy derivedHierarchy(s);
-            buildDerived(future, &derivedHierarchy, snapshot, cache);
+        for (const DerivedClass &derived : _finder(fileName, symbolName)) {
+            Class * const derivedClass = classWrittenAt(doc, derived);
+            if (!derivedClass)
+                continue;
+            TypeHierarchy derivedHierarchy(derivedClass);
+            buildDerived(future, &derivedHierarchy, snapshot);
             if (future && future->isCanceled())
                 return;
             typeHierarchy->_hierarchy.append(derivedHierarchy);
