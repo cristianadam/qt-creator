@@ -170,6 +170,9 @@ private slots:
     void declarationOfATypeAt_data();
     void declarationOfATypeAt();
 
+    void declarationOfAFunctionAt_data();
+    void declarationOfAFunctionAt();
+
     void completeAfterAnArrow();
     void completeAfterADot();
     void completeAnUnqualifiedName();
@@ -1631,6 +1634,82 @@ void tst_cxxfrontenddocument::noSwitchToComplete()
 
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
     QVERIFY(!document.switchAt(positions.first().line, positions.first().column).isValid());
+}
+
+// A function written out as a declaration for somewhere else, which is what
+// moving a definition has to write there.
+void tst_cxxfrontenddocument::declarationOfAFunctionAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QString>("declaration");
+
+    // The first marker is the function, the second the place it is written
+    // at.
+    QTest::newRow("a member, written inside its class")
+        << QByteArray("struct C {\n"
+                      "    void $f(int a);\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString("void f(int)");
+
+    QTest::newRow("a member, written outside its class")
+        << QByteArray("struct C {\n"
+                      "    void $f(int a);\n"
+                      "};\n"
+                      "void C::$f(int a) {}\n")
+        << QString("C::f") << QString("void C::f(int)");
+
+    QTest::newRow("what it says about itself comes along")
+        << QByteArray("struct C {\n"
+                      "    int $f() const noexcept;\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString("int f() const noexcept");
+
+    // A type of the class's own needs the class written in front of it
+    // outside, and nothing within.
+    QTest::newRow("a type of the class, written inside it")
+        << QByteArray("struct C {\n"
+                      "    struct T {};\n"
+                      "    T $f();\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString("T f()");
+
+    QTest::newRow("a type of the class, written outside it")
+        << QByteArray("struct C {\n"
+                      "    struct T {};\n"
+                      "    T $f();\n"
+                      "};\n"
+                      "C::T C::$f() {}\n")
+        << QString("C::f") << QString("C::T C::f()");
+
+    QTest::newRow("a position on no function")
+        << QByteArray("struct C {\n"
+                      "    int $m;\n"
+                      "    void $g();\n"
+                      "};\n")
+        << QString("f") << QString();
+}
+
+void tst_cxxfrontenddocument::declarationOfAFunctionAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, name);
+    QFETCH(QString, declaration);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 2);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QCOMPARE(document.declarationOfFunctionAt({{}, positions.first().line,
+                                               positions.first().column},
+                                              {{}, positions.last().line,
+                                               positions.last().column},
+                                              name),
+             declaration);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

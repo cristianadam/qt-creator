@@ -376,6 +376,26 @@ public:
     // translation unit declares.
     Signature signatureAt(const Place &function, const Place &writtenAt) const;
 
+    // The function at \a function, written out as a declaration of \a name
+    // for wherever \a writtenAt is: every type in it written with as little
+    // in front of it as still finds that type from there, so a nested class
+    // is named with its class outside it and by itself within.
+    //
+    // What moving a definition from one place to another has to write. The
+    // name is the caller's to choose, because it is the caller that knows
+    // where the thing is going: the same function is "f" written inside its
+    // class and "C::f" written outside it.
+    //
+    // Only what the type says, which is not everything a declaration writes.
+    // The names of the parameters are not part of a type, so they are not
+    // here -- Signature writes a parameter under a name, one at a time, for
+    // a caller that wants them. Neither is the template the function is
+    // declared under, nor anything that says something about the declaration
+    // rather than about the type: an "explicit", a "static", a default
+    // argument. Empty where the position is on no function.
+    QString declarationOfFunctionAt(const Place &function, const Place &writtenAt,
+                                    const QString &name) const;
+
     // Where this file defines \a name -- written out in full, as
     // Counterpart::name is -- taking \a parameterCount parameters, or
     // nothing where it does not define it.

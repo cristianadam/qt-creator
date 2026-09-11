@@ -2246,6 +2246,34 @@ CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
     return signature;
 }
 
+QString CxxFrontendDocument::declarationOfFunctionAt(const Place &function_,
+                                                      const Place &writtenAt,
+                                                      const QString &name) const
+{
+    const cxx::SourceLocation at = d->tokenAt(function_.line, function_.column,
+                                              function_.filePath);
+    if (!at)
+        return {};
+
+    // Either side reaches the function: a position on the name of a
+    // declaration and one on the name of a definition both name it.
+    cxx::FunctionSymbol *function = d->declaredFunctionAt(at);
+    if (!function)
+        function = d->definitionAround(at);
+    if (!function || !function->type())
+        return {};
+
+    const cxx::SourceLocation there = d->tokenAt(writtenAt.line, writtenAt.column,
+                                                  writtenAt.filePath);
+    if (!there)
+        return {};
+
+    return applyStarBinding(
+        fromStd(cxx::to_string(function->type(), name.toStdString(),
+                               {.writtenIn = d->scopeWrittenAround(there)})),
+        d->config.settings);
+}
+
 CxxFrontendDocument::Counterpart CxxFrontendDocument::definitionOf(const QString &name,
                                                                   int parameterCount) const
 {
