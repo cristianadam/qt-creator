@@ -519,32 +519,98 @@ private:
     const FilePath m_cppFilePath;
 };
 
+// A definition and the declaration it is going to sit at: what is taken
+// away, what goes along as it stands, and what is replaced. What either
+// front end fills in, so that the moving itself reads no tree.
+struct DefinitionAndItsDeclaration
+{
+    // Where the definition is written and how much of it goes -- the
+    // template it is declared under included, since that is part of it.
+    FilePath definitionFile;
+    ChangeSet::Range definitionRange;
+
+    // Where its head stops and what goes along ends, in that same file.
+    int bodyStart = 0;
+    int bodyEnd = 0;
+
+    // A definition written "= default" is the one that does not end in a
+    // body, so the ";" that closed it has to be written after it.
+    bool endsWithSemicolon = false;
+
+    // The declaration it is going to: what is replaced, and what it says
+    // without the ";" that closes it.
+    FilePath declarationFile;
+    ChangeSet::Range declarationRange;
+    QString declarationText;
+
+    bool isValid() const
+    {
+        return bodyEnd > bodyStart && !declarationText.isEmpty()
+               && declarationRange.end > declarationRange.start;
+    }
+};
+
+// Where a definition's head stops and what goes along after it ends, as the
+// built-in front end reads them.
+static void builtinBodyOf(const CppRefactoringFilePtr &file, FunctionDefinitionAST *funcAST,
+                          DefinitionAndItsDeclaration *into)
+{
+    if (isDefaulted(funcAST, file->cppDocument()->translationUnit())) {
+        definitionTextForDefaulted(funcAST, file, &into->bodyStart);
+        into->bodyEnd = file->endOf(funcAST->declarator->initializer);
+        into->endsWithSemicolon = true;
+        return;
+    }
+    into->bodyStart = file->endOf(funcAST->declarator);
+    into->bodyEnd = file->endOf(funcAST->function_body);
+}
+
+// The definition written at a place in \a filePath, as the built-in front
+// end reads it: how much of it goes -- the template it is declared under
+// included -- and where its body begins and ends.
+static bool builtinDefinitionAt(const CppQuickFixInterface &interface, const FilePath &filePath,
+                                int line, int column, DefinitionAndItsDeclaration *into)
+{
+    const CppRefactoringChanges refactoring(interface.snapshot());
+    const CppRefactoringFilePtr file = refactoring.cppFile(filePath);
+    if (!file->isValid())
+        return false;
+
+    const QList<AST *> path = ASTPath(file->cppDocument())(line, column);
+    for (auto it = std::rbegin(path); it != std::rend(path); ++it) {
+        FunctionDefinitionAST * const funcAST = (*it)->asFunctionDefinition();
+        if (!funcAST)
+            continue;
+
+        AST *whole = funcAST;
+        if (const auto outer = std::next(it); outer != std::rend(path)) {
+            if (TemplateDeclarationAST * const templated = (*outer)->asTemplateDeclaration())
+                whole = templated;
+        }
+        into->definitionRange = file->range(whole);
+        builtinBodyOf(file, funcAST, into);
+        return true;
+    }
+    return false;
+}
+
 class MoveFuncDefToDeclOp : public CppQuickFixOperation
 {
 public:
     enum Type { Push, Pull };
     MoveFuncDefToDeclOp(const CppQuickFixInterface &interface,
-                        const FilePath &fromFilePath, const FilePath &toFilePath,
-                        FunctionDefinitionAST *funcAst, Function *func, const QString &declText,
-                        const ChangeSet::Range &fromRange,
-                        const ChangeSet::Range &toRange,
+                        const DefinitionAndItsDeclaration &move,
                         Type type)
         : CppQuickFixOperation(interface, 0)
-        , m_fromFilePath(fromFilePath)
-        , m_toFilePath(toFilePath)
-        , m_funcAST(funcAst)
-        , m_func(func)
-        , m_declarationText(declText)
-        , m_fromRange(fromRange)
-        , m_toRange(toRange)
+        , m_move(move)
     {
         if (type == Type::Pull) {
             setDescription(Tr::tr("Move Definition Here"));
-        } else if (m_toFilePath == m_fromFilePath) {
+        } else if (m_move.declarationFile == m_move.definitionFile) {
             setDescription(Tr::tr("Move Definition to Class"));
         } else {
-            const QString resolved =
-                m_toFilePath.relativeNativePathFromDir(m_fromFilePath.parentDir());
+            const QString resolved = m_move.declarationFile.relativeNativePathFromDir(
+                m_move.definitionFile.parentDir());
             setDescription(Tr::tr("Move Definition to %1").arg(resolved));
         }
     }
@@ -553,65 +619,26 @@ private:
     void perform() override
     {
         CppRefactoringChanges refactoring(snapshot());
-        CppRefactoringFilePtr fromFile = refactoring.cppFile(m_fromFilePath);
-        CppRefactoringFilePtr toFile = refactoring.cppFile(m_toFilePath);
+        CppRefactoringFilePtr fromFile = refactoring.cppFile(m_move.definitionFile);
+        CppRefactoringFilePtr toFile = refactoring.cppFile(m_move.declarationFile);
 
-        ensureFuncDefAstAndRange(*fromFile);
-        if (!m_funcAST)
-            return;
-
-        QString wholeFunctionText = m_declarationText;
-        if (isDefaulted(m_funcAST, fromFile->cppDocument()->translationUnit())) {
-            wholeFunctionText += definitionTextForDefaulted(m_funcAST, fromFile);
-        } else {
-            wholeFunctionText += fromFile->textOf(fromFile->endOf(m_funcAST->declarator),
-                                                  fromFile->endOf(m_funcAST->function_body));
-        }
+        QString wholeFunctionText = m_move.declarationText
+                                    + fromFile->textOf(m_move.bodyStart, m_move.bodyEnd);
+        if (m_move.endsWithSemicolon)
+            wholeFunctionText += QLatin1Char(';');
 
         // Replace declaration with function and delete old definition
         ChangeSet toTarget;
-        toTarget.replace(m_toRange, wholeFunctionText);
-        if (m_toFilePath == m_fromFilePath)
-            toTarget.remove(m_fromRange);
-        toFile->setOpenEditor(true, m_toRange.start);
+        toTarget.replace(m_move.declarationRange, wholeFunctionText);
+        if (m_move.declarationFile == m_move.definitionFile)
+            toTarget.remove(m_move.definitionRange);
+        toFile->setOpenEditor(true, m_move.declarationRange.start);
         toFile->apply(toTarget);
-        if (m_toFilePath != m_fromFilePath)
-            fromFile->apply(ChangeSet::makeRemove(m_fromRange));
+        if (m_move.declarationFile != m_move.definitionFile)
+            fromFile->apply(ChangeSet::makeRemove(m_move.definitionRange));
     }
 
-    void ensureFuncDefAstAndRange(CppRefactoringFile &defFile)
-    {
-        if (m_funcAST) {
-            QTC_CHECK(m_fromRange.end > m_fromRange.start);
-            return;
-        }
-        QTC_ASSERT(m_func, return);
-        const QList<AST *> astPath = ASTPath(defFile.cppDocument())(m_func->line(),
-                                                                    m_func->column());
-        if (astPath.isEmpty())
-            return;
-        for (auto it = std::rbegin(astPath); it != std::rend(astPath); ++it) {
-            m_funcAST = (*it)->asFunctionDefinition();
-            if (!m_funcAST)
-                continue;
-            AST *astForRange = m_funcAST;
-            const auto prev = std::next(it);
-            if (prev != std::rend(astPath)) {
-                if (const auto templAst = (*prev)->asTemplateDeclaration())
-                    astForRange = templAst;
-            }
-            m_fromRange = defFile.range(astForRange);
-            return;
-        }
-    }
-
-    const FilePath m_fromFilePath;
-    const FilePath m_toFilePath;
-    FunctionDefinitionAST *m_funcAST;
-    Function *m_func;
-    const QString m_declarationText;
-    ChangeSet::Range m_fromRange;
-    const ChangeSet::Range m_toRange;
+    const DefinitionAndItsDeclaration m_move;
 };
 
 /*!
@@ -827,7 +854,11 @@ private:
 
         const CppRefactoringChanges refactoring(interface.snapshot());
         const CppRefactoringFilePtr defFile = interface.currentFile();
-        const ChangeSet::Range defRange = defFile->range(completeDefAST);
+
+        DefinitionAndItsDeclaration move;
+        move.definitionFile = interface.filePath();
+        move.definitionRange = defFile->range(completeDefAST);
+        builtinBodyOf(defFile, funcAST, &move);
 
         // Determine declaration (file, range, text);
         ChangeSet::Range declRange;
@@ -909,12 +940,11 @@ private:
             }
         }
 
-        if (!declFilePath.isEmpty() && !declText.isEmpty())
-            result << new MoveFuncDefToDeclOp(interface,
-                                              interface.filePath(),
-                                              declFilePath,
-                                              funcAST, func, declText,
-                                              defRange, declRange, MoveFuncDefToDeclOp::Push);
+        move.declarationFile = declFilePath;
+        move.declarationRange = declRange;
+        move.declarationText = declText;
+        if (move.isValid())
+            result << new MoveFuncDefToDeclOp(interface, move, MoveFuncDefToDeclOp::Push);
     }
 };
 
@@ -974,15 +1004,26 @@ private:
             if (!funcDef)
                 return;
 
-            QString declText = interface.currentFile()->textOf(simpleDecl);
-            declText.chop(1); // semicolon
-            declText.prepend(inlinePrefix(interface.filePath(), [funcDecl] {
+            DefinitionAndItsDeclaration move;
+            move.declarationFile = decl->filePath();
+            move.declarationRange = interface.currentFile()->range(simpleDecl);
+            move.declarationText = interface.currentFile()->textOf(simpleDecl);
+            move.declarationText.chop(1); // semicolon
+            move.declarationText.prepend(inlinePrefix(interface.filePath(), [funcDecl] {
                 return !funcDecl->enclosingScope()->asClass();
             }));
-            result << new MoveFuncDefToDeclOp(interface, funcDef->filePath(), decl->filePath(), nullptr,
-                                              funcDef, declText, {},
-                                              interface.currentFile()->range(simpleDecl),
-                                              MoveFuncDefToDeclOp::Pull);
+
+            // Where the definition being pulled over is, which is read here
+            // rather than while performing: what the operation is handed is
+            // the places, and finding them is the reading.
+            move.definitionFile = funcDef->filePath();
+            if (!builtinDefinitionAt(interface, move.definitionFile, funcDef->line(),
+                                     funcDef->column(), &move)) {
+                return;
+            }
+
+            if (move.isValid())
+                result << new MoveFuncDefToDeclOp(interface, move, MoveFuncDefToDeclOp::Pull);
             return;
         }
     }
