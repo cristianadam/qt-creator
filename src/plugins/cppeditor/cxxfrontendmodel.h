@@ -306,6 +306,17 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
+// What \a filePath declares, in the order it declares them, and nothing
+// where this model cannot read the file. Read here and now where the editor
+// is not running over it, as the declaration answer below is.
+//
+// One entry per thing declared, at the place it is declared: a function
+// declared and defined in one file is one entry, which is what the outline
+// shows too.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const Utils::FilePath &filePath);
+
 // What the name at a position means: where it was declared, what kind of
 // thing it is and what its type reads as. Nothing where this model has not
 // read the file or the position is on no name it resolved.

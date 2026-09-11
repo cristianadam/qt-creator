@@ -161,9 +161,9 @@ static QJsonObject limitProperty()
 // declaration is. A template is a class there -- its parameters being
 // something it has rather than something it is -- so nothing here says
 // "template".
-static QString declarationKind(CPlusPlus::CxxFrontendDocument::Declaration::Kind kind)
+static QString declarationKind(CPlusPlus::CxxFrontendDocument::Kind kind)
 {
-    using Kind = CPlusPlus::CxxFrontendDocument::Declaration::Kind;
+    using Kind = CPlusPlus::CxxFrontendDocument::Kind;
     switch (kind) {
     case Kind::Class: return QStringLiteral("class");
     case Kind::Enum: return QStringLiteral("enum");
@@ -176,6 +176,42 @@ static QString declarationKind(CPlusPlus::CxxFrontendDocument::Declaration::Kind
     case Kind::Unknown: break;
     }
     return QStringLiteral("symbol");
+}
+
+// What the other model says a file declares, in the shape this tool answers
+// with, and nothing where it cannot read the file.
+//
+// One entry per thing declared rather than one per place: a function
+// declared and defined in one file is one entry, at its declaration, and
+// "is_definition" then says that the file defines it.
+static std::optional<QJsonArray> fileSymbolsOnTheModel(const Utils::FilePath &filePath)
+{
+    const std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbols
+        = cxxFrontendSymbolsIn(CppModelManager::snapshot(), CppModelManager::workingCopy(),
+                               filePath);
+    if (!symbols)
+        return std::nullopt;
+
+    QJsonArray answer;
+    for (const CPlusPlus::CxxFrontendDocument::Symbol &symbol : *symbols) {
+        // Written by a macro's replacement, so there is no place in the file
+        // to send anybody to.
+        if (symbol.isGenerated)
+            continue;
+
+        QJsonObject obj{{"name", symbol.name},
+                        {"kind", declarationKind(symbol.kind)},
+                        {"line", symbol.line},
+                        {"column", symbol.column}};
+        if (!symbol.qualified.isEmpty())
+            obj.insert("scope", symbol.qualified.join("::"));
+        if (!symbol.type.isEmpty())
+            obj.insert("type", symbol.type);
+        if (symbol.kind == CPlusPlus::CxxFrontendDocument::Kind::Function)
+            obj.insert("is_definition", symbol.isDefinedHere);
+        answer.append(obj);
+    }
+    return answer;
 }
 
 // What the other model says about the name at a position, in the shape this
@@ -583,11 +619,22 @@ void registerMcpTools()
                         .arg(filePath.toUserOutput())));
             }
 
+            QJsonArray symbols;
+#ifdef QTC_WITH_CXX_FRONTEND
+            if (const std::optional<QJsonArray> onTheModel = fileSymbolsOnTheModel(filePath)) {
+                int total = 0;
+                bool truncated = false;
+                const QJsonArray capped = capResults(*onTheModel, resultLimit(args), &total,
+                                                     &truncated);
+                return CallToolResult{}.isError(false).structuredContent(QJsonObject{
+                    {"symbols", capped}, {"total", total}, {"truncated", truncated}});
+            }
+#endif
+
             SearchSymbols searcher;
             searcher.setSymbolsToSearchFor(SymbolType::AllTypes);
             const IndexItem::Ptr root = searcher(doc);
 
-            QJsonArray symbols;
             if (root) {
                 root->visitAllChildren([&symbols](const IndexItem::Ptr &item) {
                     QJsonObject obj{

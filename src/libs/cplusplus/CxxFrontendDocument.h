@@ -40,6 +40,23 @@ namespace CPlusPlus {
 class CxxFrontendDocument
 {
 public:
+    // What kind of thing something declared is, for a reader that has to say
+    // so. The words are the consumer's; these are the distinctions this
+    // model makes, and a template is not among them -- a class template is a
+    // class here, its parameters being something it has rather than
+    // something it is.
+    enum class Kind {
+        Unknown,
+        Class,
+        Enum,
+        Enumerator,
+        Namespace,
+        Function,
+        Variable,
+        Field,
+        TypeAlias
+    };
+
     struct Config
     {
         Overview settings;
@@ -127,6 +144,17 @@ public:
         // A class named without its body, which an outline greys out because
         // the thing itself is somewhere else.
         bool isForwardDeclaration = false;
+
+        // What kind of thing it is, said the same way a Declaration says it
+        // -- for a reader listing what a file declares rather than drawing
+        // it, which is what an icon is for.
+        Kind kind = Kind::Unknown;
+
+        // Whether this file defines it and not only declares it. A function
+        // declared here and defined further down is one entry -- this list
+        // holds an entity once, at the place it is declared -- so this says
+        // what the file does with it rather than what the place is.
+        bool isDefinedHere = false;
     };
     const QList<Symbol> &symbols() const;
 
@@ -476,22 +504,6 @@ public:
         int line = 0;
         int column = 0;
 
-        // What kind of thing it is, for a reader that has to say so. The
-        // words are the consumer's; these are the distinctions this model
-        // makes, and a template is not among them -- a class template is a
-        // class here, its parameters being something it has rather than
-        // something it is.
-        enum class Kind {
-            Unknown,
-            Class,
-            Enum,
-            Enumerator,
-            Namespace,
-            Function,
-            Variable,
-            Field,
-            TypeAlias
-        };
         Kind kind = Kind::Unknown;
 
         // Its type, printed the way an outline or a tooltip shows it: the

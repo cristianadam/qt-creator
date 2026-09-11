@@ -289,9 +289,9 @@ QString qualifiedNameOf(cxx::Symbol *symbol)
 
 // What kind of thing a symbol is, in the distinctions a reader asking "what
 // is this" cares about.
-CxxFrontendDocument::Declaration::Kind kindOf(cxx::Symbol *symbol)
+CxxFrontendDocument::Kind kindOf(cxx::Symbol *symbol)
 {
-    using Kind = CxxFrontendDocument::Declaration::Kind;
+    using Kind = CxxFrontendDocument::Kind;
     if (dynamic_cast<cxx::ClassSymbol *>(symbol))
         return Kind::Class;
     if (dynamic_cast<cxx::EnumSymbol *>(symbol) || dynamic_cast<cxx::ScopedEnumSymbol *>(symbol))
@@ -784,6 +784,7 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     symbol.name = name;
     symbol.qualified = enclosing;
     symbol.parent = parent;
+    symbol.kind = kindOf(member);
 
     // A constructor or a destructor returns nothing, so nothing is written
     // where a return type would be -- not even void, which is what the type
@@ -842,6 +843,22 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
 
     if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member))
         symbol.isForwardDeclaration = !cls->isComplete();
+
+    // Whether this file defines it as well as declaring it, which a reader
+    // listing what a file says wants told apart. A function declared here
+    // and defined further down is one entry -- this list holds an entity
+    // once, where it is declared -- and this file does define it.
+    if (function) {
+        symbol.isDefinedHere = function->isDefined();
+        if (!symbol.isDefinedHere) {
+            if (cxx::FunctionSymbol * const defined = function->definition()) {
+                symbol.isDefinedHere = defined->location()
+                                       && fileOf(defined->location()) == fileName;
+            }
+        }
+    } else {
+        symbol.isDefinedHere = !symbol.isForwardDeclaration;
+    }
     symbol.icon = iconTypeOf(member, classKey);
 
     if (const cxx::SourceLocation location = member->location())

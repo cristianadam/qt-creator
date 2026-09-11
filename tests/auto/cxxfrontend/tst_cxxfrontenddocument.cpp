@@ -165,6 +165,7 @@ private slots:
     void declarationAt();
     void declarationSaysWhatItIs_data();
     void declarationSaysWhatItIs();
+    void symbolsSayWhatTheyAre();
 
     void typeAt_data();
     void typeAt();
@@ -454,7 +455,7 @@ void tst_cxxfrontenddocument::declarationSaysWhatItIs()
         = document.declarationAt(positions.first().line, positions.first().column);
     QVERIFY(found.isValid());
 
-    using Kind = CxxFrontendDocument::Declaration::Kind;
+    using Kind = CxxFrontendDocument::Kind;
     const auto kind = [&] {
         switch (found.kind) {
         case Kind::Class: return "class";
@@ -474,6 +475,57 @@ void tst_cxxfrontenddocument::declarationSaysWhatItIs()
     if (!found.type.isEmpty())
         described += ' ' + found.type;
     QCOMPARE(described, expected);
+}
+
+// What the file declares, for a reader listing it rather than drawing it:
+// each entry says what kind of thing it is and whether the place is the
+// definition.
+void tst_cxxfrontenddocument::symbolsSayWhatTheyAre()
+{
+    const QByteArray source = "enum Color { Red, Green };\n"
+                              "int add(int a, int b) { return a + b; }\n"
+                              "void declaredOnly();\n"
+                              "class C;\n"
+                              "class D { int m; };\n"
+                              "namespace N { using Number = int; }\n"
+                              "void twice();\n"
+                              "void twice() {}\n";
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+        const auto kind = [&] {
+            switch (symbol.kind) {
+            case CxxFrontendDocument::Kind::Class: return "class";
+            case CxxFrontendDocument::Kind::Enum: return "enum";
+            case CxxFrontendDocument::Kind::Enumerator: return "enumerator";
+            case CxxFrontendDocument::Kind::Namespace: return "namespace";
+            case CxxFrontendDocument::Kind::Function: return "function";
+            case CxxFrontendDocument::Kind::Variable: return "variable";
+            case CxxFrontendDocument::Kind::Field: return "field";
+            case CxxFrontendDocument::Kind::TypeAlias: return "alias";
+            case CxxFrontendDocument::Kind::Unknown: break;
+            }
+            return "unknown";
+        }();
+        described.append(QString("%1 %2%3").arg(kind, symbol.name)
+                             .arg(symbol.isDefinedHere ? " defined" : ""));
+    }
+
+    // A function declared and defined in one file is one entry, at the
+    // place it is declared, and the file does define it.
+    QCOMPARE(described,
+             QStringList({"enum Color defined",
+                          "enumerator Red defined",
+                          "enumerator Green defined",
+                          "function add defined",
+                          "function declaredOnly",
+                          "class C",
+                          "class D defined",
+                          "field m defined",
+                          "namespace N defined",
+                          "alias Number defined",
+                          "function twice defined"}));
 }
 
 // The type of the expression at a position: what a tooltip shows, and what

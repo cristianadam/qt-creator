@@ -1443,6 +1443,24 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     return parts;
 }
 
+std::optional<QList<CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    return holding.document->symbols();
+}
+
 std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
     const FilePath &filePath, int line, int column)
 {
