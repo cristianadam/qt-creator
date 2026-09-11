@@ -40,55 +40,325 @@ using namespace Utils;
 namespace CppEditor::Internal {
 namespace {
 
+// A stretch of text that moves with the class: its own declaration, and
+// everything written elsewhere that belongs to it -- a member function's
+// definition, a nested class's body, a static member's definition.
+struct ClassPart
+{
+    FilePath filePath;
+    ChangeSet::Range range;
+};
+
+// How to get at a file the class is written in, so that a part can be read
+// out of it and taken away again.
+using FileGetter = std::function<CppRefactoringFilePtr(const FilePath &)>;
+
+// Everything the class is written in besides the declaration itself.
+// Finding it means reading other files, which either front end does in its
+// own time, so the parts arrive through a callback.
+using PartsHandler = std::function<void(const QList<ClassPart> &)>;
+using PartsFinder = std::function<void(const FileGetter &, const PartsHandler &)>;
+
+// What moving a class to its own files rewrites, as either front end reads
+// it: the name the new files are called after, what the class is written
+// inside, where its declaration stands and how the rest of it is found.
+struct ClassToMove
+{
+    QString className;
+    QStringList namespacePath; // Outermost first.
+    ChangeSet::Range range;    // The declaration, in the file being edited.
+    PartsFinder findOtherParts;
+
+    // Whether the file writes anything besides this class: a class that is
+    // all its file says is where it belongs already.
+    bool hasOtherDeclarations = false;
+};
+
+// Whether the file the class stands in is already named after it, in which
+// case it is where it belongs and there is nothing to offer.
+bool fileIsNamedAfter(const FilePath &filePath, const QString &className)
+{
+    const QString lowerFileBaseName = filePath.baseName().toLower();
+    if (lowerFileBaseName.contains(className.toLower()))
+        return true;
+    QString underscoredClassName = className;
+    QChar curChar = underscoredClassName.at(0);
+    for (int i = 1; i < underscoredClassName.size(); ++i) {
+        const QChar prevChar = curChar;
+        curChar = underscoredClassName.at(i);
+        if (curChar.isUpper() && prevChar.isLetterOrNumber() && !prevChar.isUpper()) {
+            underscoredClassName.insert(i, '_');
+            ++i;
+        }
+    }
+    return lowerFileBaseName.contains(underscoredClassName.toLower());
+}
+
+// The rest of the class, as the built-in front end finds it: follow symbol
+// from every member the class only declares, and take away the declaration
+// written around wherever it lands. Every lookup is a question for the
+// project, so the answer arrives once the last of them has come back.
+struct BuiltinSearch
+{
+    using Ptr = std::shared_ptr<BuiltinSearch>;
+
+    FileGetter getFile;
+    PartsHandler handler;
+    QList<ClassPart> parts;
+    int remainingFollowSymbolOps = 0;
+};
+
+void collectImplementations(Class *klass, const BuiltinSearch::Ptr &search);
+
+void lookupSymbol(Symbol *symbol, const BuiltinSearch::Ptr &search)
+{
+    const CppRefactoringFilePtr refactoringFile = search->getFile(symbol->filePath());
+    const auto editorWidget = qobject_cast<CppEditorWidget *>(refactoringFile->editor());
+    QTextCursor cursor(refactoringFile->document()->begin());
+    TranslationUnit * const tu = refactoringFile->cppDocument()->translationUnit();
+    const int symbolPos = tu->getTokenPositionInDocument(symbol->sourceLocation(),
+                                                         refactoringFile->document());
+    cursor.setPosition(symbolPos);
+    const CursorInEditor cursorInEditor(
+        cursor,
+        symbol->filePath(),
+        editorWidget,
+        editorWidget ? editorWidget->textDocument() : nullptr,
+        refactoringFile->cppDocument());
+    const auto callback = [symbol, symbolPos, doc = cursor.document(), search](const Link &link) {
+        class FinishedChecker {
+        public:
+            FinishedChecker(const BuiltinSearch::Ptr &search) : m_search(search) {}
+            ~FinishedChecker() {
+                if (--m_search->remainingFollowSymbolOps == 0)
+                    m_search->handler(m_search->parts);
+            };
+        private:
+            const BuiltinSearch::Ptr m_search;
+        } finishedChecker(search);
+        if (!link.hasValidTarget())
+            return;
+        if (symbol->filePath() == link.targetFilePath) {
+            const int linkPos = link.target.toPositionInDocument(doc);
+            if (linkPos == symbolPos)
+                return;
+        }
+        const CppRefactoringFilePtr refactoringFile = search->getFile(link.targetFilePath);
+        const QList<AST *> astPath = ASTPath(
+            refactoringFile->cppDocument())(link.target.line, link.target.column);
+        const bool isTemplate = symbol->asTemplate();
+        const bool isFunction = symbol->type()->asFunctionType();
+        for (auto it = astPath.rbegin(); it != astPath.rend(); ++it) {
+            const bool match = isTemplate ? bool((*it)->asTemplateDeclaration())
+                               : isFunction ? bool((*it)->asFunctionDefinition())
+                                            : bool((*it)->asSimpleDeclaration());
+            if (match) {
+                // For member functions of class templates.
+                if (isFunction) {
+                    const auto next = std::next(it);
+                    if (next != astPath.rend() && (*next)->asTemplateDeclaration())
+                        it = next;
+                }
+                search->parts.append({link.targetFilePath, refactoringFile->range(*it)});
+                if (symbol->asForwardClassDeclaration()) {
+                    if (const auto classSpec = (*(it - 1))->asClassSpecifier();
+                        classSpec && classSpec->symbol) {
+                        collectImplementations(classSpec->symbol, search);
+                    }
+                }
+                break;
+            }
+        }
+    };
+    ++search->remainingFollowSymbolOps;
+
+    // Force queued execution, as the built-in editor can run the callback synchronously.
+    const auto followSymbol = [cursorInEditor, callback] {
+        NonInteractiveFollowSymbolMarker niMarker;
+        CppModelManager::followSymbol(
+            cursorInEditor, callback, true, false, FollowSymbolMode::Exact);
+    };
+    QMetaObject::invokeMethod(CppModelManager::instance(), followSymbol, Qt::QueuedConnection);
+}
+
+void collectImplementations(Class *klass, const BuiltinSearch::Ptr &search)
+{
+    for (int i = 0; i < klass->memberCount(); ++i) {
+        Symbol * const member = klass->memberAt(i);
+        if (member->isGenerated())
+            continue;
+        if (member->asForwardClassDeclaration() || member->asTemplate()) {
+            lookupSymbol(member, search);
+            continue;
+        }
+        const auto decl = member->asDeclaration();
+        if (!decl)
+            continue;
+        if (decl->type().type()->asFunctionType()) {
+            if (!decl->asFunction())
+                lookupSymbol(member, search);
+        } else if (decl->isStatic() && !decl->type().isInline()) {
+            lookupSymbol(member, search);
+        }
+    }
+}
+
+PartsFinder builtinPartsFinder(Class *klass)
+{
+    return [klass](const FileGetter &getFile, const PartsHandler &handler) {
+        const auto search = std::make_shared<BuiltinSearch>();
+        search->getFile = getFile;
+        search->handler = handler;
+        collectImplementations(klass, search);
+        if (search->remainingFollowSymbolOps == 0)
+            handler(search->parts);
+    };
+}
+
+// What the built-in front end says of the class the cursor is on.
+std::optional<ClassToMove> builtinClassToMove(const CppQuickFixInterface &interface)
+{
+    ClassSpecifierAST * const classAst = astForClassOperations(interface);
+    if (!classAst || !classAst->symbol)
+        return {};
+
+    // Everything written around the class body goes along with it, up to
+    // and including the template header.
+    AST *fullDecl = nullptr;
+    for (auto it = interface.path().rbegin(); it != interface.path().rend() && !fullDecl; ++it) {
+        if (*it == classAst && it != interface.path().rend() - 1) {
+            auto next = std::next(it);
+            fullDecl = (*next)->asSimpleDeclaration();
+            if (next != interface.path().rend() - 1) {
+                next = std::next(next);
+                if (const auto templ = (*next)->asTemplateDeclaration())
+                    fullDecl = templ;
+            }
+        }
+    }
+    if (!fullDecl)
+        return {};
+
+    Overview ov;
+    ClassToMove klass;
+    klass.className = ov.prettyName(classAst->symbol->name());
+    if (klass.className.isEmpty())
+        return {};
+    klass.range = interface.currentFile()->range(fullDecl);
+    klass.findOtherParts = builtinPartsFinder(classAst->symbol);
+
+    AST * const ast = interface.currentFile()->cppDocument()->translationUnit()->ast();
+    if (!ast)
+        return {};
+    DeclarationListAST * const topLevelDecls = ast->asTranslationUnit()->declaration_list;
+    if (!topLevelDecls)
+        return {};
+    QList<Namespace *> namespacePath;
+    QList<Namespace *> currentNamespacePath;
+    bool foundOtherDecls = false;
+    bool foundSelf = false;
+    std::function<void(Namespace *)> collectSymbolsFromNamespace;
+    const auto handleSymbol = [&](Symbol *symbol) {
+        if (!symbol)
+            return;
+        if (const auto nsMember = symbol->asNamespace()) {
+            collectSymbolsFromNamespace(nsMember);
+            return;
+        }
+        if (symbol != classAst->symbol) {
+            if (!symbol->asForwardClassDeclaration())
+                foundOtherDecls = true;
+            return;
+        }
+        QTC_ASSERT(symbol->asClass(), return);
+        foundSelf = true;
+        namespacePath = currentNamespacePath;
+    };
+    collectSymbolsFromNamespace = [&](Namespace *ns) {
+        currentNamespacePath << ns;
+        for (int i = 0; i < ns->memberCount() && (!foundSelf || !foundOtherDecls); ++i)
+            handleSymbol(ns->memberAt(i));
+        currentNamespacePath.removeLast();
+    };
+    for (DeclarationListAST *it = topLevelDecls; it && (!foundSelf || !foundOtherDecls);
+         it = it->next) {
+        DeclarationAST *decl = it->value;
+        if (!decl)
+            continue;
+        if (const auto templ = decl->asTemplateDeclaration())
+            decl = templ->declaration;
+        if (!decl)
+            continue;
+        if (const auto ns = decl->asNamespace(); ns && ns->symbol) {
+            collectSymbolsFromNamespace(ns->symbol);
+            continue;
+        }
+        if (const auto simpleDecl = decl->asSimpleDeclaration()) {
+            if (!simpleDecl->decl_specifier_list)
+                continue;
+            for (SpecifierListAST *spec = simpleDecl->decl_specifier_list; spec; spec = spec->next) {
+                if (!spec->value)
+                    continue;
+                if (const auto klass = spec->value->asClassSpecifier())
+                    handleSymbol(klass->symbol);
+                else if (!spec->value->asElaboratedTypeSpecifier()) // forward decl
+                    foundOtherDecls = true;
+            }
+        } else if (decl->asDeclaration()) {
+            foundOtherDecls = true;
+        }
+    }
+    if (!foundSelf)
+        return {};
+
+    klass.namespacePath = Utils::transform<QStringList>(namespacePath, [&](const Namespace *ns) {
+        return ov.prettyName(ns->name());
+    });
+    klass.hasOtherDeclarations = foundOtherDecls;
+    return klass;
+}
+
 class MoveClassToOwnFileOp : public CppQuickFixOperation
 {
 public:
     MoveClassToOwnFileOp(
-        const CppQuickFixInterface &interface,
-        AST *fullDecl,
-        ClassSpecifierAST *classAst,
-        const QList<Namespace *> &namespacePath,
-        bool interactive)
+        const CppQuickFixInterface &interface, const ClassToMove &klass, bool interactive)
         : CppQuickFixOperation(interface)
         , m_state(std::make_shared<State>())
     {
         setDescription(Tr::tr("Move Class to a Dedicated Set of Source Files"));
         m_state->originalFilePath = interface.currentFile()->filePath();
-        m_state->classAst = classAst;
-        m_state->namespacePath = namespacePath;
+        m_state->klass = klass;
         m_state->interactive = interactive;
         PerFileState &perFileState = m_state->perFileState[interface.currentFile()->filePath()];
         perFileState.refactoringFile = interface.currentFile();
-        perFileState.declarationsToMove << fullDecl;
+        perFileState.rangesToMove << klass.range;
     }
 
 private:
     struct PerFileState {
         // We want to keep the relative order of moved code.
-        void insertSorted(AST *decl) {
-            declarationsToMove.insert(std::lower_bound(
-                                          declarationsToMove.begin(),
-                                          declarationsToMove.end(),
-                                          decl,
-                                          [](const AST *elem, const AST *value) {
-                                              return elem->firstToken() < value->firstToken();
-                                          }), decl);
+        void insertSorted(const ChangeSet::Range &range) {
+            rangesToMove.insert(std::lower_bound(
+                                    rangesToMove.begin(),
+                                    rangesToMove.end(),
+                                    range,
+                                    [](const ChangeSet::Range &elem,
+                                       const ChangeSet::Range &value) {
+                                        return elem.start < value.start;
+                                    }), range);
         }
 
         CppRefactoringFilePtr refactoringFile;
-        QList<AST *> declarationsToMove;
+        QList<ChangeSet::Range> rangesToMove;
     };
     struct State {
         using Ptr = std::shared_ptr<State>;
 
         FilePath originalFilePath;
-        AST *fullDecl = nullptr;
-        ClassSpecifierAST *classAst = nullptr;
-        QList<Namespace *> namespacePath;
-        Links lookupResults;
+        ClassToMove klass;
         QMap<FilePath, PerFileState> perFileState; // A map for deterministic order of moved code.
         CppRefactoringChanges factory{CppModelManager::snapshot()};
-        int remainingFollowSymbolOps = 0;
         bool interactive = true;
     };
     class Dialog : public QDialog {
@@ -215,9 +485,15 @@ private:
 
     void perform() override
     {
-        collectImplementations(m_state->classAst->symbol, m_state);
-        if (m_state->remainingFollowSymbolOps == 0)
-            finish(m_state);
+        const State::Ptr state = m_state;
+        const FileGetter getFile = [state](const FilePath &filePath) {
+            return getRefactoringFile(filePath, state);
+        };
+        state->klass.findOtherParts(getFile, [state](const QList<ClassPart> &parts) {
+            for (const ClassPart &part : parts)
+                state->perFileState[part.filePath].insertSorted(part.range);
+            finish(state);
+        });
     }
 
     static CppRefactoringFilePtr getRefactoringFile(const FilePath &filePath, const State::Ptr &state)
@@ -228,107 +504,12 @@ private:
         return refactoringFile;
     }
 
-    static void lookupSymbol(Symbol *symbol, const State::Ptr &state)
-    {
-        const CppRefactoringFilePtr refactoringFile = getRefactoringFile(symbol->filePath(), state);
-        const auto editorWidget = qobject_cast<CppEditorWidget *>(refactoringFile->editor());
-        QTextCursor cursor(refactoringFile->document()->begin());
-        TranslationUnit * const tu = refactoringFile->cppDocument()->translationUnit();
-        const int symbolPos = tu->getTokenPositionInDocument(symbol->sourceLocation(),
-                                                             refactoringFile->document());
-        cursor.setPosition(symbolPos);
-        const CursorInEditor cursorInEditor(
-            cursor,
-            symbol->filePath(),
-            editorWidget,
-            editorWidget ? editorWidget->textDocument() : nullptr,
-            refactoringFile->cppDocument());
-        const auto callback = [symbol, symbolPos, doc = cursor.document(), state](const Link &link) {
-            class FinishedChecker {
-            public:
-                FinishedChecker(const State::Ptr &state) : m_state(state) {}
-                ~FinishedChecker() {
-                    if (--m_state->remainingFollowSymbolOps == 0)
-                        finish(m_state);
-                };
-            private:
-                const State::Ptr &m_state;
-            } finishedChecker(state);
-            if (!link.hasValidTarget())
-                return;
-            if (symbol->filePath() == link.targetFilePath) {
-                const int linkPos = link.target.toPositionInDocument(doc);
-                if (linkPos == symbolPos)
-                    return;
-            }
-            const CppRefactoringFilePtr refactoringFile
-                = getRefactoringFile(link.targetFilePath, state);
-            const QList<AST *> astPath = ASTPath(
-                refactoringFile->cppDocument())(link.target.line, link.target.column);
-            const bool isTemplate = symbol->asTemplate();
-            const bool isFunction = symbol->type()->asFunctionType();
-            for (auto it = astPath.rbegin(); it != astPath.rend(); ++it) {
-                const bool match = isTemplate ? bool((*it)->asTemplateDeclaration())
-                                   : isFunction ? bool((*it)->asFunctionDefinition())
-                                                : bool((*it)->asSimpleDeclaration());
-                if (match) {
-                    // For member functions of class templates.
-                    if (isFunction) {
-                        const auto next = std::next(it);
-                        if (next != astPath.rend() && (*next)->asTemplateDeclaration())
-                            it = next;
-                    }
-                    state->perFileState[link.targetFilePath].insertSorted(*it);
-                    if (symbol->asForwardClassDeclaration()) {
-                        if (const auto classSpec = (*(it - 1))->asClassSpecifier();
-                            classSpec && classSpec->symbol) {
-                            collectImplementations(classSpec->symbol, state);
-                        }
-                    }
-                    break;
-                }
-            }
-        };
-        ++state->remainingFollowSymbolOps;
-
-        // Force queued execution, as the built-in editor can run the callback synchronously.
-        const auto followSymbol = [cursorInEditor, callback] {
-            NonInteractiveFollowSymbolMarker niMarker;
-            CppModelManager::followSymbol(
-                cursorInEditor, callback, true, false, FollowSymbolMode::Exact);
-        };
-        QMetaObject::invokeMethod(CppModelManager::instance(), followSymbol, Qt::QueuedConnection);
-    }
-
-    static void collectImplementations(Class *klass, const State::Ptr &state)
-    {
-        for (int i = 0; i < klass->memberCount(); ++i) {
-            Symbol * const member = klass->memberAt(i);
-            if (member->isGenerated())
-                continue;
-            if (member->asForwardClassDeclaration() || member->asTemplate()) {
-                lookupSymbol(member, state);
-                continue;
-            }
-            const auto decl = member->asDeclaration();
-            if (!decl)
-                continue;
-            if (decl->type().type()->asFunctionType()) {
-                if (!decl->asFunction())
-                    lookupSymbol(member, state);
-            } else if (decl->isStatic() && !decl->type().isInline()) {
-                lookupSymbol(member, state);
-            }
-        }
-    }
-
     static void finish(const State::Ptr &state)
     {
-        Overview ov;
         Project * const project = ProjectManager::projectForFile(state->originalFilePath);
         const CppFileSettingsData fileSettings = cppFileSettingsForProject(project);
         const auto constructDefaultFilePaths = [&] {
-            const QString className = ov.prettyName(state->classAst->symbol->name());
+            const QString &className = state->klass.className;
             const QString baseFileName = fileSettings.lowerCaseFiles ? className.toLower() : className;
             const QString headerFileName = baseFileName + '.' + fileSettings.headerSuffix;
             const FilePath baseDir = state->originalFilePath.parentDir();
@@ -381,10 +562,7 @@ private:
                 content->append('\n');
         }
         sourceContent.append('\n').append("#include \"").append(headerFileName).append("\"\n");
-        const QStringList namespaceNames
-            = Utils::transform<QStringList>(state->namespacePath, [&](const Namespace *ns) {
-                  return ov.prettyName(ns->name());
-              });
+        const QStringList &namespaceNames = state->klass.namespacePath;
         const QString headerGuard = headerGuardForProject(project, headerFilePath);
         if (fileSettings.headerPragmaOnce) {
             headerContent.append("#pragma once\n");
@@ -401,7 +579,7 @@ private:
         }
         bool hasSourceContent = false;
         for (auto it = state->perFileState.begin(); it != state->perFileState.end(); ++it) {
-            if (it->declarationsToMove.isEmpty())
+            if (it->rangesToMove.isEmpty())
                 continue;
             const CppRefactoringFilePtr refactoringFile = it->refactoringFile;
             QTC_ASSERT(refactoringFile, continue);
@@ -413,8 +591,7 @@ private:
                 insertNewIncludeDirective('"' + relInclude + '"', refactoringFile,
                                           refactoringFile->cppDocument(), changes);
             }
-            for (AST * const declToMove : std::as_const(it->declarationsToMove)) {
-                const ChangeSet::Range rangeToMove = refactoringFile->range(declToMove);
+            for (const ChangeSet::Range &rangeToMove : std::as_const(it->rangesToMove)) {
                 QString &content = isDeclFile || mustNotCreateSourceFile ? headerContent
                                                                          : sourceContent;
                 if (&content == &sourceContent)
@@ -481,111 +658,12 @@ private:
     void doMatch(const CppQuickFixInterface &interface,
                  TextEditor::QuickFixOperations &result) override
     {
-        ClassSpecifierAST * const classAst = astForClassOperations(interface);
-        if (!classAst || !classAst->symbol)
+        const std::optional<ClassToMove> klass = builtinClassToMove(interface);
+        if (!klass || !klass->hasOtherDeclarations)
             return;
-        AST *fullDecl = nullptr;
-        for (auto it = interface.path().rbegin(); it != interface.path().rend() && !fullDecl; ++it) {
-            if (*it == classAst && it != interface.path().rend() - 1) {
-                auto next = std::next(it);
-                fullDecl = (*next)->asSimpleDeclaration();
-                if (next != interface.path().rend() - 1) {
-                    next = std::next(next);
-                    if (const auto templ = (*next)->asTemplateDeclaration())
-                        fullDecl = templ;
-                }
-            }
-        }
-        if (!fullDecl)
+        if (fileIsNamedAfter(interface.filePath(), klass->className))
             return;
-
-        // Check file name.
-        const QString className = Overview().prettyName(classAst->symbol->name());
-        if (className.isEmpty())
-            return;
-        const QString lowerFileBaseName = interface.filePath().baseName().toLower();
-        if (lowerFileBaseName.contains(className.toLower()))
-            return;
-        QString underscoredClassName = className;
-        QChar curChar = underscoredClassName.at(0);
-        for (int i = 1; i < underscoredClassName.size(); ++i) {
-            const QChar prevChar = curChar;
-            curChar = underscoredClassName.at(i);
-            if (curChar.isUpper() && prevChar.isLetterOrNumber() && !prevChar.isUpper()) {
-                underscoredClassName.insert(i, '_');
-                ++i;
-            }
-        }
-        if (lowerFileBaseName.contains(underscoredClassName.toLower()))
-            return;
-
-        // Is there more than one class definition in the file?
-        AST * const ast = interface.currentFile()->cppDocument()->translationUnit()->ast();
-        if (!ast)
-            return;
-        DeclarationListAST * const topLevelDecls = ast->asTranslationUnit()->declaration_list;
-        if (!topLevelDecls)
-            return;
-        QList<Namespace *> namespacePath;
-        QList<Namespace *> currentNamespacePath;
-        bool foundOtherDecls = false;
-        bool foundSelf = false;
-        std::function<void(Namespace *)> collectSymbolsFromNamespace;
-        const auto handleSymbol = [&](Symbol *symbol) {
-            if (!symbol)
-                return;
-            if (const auto nsMember = symbol->asNamespace()) {
-                collectSymbolsFromNamespace(nsMember);
-                return;
-            }
-            if (symbol != classAst->symbol) {
-                if (!symbol->asForwardClassDeclaration())
-                    foundOtherDecls = true;
-                return;
-            }
-            QTC_ASSERT(symbol->asClass(), return);
-            foundSelf = true;
-            namespacePath = currentNamespacePath;
-        };
-        collectSymbolsFromNamespace = [&](Namespace *ns) {
-            currentNamespacePath << ns;
-            for (int i = 0; i < ns->memberCount() && (!foundSelf || !foundOtherDecls); ++i)
-                handleSymbol(ns->memberAt(i));
-            currentNamespacePath.removeLast();
-        };
-        for (DeclarationListAST *it = topLevelDecls; it && (!foundSelf || !foundOtherDecls);
-             it = it->next) {
-            DeclarationAST *decl = it->value;
-            if (!decl)
-                continue;
-            if (const auto templ = decl->asTemplateDeclaration())
-                decl = templ->declaration;
-            if (!decl)
-                continue;
-            if (const auto ns = decl->asNamespace(); ns && ns->symbol) {
-                collectSymbolsFromNamespace(ns->symbol);
-                continue;
-            }
-            if (const auto simpleDecl = decl->asSimpleDeclaration()) {
-                if (!simpleDecl->decl_specifier_list)
-                    continue;
-                for (SpecifierListAST *spec = simpleDecl->decl_specifier_list; spec; spec = spec->next) {
-                    if (!spec->value)
-                        continue;
-                    if (const auto klass = spec->value->asClassSpecifier())
-                        handleSymbol(klass->symbol);
-                    else if (!spec->value->asElaboratedTypeSpecifier()) // forward decl
-                        foundOtherDecls = true;
-                }
-            } else if (decl->asDeclaration()) {
-                foundOtherDecls = true;
-            }
-        }
-
-        if (foundSelf && foundOtherDecls) {
-            result << new MoveClassToOwnFileOp(
-                interface, fullDecl, classAst, namespacePath, m_interactive);
-        }
+        result << new MoveClassToOwnFileOp(interface, *klass, m_interactive);
     }
 
     bool m_interactive = true;
