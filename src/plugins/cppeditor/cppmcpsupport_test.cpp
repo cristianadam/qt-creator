@@ -175,6 +175,40 @@ void CppMcpSupportTest::testFindOverrides()
     QVERIFY(names.contains("Derived::f"));
 }
 
+// A function further down the hierarchy overrides it too, and one that
+// merely shares its name does not.
+void CppMcpSupportTest::testFindOverridesThroughTheHierarchy()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+    CppEditor::Tests::TemporaryDir dir;
+    Utils::FilePath file;
+    QVERIFY(writeAndParse(dir,
+                          "struct Base { virtual void f(); };\n"
+                          "struct Middle : Base { void f() override; };\n"
+                          "struct Leaf : Middle { void f() override; };\n"
+                          "struct Unrelated { void f(); };\n"
+                          "struct Other : Base { void f(int); };\n",
+                          &file));
+
+    // Base::f at line 1, column 28.
+    const QJsonObject result = callTool("cpp_find_overrides",
+                                        {{"file", file.toFSPathString()}, {"line", 1}, {"column", 28}});
+    QVERIFY(result.value("is_virtual").toBool());
+    QStringList names;
+    for (const QJsonValue &value : result.value("overrides").toArray())
+        names << value.toObject().value("name").toString();
+
+    QVERIFY(names.contains("Base::f"));
+    QVERIFY(names.contains("Middle::f"));
+    QVERIFY(names.contains("Leaf::f"));
+
+    // Another class's function of the same name is another function, and so
+    // is one taking something else.
+    QVERIFY(!names.contains("Unrelated::f"));
+    QVERIFY(!names.contains("Other::f"));
+}
+
 void CppMcpSupportTest::testRenameSymbolDryRun()
 {
     CppEditor::Tests::TestCase testCase;

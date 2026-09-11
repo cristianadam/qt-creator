@@ -17,6 +17,7 @@ private slots:
     void testFindReferences();
     void testGetTypeHierarchy();
     void testFindOverrides();
+    void testFindOverridesThroughTheHierarchy();
     void testGetIncludeHierarchy();
     void testFindSignalConnections();
     void testRenameSymbolDryRun();
