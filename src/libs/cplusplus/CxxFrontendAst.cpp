@@ -129,26 +129,35 @@ void collect(cxx::TranslationUnit *unit, const QString &fileName, cxx::AST *node
         collect(unit, fileName, child, line, column, path);
 }
 
+// Which file a caller is asking about: the one it named, or this document's
+// own where it named none.
+QString fileAskedAbout(const CxxFrontendDocument &document, const QString &inFile)
+{
+    return inFile.isEmpty() ? document.fileName() : inFile;
+}
+
 } // namespace
 
-QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, int column)
+QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, int column,
+                               const QString &inFile)
 {
     cxx::TranslationUnit *unit = document.translationUnit();
     if (!unit || !unit->ast())
         return {};
 
     QList<cxx::AST *> path;
-    collect(unit, document.fileName(), unit->ast(), line, column, path);
+    collect(unit, fileAskedAbout(document, inFile), unit->ast(), line, column, path);
     return path;
 }
 
-CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node)
+CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node,
+                          const QString &inFile)
 {
     cxx::TranslationUnit *unit = document.translationUnit();
     if (!unit || !node)
         return {};
 
-    const WrittenTokens tokens = writtenTokensOf(unit, document.fileName(), node);
+    const WrittenTokens tokens = writtenTokensOf(unit, fileAskedAbout(document, inFile), node);
     if (!tokens)
         return {};
 
@@ -177,14 +186,15 @@ bool cxxAstWasReadWithErrors(const CxxFrontendDocument &document, cxx::AST *node
     return false;
 }
 
-CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location)
+CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location,
+                            const QString &inFile)
 {
     cxx::TranslationUnit *unit = document.translationUnit();
     if (!unit || !location)
         return {};
 
     if (unit->tokenAt(location).macroGenerated()
-        || !isFromThisFile(unit, document.fileName(), location)) {
+        || !isFromThisFile(unit, fileAskedAbout(document, inFile), location)) {
         return {};
     }
 

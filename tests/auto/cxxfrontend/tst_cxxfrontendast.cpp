@@ -134,6 +134,8 @@ private slots:
 
     void theEnclosingDeclaration_data();
     void theEnclosingDeclaration();
+
+    void aPositionInAHeaderTheFileRead();
 };
 
 void tst_cxxfrontendast::pathAtAPosition_data()
@@ -496,6 +498,39 @@ void tst_cxxfrontendast::theEnclosingDeclaration()
         });
         QCOMPARE(statement + " at " + where, builtinStatement + " at " + where);
     }
+}
+
+// A header is read into the file that includes it, so one tree holds both
+// files and a position is a file as well as a place: line 2 of the header is
+// not line 2 here. Whoever asks about the file itself sees none of the
+// header, which is what every reader of this seam has relied on so far.
+void tst_cxxfrontendast::aPositionInAHeaderTheFileRead()
+{
+    CxxFrontendDocument::Config config;
+    config.onInclude = [](const QString &name, bool, const QString &)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
+        if (name != "h.h")
+            return std::nullopt;
+        return CxxFrontendDocument::Config::Include{"h.h", "struct C {\n    void f();\n};\n"};
+    };
+
+    const CxxFrontendDocument document("#include \"h.h\"\nvoid C::f() {}\n",
+                                       "<stdin>", config);
+
+    // Line 2 of this file is the definition; line 2 of the header is the
+    // declaration, and neither answers for the other.
+    QVERIFY(!cxxAstPathAt(document, 2, 10).isEmpty());
+    const QList<cxx::AST *> inTheHeader = cxxAstPathAt(document, 2, 10, "h.h");
+    QVERIFY(!inTheHeader.isEmpty());
+    QVERIFY(inTheHeader != cxxAstPathAt(document, 2, 10));
+
+    // And the extent comes back in the header's own lines.
+    const CxxAstRange range = cxxAstRangeOf(document, inTheHeader.last(), "h.h");
+    QCOMPARE(range.startLine, 2);
+    QCOMPARE(range.endLine, 2);
+
+    // Asked about this file, a node of the header's has no extent at all.
+    QVERIFY(!cxxAstRangeOf(document, inTheHeader.last()).isValid());
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendast)

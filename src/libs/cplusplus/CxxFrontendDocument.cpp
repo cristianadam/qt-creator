@@ -588,7 +588,12 @@ public:
 
     // The token at a position, or an invalid location if there is none. A
     // scope's extent is in tokens, and a position is in the text.
-    [[nodiscard]] cxx::SourceLocation tokenAt(int line, int column) const;
+    // The token a position is on, in the file this unit read under \a
+    // inFile -- this document's own where that is empty. A header is read
+    // into the file that includes it, so one unit holds both and a position
+    // is a file as well as a place.
+    [[nodiscard]] cxx::SourceLocation tokenAt(int line, int column,
+                                              const QString &inFile = {}) const;
 
     QString fileName;
     CxxFrontendDocument::Config config;
@@ -1114,7 +1119,8 @@ Definition CxxFrontendDocument::Private::definitionOf(cxx::Symbol *symbol) const
     return {symbol, true, {}};
 }
 
-cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column) const
+cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column,
+                                                          const QString &inFile) const
 {
     // Where a cursor is, rather than where a token starts. Someone following
     // a name has the cursor somewhere in the middle of it, and an editor that
@@ -1128,13 +1134,22 @@ cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column) 
         return aLine < bLine || (aLine == bLine && aColumn < bColumn);
     };
 
+    // Told apart by the file the preprocessor read the token in. For this
+    // document's own file that is the id it started from rather than a name:
+    // the tokens the front end declares for itself have no file at all, and
+    // they are not in any file's text.
+    const auto isInTheFileAskedAbout = [&](cxx::SourceLocation location) {
+        const std::uint32_t fileId = unit.tokenAt(location).fileId();
+        if (inFile.isEmpty())
+            return fileId == std::uint32_t(unit.preprocessor()->mainSourceFileId());
+        return fromStd(unit.preprocessor()->sourceFileName(fileId)) == inFile;
+    };
+
     cxx::SourceLocation endsHere;
     for (unsigned i = 1; i < unit.tokenCount(); ++i) {
         const cxx::SourceLocation location{i};
-        if (unit.tokenAt(location).fileId()
-            != std::uint32_t(unit.preprocessor()->mainSourceFileId())) {
+        if (!isInTheFileAskedAbout(location))
             continue;
-        }
         const cxx::SourcePosition start = unit.tokenStartPosition(location);
         const cxx::SourcePosition end = unit.tokenEndPosition(location);
 
@@ -1777,12 +1792,13 @@ QString CxxFrontendDocument::Signature::writtenParameterType(int index) const
 }
 
 CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
-    int line, int column, int writtenAtLine, int writtenAtColumn) const
+    const Place &function_, const Place &writtenAt) const
 {
     // Either side may be the declaration or the definition, and a position on
     // the function's name reaches it in both cases.
-    const auto functionAt = [this](int line, int column) -> cxx::FunctionSymbol * {
-        const cxx::SourceLocation location = d->tokenAt(line, column);
+    const auto functionAt = [this](const Place &place) -> cxx::FunctionSymbol * {
+        const cxx::SourceLocation location = d->tokenAt(place.line, place.column,
+                                                        place.filePath);
         if (!location)
             return nullptr;
         if (cxx::FunctionSymbol * const declared = d->declaredFunctionAt(location))
@@ -1790,8 +1806,8 @@ CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
         return d->definitionAround(location);
     };
 
-    cxx::FunctionSymbol * const function = functionAt(line, column);
-    cxx::FunctionSymbol * const other = functionAt(writtenAtLine, writtenAtColumn);
+    cxx::FunctionSymbol * const function = functionAt(function_);
+    cxx::FunctionSymbol * const other = functionAt(writtenAt);
     if (!function || !other)
         return {};
     auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());

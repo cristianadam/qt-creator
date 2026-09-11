@@ -202,6 +202,7 @@ private slots:
     void signatureWritesAsLittleAsTheOtherPlaceNeeds();
     void signatureWritesAReturnTypeForOutsideTheFunction();
     void noSignatureOffAFunction();
+    void signatureOfADeclarationInAHeader();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -1090,7 +1091,7 @@ void tst_cxxfrontenddocument::signatureOfADeclaration()
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
 
     // The declaration, written for where the definition stands.
-    const CxxFrontendDocument::Signature signature = document.signatureAt(2, 9, 4, 8);
+    const CxxFrontendDocument::Signature signature = document.signatureAt({{}, 2, 9}, {{}, 4, 8});
     QVERIFY(signature.isValid());
     QCOMPARE(signature.name(), QString("C::f"));
     QCOMPARE(signature.returnType(), QString("int"));
@@ -1117,7 +1118,7 @@ void tst_cxxfrontenddocument::signatureWritesATypeForTheOtherPlace()
         "void C::f(N::T t) {}\n";
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
 
-    const CxxFrontendDocument::Signature signature = document.signatureAt(3, 10, 5, 9);
+    const CxxFrontendDocument::Signature signature = document.signatureAt({{}, 3, 10}, {{}, 5, 9});
     QVERIFY(signature.isValid());
     QCOMPARE(signature.writeParameter(0, "t"), QString("N::T t"));
     QCOMPARE(signature.writeParameter(0, QString()), QString("N::T"));
@@ -1138,7 +1139,7 @@ void tst_cxxfrontenddocument::signatureWritesAsLittleAsTheOtherPlaceNeeds()
 
     // The definition is inside N, so T is reached there and nothing has to
     // stand in front of it.
-    const CxxFrontendDocument::Signature signature = document.signatureAt(4, 10, 6, 9);
+    const CxxFrontendDocument::Signature signature = document.signatureAt({{}, 4, 10}, {{}, 6, 9});
     QVERIFY(signature.isValid());
     QCOMPARE(signature.writeParameter(0, "t"), QString("T t"));
 }
@@ -1156,7 +1157,7 @@ void tst_cxxfrontenddocument::signatureWritesAReturnTypeForOutsideTheFunction()
         "C::T C::f(C::T t) { return t; }\n";
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
 
-    const CxxFrontendDocument::Signature signature = document.signatureAt(3, 7, 5, 9);
+    const CxxFrontendDocument::Signature signature = document.signatureAt({{}, 3, 7}, {{}, 5, 9});
     QVERIFY(signature.isValid());
     QCOMPARE(signature.writeReturnType("C::f"), QString("C::T C::f"));
     QCOMPARE(signature.writeParameter(0, "t"), QString("T t"));
@@ -1166,8 +1167,46 @@ void tst_cxxfrontenddocument::noSignatureOffAFunction()
 {
     const CxxFrontendDocument document("int global;\nvoid f() {}\n", "<stdin>");
 
-    QVERIFY(!document.signatureAt(1, 5, 2, 6).isValid());
-    QVERIFY(!document.signatureAt(2, 6, 1, 5).isValid());
+    QVERIFY(!document.signatureAt({{}, 1, 5}, {{}, 2, 6}).isValid());
+    QVERIFY(!document.signatureAt({{}, 2, 6}, {{}, 1, 5}).isValid());
+}
+
+// The case the whole thing is for: the declaration is in a header and the
+// definition in the file that includes it, which is one translation unit and
+// two files. A position therefore names a file as well as a place -- line 2
+// of the header is not line 2 here.
+void tst_cxxfrontenddocument::signatureOfADeclarationInAHeader()
+{
+    CxxFrontendDocument::Config config;
+    config.onInclude = [](const QString &name, bool, const QString &)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
+        if (name != "h.h")
+            return std::nullopt;
+        return CxxFrontendDocument::Config::Include{
+            "h.h", "namespace N { struct T {}; }\nstruct C { void f(N::T t); };\n"};
+    };
+
+    const CxxFrontendDocument document("#include \"h.h\"\n"
+                                       "\n"
+                                       "void C::f(N::T t) {}\n",
+                                       "<stdin>", config);
+
+    // The declaration, which stands on line 2 of the header, written for the
+    // definition on line 3 of this file.
+    const CxxFrontendDocument::Signature signature
+        = document.signatureAt({"h.h", 2, 18}, {{}, 3, 9});
+    QVERIFY(signature.isValid());
+    QCOMPARE(signature.name(), QString("C::f"));
+    QCOMPARE(signature.parameterCount(), 1);
+    QCOMPARE(signature.parameterName(0), QString("t"));
+    QCOMPARE(signature.writeParameter(0, "t"), QString("N::T t"));
+
+    // And the other way round, which is what somebody editing the definition
+    // is doing.
+    const CxxFrontendDocument::Signature back
+        = document.signatureAt({{}, 3, 9}, {"h.h", 2, 18});
+    QVERIFY(back.isValid());
+    QCOMPARE(back.writeParameter(0, "t"), QString("N::T t"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

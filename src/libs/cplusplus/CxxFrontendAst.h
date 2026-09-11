@@ -7,6 +7,7 @@
 #include <cxx/source_location.h>
 
 #include <QList>
+#include <QString>
 
 // Where cxx's own syntax tree begins.
 //
@@ -45,11 +46,19 @@ class CxxFrontendDocument;
 // Empty where the file did not parse into a tree at all, and where the
 // position is outside every node -- the blank line after the last
 // declaration, for instance.
-QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, int column);
+//
+// \a inFile names which of the files this translation unit read the position
+// is in, empty for the document's own. A header is read into the file that
+// includes it, so one tree holds both, and line 3 of a header is not line 3
+// here -- which is why a position is a file as well as a place. Whoever is
+// looking at one file, which is nearly everybody, leaves it empty.
+QList<cxx::AST *> cxxAstPathAt(const CxxFrontendDocument &document, int line, int column,
+                               const QString &inFile = {});
 
-// The extent of \a node in the file: the start of its first token and the end
-// of its last, counted from one, with the macro-written edges left out as
-// above. Zero lines where the node has no written token at all.
+// The extent of \a node in \a inFile -- the document's own where that is
+// empty, as above: the start of its first token there and the end of its
+// last, counted from one, with the macro-written edges left out as well.
+// Zero lines where the node has no token that file wrote.
 struct CxxAstRange
 {
     int startLine = 0;
@@ -59,14 +68,16 @@ struct CxxAstRange
 
     bool isValid() const { return startLine > 0 && endLine > 0; }
 };
-CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node);
+CxxAstRange cxxAstRangeOf(const CxxFrontendDocument &document, cxx::AST *node,
+                          const QString &inFile = {});
 
 // The extent of one token, by the same rule. A node is not the only thing a
 // reader rewrites: an operator, a keyword or a brace is a token the tree
 // points at rather than a node of its own, and a fix that replaces one needs
-// to know where it stands. Zero lines where the token is not this file's --
+// to know where it stands. Zero lines where the token is not that file's --
 // what a macro wrote has no place here to rewrite.
-CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location);
+CxxAstRange cxxTokenRangeAt(const CxxFrontendDocument &document, cxx::SourceLocation location,
+                            const QString &inFile = {});
 
 // Whether the front end stumbled over anything inside \a node: an error
 // reported at a position the node covers.

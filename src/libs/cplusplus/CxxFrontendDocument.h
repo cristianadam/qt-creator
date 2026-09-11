@@ -305,11 +305,24 @@ public:
         std::unique_ptr<Private> d;
     };
 
-    // \a line and \a column are on the function being read, \a writtenAtLine
-    // and \a writtenAtColumn on the declaration its types are to be written
-    // at. Both are one-based, and both name a function this file declares.
-    Signature signatureAt(int line, int column,
-                          int writtenAtLine, int writtenAtColumn) const;
+    // A place in one of the files this translation unit read: the file as
+    // Config::onInclude handed it over, empty for this document's own, and a
+    // line and a column in it, both counted from one.
+    //
+    // Which file has to be said, because a header is read into the file that
+    // includes it: one unit holds both, and line 3 of a header is not line 3
+    // here.
+    struct Place
+    {
+        QString filePath;
+        int line = 0;
+        int column = 0;
+    };
+
+    // \a function is on the function being read, \a writtenAt on the
+    // declaration its types are to be written at. Both name a function this
+    // translation unit declares.
+    Signature signatureAt(const Place &function, const Place &writtenAt) const;
 
     // Where this file defines \a name -- written out in full, as
     // Counterpart::name is -- taking \a parameterCount parameters, or
