@@ -7,6 +7,7 @@
 #include "cpprefactoringchanges.h"
 
 #include <utils/filepath.h>
+#include <utils/textutils.h>
 
 namespace CPlusPlus {
 class Namespace;
@@ -46,6 +47,45 @@ private:
     int m_line = 0;
     int m_column = 0;
 };
+
+// What a declaration says about where its definition goes, which is all the
+// locator needs of it -- so a caller that read the declaration on either
+// front end can fill this in, and one that holds a symbol has it read off
+// that.
+struct CPPEDITOR_EXPORT DeclarationToDefine
+{
+    // Where its own name is written, both counted from one. That is the
+    // place every front end records what a file declares.
+    Utils::FilePath filePath;
+    int line = 0;
+    int column = 0;
+
+    // What it is written inside, outermost first, which decides the
+    // namespace the definition goes into. Its own name may be at the end of
+    // the list: a name that is no namespace's simply matches none.
+    QStringList enclosingNames;
+
+    // The namespaces of that, the classes left out -- a class is written
+    // into the definition's name instead. What has to be opened around the
+    // definition where the file it is going into writes none of them.
+    QStringList enclosingNamespaces;
+
+    // A class rather than a function or a variable, which goes to the top of
+    // a namespace rather than to its end.
+    bool isClassDefinition = false;
+
+    // Just past the ";" of the class it is declared in, or nothing where it
+    // is not declared in one. Where no better place is found, a member's
+    // definition goes right after its class.
+    Utils::Text::Position afterItsClass;
+
+    bool isValid() const { return !filePath.isEmpty() && line > 0 && column > 0; }
+};
+
+// What a built-in symbol says of itself, in that form -- for a caller that
+// holds one and is asking something that takes the other.
+CPPEDITOR_EXPORT DeclarationToDefine declarationToDefine(
+    CPlusPlus::Symbol *symbol, const CppRefactoringChanges &changes);
 
 class CPPEDITOR_EXPORT InsertionPointLocator
 {
@@ -112,6 +152,16 @@ public:
             bool useSymbolFinder = true,
             const Utils::FilePath &destinationFile = {}) const;
 
+    // The same, for a declaration a caller has read on whichever front end
+    // it uses. The overload above says the same thing with a symbol, and
+    // answers by asking this one.
+    //
+    // Without the check for a definition the project may already have: that
+    // is SymbolFinder's, and it is asked of a symbol. A caller that wants it
+    // does it itself.
+    const QList<InsertionLocation> methodDefinition(const DeclarationToDefine &declaration,
+            const Utils::FilePath &destinationFile = {}) const;
+
 private:
     CppRefactoringChanges m_refactoringChanges;
 };
@@ -121,6 +171,23 @@ enum class NamespaceHandling { CreateMissing, Ignore };
 InsertionLocation CPPEDITOR_EXPORT
 insertLocationForMethodDefinition(CPlusPlus::Symbol *symbol,
                                   const bool useSymbolFinder,
+                                  NamespaceHandling namespaceHandling,
+                                  const CppRefactoringChanges &refactoring,
+                                  const Utils::FilePath &fileName,
+                                  QStringList *insertedNamespaces = nullptr);
+
+// The same, for a declaration a caller has read on whichever front end it
+// uses. The overload above says the same thing with a symbol, and answers by
+// asking this one.
+//
+// \a alreadyDefined says the project defines the thing somewhere already.
+// Then no place is looked for among what the files write and only the
+// fallbacks apply, which is what adding a second definition wants. Whether
+// it does is SymbolFinder's question, asked of a symbol, so the overload
+// above answers it and this one is told.
+InsertionLocation CPPEDITOR_EXPORT
+insertLocationForMethodDefinition(const DeclarationToDefine &declaration,
+                                  bool alreadyDefined,
                                   NamespaceHandling namespaceHandling,
                                   const CppRefactoringChanges &refactoring,
                                   const Utils::FilePath &fileName,

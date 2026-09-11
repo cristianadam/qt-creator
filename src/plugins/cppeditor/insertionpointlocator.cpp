@@ -1085,14 +1085,15 @@ struct SurroundingDefinitionsOnTheModel
 };
 
 std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
-    Class *klass, Symbol *declaration, const CppRefactoringChanges &changes)
+    const FilePath &filePath, int line, int column, const CppRefactoringChanges &changes)
 {
-    const FilePath filePath = declaration->filePath();
     if (!cxxFrontendModel(filePath))
         return {};
 
+    // The class the declaration is written in, which is the innermost one
+    // around its own place -- so the place the caller has is all this needs.
     const QList<CxxFrontendDocument::MemberFunction> functions
-        = cxxFrontendMemberFunctionsAt(filePath, klass->line(), klass->column());
+        = cxxFrontendMemberFunctionsAt(filePath, line, column);
     if (functions.isEmpty())
         return {};
 
@@ -1101,10 +1102,8 @@ std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
     SurroundingDefinitionsOnTheModel answer;
     answer.count = functions.size();
     for (int i = 0; i < functions.size(); ++i) {
-        if (functions.at(i).line == declaration->line()
-            && functions.at(i).column == declaration->column()) {
+        if (functions.at(i).line == line && functions.at(i).column == column)
             answer.index = i;
-        }
     }
     if (answer.index < 0)
         return {};
@@ -1131,17 +1130,14 @@ std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
 }
 #endif
 
-static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
+static InsertionLocation nextToSurroundingDefinitions(const FilePath &filePath,
+                                                      int line, int column,
                                                       const CppRefactoringChanges &changes,
                                                       const FilePath &destinationFile)
 {
-    Class *klass = declaration->enclosingClass();
-    if (!klass || declaration->isFriend())
-        return {};
-
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<SurroundingDefinitionsOnTheModel> onTheModel
-        = cxxSurroundingDefinitions(klass, declaration, changes)) {
+        = cxxSurroundingDefinitions(filePath, line, column, changes)) {
         return placeNextToDefinitions(onTheModel->count, onTheModel->index, destinationFile,
                                       [&](int index) {
                                           return onTheModel->definitions.at(index);
@@ -1149,14 +1145,33 @@ static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
     }
 #endif
 
-    // find the index of declaration
+    const Document::Ptr doc = changes.cppFile(filePath)->cppDocument();
+    if (!doc)
+        return {};
+
+    // The class the declaration is written in. Nothing where it is written in
+    // none, which is the answer for a free function: there are no neighbours
+    // to sit with.
+    Class *klass = nullptr;
+    for (Scope *scope = doc->scopeAt(line, column); scope; scope = scope->enclosingScope()) {
+        if ((klass = scope->asClass()))
+            break;
+    }
+    if (!klass)
+        return {};
+
+    // Which of the class's members is the one being defined, by the place its
+    // name is written at. A friend is not one of them: it is written in the
+    // class without belonging to it.
     int declIndex = -1;
     for (int i = 0; i < klass->memberCount(); ++i) {
-        Symbol *s = klass->memberAt(i);
-        if (s == declaration) {
-            declIndex = i;
-            break;
-        }
+        Symbol * const s = klass->memberAt(i);
+        if (!s || s->line() != line || s->column() != column)
+            continue;
+        if (s->isFriend())
+            return {};
+        declIndex = i;
+        break;
     }
     if (declIndex == -1)
         return {};
@@ -1167,34 +1182,74 @@ static InsertionLocation nextToSurroundingDefinitions(Symbol *declaration,
                                   });
 }
 
+DeclarationToDefine declarationToDefine(Symbol *symbol, const CppRefactoringChanges &changes)
+{
+    DeclarationToDefine declaration;
+    declaration.filePath = symbol->filePath();
+    declaration.line = symbol->line();
+    declaration.column = symbol->column();
+    declaration.isClassDefinition = symbol->asForwardClassDeclaration() != nullptr;
+
+    const Overview printer;
+    for (const Name *name : LookupContext::fullyQualifiedName(symbol)) {
+        if (!name->asNameId())
+            break;
+        declaration.enclosingNames << printer.prettyName(name);
+    }
+    declaration.enclosingNamespaces = getNamespaceNames(symbol);
+
+    if (Class * const klass = symbol->enclosingClass()) {
+        if (const Document::Ptr doc = changes.cppFile(declaration.filePath)->cppDocument()) {
+            Utils::Text::Position &at = declaration.afterItsClass;
+            doc->translationUnit()->getPosition(klass->endOffset(), &at.line, &at.column);
+            if (at.line > 0)
+                ++at.column; // Skipping the ";"
+            else
+                at = {};
+        }
+    }
+    return declaration;
+}
+
 const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
         Symbol *declaration, bool useSymbolFinder, const FilePath &destinationFile) const
 {
-    QList<InsertionLocation> result;
     if (!declaration)
-        return result;
+        return {};
 
     if (useSymbolFinder) {
         SymbolFinder symbolFinder;
         const Snapshot &snapshot = m_refactoringChanges.snapshot();
         if (declaration->type()->asFunctionType()) {
             if (symbolFinder.findMatchingDefinition(declaration, snapshot, true))
-                return result;
+                return {};
         } else if (symbolFinder.findMatchingVarDefinition(declaration, snapshot)) {
-            return result;
+            return {};
         }
     }
 
-    const InsertionLocation location = nextToSurroundingDefinitions(declaration,
+    return methodDefinition(declarationToDefine(declaration, m_refactoringChanges),
+                            destinationFile);
+}
+
+const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
+        const DeclarationToDefine &declaration, const FilePath &destinationFile) const
+{
+    QList<InsertionLocation> result;
+    if (!declaration.isValid())
+        return result;
+
+    const InsertionLocation location = nextToSurroundingDefinitions(declaration.filePath,
+                                                                    declaration.line,
+                                                                    declaration.column,
                                                                     m_refactoringChanges,
                                                                     destinationFile);
     if (location.isValid())
         result += location;
 
-    const FilePath declFilePath = declaration->filePath();
-    FilePath target = declFilePath;
-    if (!ProjectFile::isSource(ProjectFile::classify(declFilePath))) {
-        FilePath candidate = correspondingHeaderOrSource(declFilePath);
+    FilePath target = declaration.filePath;
+    if (!ProjectFile::isSource(ProjectFile::classify(declaration.filePath))) {
+        FilePath candidate = correspondingHeaderOrSource(declaration.filePath);
         if (!candidate.isEmpty()
             && !Utils::contains(result, [candidate](const InsertionLocation &loc) {
                    return loc.filePath() == candidate;
@@ -1203,7 +1258,7 @@ const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
         }
     }
 
-    if (!result.isEmpty() && target == declFilePath)
+    if (!result.isEmpty() && target == declaration.filePath)
         return result;
 
     CppRefactoringFilePtr targetFile = m_refactoringChanges.cppFile(target);
@@ -1211,33 +1266,23 @@ const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
     if (doc.isNull())
         return result;
 
-    // What the declaration is written inside, outermost first, which is what
-    // decides the namespace its definition goes into.
-    QStringList names;
-    const Overview printer;
-    for (const Name *name : LookupContext::fullyQualifiedName(declaration)) {
-        if (!name->asNameId())
-            break;
-        names << printer.prettyName(name);
-    }
-    const bool isClassDefinition = declaration->asForwardClassDeclaration();
-
-    Utils::Text::Position at = definitionPlaceIn(target, doc->translationUnit(), names,
-                                                 isClassDefinition);
-    int line = at.line, column = at.column;
+    Utils::Text::Position at = definitionPlaceIn(target, doc->translationUnit(),
+                                                 declaration.enclosingNames,
+                                                 declaration.isClassDefinition);
+    int insertLine = at.line, insertColumn = at.column;
 
     // Force empty lines before and after the new definition.
     QString prefix;
     QString suffix;
-    if (!line) {
+    if (!insertLine) {
         // Totally empty file.
-        line = 1;
-        column = 1;
+        insertLine = 1;
+        insertColumn = 1;
         prefix = suffix = QLatin1Char('\n');
     } else {
-        QTC_ASSERT(column, return result);
+        QTC_ASSERT(insertColumn, return result);
 
-        int firstNonSpace = targetFile->position(line, column);
+        int firstNonSpace = targetFile->position(insertLine, insertColumn);
         prefix = QLatin1String("\n\n");
         // Only one new line if at the end of file
         if (const QTextDocument *doc = targetFile->document()) {
@@ -1261,7 +1306,7 @@ const QList<InsertionLocation> InsertionPointLocator::methodDefinition(
         }
     }
 
-    result += InsertionLocation(target, prefix, suffix, line, column);
+    result += InsertionLocation(target, prefix, suffix, insertLine, insertColumn);
 
     return result;
 }
@@ -1292,18 +1337,42 @@ InsertionLocation insertLocationForMethodDefinition(Symbol *symbol,
 {
     QTC_ASSERT(symbol, return InsertionLocation());
 
+    // Whether the project defines the thing somewhere already is
+    // SymbolFinder's question and it is asked of a symbol, so it is answered
+    // here rather than passed on.
+    bool alreadyDefined = false;
+    if (useSymbolFinder) {
+        SymbolFinder symbolFinder;
+        const Snapshot &snapshot = refactoring.snapshot();
+        alreadyDefined = symbol->type()->asFunctionType()
+                             ? symbolFinder.findMatchingDefinition(symbol, snapshot, true) != nullptr
+                             : symbolFinder.findMatchingVarDefinition(symbol, snapshot) != nullptr;
+    }
+
+    return insertLocationForMethodDefinition(declarationToDefine(symbol, refactoring),
+                                             alreadyDefined, namespaceHandling, refactoring,
+                                             filePath, insertedNamespaces);
+}
+
+InsertionLocation insertLocationForMethodDefinition(const DeclarationToDefine &declaration,
+                                                    bool alreadyDefined,
+                                                    NamespaceHandling namespaceHandling,
+                                                    const CppRefactoringChanges &refactoring,
+                                                    const FilePath &filePath,
+                                                    QStringList *insertedNamespaces)
+{
     CppRefactoringFilePtr file = refactoring.cppFile(filePath);
     QStringList requiredNamespaces;
-    if (namespaceHandling == NamespaceHandling::CreateMissing) {
-        requiredNamespaces = getNamespaceNames(symbol);
-    }
+    if (namespaceHandling == NamespaceHandling::CreateMissing)
+        requiredNamespaces = declaration.enclosingNamespaces;
 
     // Try to find optimal location
     // FIXME: The locator should not return a valid location if the namespaces don't match
     //        (or provide enough context).
     const InsertionPointLocator locator(refactoring);
     const QList<InsertionLocation> list
-            = locator.methodDefinition(symbol, useSymbolFinder, filePath);
+            = alreadyDefined ? QList<InsertionLocation>()
+                             : locator.methodDefinition(declaration, filePath);
     const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(filePath));
     const bool hasIncludeGuard = isHeader
             && !file->cppDocument()->includeGuardMacroName().isEmpty();
@@ -1331,16 +1400,10 @@ InsertionLocation insertLocationForMethodDefinition(Symbol *symbol,
 
     // ...failed,
     // if class member try to get position right after class
-    int line = 0, column = 0;
-    if (Class *clazz = symbol->enclosingClass()) {
-        if (symbol->filePath() == filePath) {
-            file->cppDocument()->translationUnit()->getPosition(clazz->endOffset(), &line, &column);
-            if (line != 0) {
-                ++column; // Skipping the ";"
-                return InsertionLocation(filePath, QLatin1String("\n\n"), QLatin1String(""),
-                                         line, column);
-            }
-        }
+    if (declaration.afterItsClass.line > 0 && declaration.filePath == filePath) {
+        return InsertionLocation(filePath, QLatin1String("\n\n"), QLatin1String(""),
+                                 declaration.afterItsClass.line,
+                                 declaration.afterItsClass.column);
     }
 
     // fall through: position at end of file, unless we find a matching namespace
@@ -1361,6 +1424,7 @@ InsertionLocation insertLocationForMethodDefinition(Symbol *symbol,
 
     //TODO watch for moc-includes
 
+    int line = 0, column = 0;
     file->lineAndColumn(pos, &line, &column);
     return InsertionLocation(filePath, prefix, suffix, line, column);
 }
