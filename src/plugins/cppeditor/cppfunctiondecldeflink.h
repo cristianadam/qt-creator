@@ -100,6 +100,19 @@ public:
     // to counts from.
     int start = 0;
 
+    // Where what it says stops: after the trailing return type, the
+    // exception specification, the cv qualifiers or the closing parenthesis,
+    // whichever is last. The body is not part of it, and neither is the
+    // semicolon -- this is the run of text the link watches over.
+    int end = 0;
+
+    // The name it is declared under, the qualifier included: the whole of
+    // the C::f of a definition written outside its class. The link aborts
+    // when that changes under it, since it would then be following a
+    // different function.
+    int nameStart = 0;
+    int nameEnd = 0;
+
     // Where a new return type is written, and whether one may be written at
     // all -- something other than a plain declaration or a definition has no
     // place to put it.

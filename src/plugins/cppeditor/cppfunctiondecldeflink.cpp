@@ -87,21 +87,6 @@ static bool findDeclOrDef(const Document::Ptr &doc, int line, int column,
     return *funcDecl;
 }
 
-static void declDefLinkStartEnd(const CppRefactoringFileConstPtr &file,
-                                DeclarationAST *parent, FunctionDeclaratorAST *funcDecl,
-                                int *start, int *end)
-{
-    *start = file->startOf(parent);
-    if (funcDecl->trailing_return_type)
-        *end = file->endOf(funcDecl->trailing_return_type);
-    else if (funcDecl->exception_specification)
-        *end = file->endOf(funcDecl->exception_specification);
-    else if (funcDecl->cv_qualifier_list)
-        *end = file->endOf(funcDecl->cv_qualifier_list->lastValue());
-    else
-        *end = file->endOf(funcDecl->rparen_token);
-}
-
 static DeclaratorIdAST *getDeclaratorId(DeclaratorAST *declarator)
 {
     if (!declarator || !declarator->core_declarator)
@@ -286,33 +271,58 @@ static unsigned findCommaTokenBetween(const CppRefactoringFileConstPtr &file,
     return 0;
 }
 
+// Where the declaration the link covers begins and ends, and where its name
+// stands in it. The whole of what the side being edited needs -- what the
+// cursor is inside of, and what may not change under it -- and where the
+// other side's reading starts from.
+static void writtenExtentOf(const CppRefactoringFileConstPtr &file,
+                            DeclarationAST *declaration, DeclaratorAST *coreDeclarator,
+                            FunctionDeclaratorAST *declarator, WrittenDeclaration *written)
+{
+    written->start = file->startOf(declaration);
+    if (declarator->trailing_return_type)
+        written->end = file->endOf(declarator->trailing_return_type);
+    else if (declarator->exception_specification)
+        written->end = file->endOf(declarator->exception_specification);
+    else if (declarator->cv_qualifier_list)
+        written->end = file->endOf(declarator->cv_qualifier_list->lastValue());
+    else
+        written->end = file->endOf(declarator->rparen_token);
+
+    if (DeclaratorIdAST * const id = getDeclaratorId(coreDeclarator)) {
+        written->nameStart = file->startOf(id);
+        written->nameEnd = file->endOf(id);
+    }
+}
+
 // Where the built-in front end says each part of a declaration is written.
 static WrittenDeclaration writtenDeclarationOf(const CppRefactoringFileConstPtr &file,
                                                DeclarationAST *declaration,
+                                               DeclaratorAST *coreDeclarator,
                                                FunctionDeclaratorAST *declarator,
                                                Function *function)
 {
     WrittenDeclaration written;
     TranslationUnit * const unit = file->cppDocument()->translationUnit();
 
-    written.start = file->startOf(declaration);
+    writtenExtentOf(file, declaration, coreDeclarator, declarator, &written);
     FunctionDefinitionAST * const definition = declaration->asFunctionDefinition();
     written.isDefinition = definition != nullptr;
 
     // Where a new return type goes: over the first specifier that may be
     // replaced, or in front of the declarator where there is none.
-    DeclaratorAST *coreDeclarator = nullptr;
     SpecifierAST *firstReplaceableSpecifier = nullptr;
+    bool hasSpecifiers = false;
     if (SimpleDeclarationAST * const simple = declaration->asSimpleDeclaration()) {
-        coreDeclarator = simple->declarator_list->value;
+        hasSpecifiers = true;
         firstReplaceableSpecifier
             = findFirstReplaceableSpecifier(unit, simple->decl_specifier_list);
     } else if (definition) {
-        coreDeclarator = definition->declarator;
+        hasSpecifiers = true;
         firstReplaceableSpecifier
             = findFirstReplaceableSpecifier(unit, definition->decl_specifier_list);
     }
-    if (coreDeclarator) {
+    if (hasSpecifiers) {
         written.returnTypeMayBeWritten = true;
         written.returnTypeStart = firstReplaceableSpecifier
                                       ? file->startOf(firstReplaceableSpecifier)
@@ -608,22 +618,18 @@ static std::shared_ptr<FunctionDeclDefLink> findLinkHelper(
     QTC_ASSERT(targetFuncDecl->symbol->argumentCount() == source.function->argumentCount(),
                return noResult);
 
-    int targetStart, targetEnd;
-    declDefLinkStartEnd(targetFile, targetParent, targetFuncDecl, &targetStart, &targetEnd);
-    QString targetInitial = targetFile->textOf(
-                targetFile->startOf(targetParent),
-                targetEnd);
-
-    targetFile->lineAndColumn(targetStart, &link->targetLine, &link->targetColumn);
-    link->targetInitial = targetInitial;
-
     link->targetFile = targetFile;
 
     Function * const targetFunction = targetFuncDecl->symbol;
     link->sourceSignature = signatureOf(source.function);
     link->targetSignature = signatureOf(targetFunction);
-    link->targetWritten = writtenDeclarationOf(targetFile, targetParent, targetFuncDecl,
-                                               targetFunction);
+    link->targetWritten = writtenDeclarationOf(targetFile, targetParent, targetDeclarator,
+                                               targetFuncDecl, targetFunction);
+
+    targetFile->lineAndColumn(link->targetWritten.start, &link->targetLine,
+                              &link->targetColumn);
+    link->targetInitial = targetFile->textOf(link->targetWritten.start,
+                                             link->targetWritten.end);
     link->targetNameLine = targetFunction->line();
     link->targetNameColumn = targetFunction->column();
     // The name a comment above it documents it under, which is its own name
@@ -659,27 +665,26 @@ void FunctionDeclDefLinkFinder::startFindLinkAt(
     CppRefactoringChanges refactoringChanges(snapshot);
     CppRefactoringFilePtr sourceFile = refactoringChanges.cppFile(doc->filePath());
     sourceFile->setCppDocument(doc);
-    int start, end;
-    declDefLinkStartEnd(sourceFile, parent, funcDecl, &start, &end);
+    WrittenDeclaration written;
+    writtenExtentOf(sourceFile, parent, declarator, funcDecl, &written);
 
     // if already scanning, don't scan again
     if (!m_scannedSelection.isNull()
-            && m_scannedSelection.selectionStart() == start
-            && m_scannedSelection.selectionEnd() == end) {
+            && m_scannedSelection.selectionStart() == written.start
+            && m_scannedSelection.selectionEnd() == written.end) {
         return;
     }
 
     // build the selection for the currently scanned area
     m_scannedSelection = cursor;
-    m_scannedSelection.setPosition(end);
-    m_scannedSelection.setPosition(start, QTextCursor::KeepAnchor);
+    m_scannedSelection.setPosition(written.end);
+    m_scannedSelection.setPosition(written.start, QTextCursor::KeepAnchor);
     m_scannedSelection.setKeepPositionOnInsert(true);
 
     // build selection for the name
-    DeclaratorIdAST *declId = getDeclaratorId(declarator);
     m_nameSelection = cursor;
-    m_nameSelection.setPosition(sourceFile->endOf(declId));
-    m_nameSelection.setPosition(sourceFile->startOf(declId), QTextCursor::KeepAnchor);
+    m_nameSelection.setPosition(written.nameEnd);
+    m_nameSelection.setPosition(written.nameStart, QTextCursor::KeepAnchor);
     m_nameSelection.setKeepPositionOnInsert(true);
 
     using ResultType = std::shared_ptr<FunctionDeclDefLink>;
