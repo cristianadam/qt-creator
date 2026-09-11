@@ -352,6 +352,16 @@ class TypePrinter {
           }
           return false;
         }
+
+        // A specialization is written under the name of the template it
+        // specializes, and that name is what a lookup finds: S<int> is
+        // reached by writing S, with the arguments doing the rest.
+        if (auto klass = symbol_cast<ClassSymbol>(symbol);
+            klass && klass->isSpecialization() &&
+            klass->primaryTemplateSymbol() == found) {
+          return true;
+        }
+
         return found == symbol;
       }
     }
