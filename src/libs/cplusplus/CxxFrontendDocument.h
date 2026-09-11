@@ -243,6 +243,35 @@ public:
     };
     Counterpart counterpartAt(int line, int column) const;
 
+    // A call or a new expression at a position whose value is thrown away,
+    // which is what "assign this to a local variable" is offered on.
+    //
+    // Nothing where the position is on no such expression, where its value
+    // is used after all -- an argument, a return, a member initializer --
+    // or where there is no value to assign: a call of something that
+    // returns nothing, and one this front end could not resolve.
+    struct DiscardedValue
+    {
+        // Where the expression begins, which is where a declaration is
+        // written in front of it. One-based.
+        int line = 0;
+        int column = 0;
+
+        // The name of what is called, which is what a variable holding its
+        // value would be named after.
+        QString name;
+
+        // The value's type, written as a declaration of that name and for
+        // the scope the expression stands in. A caller writing a variable
+        // there swaps the name for the one it chose, which is why the name
+        // is written in rather than left out: how a declarator is written
+        // around a name is not something a caller can work out from a type.
+        QString declaration;
+
+        bool isValid() const { return line > 0; }
+    };
+    DiscardedValue discardedValueAt(int line, int column) const;
+
     // The switch statement written around a position: where its body opens,
     // and which values of the enumeration its condition has it does not
     // handle yet, each written the way a case label has to write it.

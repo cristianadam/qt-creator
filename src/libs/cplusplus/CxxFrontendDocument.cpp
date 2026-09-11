@@ -1716,6 +1716,118 @@ QString caseLabelFor(cxx::ScopeSymbol *enumeration, bool isScoped, cxx::Symbol *
 
 } // namespace
 
+namespace {
+
+// The name a call is written under, which is the name of what it calls.
+cxx::UnqualifiedIdAST *calledNameOf(cxx::ExpressionAST *expression)
+{
+    if (auto * const call = dynamic_cast<cxx::CallExpressionAST *>(expression)) {
+        cxx::ExpressionAST * const callee = call->baseExpression;
+        if (auto * const member = dynamic_cast<cxx::MemberExpressionAST *>(callee))
+            return member->unqualifiedId;
+        if (auto * const id = dynamic_cast<cxx::IdExpressionAST *>(callee))
+            return id->unqualifiedId;
+        return nullptr;
+    }
+    if (auto * const created = dynamic_cast<cxx::NewExpressionAST *>(expression)) {
+        // "new Foo" is named after the class, which is what its type
+        // specifier says.
+        for (auto *specifier : cxx::ListView{created->typeSpecifierList}) {
+            if (auto * const named = dynamic_cast<cxx::NamedTypeSpecifierAST *>(specifier))
+                return named->unqualifiedId;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+CxxFrontendDocument::DiscardedValue CxxFrontendDocument::discardedValueAt(int line,
+                                                                          int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    const auto holds = [](cxx::AST *node, cxx::SourceLocation what) {
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return what.index() >= first && what.index() < last;
+    };
+
+    // The statement whose whole expression is thrown away, and the innermost
+    // call or new expression the position is on inside it. Both innermost,
+    // and the walk reaches an outer one first.
+    cxx::ExpressionStatementAST *statement = nullptr;
+    cxx::ExpressionAST *pointedAt = nullptr;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot)
+            continue;
+        if (auto * const thrownAway = dynamic_cast<cxx::ExpressionStatementAST *>(*slot);
+            thrownAway && holds(thrownAway, location)) {
+            statement = thrownAway;
+            pointedAt = nullptr;
+            continue;
+        }
+        const bool isACallOrANew = dynamic_cast<cxx::CallExpressionAST *>(*slot)
+                                   || dynamic_cast<cxx::NewExpressionAST *>(*slot);
+        if (isACallOrANew && holds(*slot, location))
+            pointedAt = dynamic_cast<cxx::ExpressionAST *>(*slot);
+    }
+    if (!statement || !pointedAt)
+        return {};
+
+    // The value thrown away is what the statement says, and it has to be a
+    // call or a new expression: an assignment or a bare name has no value to
+    // give a variable, and a return or an argument is not an expression
+    // statement at all.
+    cxx::ExpressionAST * const expression = written(statement->expression);
+    const bool isACallOrANew = dynamic_cast<cxx::CallExpressionAST *>(expression)
+                               || dynamic_cast<cxx::NewExpressionAST *>(expression);
+    if (!isACallOrANew)
+        return {};
+
+    // What the position is on has to be that expression, or something it is
+    // called *on*: the cursor in the middle of "b->foo()->func()" means the
+    // whole chain, which is what one variable can hold. Anywhere else -- an
+    // argument, an operand -- the value the cursor points at is used where
+    // it stands and no variable can take its place.
+    for (cxx::ExpressionAST *along = expression; along != pointedAt;) {
+        if (auto * const call = dynamic_cast<cxx::CallExpressionAST *>(along))
+            along = written(call->baseExpression);
+        else if (auto * const member = dynamic_cast<cxx::MemberExpressionAST *>(along))
+            along = written(member->baseExpression);
+        else
+            return {};
+        if (!along)
+            return {};
+    }
+
+    // Nothing to assign: a call of something that returns nothing, and one
+    // the front end could not resolve, which has no type at all.
+    const cxx::Type *type = expression->type;
+    if (!type || cxx::type_cast<cxx::VoidType>(type))
+        return {};
+
+    cxx::UnqualifiedIdAST * const called = calledNameOf(expression);
+    auto * const named = called ? dynamic_cast<cxx::NameIdAST *>(called) : nullptr;
+    if (!named || !named->identifier)
+        return {};
+
+    const cxx::SourcePosition begins = d->unit.tokenStartPosition(
+        expression->firstSourceLocation());
+    DiscardedValue answer;
+    answer.line = int(begins.line);
+    answer.column = int(begins.column);
+    answer.name = fromStd(cxx::to_string(named->identifier));
+    answer.declaration = applyStarBinding(
+        fromStd(cxx::to_string(type, answer.name.toStdString(),
+                               {.writtenIn = d->scopeWrittenAround(location)})),
+        d->config.settings);
+    return answer;
+}
+
 CxxFrontendDocument::Switch CxxFrontendDocument::switchAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);

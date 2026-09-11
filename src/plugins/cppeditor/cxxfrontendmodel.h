@@ -230,6 +230,15 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// A call or a new expression at \a line and \a column of \a filePath, both
+// counted from one, whose value is thrown away.
+//
+// Nothing where the model has no such file, and then the caller answers the
+// way it did before. An invalid answer is an answer: there is nothing there
+// to assign to a variable.
+std::optional<CPlusPlus::CxxFrontendDocument::DiscardedValue> cxxFrontendDiscardedValueAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 // The switch statement written around \a line and \a column of \a filePath,
 // both counted from one: where to write new cases, and which values of the
 // enumeration its condition has it does not handle yet.

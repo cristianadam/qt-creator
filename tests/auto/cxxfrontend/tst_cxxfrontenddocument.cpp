@@ -204,6 +204,11 @@ private slots:
     void noSignatureOffAFunction();
     void signatureOfADeclarationInAHeader();
 
+    void discardedValue_data();
+    void discardedValue();
+    void noDiscardedValue_data();
+    void noDiscardedValue();
+
     void switchOverAnEnum_data();
     void switchOverAnEnum();
     void noSwitchToComplete_data();
@@ -1212,6 +1217,95 @@ void tst_cxxfrontenddocument::signatureOfADeclarationInAHeader()
         = document.signatureAt({{}, 3, 9}, {"h.h", 2, 18});
     QVERIFY(back.isValid());
     QCOMPARE(back.writeParameter(0, "t"), QString("N::T t"));
+}
+
+// A call whose value is thrown away, which is what offering to assign it to
+// a variable rests on: what is called, and what has to be written in front
+// of it to keep the value.
+void tst_cxxfrontenddocument::discardedValue_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expectedName");
+    QTest::addColumn<QString>("expectedDeclaration");
+
+    QTest::newRow("a free function")
+        << QByteArray("int foo();\nvoid bar() { $foo(); }\n")
+        << "foo" << "int foo";
+
+    QTest::newRow("a member function through a pointer")
+        << QByteArray("struct Foo { int *fooFunc(); };\n"
+                      "void bar() { Foo *f = nullptr; f->$fooFunc(); }\n")
+        << "fooFunc" << "int *fooFunc";
+
+    QTest::newRow("a static member function")
+        << QByteArray("struct Foo { static int *s(); };\n"
+                      "void bar() { Foo::$s(); }\n")
+        << "s" << "int *s";
+
+    QTest::newRow("a new expression")
+        << QByteArray("struct Foo {};\nvoid bar() { $new Foo; }\n")
+        << "Foo" << "Foo *Foo";
+
+    // The type is written for where it is going, so a class in a namespace
+    // the statement is not in has to be named with it.
+    QTest::newRow("a value of a type from another namespace")
+        << QByteArray("namespace N { struct T {}; T make(); }\n"
+                      "void bar() { N::$make(); }\n")
+        << "make" << "N::T make";
+
+    QTest::newRow("a value of a type the scope reaches")
+        << QByteArray("namespace N { struct T {}; T make();\n"
+                      "void bar() { $make(); } }\n")
+        << "make" << "T make";
+}
+
+void tst_cxxfrontenddocument::discardedValue()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expectedName);
+    QFETCH(QString, expectedDeclaration);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::DiscardedValue found
+        = document.discardedValueAt(positions.first().line, positions.first().column);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, expectedName);
+    QCOMPARE(found.declaration, expectedDeclaration);
+}
+
+void tst_cxxfrontenddocument::noDiscardedValue_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+
+    QTest::newRow("a value that is used as an argument")
+        << QByteArray("int foo(int);\nint bar();\nvoid baz() { foo($bar()); }\n");
+    QTest::newRow("a value that is returned")
+        << QByteArray("int bar();\nint baz() { return $bar(); }\n");
+    QTest::newRow("a value that is assigned already")
+        << QByteArray("int bar();\nvoid baz() { int a = $bar(); }\n");
+    QTest::newRow("a call of something that returns nothing")
+        << QByteArray("void foo();\nvoid bar() { $foo(); }\n");
+    QTest::newRow("a call the front end could not resolve")
+        << QByteArray("int someFunc(int);\nvoid f() { $someFunc(); }\n");
+    QTest::newRow("a position on no call at all")
+        << QByteArray("int bar();\nvoid baz() { $int a = 1; }\n");
+}
+
+void tst_cxxfrontenddocument::noDiscardedValue()
+{
+    QFETCH(QByteArray, marked);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(!document.discardedValueAt(positions.first().line,
+                                        positions.first().column).isValid());
 }
 
 // Which values a switch over an enumeration does not handle, and how each

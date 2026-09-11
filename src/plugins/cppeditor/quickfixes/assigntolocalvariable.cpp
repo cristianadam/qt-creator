@@ -14,6 +14,11 @@
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
 #include <projectexplorer/projecttree.h>
+#include <utils/textutils.h>
+
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
 
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
@@ -25,17 +30,32 @@ using namespace Utils;
 namespace CppEditor::Internal {
 namespace {
 
+// A value somebody is throwing away: where it stands, what it is called, and
+// how its type has to be written there. The whole of what this fix needs to
+// know about the code -- what it does with it is name a variable and write a
+// declaration in front of the expression.
+class WrittenValue
+{
+public:
+    int insertAt = 0;
+
+    // The name of what is called, which the variable is named after.
+    QString name;
+
+    // The value's type, written as a declaration of that name. Not a type on
+    // its own, because how a declarator is written around a name -- the star
+    // of a pointer, the brackets of an array -- is not something a caller
+    // can work out from the type.
+    QString declaration;
+};
+
 class AssignToLocalVariableOperation : public CppQuickFixOperation
 {
 public:
     explicit AssignToLocalVariableOperation(const CppQuickFixInterface &interface,
-                                            const int insertPos, const AST *ast, const Name *name)
+                                            const WrittenValue &value)
         : CppQuickFixOperation(interface)
-        , m_insertPos(insertPos)
-        , m_ast(ast)
-        , m_name(name)
-        , m_oo(CppCodeStyleSettings::currentProjectCodeStyleOverview())
-        , m_originalName(m_oo.prettyName(m_name))
+        , m_value(value)
         , m_file(interface.currentFile())
     {
         setDescription(Tr::tr("Assign to Local Variable"));
@@ -47,15 +67,15 @@ private:
         QString type = deduceType();
         if (type.isEmpty())
             return;
-        const int origNameLength = m_originalName.size();
+        const int origNameLength = m_value.name.size();
         const QString varName = constructVarName();
         const QString insertString = type.replace(type.size() - origNameLength, origNameLength,
                                                   varName + QLatin1String(" = "));
-        m_file->apply(ChangeSet::makeInsert(m_insertPos, insertString));
+        m_file->apply(ChangeSet::makeInsert(m_value.insertAt, insertString));
 
         // move cursor to new variable name
         QTextCursor c = m_file->cursor();
-        c.setPosition(m_insertPos + insertString.size() - varName.size() - 3);
+        c.setPosition(m_value.insertAt + insertString.size() - varName.size() - 3);
         c.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
         editor()->setTextCursor(c);
     }
@@ -65,35 +85,13 @@ private:
         const auto settings = cppQuickFixSettingsForProject(
             ProjectExplorer::ProjectTree::currentProject());
         if (m_file->cppDocument()->languageFeatures().cxx11Enabled && settings->useAuto)
-            return "auto " + m_originalName;
-
-        TypeOfExpression typeOfExpression;
-        typeOfExpression.init(semanticInfo().doc, snapshot(), context().bindings());
-        typeOfExpression.setExpandTemplates(true);
-        Scope * const scope = m_file->scopeAt(m_ast->firstToken());
-        const QList<LookupItem> result = typeOfExpression(m_file->textOf(m_ast).toUtf8(),
-                                                          scope, TypeOfExpression::Preprocess);
-        if (result.isEmpty())
-            return {};
-
-        SubstitutionEnvironment env;
-        env.setContext(context());
-        env.switchScope(result.first().scope());
-        ClassOrNamespace *con = typeOfExpression.context().lookupType(scope);
-        if (!con)
-            con = typeOfExpression.context().globalNamespace();
-        UseMinimalNames q(con);
-        env.enter(&q);
-
-        Control *control = context().bindings()->control().get();
-        FullySpecifiedType type = rewriteType(result.first().type(), &env, control);
-
-        return m_oo.prettyType(type, m_name);
+            return "auto " + m_value.name;
+        return m_value.declaration;
     }
 
     QString constructVarName() const
     {
-        QString newName = m_originalName;
+        QString newName = m_value.name;
         if (newName.startsWith(QLatin1String("get"), Qt::CaseInsensitive)
             && newName.size() > 3
             && newName.at(3).isUpper()) {
@@ -111,26 +109,15 @@ private:
         return newName;
     }
 
-    const int m_insertPos;
-    const AST * const m_ast;
-    const Name * const m_name;
-    const Overview m_oo;
-    const QString m_originalName;
+    const WrittenValue m_value;
     const CppRefactoringFilePtr m_file;
 };
 
-//! Assigns the return value of a function call or a new expression to a local variable
-class AssignToLocalVariable : public CppQuickFixFactory
+// The value being thrown away at the cursor, as the built-in front end reads
+// it: a walk of the tree around the call, because asking whether anybody uses
+// the value is what that walk is for.
+std::optional<WrittenValue> builtinDiscardedValueAt(const CppQuickFixInterface &interface)
 {
-public:
-    AssignToLocalVariable()
-    {
-        setClangdReplacement({20});
-    }
-
-private:
-    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
-    {
         const QList<AST *> &path = interface.path();
         AST *outerAST = nullptr;
         SimpleNameAST *nameAST = nullptr;
@@ -138,15 +125,15 @@ private:
         for (int i = path.size() - 3; i >= 0; --i) {
             if (CallAST *callAST = path.at(i)->asCall()) {
                 if (!interface.isCursorOn(callAST))
-                    return;
+                    return std::nullopt;
                 if (i - 2 >= 0) {
                     const int idx = i - 2;
                     if (path.at(idx)->asSimpleDeclaration())
-                        return;
+                        return std::nullopt;
                     if (path.at(idx)->asExpressionStatement())
-                        return;
+                        return std::nullopt;
                     if (path.at(idx)->asMemInitializer())
-                        return;
+                        return std::nullopt;
                     if (path.at(idx)->asCall()) { // Fallback if we have a->b()->c()...
                         --i;
                         continue;
@@ -154,11 +141,11 @@ private:
                 }
                 for (int a = i - 1; a > 0; --a) {
                     if (path.at(a)->asBinaryExpression())
-                        return;
+                        return std::nullopt;
                     if (path.at(a)->asReturnStatement())
-                        return;
+                        return std::nullopt;
                     if (path.at(a)->asCall())
-                        return;
+                        return std::nullopt;
                 }
 
                 if (MemberAccessAST *member = path.at(i + 1)->asMemberAccess()) { // member
@@ -176,21 +163,21 @@ private:
                 }
             } else if (NewExpressionAST *newexp = path.at(i)->asNewExpression()) {
                 if (!interface.isCursorOn(newexp))
-                    return;
+                    return std::nullopt;
                 if (i - 2 >= 0) {
                     const int idx = i - 2;
                     if (path.at(idx)->asSimpleDeclaration())
-                        return;
+                        return std::nullopt;
                     if (path.at(idx)->asExpressionStatement())
-                        return;
+                        return std::nullopt;
                     if (path.at(idx)->asMemInitializer())
-                        return;
+                        return std::nullopt;
                 }
                 for (int a = i - 1; a > 0; --a) {
                     if (path.at(a)->asReturnStatement())
-                        return;
+                        return std::nullopt;
                     if (path.at(a)->asCall())
-                        return;
+                        return std::nullopt;
                 }
 
                 if (NamedTypeSpecifierAST *ts = path.at(i + 2)->asNamedTypeSpecifier()) {
@@ -214,7 +201,8 @@ private:
                                      file->scopeAt(outerAST->firstToken()),
                                      TypeOfExpression::Preprocess);
             if (items.isEmpty())
-                return;
+                return std::nullopt;
+            const FullySpecifiedType outerType = items.first().type();
 
             if (CallAST *callAST = outerAST->asCall()) {
                 items = typeOfExpression(file->textOf(callAST->base_expression).toUtf8(),
@@ -232,20 +220,72 @@ private:
 
                 if (Function *func = item.declaration()->asFunction()) {
                     if (func->isSignal() || func->returnType()->asVoidType())
-                        return;
+                        return std::nullopt;
                 } else if (Declaration *dec = item.declaration()->asDeclaration()) {
                     if (Function *func = dec->type()->asFunctionType()) {
                         if (func->isSignal() || func->returnType()->asVoidType())
-                            return;
+                            return std::nullopt;
                     }
                 }
 
-                const Name *name = nameAST->name;
-                const int insertPos = interface.currentFile()->startOf(outerAST);
-                result << new AssignToLocalVariableOperation(interface, insertPos, outerAST, name);
-                return;
+                const Overview oo = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+
+                // The type as it has to be written where the declaration is
+                // going, which is what UseMinimalNames answers: the shortest
+                // spelling that still finds it from there.
+                SubstitutionEnvironment env;
+                env.setContext(interface.context());
+                env.switchScope(items.first().scope());
+                Scope * const scope = file->scopeAt(outerAST->firstToken());
+                ClassOrNamespace *con = interface.context().lookupType(scope);
+                if (!con)
+                    con = interface.context().globalNamespace();
+                UseMinimalNames q(con);
+                env.enter(&q);
+                Control * const control = interface.context().bindings()->control().get();
+
+                return WrittenValue{file->startOf(outerAST),
+                                    oo.prettyName(nameAST->name),
+                                    oo.prettyType(rewriteType(outerType, &env, control),
+                                                  nameAST->name)};
             }
         }
+    return std::nullopt;
+}
+
+std::optional<WrittenValue> discardedValueAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
+        interface.textDocument(), interface.position());
+    if (const std::optional<CxxFrontendDocument::DiscardedValue> found
+        = cxxFrontendDiscardedValueAt(interface.filePath(), at.line, at.column + 1);
+        found && found->isValid()) {
+        return WrittenValue{Utils::Text::Position{found->line, found->column - 1}
+                                .toPositionInDocument(interface.textDocument()),
+                            found->name,
+                            found->declaration};
+    }
+#endif
+    return builtinDiscardedValueAt(interface);
+}
+
+//! Assigns the return value of a function call or a new expression to a local variable
+class AssignToLocalVariable : public CppQuickFixFactory
+{
+public:
+    AssignToLocalVariable()
+    {
+        setClangdReplacement({20});
+    }
+
+private:
+    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
+    {
+        const std::optional<WrittenValue> value = discardedValueAt(interface);
+        if (!value)
+            return;
+        result << new AssignToLocalVariableOperation(interface, *value);
     }
 };
 
