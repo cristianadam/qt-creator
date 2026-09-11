@@ -1,0 +1,16 @@
+class S
+{
+public:
+    S();
+    S(const char *text);
+    bool isEmpty() const;
+    void clear();
+};
+
+void f1(S s);
+void f2(S *s);
+
+void foo() {
+    auto @str = new S("narf");
+    str->clear();
+}
