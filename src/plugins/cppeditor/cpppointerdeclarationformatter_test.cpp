@@ -3,6 +3,10 @@
 
 #include "cpppointerdeclarationformatter_test.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include "cpppointerdeclarationformatter.h"
 #include "cpptoolstestcase.h"
 
@@ -90,6 +94,19 @@ public:
         QTextDocument *qtextDocument = editor->textDocument()->document();
         CppRefactoringFilePtr cppRefactoringFile
             = CppRefactoringChanges::file(editor->editorWidget(), document);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // What the editor's parser does when the other model is asked for:
+        // run it over the file being formatted, so that the formatter finds
+        // it and reads that tree instead. The rows are the same either way,
+        // which tree answers being decided by the environment exactly as in
+        // the editor.
+        if (cxxFrontendModelRequested()) {
+            WorkingCopy workingCopy;
+            workingCopy.insert(filePath, sourceWithoutCursorMarker);
+            updateCxxFrontendModel({}, filePath, {}, workingCopy);
+        }
+#endif
 
         // Prepare for formatting
         Overview overview;

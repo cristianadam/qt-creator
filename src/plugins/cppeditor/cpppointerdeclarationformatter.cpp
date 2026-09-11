@@ -9,6 +9,19 @@
 #include <QDebug>
 #include <QTextCursor>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+
+#include <cplusplus/CxxFrontendAst.h>
+#include <cplusplus/CxxFrontendDocument.h>
+#include <cplusplus/CxxFrontendSnapshot.h>
+
+#include <cxx/ast.h>
+#include <cxx/ast_cursor.h>
+#include <cxx/names.h>
+#include <cxx/translation_unit.h>
+#endif
+
 #define DEBUG_OUTPUT 0
 
 #if DEBUG_OUTPUT
@@ -136,8 +149,405 @@ static QList<AST *> constructsToFormat(const QList<AST *> &astPath)
     return filtered;
 }
 
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// What the cxx-frontend model reads: the same constructs, the same ranges,
+// and the type printed the same way -- said over that tree.
+//
+// One thing is decided differently. The built-in path skips a declaration
+// whose tokens a macro wrote, which is the same rule as "this front end
+// reads the file as the compiler does": a place nobody wrote is a place with
+// nothing to rewrite. Here that shows up as a range whose edges are not in
+// the file, and cxxAstRangeOf says so by answering nothing.
+class CxxDeclarationReader
+{
+public:
+    CxxDeclarationReader(const CPlusPlus::CxxFrontendDocument &document,
+                         const CppRefactoringFilePtr &file, const Overview &overview)
+        : m_document(document), m_file(file), m_overview(overview)
+    {}
+
+    QList<DeclarationToFormat> readEverything()
+    {
+        cxx::TranslationUnit * const unit = m_document.translationUnit();
+        if (!unit || !unit->ast())
+            return {};
+        readSubtree(unit->ast());
+        return m_declarations;
+    }
+
+    QList<DeclarationToFormat> readAt(const Utils::Text::Position &position)
+    {
+        // The innermost construct the position is in that has anything to
+        // rewrite, which is the one the built-in path offers first -- and
+        // everything written inside it, since a parameter of a declaration
+        // the cursor is on is part of what that declaration says.
+        const QList<cxx::AST *> path
+            = cxxAstPathAt(m_document, position.line, position.column + 1);
+        for (int index = path.size() - 1; index >= 0; --index) {
+            m_declarations.clear();
+            readSubtree(path.at(index));
+            if (!m_declarations.isEmpty())
+                return m_declarations;
+        }
+        return {};
+    }
+
+private:
+    void readSubtree(cxx::AST *root)
+    {
+        for (cxx::ASTCursor cursor(root, "node"); cursor; ++cursor) {
+            auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+            if (slot && *slot)
+                read(*slot);
+        }
+    }
+
+    // The first specifier that says something about the type, the ones that
+    // say something about the declaration instead being no part of what is
+    // rewritten: "static char *s" starts at "char".
+    static cxx::SourceLocation firstTypeSpecifier(cxx::List<cxx::SpecifierAST *> *list)
+    {
+        for (auto *specifier : cxx::ListView{list}) {
+            if (!specifier)
+                continue;
+            if (dynamic_cast<cxx::TypedefSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::FriendSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ConstevalSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ConstinitSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ConstexprSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::InlineSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::NoreturnSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::StaticSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ExternSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::RegisterSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ThreadLocalSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ThreadSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::MutableSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::VirtualSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::ExplicitSpecifierAST *>(specifier)) {
+                continue;
+            }
+            return specifier->firstSourceLocation();
+        }
+        return {};
+    }
+
+    // Whether the declarators of this declaration are rewritten at all: a
+    // class, an enum or a typedef says nothing about a pointer.
+    static bool saysAType(cxx::List<cxx::SpecifierAST *> *list)
+    {
+        for (auto *specifier : cxx::ListView{list}) {
+            if (dynamic_cast<cxx::ClassSpecifierAST *>(specifier)
+                || dynamic_cast<cxx::EnumSpecifierAST *>(specifier)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // The name a declarator declares, which for a pointer to a function
+    // stands inside parentheses: the foo of "*(*foo)(int)".
+    static cxx::IdDeclaratorAST *idOf(cxx::DeclaratorAST *declarator)
+    {
+        while (declarator) {
+            if (auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator))
+                return id;
+            auto * const nested = dynamic_cast<cxx::NestedDeclaratorAST *>(
+                declarator->coreDeclarator);
+            declarator = nested ? nested->declarator : nullptr;
+        }
+        return nullptr;
+    }
+
+    // The parameters of a function this declarator *declares*, and nothing
+    // for one that declares a pointer to a function: what is rewritten of a
+    // function is the type it hands back, while a pointer to one is
+    // rewritten whole, the parameters of its type included.
+    static cxx::FunctionDeclaratorChunkAST *functionChunkOf(cxx::DeclaratorAST *declarator)
+    {
+        // The stars of "char *f()" belong to the type it hands back, so
+        // what tells the two apart is the name: a pointer to a function
+        // writes it inside parentheses.
+        if (!dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator))
+            return nullptr;
+        for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+            if (auto * const function = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk))
+                return function;
+        }
+        return nullptr;
+    }
+
+    static bool hasPointerOperators(cxx::DeclaratorAST *declarator)
+    {
+        return declarator && declarator->ptrOpList;
+    }
+
+    // Where the initializer of a declarator begins, so that the range stops
+    // in front of it: what is rewritten is the declaration and not the value.
+    static cxx::SourceLocation equalOf(cxx::DeclaratorAST *declarator,
+                                       cxx::ExpressionAST *initializer)
+    {
+        if (auto * const equal = dynamic_cast<cxx::EqualInitializerAST *>(initializer))
+            return equal->equalLoc;
+        Q_UNUSED(declarator)
+        return {};
+    }
+
+    int startOf(cxx::SourceLocation location) const
+    {
+        const CxxAstRange range = cxxTokenRangeAt(m_document, location);
+        return range.isValid() ? m_file->position(range.startLine, range.startColumn) : -1;
+    }
+
+    int endOfTokenBefore(cxx::SourceLocation location) const
+    {
+        if (!location || location.index() == 0)
+            return -1;
+        const CxxAstRange range = cxxTokenRangeAt(m_document,
+                                                  cxx::SourceLocation{location.index() - 1});
+        return range.isValid() ? m_file->position(range.endLine, range.endColumn) : -1;
+    }
+
+    int endOf(cxx::AST *node) const
+    {
+        const CxxAstRange range = cxxAstRangeOf(m_document, node);
+        return range.isValid() ? m_file->position(range.endLine, range.endColumn) : -1;
+    }
+
+    // The name as it is written, the qualification in front of it included,
+    // so that a rewriting loses nothing of it.
+    QString writtenName(cxx::DeclaratorAST *declarator, int *nameLine, int *nameColumn) const
+    {
+        cxx::IdDeclaratorAST * const id = idOf(declarator);
+        if (!id || !id->unqualifiedId)
+            return {};
+        const CxxAstRange name = cxxAstRangeOf(m_document, id->unqualifiedId);
+        if (!name.isValid())
+            return {};
+        *nameLine = name.startLine;
+        *nameColumn = name.startColumn;
+
+        const CxxAstRange whole = cxxAstRangeOf(m_document, id);
+        if (!whole.isValid())
+            return {};
+        return m_file->textOf(m_file->position(whole.startLine, whole.startColumn),
+                              m_file->position(name.endLine, name.endColumn));
+    }
+
+    // The names the parameters of a function type are written under, which
+    // a type does not carry: "char *(*f)(int n)" loses the n otherwise.
+    static QStringList writtenParameterNames(cxx::DeclaratorAST *declarator)
+    {
+        QStringList names;
+        for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+            auto * const function = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+            if (!function || !function->parameterDeclarationClause)
+                continue;
+            for (auto *parameter :
+                 cxx::ListView{function->parameterDeclarationClause->parameterDeclarationList}) {
+                names.append(parameter && parameter->identifier
+                                 ? QString::fromStdString(parameter->identifier->name())
+                                 : QString());
+            }
+            break;
+        }
+        return names;
+    }
+
+    void note(cxx::DeclaratorAST *declarator, int start, int end, int charactersToRemove)
+    {
+        if (start < 0 || end < 0 || start >= end)
+            return;
+
+        // An attribute standing in what would be rewritten is no part of
+        // the type, and printing the type would drop it. Read off the text,
+        // since what is asked is whether the words are there at all.
+        const QString original = m_file->textOf(start, end);
+        if (original.contains("__attribute__") || original.contains("__declspec"))
+            return;
+        int nameLine = 0;
+        int nameColumn = 0;
+        const QString name = writtenName(declarator, &nameLine, &nameColumn);
+        if (name.isEmpty())
+            return;
+        QString rewritten = m_document.typeDeclaredAt(nameLine, nameColumn, name, {}, m_overview,
+                                                      writtenParameterNames(declarator));
+        if (rewritten.isEmpty())
+            return;
+        rewritten.remove(0, charactersToRemove);
+        m_declarations.append({{start, end}, rewritten});
+    }
+
+    void read(cxx::AST *node)
+    {
+        if (auto * const declaration = dynamic_cast<cxx::SimpleDeclarationAST *>(node)) {
+            readSimpleDeclaration(declaration);
+            return;
+        }
+        if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(node)) {
+            readFunctionDefinition(definition);
+            return;
+        }
+        if (auto * const parameter = dynamic_cast<cxx::ParameterDeclarationAST *>(node)) {
+            readParameter(parameter);
+            return;
+        }
+        if (auto * const statement = dynamic_cast<cxx::IfStatementAST *>(node)) {
+            readCondition(statement->condition);
+            return;
+        }
+        if (auto * const statement = dynamic_cast<cxx::WhileStatementAST *>(node)) {
+            readCondition(statement->condition);
+            return;
+        }
+        if (auto * const statement = dynamic_cast<cxx::ForStatementAST *>(node)) {
+            readCondition(statement->condition);
+            return;
+        }
+    }
+
+    void readSimpleDeclaration(cxx::SimpleDeclarationAST *declaration)
+    {
+        if (!declaration->declSpecifierList || !declaration->initDeclaratorList
+            || !saysAType(declaration->declSpecifierList)) {
+            return;
+        }
+
+        cxx::DeclaratorAST *firstDeclarator = nullptr;
+        for (auto *declared : cxx::ListView{declaration->initDeclaratorList}) {
+            if (declared && declared->declarator) {
+                firstDeclarator = declared->declarator;
+                break;
+            }
+        }
+        if (!firstDeclarator)
+            return;
+
+        const cxx::SourceLocation typeSpecifier
+            = firstTypeSpecifier(declaration->declSpecifierList);
+
+        for (auto *declared : cxx::ListView{declaration->initDeclaratorList}) {
+            if (!declared || !declared->declarator)
+                continue;
+            cxx::DeclaratorAST * const declarator = declared->declarator;
+            const bool isFirst = declarator == firstDeclarator;
+
+            // Every declarator is rewritten with all the type specifiers in
+            // front of it, so for the ones after the first that much is cut
+            // off again.
+            int charactersToRemove = 0;
+            if (!isFirst) {
+                const int declarationStart = startOf(declaration->firstSourceLocation());
+                const int firstStart = startOf(firstDeclarator->firstSourceLocation());
+                if (declarationStart < 0 || firstStart < 0 || declarationStart >= firstStart)
+                    continue;
+                charactersToRemove = firstStart - declarationStart;
+            }
+
+            if (cxx::FunctionDeclaratorChunkAST * const function = functionChunkOf(declarator)) {
+                // What is rewritten of a function is the type it hands back,
+                // which stops in front of its parameters.
+                const int start = isFirst ? startOf(typeSpecifier)
+                                          : startOf(declarator->firstSourceLocation());
+                note(declarator, start, endOfTokenBefore(function->lparenLoc),
+                     charactersToRemove);
+                continue;
+            }
+
+            const int start = isFirst ? startOf(typeSpecifier)
+                                      : startOf(declarator->firstSourceLocation());
+            const cxx::SourceLocation equal = equalOf(declarator, declared->initializer);
+            note(declarator, start,
+                 equal ? endOfTokenBefore(equal) : endOf(declarator),
+                 charactersToRemove);
+        }
+    }
+
+    void readFunctionDefinition(cxx::FunctionDefinitionAST *definition)
+    {
+        if (!hasPointerOperators(definition->declarator) || !definition->declSpecifierList)
+            return;
+        cxx::FunctionDeclaratorChunkAST * const function = functionChunkOf(definition->declarator);
+        if (!function)
+            return;
+        note(definition->declarator, startOf(firstTypeSpecifier(definition->declSpecifierList)),
+             endOfTokenBefore(function->lparenLoc), 0);
+    }
+
+    void readParameter(cxx::ParameterDeclarationAST *parameter)
+    {
+        if (!hasPointerOperators(parameter->declarator))
+            return;
+        const cxx::SourceLocation equal
+            = equalOf(parameter->declarator,
+                      dynamic_cast<cxx::ExpressionAST *>(parameter->expression));
+        note(parameter->declarator, startOf(parameter->firstSourceLocation()),
+             equal ? endOfTokenBefore(equal) : endOf(parameter->declarator), 0);
+    }
+
+    // A declaration written in the condition of an if, a while or a for.
+    // The statement records what it wants there, so the declaration sits
+    // under the conversions the condition asked for.
+    void readCondition(cxx::ExpressionAST *condition)
+    {
+        while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(condition))
+            condition = cast->expression;
+        auto * const declared = dynamic_cast<cxx::ConditionExpressionAST *>(condition);
+        if (!declared || !hasPointerOperators(declared->declarator))
+            return;
+        const cxx::SourceLocation equal = equalOf(declared->declarator, declared->initializer);
+        if (!equal)
+            return;
+        note(declared->declarator, startOf(declared->firstSourceLocation()),
+             endOfTokenBefore(equal), 0);
+    }
+
+    const CPlusPlus::CxxFrontendDocument &m_document;
+    const CppRefactoringFilePtr m_file;
+    const Overview m_overview;
+    QList<DeclarationToFormat> m_declarations;
+};
+
+// The model's reading of the file being formatted, or nothing where it has
+// not read that file or could not read it properly -- a construct the front
+// end stumbled over is not one to rewrite by.
+std::optional<QList<DeclarationToFormat>> cxxDeclarations(
+    const CppRefactoringFilePtr &file, const Overview &overview,
+    const std::optional<Utils::Text::Position> &position)
+{
+    const std::shared_ptr<const CPlusPlus::CxxFrontendSnapshot> model
+        = cxxFrontendModel(file->filePath());
+    if (!model)
+        return std::nullopt;
+    const CPlusPlus::CxxFrontendDocument * const document
+        = model->document(file->filePath().toFSPathString());
+    if (!document || !document->translationUnit())
+        return std::nullopt;
+    if (Utils::anyOf(document->diagnostics(),
+                     [](const CPlusPlus::CxxFrontendDocument::Diagnostic &diagnostic) {
+                         return diagnostic.isError;
+                     })) {
+        return std::nullopt;
+    }
+
+    CxxDeclarationReader reader(*document, file, overview);
+    if (position)
+        return reader.readAt(*position);
+    return reader.readEverything();
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
 Utils::ChangeSet PointerDeclarationFormatter::formatEverything()
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<DeclarationToFormat>> onTheModel
+        = cxxDeclarations(m_cppRefactoringFile, m_overview, {})) {
+        return changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, *onTheModel);
+    }
+#endif
     const Document::Ptr document = m_cppRefactoringFile->cppDocument();
     AST * const ast = document && document->translationUnit()
                           ? document->translationUnit()->ast()
@@ -147,6 +557,12 @@ Utils::ChangeSet PointerDeclarationFormatter::formatEverything()
 
 Utils::ChangeSet PointerDeclarationFormatter::formatAt(const Utils::Text::Position &position)
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<DeclarationToFormat>> onTheModel
+        = cxxDeclarations(m_cppRefactoringFile, m_overview, position)) {
+        return changesForDeclarations(m_cppRefactoringFile, m_cursorHandling, *onTheModel);
+    }
+#endif
     const Document::Ptr document = m_cppRefactoringFile->cppDocument();
     if (!document)
         return {};

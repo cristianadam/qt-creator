@@ -115,6 +115,17 @@ struct IncludeState
 
 // The printer always binds a star to the type name: "char* p". Qt Creator's
 // default is to bind it to the identifier: "char *p".
+// Where the spaces of a pointer operator go, as the printer takes it. Qt
+// Creator says it the other way round -- which side the star binds to -- so
+// a bound side is a side with no space.
+cxx::TypePrintOptions pointerSpacingOf(const Overview &settings)
+{
+    return {.spaceBeforePointerOperators
+            = !settings.starBindFlags.testFlag(Overview::BindToTypeName),
+            .spaceAfterPointerOperators
+            = !settings.starBindFlags.testFlag(Overview::BindToIdentifier)};
+}
+
 QString applyStarBinding(const QString &declaration, const Overview &settings)
 {
     if (!settings.starBindFlags.testFlag(Overview::BindToIdentifier))
@@ -3680,7 +3691,9 @@ QString CxxFrontendDocument::declarationOfTypeAt(int line, int column,
 }
 
 QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString &name,
-                                            const Place &writtenAt) const
+                                            const Place &writtenAt,
+                                            const std::optional<Overview> &settings,
+                                            const QStringList &parameterNames) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);
     cxx::ScopeSymbol * const global = d->unit.globalScope();
@@ -3741,10 +3754,36 @@ QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString 
                 declarator = definition->declarator;
                 symbol = definition->symbol;
             }
-            if (!declarator || !symbol || !symbol->type())
-                continue;
-            if (d->nameLocationOfDeclarator(declarator) == location)
+            if (declarator && symbol && symbol->type()
+                && d->nameLocationOfDeclarator(declarator) == location) {
                 declared = symbol;
+                continue;
+            }
+
+            // A parameter of a function *type* -- the (char *s) of a
+            // pointer to a function -- declares nothing anybody can look
+            // up: its symbols hang off the clause that writes them rather
+            // than off a scope, so that is where they are found.
+            auto * const clause = dynamic_cast<cxx::ParameterDeclarationClauseAST *>(*slot);
+            if (!clause || !clause->functionParametersSymbol)
+                continue;
+            int index = 0;
+            for (auto *parameter : cxx::ListView{clause->parameterDeclarationList}) {
+                if (parameter && parameter->declarator
+                    && d->nameLocationOfDeclarator(parameter->declarator) == location) {
+                    const auto members = clause->functionParametersSymbol->members();
+                    int at = 0;
+                    for (cxx::Symbol *member : members) {
+                        if (at++ != index)
+                            continue;
+                        if (member && member->type())
+                            declared = member;
+                        break;
+                    }
+                    break;
+                }
+                ++index;
+            }
         }
     }
 
@@ -3759,11 +3798,17 @@ QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString 
     if (!type)
         return {};
 
+    // Printed with the spaces the style asks for rather than moved about
+    // afterwards: which of the characters in the answer are the pointer
+    // operator is only plain while it is being written.
+    const Overview &style = settings ? *settings : d->config.settings;
+    cxx::TypePrintOptions options = pointerSpacingOf(style);
     const cxx::SourceLocation there = d->tokenAt(writtenAt.line, writtenAt.column,
                                                  writtenAt.filePath);
-    return applyStarBinding(fromStd(cxx::to_string(type, name.toStdString(),
-                                                   {.writtenIn = d->scopeWrittenAround(there)})),
-                            d->config.settings);
+    options.writtenIn = d->scopeWrittenAround(there);
+    for (const QString &parameter : parameterNames)
+        options.parameterNames.push_back(parameter.toStdString());
+    return fromStd(cxx::to_string(type, name.toStdString(), options));
 }
 
 CxxFrontendDocument::EnclosingFunction CxxFrontendDocument::enclosingFunctionAt(int line,

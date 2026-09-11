@@ -822,8 +822,19 @@ public:
     // Empty where nothing is declared at the position: a name that declares
     // something is not a use of it, so this asks the declaration rather than
     // whatever stands there.
+    // \a settings says where the spaces of a pointer or a reference go,
+    // for a caller that has a style of its own rather than the project's --
+    // a reformatting of declarations is about those spaces, and a page
+    // previewing a setting shows one nobody has chosen yet. The document's
+    // own settings where it is nothing.
+    // \a parameterNames are the names to write the parameters of a
+    // function type under, in the order they are written. A parameter's
+    // name is not part of a type, so a caller rewriting "char *(*f)(int n)"
+    // has to hand the n over or it is lost.
     QString typeDeclaredAt(int line, int column, const QString &name,
-                           const Place &writtenAt) const;
+                           const Place &writtenAt,
+                           const std::optional<Overview> &settings = {},
+                           const QStringList &parameterNames = {}) const;
 
     // The function written around a position, as a reader about to write
     // another one beside it needs it.
