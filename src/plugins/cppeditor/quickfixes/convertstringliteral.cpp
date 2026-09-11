@@ -8,6 +8,7 @@
 #include "../cppeditorwidget.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
+#include "cppquickfixhelpers.h"
 
 #include <cplusplus/Overview.h>
 
@@ -20,8 +21,12 @@
 #include <cplusplus/CxxFrontendSnapshot.h>
 
 #include <cxx/ast.h>
+#include <cxx/control.h>
 #include <cxx/literals.h>
+#include <cxx/name_lookup.h>
 #include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/translation_unit.h>
 #endif
 
 #ifdef WITH_TESTS
@@ -495,157 +500,6 @@ static WrappableLiteral builtinWrappableLiteralAt(const CppQuickFixInterface &in
     return written;
 }
 
-class ConvertCStringToNSStringOp: public CppQuickFixOperation
-{
-public:
-    ConvertCStringToNSStringOp(const CppQuickFixInterface &interface, int priority,
-                               StringLiteralAST *stringLiteral, CallAST *qlatin1Call)
-        : CppQuickFixOperation(interface, priority)
-        , stringLiteral(stringLiteral)
-        , qlatin1Call(qlatin1Call)
-    {
-        setDescription(Tr::tr("Convert to Objective-C String Literal"));
-    }
-
-    void perform() override
-    {
-        ChangeSet changes;
-
-        if (qlatin1Call) {
-            changes.replace(currentFile()->startOf(qlatin1Call), currentFile()->startOf(stringLiteral),
-                            QLatin1String("@"));
-            changes.remove(currentFile()->endOf(stringLiteral), currentFile()->endOf(qlatin1Call));
-        } else {
-            changes.insert(currentFile()->startOf(stringLiteral), QLatin1String("@"));
-        }
-
-        currentFile()->apply(changes);
-    }
-
-private:
-    StringLiteralAST *stringLiteral;
-    CallAST *qlatin1Call;
-};
-
-/*!
-  Replace
-     "abcd"
-     QLatin1String("abcd")
-     QLatin1Literal("abcd")
-
-  With
-     @"abcd"
-
-  Activates on: the string literal, if the file type is a Objective-C(++) file.
-*/
-class ConvertCStringToNSString: public CppQuickFixFactory
-{
-#ifdef WITH_TESTS
-public:
-    static QObject *createTest() { return new QObject; }
-#endif
-
-private:
-    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
-    {
-        CppRefactoringFilePtr file = interface.currentFile();
-
-        if (!interface.editor()->cppEditorDocument()->isObjCEnabled())
-            return;
-
-        StringLiteralType type = TypeNone;
-        QByteArray enclosingFunction;
-        CallAST *qlatin1Call;
-        const QList<AST *> &path = interface.path();
-        ExpressionAST *literal = analyzeStringLiteral(path, file, &type, &enclosingFunction,
-                                                      &qlatin1Call);
-        if (!literal || type != TypeString)
-            return;
-        if (!isQtStringLiteral(enclosingFunction))
-            qlatin1Call = nullptr;
-
-        result << new ConvertCStringToNSStringOp(interface, path.size() - 1, literal->asStringLiteral(),
-                                                 qlatin1Call);
-    }
-};
-
-/*!
-  Replace
-    "abcd"
-
-  With
-    tr("abcd") or
-    QCoreApplication::translate("CONTEXT", "abcd") or
-    QT_TRANSLATE_NOOP("GLOBAL", "abcd")
-
-  depending on what is available.
-
-  Activates on: the string literal
-*/
-class TranslateStringLiteral: public CppQuickFixFactory
-{
-    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
-    {
-        // Initialize
-        const QList<AST *> &path = interface.path();
-        const WrappableLiteral literal = builtinWrappableLiteralAt(interface);
-        if (literal.kind != WrappableLiteral::String
-            || isQtStringLiteral(literal.enclosingFunction)
-            || isQtStringTranslation(literal.enclosingFunction)) {
-            return;
-        }
-
-        QString trContext;
-
-        std::shared_ptr<Control> control = interface.context().bindings()->control();
-        const Name *trName = control->identifier("tr");
-
-        // Check whether we are in a function:
-        const QString description = Tr::tr("Mark as Translatable");
-        for (int i = path.size() - 1; i >= 0; --i) {
-            if (FunctionDefinitionAST *definition = path.at(i)->asFunctionDefinition()) {
-                Function *function = definition->symbol;
-                ClassOrNamespace *b = interface.context().lookupType(function);
-                if (b) {
-                    // Do we have a tr function?
-                    const QList<LookupItem> items = b->find(trName);
-                    for (const LookupItem &r : items) {
-                        Symbol *s = r.declaration();
-                        if (s->type()->asFunctionType()) {
-                            // no context required for tr
-                            result << new WrapStringLiteralOp(interface, path.size() - 1,
-                                                              TranslateTrAction,
-                                                              description, literal);
-                            return;
-                        }
-                    }
-                }
-                // We need to do a QCA::translate, so we need a context.
-                // Use fully qualified class name:
-                Overview oo;
-                const QList<const Name *> names = LookupContext::path(function);
-                for (const Name *n : names) {
-                    if (!trContext.isEmpty())
-                        trContext.append(QLatin1String("::"));
-                    trContext.append(oo.prettyName(n));
-                }
-                // ... or global if none available!
-                if (trContext.isEmpty())
-                    trContext = QLatin1String("GLOBAL");
-                result << new WrapStringLiteralOp(interface, path.size() - 1,
-                                                  TranslateQCoreApplicationAction,
-                                                  description, literal, trContext);
-                return;
-            }
-        }
-
-        // We need to use Q_TRANSLATE_NOOP
-        result << new WrapStringLiteralOp(interface, path.size() - 1,
-                                          TranslateNoopAction,
-                                          description, literal, trContext);
-    }
-};
-
 #ifdef QTC_WITH_CXX_FRONTEND
 QByteArray plainNameOf(cxx::UnqualifiedIdAST *id)
 {
@@ -780,6 +634,255 @@ WrappableLiteral wrappableLiteralAt(const CppQuickFixInterface &interface)
 #endif
     return builtinWrappableLiteralAt(interface);
 }
+
+class ConvertCStringToNSStringOp: public CppQuickFixOperation
+{
+public:
+    ConvertCStringToNSStringOp(const CppQuickFixInterface &interface, int priority,
+                               StringLiteralAST *stringLiteral, CallAST *qlatin1Call)
+        : CppQuickFixOperation(interface, priority)
+        , stringLiteral(stringLiteral)
+        , qlatin1Call(qlatin1Call)
+    {
+        setDescription(Tr::tr("Convert to Objective-C String Literal"));
+    }
+
+    void perform() override
+    {
+        ChangeSet changes;
+
+        if (qlatin1Call) {
+            changes.replace(currentFile()->startOf(qlatin1Call), currentFile()->startOf(stringLiteral),
+                            QLatin1String("@"));
+            changes.remove(currentFile()->endOf(stringLiteral), currentFile()->endOf(qlatin1Call));
+        } else {
+            changes.insert(currentFile()->startOf(stringLiteral), QLatin1String("@"));
+        }
+
+        currentFile()->apply(changes);
+    }
+
+private:
+    StringLiteralAST *stringLiteral;
+    CallAST *qlatin1Call;
+};
+
+/*!
+  Replace
+     "abcd"
+     QLatin1String("abcd")
+     QLatin1Literal("abcd")
+
+  With
+     @"abcd"
+
+  Activates on: the string literal, if the file type is a Objective-C(++) file.
+*/
+class ConvertCStringToNSString: public CppQuickFixFactory
+{
+#ifdef WITH_TESTS
+public:
+    static QObject *createTest() { return new QObject; }
+#endif
+
+private:
+    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
+    {
+        CppRefactoringFilePtr file = interface.currentFile();
+
+        if (!interface.editor()->cppEditorDocument()->isObjCEnabled())
+            return;
+
+        StringLiteralType type = TypeNone;
+        QByteArray enclosingFunction;
+        CallAST *qlatin1Call;
+        const QList<AST *> &path = interface.path();
+        ExpressionAST *literal = analyzeStringLiteral(path, file, &type, &enclosingFunction,
+                                                      &qlatin1Call);
+        if (!literal || type != TypeString)
+            return;
+        if (!isQtStringLiteral(enclosingFunction))
+            qlatin1Call = nullptr;
+
+        result << new ConvertCStringToNSStringOp(interface, path.size() - 1, literal->asStringLiteral(),
+                                                 qlatin1Call);
+    }
+};
+
+// Where a literal that is to be marked as translatable stands: what decides
+// which of the three ways of marking it is written.
+struct TranslationSite
+{
+    // Outside every function there is nothing to name a context after.
+    bool insideAFunction = false;
+
+    // A tr() reachable from there, which is the one way of marking a literal
+    // that needs no context of its own.
+    bool hasTr = false;
+
+    // The scope the function belongs to, written out in full, and empty for
+    // a function at file scope -- which is translated under "GLOBAL".
+    QString context;
+};
+
+// Where the cursor stands, as the built-in front end reads it.
+TranslationSite builtinTranslationSiteAt(const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    const Name * const trName = interface.context().bindings()->control()->identifier("tr");
+
+    for (int i = path.size() - 1; i >= 0; --i) {
+        FunctionDefinitionAST * const definition = path.at(i)->asFunctionDefinition();
+        if (!definition)
+            continue;
+
+        TranslationSite site;
+        site.insideAFunction = true;
+        Function * const function = definition->symbol;
+        if (ClassOrNamespace * const scope = interface.context().lookupType(function)) {
+            const QList<LookupItem> items = scope->find(trName);
+            for (const LookupItem &item : items) {
+                Symbol * const symbol = item.declaration();
+                if (symbol->type()->asFunctionType()) {
+                    site.hasTr = true;
+                    return site;
+                }
+            }
+        }
+
+        // The class the function belongs to, named in full.
+        Overview oo;
+        for (const Name *name : LookupContext::path(function)) {
+            if (!site.context.isEmpty())
+                site.context.append(QLatin1String("::"));
+            site.context.append(oo.prettyName(name));
+        }
+        return site;
+    }
+    return {};
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same on the cxx-frontend model, where the function around the cursor is
+// what the document says it is, and a tr() is looked for the way any other
+// member is -- so one a base class declares, in a header this file read, is
+// found as well.
+//
+// Nothing where the model has not read the file; the caller then reads the
+// built-in tree instead.
+std::optional<TranslationSite> cxxTranslationSiteAt(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return {};
+
+    // The editor counts from zero and the model from one.
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QTextCursor cursor = file->cursor();
+    const int line = cursor.blockNumber() + 1;
+    const int column = cursor.positionInBlock() + 1;
+
+    // The function written around the position, named in full -- "N::C::f".
+    // What a context has to say is the scope that name is written in.
+    const QString function = document->functionAt(line, column);
+    if (function.isEmpty())
+        return TranslationSite{};
+
+    TranslationSite site;
+    site.insideAFunction = true;
+    QStringList scope = function.split("::");
+    scope.removeLast();
+    site.context = scope.join("::");
+
+    cxx::TranslationUnit * const unit = document->translationUnit();
+    if (!unit)
+        return site;
+
+    // Whether a tr() can be called from inside that function, which is a
+    // question about the class it belongs to and about every class that one
+    // inherits from.
+    const QList<cxx::AST *> path = cxxAstPathAt(*document, line, column);
+    for (int i = path.size() - 1; i >= 0; --i) {
+        auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(path.at(i));
+        if (!definition || !definition->symbol)
+            continue;
+
+        cxx::ClassSymbol *enclosing = nullptr;
+        for (cxx::Symbol *symbol = definition->symbol->parent(); symbol && !enclosing;
+             symbol = symbol->parent()) {
+            enclosing = dynamic_cast<cxx::ClassSymbol *>(symbol);
+        }
+        if (!enclosing)
+            break;
+
+        cxx::Symbol * const tr
+            = cxx::qualifiedLookup(enclosing, unit->control()->getIdentifier("tr"));
+        // A name that stands for a function stands for every function of that
+        // name, so what comes back is the set of them rather than one.
+        site.hasTr = dynamic_cast<cxx::FunctionSymbol *>(tr)
+                     || dynamic_cast<cxx::OverloadSetSymbol *>(tr);
+        break;
+    }
+    return site;
+}
+#endif
+
+// Where the cursor stands, whichever front end can read it.
+TranslationSite translationSiteAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<TranslationSite> site = cxxTranslationSiteAt(interface))
+        return *site;
+#endif
+    return builtinTranslationSiteAt(interface);
+}
+
+/*!
+  Replace
+    "abcd"
+
+  With
+    tr("abcd") or
+    QCoreApplication::translate("CONTEXT", "abcd") or
+    QT_TRANSLATE_NOOP("GLOBAL", "abcd")
+
+  depending on what is available.
+
+  Activates on: the string literal
+*/
+class TranslateStringLiteral: public CppQuickFixFactory
+{
+    void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
+    {
+        const WrappableLiteral literal = wrappableLiteralAt(interface);
+        if (literal.kind != WrappableLiteral::String
+            || isQtStringLiteral(literal.enclosingFunction)
+            || isQtStringTranslation(literal.enclosingFunction)) {
+            return;
+        }
+
+        const TranslationSite site = translationSiteAt(interface);
+        const QString description = Tr::tr("Mark as Translatable");
+
+        // A tr() needs no context: which one it is, is what the class it is
+        // called on says. Without one the class has to be named, and with no
+        // function to name it after there is nothing to look a translation up
+        // under at all -- then the literal is only marked as one.
+        if (!site.insideAFunction) {
+            result << new WrapStringLiteralOp(interface, literal.priority, TranslateNoopAction,
+                                              description, literal, QString());
+        } else if (site.hasTr) {
+            result << new WrapStringLiteralOp(interface, literal.priority, TranslateTrAction,
+                                              description, literal);
+        } else {
+            result << new WrapStringLiteralOp(interface, literal.priority,
+                                              TranslateQCoreApplicationAction, description,
+                                              literal,
+                                              site.context.isEmpty() ? QString("GLOBAL")
+                                                                     : site.context);
+        }
+    }
+};
 
 /*!
   Replace
