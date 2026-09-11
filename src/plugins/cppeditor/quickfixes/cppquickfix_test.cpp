@@ -221,8 +221,9 @@ QuickFixOperationTest::QuickFixOperationTest(const QList<TestDocumentPtr> &testD
         // std::as_const() is declined on a call because a temporary cannot be
         // bound to it. A call that hands back a reference is not a temporary,
         // and what the built-in front end reads of an expression does not say
-        // which one it is.
-        QEXPECT_FAIL("declared-call-returning-a-reference", "FIXME", Abort);
+        // which one it is; the cxx-frontend model does, and answers this.
+        if (!onTheCxxFrontendModel())
+            QEXPECT_FAIL("declared-call-returning-a-reference", "FIXME", Abort);
         QVERIFY(testDocuments.first()->m_expectedSource.isEmpty());
         return;
     }

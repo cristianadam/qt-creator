@@ -19,9 +19,13 @@
 #include <cplusplus/CxxFrontendSnapshot.h>
 
 #include <cxx/ast.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/types.h>
 #endif
 
 #include <functional>
+#include <optional>
 
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
@@ -433,15 +437,22 @@ std::optional<ChangeSet::Range> rangeOfNode(const CxxFrontendDocument &document,
                             file->position(range.endLine, range.endColumn));
 }
 
+// The expression as it stands in the file, past the conversions cxx records
+// around it -- what somebody wrote, which is what a fix rewrites.
+cxx::ExpressionAST *cxxWritten(cxx::ExpressionAST *expression)
+{
+    while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(expression))
+        expression = cast->expression;
+    return expression;
+}
+
 // The declaration written in a condition, past the conversions cxx records
 // around it: "if (Foo *foo = g())" reads as a cast of a cast of the
 // declaration, because what the statement wants there is a bool. Null where
 // the condition is an ordinary expression.
 cxx::ConditionExpressionAST *cxxConditionDeclaration(cxx::ExpressionAST *condition)
 {
-    while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(condition))
-        condition = cast->expression;
-    return dynamic_cast<cxx::ConditionExpressionAST *>(condition);
+    return dynamic_cast<cxx::ConditionExpressionAST *>(cxxWritten(condition));
 }
 #endif
 
@@ -1510,13 +1521,24 @@ static bool isQtShareableClass(const QByteArray &name)
     return types.contains(name);
 }
 
+// The container a range-based for loop walks over, as this fix needs it:
+// where it is written, which is what the wrapping goes around, and the class
+// its type names, which is what decides whether wrapping it gains anything.
+// Which node that was read off depends on the front end; neither of these
+// does.
+struct WrittenContainer
+{
+    int start = 0;
+    int end = 0;
+    QString className;
+};
+
 class WrapInStdAsConstOp : public CppQuickFixOperation
 {
 public:
-    WrapInStdAsConstOp(const CppQuickFixInterface &interface,
-                                  ExpressionAST *expression)
+    WrapInStdAsConstOp(const CppQuickFixInterface &interface, const WrittenContainer &container)
         : CppQuickFixOperation(interface, 0)
-        , m_expression(expression)
+        , m_container(container)
     {
         setDescription(Tr::tr("Wrap in std::as_const()"));
     }
@@ -1524,16 +1546,161 @@ public:
 private:
     void perform() override
     {
-        const int startPos = currentFile()->startOf(m_expression);
-        const int endPos = currentFile()->endOf(m_expression);
         ChangeSet changes;
-        changes.insert(startPos, "std::as_const(");
-        changes.insert(endPos, ")");
+        changes.insert(m_container.start, "std::as_const(");
+        changes.insert(m_container.end, ")");
         currentFile()->apply(changes);
     }
 
-    ExpressionAST * const m_expression;
+    const WrittenContainer m_container;
 };
+
+// The container the cursor is on, as the built-in front end reads it.
+std::optional<WrittenContainer> builtinContainerToWrap(const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    if (path.isEmpty())
+        return {};
+
+    // Find the innermost range-based for statement containing the cursor.
+    const RangeBasedForStatementAST *forStmt = nullptr;
+    for (int i = path.size() - 1; i >= 0; --i) {
+        if ((forStmt = path.at(i)->asRangeBasedForStatement()))
+            break;
+    }
+    if (!forStmt || !forStmt->expression)
+        return {};
+
+    // Cursor must be on the container expression (after the colon).
+    if (!interface.isCursorOn(forStmt->expression))
+        return {};
+
+    // std::as_const() takes a non-const lvalue reference, so it cannot wrap a temporary
+    // returned by a function call. Reject call expressions to avoid a compile error.
+    if (forStmt->expression->asCall())
+        return {};
+
+    // Determine the type of the container expression.
+    TypeOfExpression typeOfExpression;
+    typeOfExpression.init(interface.semanticInfo().doc, interface.snapshot(),
+                          interface.context().bindings());
+    const CppRefactoringFilePtr file = interface.currentFile();
+    Scope * const scope = file->scopeAt(forStmt->expression->firstToken());
+    const QList<LookupItem> items = typeOfExpression(
+        file->textOf(forStmt->expression).toUtf8(),
+        scope,
+        TypeOfExpression::Preprocess);
+    if (items.isEmpty())
+        return {};
+
+    FullySpecifiedType type = items.first().type();
+
+    // Strip a reference layer, if present.
+    if (const ReferenceType *ref = type->asReferenceType())
+        type = ref->elementType();
+
+    // Container must not already be const.
+    if (type.isConst())
+        return {};
+
+    const NamedType * const namedType = type->asNamedType();
+    if (!namedType)
+        return {};
+    const Name * const name = namedType->name();
+    if (!name)
+        return {};
+    const Identifier * const id = name->identifier();
+    if (!id)
+        return {};
+
+    return WrittenContainer{file->startOf(forStmt->expression),
+                            file->endOf(forStmt->expression),
+                            QString::fromUtf8(id->chars(), id->size())};
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same container on the cxx-frontend model, which says two things the
+// built-in tree only approximates: whether what is written there is a value
+// somebody can take a reference to, and what its type really is.
+//
+// Nothing where that model has not read the file, where it read the loop with
+// errors, or where the cursor is not on the container -- the built-in path
+// then answers, as it did before.
+std::optional<WrittenContainer> cxxContainerToWrap(const CppQuickFixInterface &interface)
+{
+    const CxxFrontendDocument * const document = cxxFrontendDocumentFor(interface);
+    if (!document)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    const QTextCursor cursor = file->cursor();
+
+    // The editor counts from zero and the tree from one.
+    const QList<cxx::AST *> path
+        = cxxAstPathAt(*document, cursor.blockNumber() + 1, cursor.positionInBlock() + 1);
+
+    // Innermost wins: the path holds an outer loop before the one the cursor
+    // is in.
+    cxx::ForRangeStatementAST *loop = nullptr;
+    for (cxx::AST * const node : path) {
+        if (auto * const statement = dynamic_cast<cxx::ForRangeStatementAST *>(node))
+            loop = statement;
+    }
+    if (!loop || !loop->rangeInitializer)
+        return {};
+
+    // Not something to rewrite: where the front end stumbled inside the loop
+    // its tree does not match the text, and the wrapping would go around the
+    // wrong stretch of it.
+    if (cxxAstWasReadWithErrors(*document, loop))
+        return {};
+
+    cxx::ExpressionAST * const container = cxxWritten(loop->rangeInitializer);
+    if (!container)
+        return {};
+
+    const std::optional<ChangeSet::Range> range = rangeOfNode(*document, file, container);
+    if (!range)
+        return {};
+
+    // The fix is written around the container, so that is where it is
+    // offered; the cursor anywhere else in the loop means something else.
+    const int position = cursor.selectionStart();
+    if (position < range->start || position > range->end)
+        return {};
+
+    // std::as_const() takes an lvalue reference, so what is written there has
+    // to be something a reference can be taken to. That rules out the
+    // temporary a call hands back -- and only that one: a call handing back a
+    // reference is as good an lvalue as a variable.
+    if (container->valueCategory != cxx::ValueCategory::kLValue)
+        return {};
+
+    // A reference names what it refers to, so it is read through first, and
+    // the const that matters is the one on the far side of it.
+    const cxx::Type *type = container->type;
+    if (auto * const reference = cxx::type_cast<cxx::LvalueReferenceType>(type))
+        type = reference->elementType();
+    if (!type || cxx::has_const(cxx::cv_qualifiers(type)))
+        return {};
+
+    auto * const named = cxx::unqualified_cast<cxx::ClassType>(type);
+    if (!named || !named->symbol() || !named->symbol()->name())
+        return {};
+
+    return WrittenContainer{range->start, range->end,
+                            QString::fromStdString(cxx::to_string(named->symbol()->name()))};
+}
+#endif
+
+std::optional<WrittenContainer> containerToWrap(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<WrittenContainer> container = cxxContainerToWrap(interface))
+        return container;
+#endif
+    return builtinContainerToWrap(interface);
+}
 
 /*!
   Wraps the container expression of a range-based for loop in std::as_const() if
@@ -1546,65 +1713,13 @@ class WrapInStdAsConst : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
-        const QList<AST *> &path = interface.path();
-        if (path.isEmpty())
-            return;
-
-        // Find the innermost range-based for statement containing the cursor.
-        const RangeBasedForStatementAST *forStmt = nullptr;
-        for (int i = path.size() - 1; i >= 0; --i) {
-            if ((forStmt = path.at(i)->asRangeBasedForStatement()))
-                break;
-        }
-        if (!forStmt || !forStmt->expression)
-            return;
-
-        // Cursor must be on the container expression (after the colon).
-        if (!interface.isCursorOn(forStmt->expression))
-            return;
-
-        // std::as_const() takes a non-const lvalue reference, so it cannot wrap a temporary
-        // returned by a function call. Reject call expressions to avoid a compile error.
-        if (forStmt->expression->asCall())
-            return;
-
-        // Determine the type of the container expression.
-        TypeOfExpression typeOfExpression;
-        typeOfExpression.init(interface.semanticInfo().doc, interface.snapshot(),
-                              interface.context().bindings());
-        const CppRefactoringFilePtr file = interface.currentFile();
-        Scope * const scope = file->scopeAt(forStmt->expression->firstToken());
-        const QList<LookupItem> items = typeOfExpression(
-            file->textOf(forStmt->expression).toUtf8(),
-            scope,
-            TypeOfExpression::Preprocess);
-        if (items.isEmpty())
-            return;
-
-        FullySpecifiedType type = items.first().type();
-
-        // Strip a reference layer, if present.
-        if (const ReferenceType *ref = type->asReferenceType())
-            type = ref->elementType();
-
-        // Container must not already be const.
-        if (type.isConst())
-            return;
+        const std::optional<WrittenContainer> container = containerToWrap(interface);
 
         // Container must be a Qt implicit-sharing (shareable) type.
-        const NamedType * const namedType = type->asNamedType();
-        if (!namedType)
-            return;
-        const Name * const name = namedType->name();
-        if (!name)
-            return;
-        const Identifier * const id = name->identifier();
-        if (!id)
-            return;
-        if (!isQtShareableClass(id->chars()))
+        if (!container || !isQtShareableClass(container->className.toUtf8()))
             return;
 
-        result << new WrapInStdAsConstOp(interface, forStmt->expression);
+        result << new WrapInStdAsConstOp(interface, *container);
     }
 };
 
