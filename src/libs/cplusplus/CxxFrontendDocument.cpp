@@ -443,7 +443,7 @@ public:
             const QString name = fromStd(macro.name);
             m_ownDefines.insert(name);
             removeFrom(m_out, name);
-            removeFrom(m_inForce, name);
+            removeFromInForce(name);
         }
 
         // Asking about a macro is what makes a file depend on where it was
@@ -511,17 +511,57 @@ public:
             return line;
         }
 
-        static void removeFrom(QStringList &lines, const QString &name)
+        // Whether a #define line is that name's, which is macroNameOf() asked
+        // rather than answered: the name is read out of tens of thousands of
+        // lines every time one is taken away, and building each of them to
+        // throw it away is what that used to cost.
+        static bool defines(const QString &line, const QString &name)
         {
-            lines.removeIf([&](const QString &line) {
-                return CxxFrontendDocument::macroNameOf(line) == name;
-            });
+            if (!line.startsWith(name))
+                return false;
+            if (line.size() == name.size())
+                return true;
+            const QChar next = line.at(name.size());
+            return next == u'(' || next.isSpace();
         }
 
+        static void removeFrom(QStringList &lines, const QString &name)
+        {
+            lines.removeIf([&](const QString &line) { return defines(line, name); });
+        }
+
+        // One line per name, and a redefinition stands where the first
+        // definition stood. Where each name's line is, is kept: a translation
+        // unit of Qt headers defines tens of thousands of macros, and reading
+        // the name out of every line held to find the one being redefined was
+        // the most expensive thing this model did.
         void replaceInForce(const QString &name, const QString &line)
         {
-            removeFrom(m_inForce, name);
+            const auto at = m_inForceAt.constFind(name);
+            if (at != m_inForceAt.cend()) {
+                m_inForce[*at] = line;
+                return;
+            }
+            m_inForceAt.insert(name, m_inForce.size());
             m_inForce.append(line);
+        }
+
+        // What an #undef takes out. Everything after it moves up, so this
+        // pays for itself only because an #undef is rare where a #define is
+        // not.
+        void removeFromInForce(const QString &name)
+        {
+            const auto at = m_inForceAt.constFind(name);
+            if (at == m_inForceAt.cend())
+                return;
+
+            const qsizetype removed = *at;
+            m_inForceAt.erase(at);
+            m_inForce.removeAt(removed);
+            for (qsizetype &index : m_inForceAt) {
+                if (index > removed)
+                    --index;
+            }
         }
 
         void note(const QString &name, const QString &definition)
@@ -535,6 +575,7 @@ public:
 
         QStringList &m_out;
         QStringList m_inForce;
+        QHash<QString, qsizetype> m_inForceAt;
         bool m_seeding = false;
         QHash<QString, QString> m_consulted;
         QSet<QString> m_ownDefines;
