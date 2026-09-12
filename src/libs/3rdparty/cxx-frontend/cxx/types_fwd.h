@@ -195,6 +195,17 @@ struct TypePrintOptions {
   // parameters are not these.
   std::vector<std::string> parameterNames;
 
+  // What the type belongs to, for writing the template parameters in it
+  // under the names they were given. A type parameter is a depth and an
+  // index and has no name of its own -- one type stands for the first
+  // parameter of every template there is -- so the names can only come
+  // from the declaration the type was read off.
+  //
+  // Without this a parameter is written as "type-param<0, 0>", which says
+  // what it is rather than what it is called, and a list showing
+  // declarations to a reader wants the latter.
+  Symbol* templateParametersOf = nullptr;
+
   // Where the spaces go around the * and & of a pointer or a reference,
   // which is a matter of style and not of meaning: "char* s" by default,
   // "char *s" binding them to the name, "char * s" with both spaces, and

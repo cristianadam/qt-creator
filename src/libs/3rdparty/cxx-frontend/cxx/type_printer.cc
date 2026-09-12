@@ -464,9 +464,70 @@ class TypePrinter {
     specifiers_.append(to_string(type->symbol()->name()));
   }
 
+  // The name the template parameter at \a depth and \a index was given,
+  // where the caller said which declaration to read them off. Depth counts
+  // from the outside in: the parameters of a class template are at depth 0
+  // and those of a member template written inside it at depth 1.
+  [[nodiscard]] auto templateParameterName(int depth, int index) const
+      -> std::optional<std::string> {
+    if (!options_.templateParametersOf || depth < 0 || index < 0) {
+      return std::nullopt;
+    }
+
+    // A template's parameters hang off the template rather than standing
+    // between it and what encloses it, so the chain is read for what each
+    // symbol on it is a template of.
+    const auto listOf = [](Symbol* symbol) -> TemplateParametersSymbol* {
+      if (auto s = symbol_cast<ClassSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      if (auto s = symbol_cast<FunctionSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      if (auto s = symbol_cast<TypeAliasSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      if (auto s = symbol_cast<VariableSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      if (auto s = symbol_cast<ConceptSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      if (auto s = symbol_cast<DeductionGuideSymbol>(symbol)) {
+        return s->templateParameters();
+      }
+      return symbol_cast<TemplateParametersSymbol>(symbol);
+    };
+
+    std::vector<ScopeSymbol*> parameterLists;
+    for (Symbol* symbol = options_.templateParametersOf; symbol;
+         symbol = symbol->parent()) {
+      if (auto* list = listOf(symbol)) parameterLists.push_back(list);
+    }
+
+    // Collected from the inside out, which is the other way round.
+    if (std::cmp_greater_equal(depth, parameterLists.size())) {
+      return std::nullopt;
+    }
+    auto* parameters = parameterLists[parameterLists.size() - 1 - depth];
+
+    int position = 0;
+    for (auto parameter : parameters->members()) {
+      if (position++ != index) continue;
+      if (!parameter->name()) return std::nullopt;
+      return to_string(parameter->name());
+    }
+    return std::nullopt;
+  }
+
   void operator()(const TypeParameterType* type) {
     if (type->depth() < 0 || type->index() < 0) {
       specifiers_.append("<dependent-type>");
+      return;
+    }
+    if (auto name = templateParameterName(type->depth(), type->index())) {
+      specifiers_.append(*name);
+      if (type->isParameterPack()) specifiers_.append("...");
       return;
     }
     specifiers_.append(std::format("type-param<{}, {}>{}", type->index(),
@@ -475,6 +536,11 @@ class TypePrinter {
   }
 
   void operator()(const TemplateTypeParameterType* type) {
+    if (auto name = templateParameterName(type->depth(), type->index())) {
+      specifiers_.append(*name);
+      if (type->isParameterPack()) specifiers_.append("...");
+      return;
+    }
     specifiers_.append(std::format("template-type-param<{}, {}>{}",
                                    type->index(), type->depth(),
                                    type->isParameterPack() ? "..." : ""));
