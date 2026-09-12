@@ -208,6 +208,13 @@ public:
     // where it declares none.
     QList<QtProperty> qtPropertiesAt(int line, int column) const;
 
+    // The property a position is written on, which is the Q_PROPERTY token
+    // and the two parentheses around what it says. A position inside them
+    // is a question about the type, the name or an item, and answers
+    // nothing here -- as a path through a tree stops at the innermost node
+    // holding the position.
+    std::optional<QtProperty> qtPropertyAt(int line, int column) const;
+
 
     // The macros this file defines, in the form Config::predefinedMacros
     // takes, so that they can be handed to whatever includes it.

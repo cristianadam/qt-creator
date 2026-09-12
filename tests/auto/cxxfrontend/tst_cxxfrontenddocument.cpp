@@ -193,6 +193,7 @@ private slots:
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
     void readsWhatAQtPropertyDeclares();
+    void readsWhichQtPropertyAPositionIsOn();
     void readsACallAMetaObjectCouldMake();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
@@ -984,6 +985,51 @@ void tst_cxxfrontenddocument::readsWhatAQtPropertyDeclares()
 
     // Nothing is said of a position outside any class.
     QVERIFY(document.qtPropertiesAt(1, 1).isEmpty());
+}
+
+// Which property a cursor is on, which nothing else can answer: a property
+// declares nothing, so there is no symbol of it to find at a place.
+void tst_cxxfrontenddocument::readsWhichQtPropertyAPositionIsOn()
+{
+    //           1         2         3         4         5         6         7         8
+    //  1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678
+    //      Q_PROPERTY(const QString &title READ title WRITE setTitle NOTIFY titleChanged FINAL)
+    const CxxFrontendDocument document(
+        "class QString;\n"
+        "class Widget\n"
+        "{\n"
+        "    Q_OBJECT\n"
+        "    Q_PROPERTY(const QString &title READ title WRITE setTitle"
+        " NOTIFY titleChanged FINAL)\n"
+        "    Q_PROPERTY(int count MEMBER d->count CONSTANT)\n"
+        "};\n",
+        "<stdin>");
+
+    const auto nameAt = [&document](int line, int column) {
+        const std::optional<CxxFrontendDocument::QtProperty> property
+            = document.qtPropertyAt(line, column);
+        return property ? property->name : QString();
+    };
+
+    // The macro's own name, from its first character to the place a cursor
+    // ends up after it, and the parenthesis it ends with.
+    QCOMPARE(nameAt(5, 5), QString("title"));
+    QCOMPARE(nameAt(5, 10), QString("title"));
+    QCOMPARE(nameAt(5, 15), QString("title"));
+    QCOMPARE(nameAt(5, 89), QString("title"));
+    QCOMPARE(nameAt(6, 8), QString("count"));
+
+    // Inside the parentheses the question is about what the property says
+    // and not about the property: the type, the name, an item, and the end
+    // of the last of them, which is where the closing parenthesis begins.
+    QVERIFY(nameAt(5, 16).isEmpty());
+    QVERIFY(nameAt(5, 33).isEmpty());
+    QVERIFY(nameAt(5, 38).isEmpty());
+    QVERIFY(nameAt(5, 88).isEmpty());
+
+    // And a place where no property is written.
+    QVERIFY(nameAt(3, 1).isEmpty());
+    QVERIFY(nameAt(7, 1).isEmpty());
 }
 
 // A call a meta object could make instead: what it is made on, with what,

@@ -778,6 +778,12 @@ public:
     [[nodiscard]] CxxFrontendDocument::Completion::Candidate describeCandidate(
         cxx::Symbol *symbol) const;
 
+    // The innermost class a location is inside of.
+    [[nodiscard]] cxx::ClassSymbol *classAround(cxx::SourceLocation location) const;
+    // What one Q_PROPERTY says, as the caller reads it.
+    [[nodiscard]] CxxFrontendDocument::QtProperty describeProperty(
+        const cxx::QtProperty &property) const;
+
     QList<CxxFrontendDocument::Symbol> symbols;
     // Kept alongside symbols, same indices: the model behind each entry.
     std::vector<cxx::Symbol *> cxxSymbols;
@@ -4261,15 +4267,8 @@ QStringList CxxFrontendDocument::Private::basesOfClass(
     return bases;
 }
 
-QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int line,
-                                                                           int column) const
+cxx::ClassSymbol *CxxFrontendDocument::Private::classAround(cxx::SourceLocation location) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
-    if (!location)
-        return {};
-
-    // The innermost class the position is inside of, which is the one whose
-    // properties are being asked about.
     cxx::ClassSymbol *found = nullptr;
     const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
         for (cxx::Symbol *member : scope->members()) {
@@ -4281,11 +4280,14 @@ QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int l
             walk(inner);
         }
     };
-    if (cxx::ScopeSymbol *global = d->unit.globalScope())
+    if (cxx::ScopeSymbol *global = unit.globalScope())
         walk(global);
-    if (!found)
-        return {};
+    return found;
+}
 
+CxxFrontendDocument::QtProperty CxxFrontendDocument::Private::describeProperty(
+    const cxx::QtProperty &property) const
+{
     // What stands between two tokens, with a space where the source had
     // anything at all: a type is written "const QString &" and a value may
     // be written "d->count".
@@ -4295,28 +4297,97 @@ QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int l
              at = cxx::SourceLocation(at.index() + 1)) {
             if (!text.isEmpty())
                 text += ' ';
-            text += fromStd(d->unit.tokenText(at));
+            text += fromStd(unit.tokenText(at));
         }
         return text;
     };
 
-    QList<QtProperty> properties;
-    for (const cxx::QtProperty &property : found->qtProperties()) {
-        QtProperty answer;
-        answer.name = property.name ? fromStd(cxx::to_string(property.name)) : QString();
-        answer.type = textOf(property.firstTypeToken, property.lastTypeToken);
-        if (const cxx::SourceLocation at = property.nameToken) {
-            const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
-            answer.line = int(position.line);
-            answer.column = int(position.column);
-        }
-        for (const cxx::QtPropertyItem &item : property.items) {
-            answer.items.append({fromStd(item.name),
-                                 textOf(item.firstToken, item.lastToken)});
-        }
-        properties.append(answer);
+    CxxFrontendDocument::QtProperty answer;
+    answer.name = property.name ? fromStd(cxx::to_string(property.name)) : QString();
+    answer.type = textOf(property.firstTypeToken, property.lastTypeToken);
+    if (const cxx::SourceLocation at = property.nameToken) {
+        const cxx::SourcePosition position = unit.tokenStartPosition(at);
+        answer.line = int(position.line);
+        answer.column = int(position.column);
     }
+    for (const cxx::QtPropertyItem &item : property.items)
+        answer.items.append({fromStd(item.name), textOf(item.firstToken, item.lastToken)});
+    return answer;
+}
+
+QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int line,
+                                                                           int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+
+    // The innermost class the position is inside of, which is the one whose
+    // properties are being asked about.
+    cxx::ClassSymbol *found = d->classAround(location);
+    if (!found)
+        return {};
+
+    QList<QtProperty> properties;
+    for (const cxx::QtProperty &property : found->qtProperties())
+        properties.append(d->describeProperty(property));
     return properties;
+}
+
+std::optional<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertyAt(
+    int line, int column) const
+{
+    // Not through tokenAt: a position on no token at all falls through to the
+    // next one there, and the position just after a property's closing
+    // parenthesis is one of those -- yet it is still a question about the
+    // property. So the places are compared as they were asked about.
+    const auto notBefore = [&](const cxx::SourcePosition &position) {
+        return line > int(position.line)
+               || (line == int(position.line) && column >= int(position.column));
+    };
+    const auto notAfter = [&](const cxx::SourcePosition &position) {
+        return line < int(position.line)
+               || (line == int(position.line) && column <= int(position.column));
+    };
+    // Both ends included: the place a cursor is put after a word is the end
+    // of that word, and it is still a question about it.
+    const auto within = [&](cxx::SourceLocation first, cxx::SourceLocation last) {
+        return first && last && notBefore(d->unit.tokenStartPosition(first))
+               && notAfter(d->unit.tokenEndPosition(last));
+    };
+
+    const std::function<std::optional<QtProperty>(cxx::ScopeSymbol *)> walk =
+        [&](cxx::ScopeSymbol *scope) -> std::optional<QtProperty> {
+        for (cxx::Symbol *member : scope->members()) {
+            auto *inner = member->asScopeSymbol();
+            if (!inner)
+                continue;
+            if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(inner)) {
+                for (const cxx::QtProperty &property : cls->qtProperties()) {
+                    if (!property.firstToken || !property.lastToken)
+                        continue;
+                    if (d->fileOf(property.firstToken) != d->fileName)
+                        continue;
+                    if (!within(property.firstToken, property.lastToken))
+                        continue;
+                    // Inside the parentheses the question is about what the
+                    // property says -- its type, its name, one of its items --
+                    // and not about the property itself. What is left is the
+                    // macro's own name and the two parentheses.
+                    const cxx::SourceLocation beforeClose{property.lastToken.index() - 1};
+                    if (within(property.firstTypeToken, beforeClose))
+                        continue;
+                    return d->describeProperty(property);
+                }
+            }
+            if (const std::optional<QtProperty> answer = walk(inner))
+                return answer;
+        }
+        return {};
+    };
+    if (cxx::ScopeSymbol *global = d->unit.globalScope())
+        return walk(global);
+    return {};
 }
 
 CxxFrontendDocument::MetaMethodCall CxxFrontendDocument::metaMethodCallAt(int line,
