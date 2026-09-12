@@ -572,6 +572,11 @@ public:
         // means the document does not have it at all.
         bool isDefinition = true;
 
+        // What Qt makes of it, where the file was read as Qt: a signal is
+        // emitted, a slot is connected to, and an invokable one is called
+        // by name through the meta object. None for everything else.
+        QtMethod qtMethod = QtMethod::None;
+
         // Whether a using declaration in this file brought the name in. The
         // built-in model answers such a name with the using declaration
         // itself rather than with what it names, which is what

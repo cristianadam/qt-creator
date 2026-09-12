@@ -14,6 +14,7 @@ class CppMcpSupportTest : public QObject
 private slots:
     void testGetFileSymbols();
     void testGetSymbolInfo();
+    void testGetSymbolInfoSaysWhatQtMakesOfIt();
     void testFindReferences();
     void testGetTypeHierarchy();
     void testFindCallers();

@@ -225,6 +225,23 @@ static std::optional<QList<CPlusPlus::Usage>> symbolUsagesOnTheModel(CPlusPlus::
     return usages;
 }
 
+// What Qt makes of a function, for a reader that has to know whether to
+// emit it, connect to it or call it. Nothing where it is none of those.
+static QString qtMethodOf(CPlusPlus::CxxFrontendDocument::QtMethod method)
+{
+    switch (method) {
+    case CPlusPlus::CxxFrontendDocument::QtMethod::Signal:
+        return "signal";
+    case CPlusPlus::CxxFrontendDocument::QtMethod::Slot:
+        return "slot";
+    case CPlusPlus::CxxFrontendDocument::QtMethod::Invokable:
+        return "invokable";
+    case CPlusPlus::CxxFrontendDocument::QtMethod::None:
+        break;
+    }
+    return {};
+}
+
 // What the other model says a file declares, in the shape this tool answers
 // with, and nothing where it cannot read the file.
 //
@@ -284,6 +301,8 @@ static std::optional<QJsonObject> symbolInfoOnTheModel(const Utils::FilePath &fi
         result.insert("qualified_name", declaration->name);
     if (!declaration->type.isEmpty())
         result.insert("type", declaration->type);
+    if (const QString qtMethod = qtMethodOf(declaration->qtMethod); !qtMethod.isEmpty())
+        result.insert("qt_method", qtMethod);
 
     // Where it was first declared, which is the declaration a reader is sent
     // to; where it is defined is the other side of it, unless the place
@@ -931,6 +950,16 @@ void registerMcpTools()
             const QString type = overview.prettyType(symbol->type());
             if (!type.isEmpty())
                 result.insert("type", type);
+
+            // What Qt makes of it, which either model can say.
+            if (const CPlusPlus::Function *function = symbol->type()->asFunctionType()) {
+                if (function->isSignal())
+                    result.insert("qt_method", "signal");
+                else if (function->isSlot())
+                    result.insert("qt_method", "slot");
+                else if (function->isInvokable())
+                    result.insert("qt_method", "invokable");
+            }
 
             const auto location = [](const CPlusPlus::Symbol *s) {
                 return QJsonObject{{"file", s->filePath().toUserOutput()},

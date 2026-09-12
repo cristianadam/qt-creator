@@ -118,6 +118,39 @@ void CppMcpSupportTest::testGetSymbolInfo()
     QCOMPARE(info.value("definition").toObject().value("line").toInt(), 1);
 }
 
+// What Qt makes of a member, which is what tells emitting it from calling
+// it. Read off the file as it is written: a class saying "signals:" says
+// it whether or not Qt is anywhere near the build.
+void CppMcpSupportTest::testGetSymbolInfoSaysWhatQtMakesOfIt()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+    CppEditor::Tests::TemporaryDir dir;
+    Utils::FilePath file;
+    QVERIFY(writeAndParse(dir,
+                          "class C\n"
+                          "{\n"
+                          "signals:\n"
+                          "    void changed(int v);\n"
+                          "public slots:\n"
+                          "    void reset();\n"
+                          "public:\n"
+                          "    void plain();\n"
+                          "};\n",
+                          &file));
+
+    const auto qtMethodAt = [&](int line, int column) {
+        return callTool("cpp_get_symbol_info",
+                        {{"file", file.toFSPathString()}, {"line", line}, {"column", column}})
+            .value("qt_method")
+            .toString();
+    };
+
+    QCOMPARE(qtMethodAt(4, 10), QString("signal"));
+    QCOMPARE(qtMethodAt(6, 10), QString("slot"));
+    QCOMPARE(qtMethodAt(8, 10), QString());
+}
+
 void CppMcpSupportTest::testFindReferences()
 {
     CppEditor::Tests::TestCase testCase;

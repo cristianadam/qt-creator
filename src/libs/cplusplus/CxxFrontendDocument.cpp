@@ -3429,6 +3429,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
     declaration.kind = kindOf(symbol);
+    declaration.qtMethod = qtMethodOf(symbol);
     declaration.type = d->describeType(symbol);
 
     if (const cxx::SourceLocation location = definition.location ? definition.location
@@ -3472,6 +3473,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int li
         declaration.line = symbol.line;
         declaration.column = symbol.column;
         declaration.kind = kindOf(declared);
+        declaration.qtMethod = qtMethodOf(declared);
         declaration.type = d->describeType(declared);
 
         // Where it was first declared, which is what tells one entity from
@@ -4741,6 +4743,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
     declaration.kind = kindOf(symbol);
+    declaration.qtMethod = qtMethodOf(symbol);
     declaration.type = d->describeType(symbol);
     const cxx::SourcePosition position = d->unit.tokenStartPosition(
         definition.location ? definition.location : symbol->location());
