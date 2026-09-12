@@ -187,7 +187,26 @@ public:
         QtMethod qtMethod = QtMethod::None;
         bool isQObject = false;
     };
+
+    // What a class declared with Q_PROPERTY, as written. The values are
+    // text because that is what they are -- "d->count" is one -- and what
+    // writes a getter for a property writes text too.
+    struct QtProperty
+    {
+        QString name;
+        QString type;    // as written, "const QString &" and not a path
+        int line = 0;    // where the name stands, one-based
+        int column = 0;
+        // READ -> "title", WRITE -> "setTitle", FINAL -> "". In the order
+        // the property wrote them.
+        QList<QPair<QString, QString>> items;
+    };
     const QList<Symbol> &symbols() const;
+
+    // The properties the class written at a position declares, in the
+    // order it wrote them. Nothing where no class is written there, or
+    // where it declares none.
+    QList<QtProperty> qtPropertiesAt(int line, int column) const;
 
     // The macros this file defines, in the form Config::predefinedMacros
     // takes, so that they can be handed to whatever includes it.

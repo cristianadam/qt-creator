@@ -9595,21 +9595,102 @@ auto Parser::parse_qt_class_macro() -> bool {
     return true;
   }
 
-  // The ones that take arguments: Q_PROPERTY, Q_ENUMS, Q_CLASSINFO and
-  // their like. What they say is not read yet, so what matters is that a
-  // class holding them still reads as a class.
   const auto& name = id->name();
   if (!name.starts_with("Q_")) return false;
   if (!LA(1).is(TokenKind::T_LPAREN)) return false;
 
   const auto start = currentLocation();
   (void)consumeToken();
+
+  if (name == "Q_PROPERTY" && classSymbol) {
+    if (!parse_qt_property(classSymbol)) {
+      rewind(start);
+      return false;
+    }
+    SourceLocation semicolonLoc;
+    (void)match(TokenKind::T_SEMICOLON, semicolonLoc);
+    return true;
+  }
+
+  // The rest of the ones that take arguments: Q_ENUMS, Q_CLASSINFO and
+  // their like. What they say is not read, so what matters is that a class
+  // holding them still reads as a class.
   if (!skip_balanced_parens()) {
     rewind(start);
     return false;
   }
   SourceLocation semicolonLoc;
   (void)match(TokenKind::T_SEMICOLON, semicolonLoc);
+  return true;
+}
+
+// The words moc reads a property's parts by. What stands in front of the
+// first of them is the type and the name of the property.
+static auto isQtPropertyItem(std::string_view text) -> bool {
+  static constexpr std::string_view items[] = {
+      "READ",     "WRITE",    "RESET",       "NOTIFY",  "REVISION",
+      "MEMBER",   "BINDABLE", "DESIGNABLE",  "STORED",  "SCRIPTABLE",
+      "USER",     "CONSTANT", "FINAL",       "REQUIRED"};
+  return std::ranges::contains(items, text);
+}
+
+// Q_PROPERTY(int value READ value WRITE setValue NOTIFY valueChanged), read
+// the way moc reads it: a type, a name, and then the items. Nothing here is
+// looked up -- the value written after an item is a piece of source, which
+// is what whoever writes a getter for it needs.
+auto Parser::parse_qt_property(ClassSymbol* classSymbol) -> bool {
+  SourceLocation lparenLoc;
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  std::vector<SourceLocation> tokens;
+  int depth = 1;
+  while (!lookat(TokenKind::T_EOF_SYMBOL)) {
+    if (lookat(TokenKind::T_RPAREN)) {
+      if (--depth == 0) {
+        (void)consumeToken();
+        break;
+      }
+    } else if (lookat(TokenKind::T_LPAREN)) {
+      ++depth;
+    }
+    tokens.push_back(consumeToken());
+  }
+
+  const auto textOf = [&](SourceLocation loc) -> const std::string& {
+    return unit_->tokenText(loc);
+  };
+
+  std::size_t firstItem = tokens.size();
+  for (std::size_t i = 0; i < tokens.size(); ++i) {
+    if (!isQtPropertyItem(textOf(tokens[i]))) continue;
+    firstItem = i;
+    break;
+  }
+
+  // A type and a name, in that order, and nothing to say without them.
+  if (firstItem < 2) return true;
+
+  QtProperty property;
+  property.nameToken = tokens[firstItem - 1];
+  property.name = unit_->identifier(property.nameToken);
+  property.firstTypeToken = tokens.front();
+  property.lastTypeToken = tokens[firstItem - 2];
+
+  for (std::size_t i = firstItem; i < tokens.size();) {
+    QtPropertyItem item;
+    item.name = textOf(tokens[i]);
+    ++i;
+    // What follows it, up to the next item, is its value -- and some of
+    // them are written alone.
+    while (i < tokens.size() && !isQtPropertyItem(textOf(tokens[i]))) {
+      if (!item.firstToken) item.firstToken = tokens[i];
+      item.lastToken = tokens[i];
+      ++i;
+    }
+    property.items.push_back(std::move(item));
+  }
+
+  classSymbol->addQtProperty(std::move(property));
   return true;
 }
 

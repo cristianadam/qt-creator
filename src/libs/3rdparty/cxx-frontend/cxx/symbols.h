@@ -784,6 +784,26 @@ class UnresolvedSymbol final : public Symbol {
   ~UnresolvedSymbol() override;
 };
 
+// One item of a Q_PROPERTY: the word moc reads it by, and where the value
+// written after it stands. A value is a piece of source and not a name --
+// "d->value()" is one -- so it is kept as the run of tokens it is, for
+// whoever wants its text to read it.
+struct QtPropertyItem {
+  std::string name;
+  SourceLocation firstToken;
+  SourceLocation lastToken;
+};
+
+// What a Q_PROPERTY says, as written: moc reads the text of it, and so does
+// anything that writes a getter for it.
+struct QtProperty {
+  SourceLocation firstTypeToken;
+  SourceLocation lastTypeToken;
+  const Identifier* name = nullptr;
+  SourceLocation nameToken;
+  std::vector<QtPropertyItem> items;
+};
+
 class ClassSymbol final : public ScopeSymbol,
                           public MaybeTemplate<ClassSymbol, SpecifierAST>,
                           public MaybeRedecl<ClassSymbol> {
@@ -876,6 +896,11 @@ class ClassSymbol final : public ScopeSymbol,
 
   [[nodiscard]] auto isQGadget() const -> bool;
   void setQGadget(bool isQGadget);
+
+  // The properties the class declared with Q_PROPERTY, in the order it
+  // wrote them. Empty where the Qt extensions were not read.
+  [[nodiscard]] auto qtProperties() const -> const std::vector<QtProperty>&;
+  void addQtProperty(QtProperty property);
 
   [[nodiscard]] auto isComplete() const -> bool;
   void setComplete(bool isComplete);
@@ -984,6 +1009,7 @@ class ClassSymbol final : public ScopeSymbol,
 
  private:
   std::vector<BaseClassSymbol*> baseClasses_;
+  std::vector<QtProperty> qtProperties_;
   std::vector<ClassSymbol*> befriendingClasses_;
   std::vector<TemplateFriendship> templateFriendships_;
   ClassSymbol* instantiationPattern_ = nullptr;

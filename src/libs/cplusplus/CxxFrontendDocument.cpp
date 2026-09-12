@@ -4259,6 +4259,64 @@ QStringList CxxFrontendDocument::Private::basesOfClass(
     return bases;
 }
 
+QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int line,
+                                                                           int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+
+    // The innermost class the position is inside of, which is the one whose
+    // properties are being asked about.
+    cxx::ClassSymbol *found = nullptr;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        for (cxx::Symbol *member : scope->members()) {
+            auto *inner = member->asScopeSymbol();
+            if (!inner || !inner->contains(location))
+                continue;
+            if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(inner))
+                found = cls;
+            walk(inner);
+        }
+    };
+    if (cxx::ScopeSymbol *global = d->unit.globalScope())
+        walk(global);
+    if (!found)
+        return {};
+
+    // What stands between two tokens, with a space where the source had
+    // anything at all: a type is written "const QString &" and a value may
+    // be written "d->count".
+    const auto textOf = [&](cxx::SourceLocation first, cxx::SourceLocation last) {
+        QString text;
+        for (cxx::SourceLocation at = first; at && at.index() <= last.index();
+             at = cxx::SourceLocation(at.index() + 1)) {
+            if (!text.isEmpty())
+                text += ' ';
+            text += fromStd(d->unit.tokenText(at));
+        }
+        return text;
+    };
+
+    QList<QtProperty> properties;
+    for (const cxx::QtProperty &property : found->qtProperties()) {
+        QtProperty answer;
+        answer.name = property.name ? fromStd(cxx::to_string(property.name)) : QString();
+        answer.type = textOf(property.firstTypeToken, property.lastTypeToken);
+        if (const cxx::SourceLocation at = property.nameToken) {
+            const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+            answer.line = int(position.line);
+            answer.column = int(position.column);
+        }
+        for (const cxx::QtPropertyItem &item : property.items) {
+            answer.items.append({fromStd(item.name),
+                                 textOf(item.firstToken, item.lastToken)});
+        }
+        properties.append(answer);
+    }
+    return properties;
+}
+
 QStringList CxxFrontendDocument::basesAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);

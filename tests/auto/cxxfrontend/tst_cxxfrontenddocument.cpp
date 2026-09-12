@@ -192,6 +192,7 @@ private slots:
     void reportsDiagnostics();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
+    void readsWhatAQtPropertyDeclares();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
@@ -942,6 +943,46 @@ void tst_cxxfrontenddocument::readsWhatQtWritesOnTopOfCxx()
         QVERIFY(symbol.isQObject);
     }
     QVERIFY(sawWidget);
+}
+
+// What a class says about its properties, which is what writing a getter,
+// a setter or a notification for one needs. The values are text because
+// that is what Q_PROPERTY writes: "d->count" is a value.
+void tst_cxxfrontenddocument::readsWhatAQtPropertyDeclares()
+{
+    const CxxFrontendDocument document(
+        "class QString;\n"
+        "class Widget\n"
+        "{\n"
+        "    Q_OBJECT\n"
+        "    Q_PROPERTY(const QString &title READ title WRITE setTitle"
+        " NOTIFY titleChanged FINAL)\n"
+        "    Q_PROPERTY(int count MEMBER d->count CONSTANT)\n"
+        "};\n",
+        "<stdin>");
+
+    // Asked of a position inside the class, which is what a fix offered on
+    // one has.
+    const QList<CxxFrontendDocument::QtProperty> properties
+        = document.qtPropertiesAt(5, 10);
+    QCOMPARE(properties.size(), 2);
+
+    QCOMPARE(properties.first().name, QString("title"));
+    QCOMPARE(properties.first().type, QString("const QString &"));
+    QCOMPARE(properties.first().line, 5);
+    const QList<QPair<QString, QString>> expected{{"READ", "title"},
+                                                  {"WRITE", "setTitle"},
+                                                  {"NOTIFY", "titleChanged"},
+                                                  {"FINAL", ""}};
+    QCOMPARE(properties.first().items, expected);
+
+    QCOMPARE(properties.last().name, QString("count"));
+    QCOMPARE(properties.last().type, QString("int"));
+    QCOMPARE(properties.last().items.first(), qMakePair(QString("MEMBER"),
+                                                        QString("d -> count")));
+
+    // Nothing is said of a position outside any class.
+    QVERIFY(document.qtPropertiesAt(1, 1).isEmpty());
 }
 
 // Document's questions that cannot be answered on this model yet, asserted so

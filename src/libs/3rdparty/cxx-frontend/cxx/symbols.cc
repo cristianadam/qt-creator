@@ -959,6 +959,14 @@ auto ClassSymbol::isQGadget() const -> bool { return isQGadget_; }
 
 void ClassSymbol::setQGadget(bool isQGadget) { isQGadget_ = isQGadget; }
 
+auto ClassSymbol::qtProperties() const -> const std::vector<QtProperty>& {
+  return qtProperties_;
+}
+
+void ClassSymbol::addQtProperty(QtProperty property) {
+  qtProperties_.push_back(std::move(property));
+}
+
 auto ClassSymbol::baseClasses() const -> const std::vector<BaseClassSymbol*>& {
   return baseClasses_;
 }
