@@ -1502,6 +1502,13 @@ void FunctionSymbol::addOverriddenFunction(FunctionSymbol* function) {
 auto FunctionSymbol::overrides(FunctionSymbol* function) const -> bool {
   if (!function) return false;
 
+  // Laying out one vtable asks this of every pair of virtual functions it
+  // can see, so what it costs where the answer is plain is what it costs.
+  // A function overrides what it was declared over, and that is where the
+  // answer nearly always is -- found there, nothing is built to find it.
+  if (std::ranges::contains(overriddenFunctions_, function)) return true;
+  if (overriddenFunctions_.empty()) return false;
+
   std::vector<const FunctionSymbol*> pending{this};
   std::unordered_set<const FunctionSymbol*> visited;
 
