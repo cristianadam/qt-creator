@@ -475,6 +475,19 @@ std::optional<CPlusPlus::CxxFrontendDocument::DiscardedValue> cxxFrontendDiscard
 // Nothing where the model has no such file, and then the caller answers the
 // way it did before. An invalid answer is an answer: the position is in no
 // switch, or in one there is nothing to complete.
+// The call a meta object could make instead of the one at a position:
+// what is called on what, with what, and how much of the line says so.
+// Nothing where the model has no such file, or where the position is on
+// no call Qt can make by name.
+// What a name means where \a filePath can see it: whether anything is
+// declared under it at all, and what. Nothing where the model has no such
+// file. The question a fix asks before writing an include for something.
+std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendLookup(
+    const Utils::FilePath &filePath, const QString &name);
+
+std::optional<CPlusPlus::CxxFrontendDocument::MetaMethodCall> cxxFrontendMetaMethodCallAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 std::optional<CPlusPlus::CxxFrontendDocument::Switch> cxxFrontendSwitchAt(
     const Utils::FilePath &filePath, int line, int column);
 

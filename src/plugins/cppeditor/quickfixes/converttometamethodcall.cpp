@@ -12,6 +12,10 @@
 #include <cplusplus/Overview.h>
 #include <cplusplus/TypeOfExpression.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #endif
@@ -192,12 +196,62 @@ MetaMethodCall builtinMetaMethodCallAt(const CppQuickFixInterface &interface)
     return call;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same, off the cxx-frontend model. Nothing where it has no such file,
+// where the position is on no call Qt can make by name, or where the text
+// the new call is built from is not all there.
+std::optional<MetaMethodCall> modelMetaMethodCallAt(const CppQuickFixInterface &interface)
+{
+    const int line = interface.currentFile()->cursor().blockNumber() + 1;
+    const int column = interface.currentFile()->cursor().positionInBlock() + 1;
+    const std::optional<CPlusPlus::CxxFrontendDocument::MetaMethodCall> read
+        = cxxFrontendMetaMethodCallAt(interface.currentFile()->filePath(), line, column);
+    if (!read)
+        return std::nullopt;
+
+    const auto textOf = [&](const CPlusPlus::CxxFrontendDocument::Extent &extent) {
+        const int start = interface.currentFile()->position(extent.startLine, extent.startColumn);
+        const int end = interface.currentFile()->position(extent.endLine, extent.endColumn);
+        return interface.currentFile()->textOf(start, end);
+    };
+
+    MetaMethodCall call;
+    call.startPosition = interface.currentFile()->position(read->replaced.startLine,
+                                                           read->replaced.startColumn);
+    call.endPosition = interface.currentFile()->position(read->replaced.endLine,
+                                                         read->replaced.endColumn);
+    call.baseExpression = textOf(read->base);
+    call.baseIsPointer = read->baseIsPointer;
+    call.methodName = read->methodName;
+    for (const auto &argument : read->arguments)
+        call.arguments << MetaMethodCall::Argument{argument.type, textOf(argument.written)};
+
+    // Whether the file can name QMetaObject already, which is a lookup
+    // from where the call stands.
+    if (const std::optional<CPlusPlus::CxxFrontendDocument::Declaration> declared
+        = cxxFrontendLookup(interface.currentFile()->filePath(), "QMetaObject")) {
+        call.metaObjectIsDeclared = declared->isValid()
+                                    && declared->kind
+                                           == CPlusPlus::CxxFrontendDocument::Kind::Class;
+    }
+
+    return call;
+}
+#endif
+
 //! Converts a normal function call into a meta method invocation, if the functions is
 //! marked as invokable.
 class ConvertToMetaMethodCall : public CppQuickFixFactory
 {
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (const std::optional<MetaMethodCall> onTheModel = modelMetaMethodCallAt(interface)) {
+            if (onTheModel->isValid())
+                result << new ConvertToMetaMethodCallOp(interface, *onTheModel);
+            return;
+        }
+#endif
         const MetaMethodCall call = builtinMetaMethodCallAt(interface);
         if (!call.isValid())
             return;

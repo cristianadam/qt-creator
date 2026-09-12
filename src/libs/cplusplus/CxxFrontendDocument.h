@@ -208,6 +208,7 @@ public:
     // where it declares none.
     QList<QtProperty> qtPropertiesAt(int line, int column) const;
 
+
     // The macros this file defines, in the form Config::predefinedMacros
     // takes, so that they can be handed to whatever includes it.
     QStringList definedMacros() const;
@@ -689,6 +690,40 @@ public:
 
         bool isValid() const { return startLine > 0 && endLine > 0; }
     };
+
+    // A call a meta object could make instead of whoever wrote it: what is
+    // called on what, with what, and how much of the line says so. Every
+    // piece of it is a place, since what the new call quotes is the text
+    // the file has and not what this model would print.
+    //
+    // Nothing unless the position is on a member function call of
+    // something Qt can invoke by name -- a signal, a slot, or a member
+    // marked Q_INVOKABLE.
+    struct MetaMethodCall
+    {
+        // An argument as Q_ARG takes it: where it is written, and the type
+        // it has, which is the one thing here the file does not say.
+        struct Argument
+        {
+            QString type;
+            Extent written;
+        };
+
+        // What is replaced, taking in the "emit" or "Q_EMIT" in front of
+        // the call where one stands there.
+        Extent replaced;
+
+        Extent base;
+        // Whether what the call is made on is already a pointer, which is
+        // what QMetaObject::invokeMethod() wants.
+        bool baseIsPointer = false;
+
+        QString methodName;
+        QList<Argument> arguments;
+
+        bool isValid() const { return replaced.isValid() && !methodName.isEmpty(); }
+    };
+    MetaMethodCall metaMethodCallAt(int line, int column) const;
 
     // The class written at a position, as the file about to give it away
     // reads it -- what moving a class to files of its own needs to know

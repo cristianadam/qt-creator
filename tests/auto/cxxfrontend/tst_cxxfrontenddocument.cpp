@@ -193,6 +193,7 @@ private slots:
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
     void readsWhatAQtPropertyDeclares();
+    void readsACallAMetaObjectCouldMake();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
@@ -983,6 +984,52 @@ void tst_cxxfrontenddocument::readsWhatAQtPropertyDeclares()
 
     // Nothing is said of a position outside any class.
     QVERIFY(document.qtPropertiesAt(1, 1).isEmpty());
+}
+
+// A call a meta object could make instead: what it is made on, with what,
+// and how much of the line has to go. Each piece is a place, since what
+// the new call quotes is the text the file has.
+void tst_cxxfrontenddocument::readsACallAMetaObjectCouldMake()
+{
+    const CxxFrontendDocument document("class C {\n"
+                                       "public:\n"
+                                       "    C() {\n"
+                                       "        C c;\n"
+                                       "        emit this->twoArgs(0, c);\n"
+                                       "        this->notInvokable();\n"
+                                       "    }\n"
+                                       "signals:\n"
+                                       "    void twoArgs(int index, const C &value);\n"
+                                       "private:\n"
+                                       "    void notInvokable();\n"
+                                       "};\n",
+                                       "<stdin>");
+    QVERIFY(document.diagnostics().isEmpty());
+
+    const CxxFrontendDocument::MetaMethodCall call = document.metaMethodCallAt(5, 22);
+    QVERIFY(call.isValid());
+    QCOMPARE(call.methodName, QString("twoArgs"));
+
+    // The "emit" goes with it, and the range ends past the ")".
+    QCOMPARE(call.replaced.startLine, 5);
+    QCOMPARE(call.replaced.startColumn, 9);
+    QCOMPARE(call.replaced.endLine, 5);
+    QCOMPARE(call.replaced.endColumn, 33);
+
+    // Called on a pointer, so nothing has to have its address taken.
+    QVERIFY(call.baseIsPointer);
+    QCOMPARE(call.base.startColumn, 14);
+
+    // The type each argument is written with, which is what was written
+    // and not what the call asked for: "c" is a C, whatever the parameter
+    // it is bound to says.
+    QCOMPARE(call.arguments.size(), 2);
+    QCOMPARE(call.arguments.first().type, QString("int"));
+    QCOMPARE(call.arguments.last().type, QString("C"));
+    QCOMPARE(call.arguments.last().written.startColumn, 31);
+
+    // A member Qt cannot invoke by name is not one of these.
+    QVERIFY(!document.metaMethodCallAt(6, 15).isValid());
 }
 
 // Document's questions that cannot be answered on this model yet, asserted so

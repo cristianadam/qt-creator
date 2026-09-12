@@ -4317,6 +4317,104 @@ QList<CxxFrontendDocument::QtProperty> CxxFrontendDocument::qtPropertiesAt(int l
     return properties;
 }
 
+CxxFrontendDocument::MetaMethodCall CxxFrontendDocument::metaMethodCallAt(int line,
+                                                                         int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    const auto holds = [](cxx::AST *node, cxx::SourceLocation what) {
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return what.index() >= first && what.index() < last;
+    };
+
+    // The innermost call the position is on. The walk reaches the outer
+    // ones first, so the last one that holds the position is the one.
+    cxx::CallExpressionAST *call = nullptr;
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        if (auto * const candidate = dynamic_cast<cxx::CallExpressionAST *>(*slot);
+            candidate && holds(candidate, location)) {
+            call = candidate;
+        }
+    }
+    if (!call)
+        return {};
+
+    // Called on something, which is what a meta object needs to invoke it.
+    auto * const member = dynamic_cast<cxx::MemberExpressionAST *>(call->baseExpression);
+    if (!member || !member->baseExpression || !member->unqualifiedId)
+        return {};
+
+    // And callable by name: a signal, a slot or a Q_INVOKABLE.
+    auto * const function = dynamic_cast<cxx::FunctionSymbol *>(member->symbol);
+    if (!function || function->qtMethodKind() == cxx::QtMethodKind::kNone)
+        return {};
+
+    const auto extentOf = [&](cxx::AST *node) {
+        const CxxAstRange range = cxxAstRangeOf(*this, node);
+        return Extent{range.startLine, range.startColumn, range.endLine, range.endColumn};
+    };
+
+    MetaMethodCall answer;
+    answer.base = extentOf(member->baseExpression);
+    if (!answer.base.isValid())
+        return {};
+
+    // What it is called on, as the checker read it: a pointer is handed
+    // over as it stands, and anything else has its address taken.
+    if (const cxx::Type *type = member->baseExpression->type) {
+        answer.baseIsPointer = cxx::unqualified_cast<cxx::PointerType>(type) != nullptr;
+    }
+
+    answer.methodName = fromStd(cxx::to_string(function->name()));
+    if (answer.methodName.isEmpty())
+        return {};
+
+    for (cxx::ExpressionAST *argument : cxx::ListView{call->expressionList}) {
+        // What was written, not what the call asked for: an argument bound
+        // to a "const C &" parameter is written as the C it is, and that is
+        // the type Q_ARG has to be given.
+        while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(argument))
+            argument = cast->expression;
+        if (!argument || !argument->type)
+            return {};
+        MetaMethodCall::Argument written;
+        // Printed as it has to be written inside Q_ARG, which is where
+        // the reader of it stands.
+        written.type = applyStarBinding(fromStd(cxx::to_string(argument->type, "",
+                                                               {.omitEnclosingScope = true})),
+                                        d->config.settings);
+        written.written = extentOf(argument);
+        if (!written.written.isValid())
+            return {};
+        answer.arguments.append(written);
+    }
+
+    const Extent whole = extentOf(call);
+    if (!whole.isValid())
+        return {};
+    answer.replaced = whole;
+
+    // The "emit" in front of it goes too, there being nothing to emit
+    // once the call is a call on a meta object.
+    if (const unsigned first = call->firstSourceLocation().index(); first > 0) {
+        const cxx::SourceLocation before{first - 1};
+        const QString text = fromStd(d->unit.tokenText(before));
+        if (text == "emit" || text == "Q_EMIT") {
+            const cxx::SourcePosition start = d->unit.tokenStartPosition(before);
+            answer.replaced.startLine = int(start.line);
+            answer.replaced.startColumn = int(start.column);
+        }
+    }
+
+    return answer;
+}
+
 QStringList CxxFrontendDocument::basesAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);
