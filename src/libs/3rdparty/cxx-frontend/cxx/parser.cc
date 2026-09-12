@@ -9603,7 +9603,7 @@ auto Parser::parse_qt_class_macro() -> bool {
   (void)consumeToken();
 
   if (name == "Q_PROPERTY" && classSymbol) {
-    if (!parse_qt_property(classSymbol)) {
+    if (!parse_qt_property(classSymbol, start)) {
       rewind(start);
       return false;
     }
@@ -9638,16 +9638,18 @@ static auto isQtPropertyItem(std::string_view text) -> bool {
 // the way moc reads it: a type, a name, and then the items. Nothing here is
 // looked up -- the value written after an item is a piece of source, which
 // is what whoever writes a getter for it needs.
-auto Parser::parse_qt_property(ClassSymbol* classSymbol) -> bool {
+auto Parser::parse_qt_property(ClassSymbol* classSymbol,
+                               SourceLocation macroLoc) -> bool {
   SourceLocation lparenLoc;
   if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
 
+  SourceLocation rparenLoc;
   std::vector<SourceLocation> tokens;
   int depth = 1;
   while (!lookat(TokenKind::T_EOF_SYMBOL)) {
     if (lookat(TokenKind::T_RPAREN)) {
       if (--depth == 0) {
-        (void)consumeToken();
+        rparenLoc = consumeToken();
         break;
       }
     } else if (lookat(TokenKind::T_LPAREN)) {
@@ -9671,6 +9673,10 @@ auto Parser::parse_qt_property(ClassSymbol* classSymbol) -> bool {
   if (firstItem < 2) return true;
 
   QtProperty property;
+  property.firstToken = macroLoc;
+  // The parenthesis where the property ends, or the last token read where
+  // the file stopped before one.
+  property.lastToken = rparenLoc ? rparenLoc : tokens.back();
   property.nameToken = tokens[firstItem - 1];
   property.name = unit_->identifier(property.nameToken);
   property.firstTypeToken = tokens.front();

@@ -797,6 +797,11 @@ struct QtPropertyItem {
 // What a Q_PROPERTY says, as written: moc reads the text of it, and so does
 // anything that writes a getter for it.
 struct QtProperty {
+  // The whole of it, from the Q_PROPERTY token to the closing parenthesis.
+  // Nothing declares a property, so this is the only place an editor can
+  // tell that the cursor is on one.
+  SourceLocation firstToken;
+  SourceLocation lastToken;
   SourceLocation firstTypeToken;
   SourceLocation lastTypeToken;
   const Identifier* name = nullptr;

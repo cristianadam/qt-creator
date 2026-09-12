@@ -219,7 +219,8 @@ class Parser final {
   [[nodiscard]] auto qtExtensions() const -> bool;
   [[nodiscard]] auto parse_qt_access_specifier(DeclarationAST*& yyast) -> bool;
   [[nodiscard]] auto parse_qt_class_macro() -> bool;
-  [[nodiscard]] auto parse_qt_property(ClassSymbol* classSymbol) -> bool;
+  [[nodiscard]] auto parse_qt_property(ClassSymbol* classSymbol,
+                                       SourceLocation macroLoc) -> bool;
   [[nodiscard]] auto parse_qt_method_specifier(QtMethodKind& kind) -> bool;
   [[nodiscard]] auto parse_qt_emit() -> bool;
   [[nodiscard]] auto skip_balanced_parens() -> bool;
