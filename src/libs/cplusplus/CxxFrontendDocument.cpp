@@ -1752,18 +1752,36 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
 
     IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders, {}};
 
-    unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
-    while (state)
-        std::visit(state, unit.continuePreprocessing());
-    unit.endPreprocessing();
+    // The front end reports what it cannot make sense of as a diagnostic, but
+    // where it finds itself in a state it does not allow -- a defect of its
+    // own -- it throws, and there is no answer to be had from a document it
+    // threw out of. Whoever asked is told nothing and reads the file the
+    // other way, which is what every consumer of this model does with an
+    // answer it does not give; letting it out of here would take the whole
+    // editor down instead, this being the parser's thread.
+    try {
+        unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
+        while (state)
+            std::visit(state, unit.continuePreprocessing());
+        unit.endPreprocessing();
 
-    unit.parse({.checkTypes = true,
-                .complete = [this](const cxx::CodeCompletionContext &context) {
-                    recordCompletion(context);
-                }});
+        unit.parse({.checkTypes = true,
+                    .complete = [this](const cxx::CodeCompletionContext &context) {
+                        recordCompletion(context);
+                    }});
 
-    if (cxx::ScopeSymbol *global = unit.globalScope())
-        collect(global, {});
+        if (cxx::ScopeSymbol *global = unit.globalScope())
+            collect(global, {});
+    } catch (const std::exception &exception) {
+        // Said of the file as a whole, there being no place in it this is
+        // about, and as an error, so that anything reading the file with an
+        // eye to rewriting it hands back.
+        symbols.clear();
+        diagnostics.append({1, 1,
+                            QString("the C++ front end could not read this file: %1")
+                                .arg(QString::fromUtf8(exception.what())),
+                            true});
+    }
 }
 
 CxxFrontendDocument::CxxFrontendDocument(const QString &source, const QString &fileName)

@@ -190,6 +190,7 @@ private slots:
     void noCompletionWhereNoneWasAsked();
 
     void reportsDiagnostics();
+    void aFileTheFrontEndCannotReadIsNotFatal();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
@@ -854,6 +855,34 @@ void tst_cxxfrontenddocument::reportsDiagnostics()
     QVERIFY(!bad.diagnostics().isEmpty());
     QCOMPARE(bad.diagnostics().first().line, 1);
     QVERIFY(bad.diagnostics().first().isError);
+}
+
+// What the front end does where it finds itself in a state it does not allow:
+// it throws, and a document that cannot be read has to say so rather than take
+// the process with it. Every answer is then empty, which is what a consumer
+// reads as "ask the other model".
+//
+// The source below is the shortest thing found that does it -- the definition
+// of a static data member template of a class template, which is how
+// QVarLengthArray is written and so how every file that includes <QVariant>
+// reaches this.
+void tst_cxxfrontenddocument::aFileTheFrontEndCannotReadIsNotFatal()
+{
+    const CxxFrontendDocument document("template <class T>\n"
+                                       "struct B {\n"
+                                       "    template <typename U> static U y;\n"
+                                       "};\n"
+                                       "\n"
+                                       "template <class T>\n"
+                                       "template <typename U>\n"
+                                       "U B<T>::y;\n",
+                                       "<stdin>");
+
+    QVERIFY(document.symbols().isEmpty());
+    QVERIFY(!document.diagnostics().isEmpty());
+    const CxxFrontendDocument::Diagnostic &diagnostic = document.diagnostics().last();
+    QVERIFY(diagnostic.isError);
+    QVERIFY2(diagnostic.text.contains("could not read this file"), qPrintable(diagnostic.text));
 }
 
 // Document's questions that cannot be answered on this model yet, asserted so
