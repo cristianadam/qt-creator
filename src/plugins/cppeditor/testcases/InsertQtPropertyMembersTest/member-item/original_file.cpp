@@ -1,4 +1,4 @@
 struct QObject { void connect(); };
 struct XmarksTheSpot : public QObject {
-    @Q_PROPERTY(int it READ getIt WRITE setIt RESET resetIt NOTIFY itChanged)
+    @Q_PROPERTY(int it MEMBER m_it NOTIFY itChanged)
 };
