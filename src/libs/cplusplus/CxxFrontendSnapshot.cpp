@@ -195,11 +195,20 @@ QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString 
                && declaration.canonicalColumn == target.canonicalColumn;
     };
 
+    // Where the thing was first declared, which is its home. A file that
+    // includes a header may declare what the header declares over again --
+    // "extern int x;" -- and that is the same thing, linked as such by the
+    // front end, so a search started at either place has to reach the other:
+    // the files to read are the ones that reach the first declaration, not
+    // the ones that reach whichever place the search began at.
+    const QString declaringFile = target.canonicalLine != 0 ? target.canonicalFilePath
+                                                            : target.filePath;
+
     QList<Usage> usages;
     for (const QString &file : files()) {
         // A file that does not reach the declaring file cannot be naming what
         // it declares.
-        if (file != target.filePath && !allIncludesFor(file).contains(target.filePath))
+        if (file != declaringFile && !allIncludesFor(file).contains(declaringFile))
             continue;
 
         const CxxFrontendDocument *candidate = document(file);
@@ -235,23 +244,27 @@ QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString 
         }
     }
 
-    // The place the thing was declared, when that file is not one of the
+    // The places the thing was declared, when their file is not one of the
     // ones searched: a header is read into whoever includes it rather than
     // being a document of its own, and where it declares something is
     // known from the declaration itself.
-    const auto isTheDeclaration = [&](const Usage &usage) {
-        return usage.filePath == target.filePath && usage.line == target.line
-               && usage.column == target.column;
-    };
-    if (std::none_of(usages.cbegin(), usages.cend(), isTheDeclaration)) {
+    const auto declaredAt = [&](const QString &file, int line, int column) {
+        const auto isThatPlace = [&](const Usage &usage) {
+            return usage.filePath == file && usage.line == line && usage.column == column;
+        };
+        if (std::any_of(usages.cbegin(), usages.cend(), isThatPlace))
+            return;
         Usage usage;
-        usage.filePath = target.filePath;
-        usage.line = target.line;
-        usage.column = target.column;
+        usage.filePath = file;
+        usage.line = line;
+        usage.column = column;
         usage.length = int(name.size());
         usage.isDeclaration = true;
         usages.append(usage);
-    }
+    };
+    declaredAt(target.filePath, target.line, target.column);
+    if (target.canonicalLine != 0)
+        declaredAt(target.canonicalFilePath, target.canonicalLine, target.canonicalColumn);
     return usages;
 }
 
@@ -304,11 +317,6 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // the definition of a class forward declared in this file may be in a
         // file nothing here includes.
         "finding a definition across files that are not included",
-        // Whether "extern int x;" here declares the x a header declared or
-        // one of this file's own. Needs linkage, where everything above is
-        // about scopes, so the two stay two things and a search from either
-        // one does not reach the other.
-        "unqualified redeclarations across files",
     };
 }
 

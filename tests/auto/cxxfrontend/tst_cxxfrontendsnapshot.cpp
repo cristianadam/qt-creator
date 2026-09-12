@@ -129,7 +129,8 @@ private slots:
     void aUsageThroughABaseIsFound();
     void aUsageFromAMacroArgumentIsReportedOnce();
     void aUsageFromAMacroBodyIsNotReported();
-    void anUnqualifiedRedeclarationIsNotReported();
+    void anUnqualifiedRedeclarationIsReported();
+    void aDeclarationInAHeaderNobodyReadIsReported();
     void aPositionThatNamesNothingHasNoUsages();
     void aMemberNamedThroughAnObjectIsFound();
 
@@ -740,21 +741,22 @@ void tst_cxxfrontendsnapshot::theDeclarationIsAPlaceToSearchFrom()
              QStringList({"a.cpp:2:12", "h.h:1:5 (declaration)"}));
 }
 
-// Matching on the spelling would report this, and it would be wrong: the name
-// in a.cpp means a.cpp's own variable. Which is why every place is resolved
-// and compared against the declaration being searched for.
+// Matching on the spelling would report these, and it would be wrong: what
+// a.cpp calls "both" is a variable of its own, declared in a scope of its
+// own, and the front end links it to nothing. Which is why every place is
+// resolved and compared against the declaration being searched for.
 void tst_cxxfrontendsnapshot::aNameThatMeansSomethingElseIsNotAUsage()
 {
     Files files;
-    files.add("h.h", "int both;\n");
+    files.add("h.h", "namespace N { int both; }\n");
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nint both;\nvoid f() { both = 1; }\n");
-    snapshot.process("h.h", "int both;\n");
+    snapshot.process("h.h", "namespace N { int both; }\n");
 
-    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
-             QStringList("h.h:1:5 (declaration)"));
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 19)),
+             QStringList("h.h:1:19 (declaration)"));
     QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 3, 12)),
              QStringList({"a.cpp:2:5 (declaration)", "a.cpp:3:12"}));
 }
@@ -849,12 +851,17 @@ void tst_cxxfrontendsnapshot::aUsageFromAMacroBodyIsNotReported()
              QStringList("a.cpp:1:5 (declaration)"));
 }
 
-// The price of that rule, and the reason it is written down. "extern int x;"
-// looks exactly like a file's own variable, and saying that it is the header's
-// x is a question about linkage, not about scopes. So the two are two things
-// here: a search from either side finds that side's places, and neither
-// reaches the other.
-void tst_cxxfrontendsnapshot::anUnqualifiedRedeclarationIsNotReported()
+// The other side of that rule. "extern int x;" in a file that includes the
+// header declaring x names the header's x -- the front end reads the header
+// into the file and links the two -- so both places are the same thing and a
+// search started at either of them finds all of them, b.cpp included. It has
+// to: renaming the one in the header and leaving the others behind would
+// break the program.
+//
+// Which is why the files to read are the ones that reach where the thing was
+// *first* declared. b.cpp does not include a.cpp, and a search begun at
+// a.cpp's line would never look at it otherwise.
+void tst_cxxfrontendsnapshot::anUnqualifiedRedeclarationIsReported()
 {
     Files files;
     files.add("h.h", "int shared;\n");
@@ -862,14 +869,31 @@ void tst_cxxfrontendsnapshot::anUnqualifiedRedeclarationIsNotReported()
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
     snapshot.process("a.cpp", "#include \"h.h\"\nextern int shared;\nvoid f() { shared = 1; }\n");
+    snapshot.process("b.cpp", "#include \"h.h\"\nvoid g() { shared = 2; }\n");
     snapshot.process("h.h", "int shared;\n");
 
-    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
-             QStringList("h.h:1:5 (declaration)"));
+    const QStringList everyPlace{"a.cpp:2:12 (declaration)", "a.cpp:3:12", "b.cpp:2:12",
+                                 "h.h:1:5 (declaration)"};
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)), everyPlace);
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 2, 12)), everyPlace);
+    QCOMPARE(placesOf(snapshot.findUsages("b.cpp", 2, 12)), everyPlace);
+}
+
+// A header is read into whoever includes it rather than being a document of
+// its own, so a search may never look at the file a declaration is in. Where
+// it stands is known from the declaration itself, and is reported as a place
+// all the same -- otherwise a rename would leave the header behind.
+void tst_cxxfrontendsnapshot::aDeclarationInAHeaderNobodyReadIsReported()
+{
+    Files files;
+    files.add("h.h", "int shared;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nextern int shared;\nvoid f() { shared = 1; }\n");
+
     QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 2, 12)),
-             QStringList({"a.cpp:2:12 (declaration)", "a.cpp:3:12"}));
-    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
-                .contains("unqualified redeclarations across files"));
+             QStringList({"a.cpp:2:12 (declaration)", "a.cpp:3:12", "h.h:1:5 (declaration)"}));
 }
 
 void tst_cxxfrontendsnapshot::aPositionThatNamesNothingHasNoUsages()
@@ -953,8 +977,11 @@ void tst_cxxfrontendsnapshot::unsupportedLookups()
     QVERIFY(unsupported.contains("using directives across files"));
 
     // What reading a header into its includer settled, so that the list
-    // does not keep saying it.
+    // does not keep saying it. A file that declares over again what a header
+    // declares is linked to the header by the front end, so the two are one
+    // thing and a search reaches both.
     QVERIFY(!unsupported.contains("members named through an object across files"));
+    QVERIFY(!unsupported.contains("unqualified redeclarations across files"));
 }
 
 // The two places a function is written, and the one direction that is
