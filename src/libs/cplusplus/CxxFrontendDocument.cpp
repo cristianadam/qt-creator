@@ -906,6 +906,9 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         .omitFunctionReturnType = !config.settings.showReturnTypes || returnsNothing,
         .omitEnclosingScope = true,
         .omitExceptionSpecification = true,
+        // Under the names they were given: what a reader of a list wants of
+        // "T" is "T", not which parameter of which template it is.
+        .templateParametersOf = member,
     };
     symbol.type = member->type() ? applyStarBinding(fromStd(cxx::to_string(member->type(),
                                                                           name.toStdString(),
@@ -923,7 +926,8 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         symbol.signature = fromStd(cxx::to_string(functionType, "",
                                                   {.omitFunctionReturnType = true,
                                                    .omitEnclosingScope = true,
-                                                   .omitExceptionSpecification = true}));
+                                                   .omitExceptionSpecification = true,
+                                                   .templateParametersOf = member}));
         if (!returnsNothing) {
             symbol.valueType = applyStarBinding(
                 fromStd(cxx::to_string(functionType->returnType(), "", options)),
@@ -1423,6 +1427,7 @@ CxxFrontendDocument::Completion::Candidate CxxFrontendDocument::Private::describ
         .omitFunctionReturnType = !config.settings.showReturnTypes,
         .omitEnclosingScope = true,
         .omitExceptionSpecification = true,
+        .templateParametersOf = symbol,
     };
     candidate.detail = symbol->type()
                            ? applyStarBinding(fromStd(cxx::to_string(symbol->type(),

@@ -428,7 +428,7 @@ void LocatorFilterTest::testCurrentDocumentFilter_data()
     // them. A variable is not deduplicated that way, so Outer::staticVariable
     // is listed both times.
     //
-    // Five things the cxx-frontend model says differently here, each on
+    // Three things the cxx-frontend model says differently here, each on
     // purpose:
     //   - it holds a thing once, where it is declared, so the definition of
     //     Outer::staticVariable is no second entry and the members stand in
@@ -437,9 +437,7 @@ void LocatorFilterTest::testCurrentDocumentFilter_data()
     //     model is the one that is right;
     //   - an alias is printed as what it resolves to (int for MyAlias), and
     //     a type is printed without the scopes around it, which is what an
-    //     outline wants of the same answer;
-    //   - a template parameter has no name in this front end's types, so a
-    //     signature written with one reads "type-param<0, 0>".
+    //     outline wants of the same answer.
     QTest::newRow("aliases-nested-types-and-members")
         << testDirectory / "file2.cpp"
         << ResultDataList{
@@ -483,7 +481,7 @@ void LocatorFilterTest::testCurrentDocumentFilter_data()
             ResultData("MyUnion", ""),
             ResultData("int asInt", "MyUnion"),
             ResultData("float asFloat", "MyUnion"),
-            ResultData("templateFunction(type-param<0, 0>)", ""),
+            ResultData("templateFunction(T)", ""),
             ResultData("Inner AliasInNamespace", "MyOtherNamespace"),
             ResultData("ScopedEnum TypedefInNamespace", "MyOtherNamespace"),
         };
