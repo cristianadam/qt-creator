@@ -355,6 +355,15 @@ Parser::Parser(TranslationUnit* unit)
   finalId_ = control_->getIdentifier("final");
   overrideId_ = control_->getIdentifier("override");
 
+  qtIds_.signals = control_->getIdentifier("signals");
+  qtIds_.slots = control_->getIdentifier("slots");
+  qtIds_.Q_SIGNALS = control_->getIdentifier("Q_SIGNALS");
+  qtIds_.Q_SLOTS = control_->getIdentifier("Q_SLOTS");
+  qtIds_.Q_OBJECT = control_->getIdentifier("Q_OBJECT");
+  qtIds_.Q_GADGET = control_->getIdentifier("Q_GADGET");
+  qtIds_.emit = control_->getIdentifier("emit");
+  qtIds_.Q_EMIT = control_->getIdentifier("Q_EMIT");
+
   setScope(globalScope_);
 }
 
@@ -4264,6 +4273,10 @@ auto Parser::parse_expression_statement(
   SourceLocation semicolonLoc;
 
   ExpressionAST* expression = nullptr;
+
+  // "emit" says who is meant to read what follows and nothing to the
+  // compiler, which is what Qt defines it as.
+  (void)parse_qt_emit();
 
   if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) {
     if (!parse_maybe_expression(expression, ExprContext{})) return false;
@@ -9492,12 +9505,166 @@ auto Parser::parse_class_key(SourceLocation& classLoc) -> bool {
   return false;
 }
 
+// Whether what is being read says it is Qt, which is settled before a line
+// of it is preprocessed: the words are macros there, and whether they are
+// expanded is the same question.
+auto Parser::qtExtensions() const -> bool {
+  auto* pp = unit_->preprocessor();
+  return pp && pp->qtExtensions();
+}
+
+auto Parser::skip_balanced_parens() -> bool {
+  if (!lookat(TokenKind::T_LPAREN)) return false;
+  (void)consumeToken();
+  int depth = 1;
+  while (depth > 0 && !lookat(TokenKind::T_EOF_SYMBOL)) {
+    if (lookat(TokenKind::T_LPAREN)) {
+      ++depth;
+    } else if (lookat(TokenKind::T_RPAREN)) {
+      --depth;
+    }
+    (void)consumeToken();
+  }
+  return true;
+}
+
+// "signals:", "slots:", "public slots:" and the Q_ spellings of them. A
+// signals section is public, whatever stands in front of it; a slots
+// section keeps the access it was given, which is what C++ would make of
+// the word in front of it anyway.
+auto Parser::parse_qt_access_specifier(DeclarationAST*& yyast) -> bool {
+  if (!qtExtensions()) return false;
+
+  SourceLocation accessLoc;
+  const bool hasAccess = parse_access_specifier(accessLoc);
+
+  SourceLocation qtLoc;
+  QtMethodKind kind = QtMethodKind::kNone;
+  if (parse_id(qtIds_.signals, qtLoc) || parse_id(qtIds_.Q_SIGNALS, qtLoc)) {
+    kind = QtMethodKind::kSignal;
+  } else if (parse_id(qtIds_.slots, qtLoc) || parse_id(qtIds_.Q_SLOTS, qtLoc)) {
+    kind = QtMethodKind::kSlot;
+  }
+
+  if (kind == QtMethodKind::kNone || !lookat(TokenKind::T_COLON)) {
+    rewind(hasAccess ? accessLoc : qtLoc ? qtLoc : currentLocation());
+    return false;
+  }
+
+  auto ast = AccessDeclarationAST::create(pool_);
+  yyast = ast;
+  ast->accessLoc = hasAccess ? accessLoc : qtLoc;
+  expect(TokenKind::T_COLON, ast->colonLoc);
+
+  // A signal is callable by anybody; a slot is what the class said it is.
+  ast->accessSpecifier = kind == QtMethodKind::kSignal ? TokenKind::T_PUBLIC
+                         : hasAccess ? unit_->tokenKind(accessLoc)
+                                     : TokenKind::T_PRIVATE;
+
+  binder_.setCurrentAccessSpecifier(
+      toAccessSpecifier(ast->accessSpecifier, binder_.defaultAccessSpecifier()));
+  binder_.setCurrentQtMethodKind(kind);
+  return true;
+}
+
+// Q_OBJECT and Q_GADGET, which say that moc has work to do here, and the
+// macros written beside them, whose contents nothing reads yet. Each is
+// written without a semicolon after it, so there is nothing to take but
+// the macro itself.
+auto Parser::parse_qt_class_macro() -> bool {
+  if (!qtExtensions()) return false;
+  if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+
+  const auto* id = unit_->identifier(currentLocation());
+  if (!id) return false;
+
+  auto* classSymbol = binder_.classBeingDefined();
+
+  if (id == qtIds_.Q_OBJECT || id == qtIds_.Q_GADGET) {
+    (void)consumeToken();
+    if (classSymbol) {
+      if (id == qtIds_.Q_OBJECT) {
+        classSymbol->setQObject(true);
+      } else {
+        classSymbol->setQGadget(true);
+      }
+    }
+    // Written without one, but tolerated with one.
+    SourceLocation semicolonLoc;
+    (void)match(TokenKind::T_SEMICOLON, semicolonLoc);
+    return true;
+  }
+
+  // The ones that take arguments: Q_PROPERTY, Q_ENUMS, Q_CLASSINFO and
+  // their like. What they say is not read yet, so what matters is that a
+  // class holding them still reads as a class.
+  const auto& name = id->name();
+  if (!name.starts_with("Q_")) return false;
+  if (!LA(1).is(TokenKind::T_LPAREN)) return false;
+
+  const auto start = currentLocation();
+  (void)consumeToken();
+  if (!skip_balanced_parens()) {
+    rewind(start);
+    return false;
+  }
+  SourceLocation semicolonLoc;
+  (void)match(TokenKind::T_SEMICOLON, semicolonLoc);
+  return true;
+}
+
+// Q_INVOKABLE, Q_SIGNAL, Q_SLOT and the marks written beside them, which
+// say what the one member after them is.
+auto Parser::parse_qt_method_specifier(QtMethodKind& kind) -> bool {
+  if (!qtExtensions()) return false;
+  if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+
+  const auto* id = unit_->identifier(currentLocation());
+  if (!id) return false;
+  const auto& name = id->name();
+
+  if (name == "Q_INVOKABLE") {
+    kind = QtMethodKind::kInvokable;
+  } else if (name == "Q_SIGNAL") {
+    kind = QtMethodKind::kSignal;
+  } else if (name == "Q_SLOT") {
+    kind = QtMethodKind::kSlot;
+  } else if (name == "Q_SCRIPTABLE") {
+    // Says how it may be called rather than what it is.
+  } else if (name == "Q_REVISION") {
+    if (!LA(1).is(TokenKind::T_LPAREN)) return false;
+    (void)consumeToken();
+    return skip_balanced_parens();
+  } else {
+    return false;
+  }
+
+  (void)consumeToken();
+  return true;
+}
+
+// "emit" in front of the call that raises a signal, which is written for
+// the reader and says nothing to the compiler.
+auto Parser::parse_qt_emit() -> bool {
+  if (!qtExtensions()) return false;
+  SourceLocation loc;
+  return parse_id(qtIds_.emit, loc) || parse_id(qtIds_.Q_EMIT, loc);
+}
+
 auto Parser::parse_member_specification(DeclarationAST*& yyast) -> bool {
   return parse_member_declaration(yyast);
 }
 
 auto Parser::parse_member_declaration(DeclarationAST*& yyast) -> bool {
   SourceLocation accessLoc;
+
+  // Qt's own, before anything else: what they look like to C++ is an
+  // identifier where a declaration should start.
+  if (parse_qt_access_specifier(yyast)) return true;
+  if (parse_qt_class_macro()) {
+    yyast = EmptyDeclarationAST::create(pool_);
+    return true;
+  }
 
   if (parse_access_specifier(accessLoc)) {
     auto ast = AccessDeclarationAST::create(pool_);
@@ -9556,6 +9723,16 @@ auto Parser::hasNoUniqueAddressAttribute(
 auto Parser::parse_member_declaration_helper(DeclarationAST*& yyast) -> bool {
   SourceLocation extensionLoc;
   match(TokenKind::T___EXTENSION__, extensionLoc);
+
+  // Q_INVOKABLE and its like, which say what the member about to be read
+  // is. Several may stand in front of one member.
+  if (qtExtensions()) {
+    for (QtMethodKind marked = QtMethodKind::kNone;
+         parse_qt_method_specifier(marked);) {
+      if (marked != QtMethodKind::kNone) binder_.setPendingQtMethodKind(marked);
+      marked = QtMethodKind::kNone;
+    }
+  }
 
   List<AttributeSpecifierAST*>* attributes = nullptr;
   parse_optional_attribute_specifier_seq(attributes);

@@ -191,6 +191,7 @@ private slots:
 
     void reportsDiagnostics();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
+    void readsWhatQtWritesOnTopOfCxx();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
@@ -891,6 +892,56 @@ void tst_cxxfrontenddocument::aMemberOfAClassTemplateDefinedOutsideItIsRead()
         names.append(symbol.qualified.join("::") + (symbol.qualified.isEmpty() ? "" : "::")
                      + symbol.name);
     QCOMPARE(names, QStringList({"B", "B::count", "B::y"}));
+}
+
+// What Qt writes on top of C++, which a file that says "signals:" says
+// whether or not Qt is anywhere near it. Read as C++ this is a class body
+// with words where declarations should be, and nothing of it parses.
+void tst_cxxfrontenddocument::readsWhatQtWritesOnTopOfCxx()
+{
+    const CxxFrontendDocument document("class QObject {};\n"
+                                       "class Widget : public QObject\n"
+                                       "{\n"
+                                       "    Q_OBJECT\n"
+                                       "    Q_PROPERTY(int value READ value)\n"
+                                       "public:\n"
+                                       "    int value() const;\n"
+                                       "signals:\n"
+                                       "    void valueChanged(int v);\n"
+                                       "public slots:\n"
+                                       "    void reset();\n"
+                                       "public:\n"
+                                       "    Q_INVOKABLE void poke();\n"
+                                       "};\n"
+                                       "void use(Widget *w) { emit w->valueChanged(1); }\n",
+                                       "<stdin>");
+
+    QVERIFY2(document.diagnostics().isEmpty(),
+             qPrintable(document.diagnostics().isEmpty()
+                            ? QString()
+                            : document.diagnostics().first().text));
+
+    const auto qtMethodOf = [&](const QString &name) {
+        for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+            if (symbol.name == name)
+                return symbol.qtMethod;
+        }
+        return CxxFrontendDocument::QtMethod::None;
+    };
+
+    QCOMPARE(qtMethodOf("valueChanged"), CxxFrontendDocument::QtMethod::Signal);
+    QCOMPARE(qtMethodOf("reset"), CxxFrontendDocument::QtMethod::Slot);
+    QCOMPARE(qtMethodOf("poke"), CxxFrontendDocument::QtMethod::Invokable);
+    QCOMPARE(qtMethodOf("value"), CxxFrontendDocument::QtMethod::None);
+
+    bool sawWidget = false;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+        if (symbol.name != "Widget")
+            continue;
+        sawWidget = true;
+        QVERIFY(symbol.isQObject);
+    }
+    QVERIFY(sawWidget);
 }
 
 // Document's questions that cannot be answered on this model yet, asserted so
@@ -1670,14 +1721,25 @@ void tst_cxxfrontenddocument::classToMove_data()
         << QString();
     QTest::newRow("a position on nothing at all") << QByteArray("void f();\n$\n") << QString();
 
-    // What the recovery made of it ends where the text does not, so there is
-    // no range to carry away. A Qt class is one of these.
-    QTest::newRow("a class this front end stumbled over")
+    // A Qt class is a class: its signals section is read, so the range to
+    // carry away is the whole of it.
+    QTest::newRow("a class written in Qt")
         << QByteArray("void f();\n"
                       "class $C\n"
                       "{\n"
                       "signals:\n"
                       "    void s();\n"
+                      "};\n")
+        << QString("C|C||2:1-6:3|other");
+
+    // What the recovery made of one it could not read ends where the text
+    // does not, so there is no range to carry away.
+    QTest::newRow("a class this front end stumbled over")
+        << QByteArray("void f();\n"
+                      "class $C\n"
+                      "{\n"
+                      "    NotAType m;\n"
+                      "    void g(NotAType);\n"
                       "};\n")
         << QString();
 }

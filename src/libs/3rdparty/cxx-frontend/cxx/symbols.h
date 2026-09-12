@@ -869,6 +869,14 @@ class ClassSymbol final : public ScopeSymbol,
   [[nodiscard]] auto isFinal() const -> bool;
   void setFinal(bool isFinal);
 
+  // Whether the class said Q_OBJECT or Q_GADGET, read only where the Qt
+  // extensions are.
+  [[nodiscard]] auto isQObject() const -> bool;
+  void setQObject(bool isQObject);
+
+  [[nodiscard]] auto isQGadget() const -> bool;
+  void setQGadget(bool isQGadget);
+
   [[nodiscard]] auto isComplete() const -> bool;
   void setComplete(bool isComplete);
 
@@ -1003,6 +1011,8 @@ class ClassSymbol final : public ScopeSymbol,
       std::uint32_t isClosureType_ : 1;
       std::uint32_t hasLambdaCapture_ : 1;
       std::uint32_t hasUserDeclaredConstructors_ : 1;
+      std::uint32_t isQObject_ : 1;
+      std::uint32_t isQGadget_ : 1;
     };
   };
 };
@@ -1117,6 +1127,12 @@ class FunctionSymbol final
 
   [[nodiscard]] auto isFinal() const -> bool;
   void setFinal(bool isFinal);
+
+  // What Qt's moc makes of it, read only where the Qt extensions are: the
+  // section of the class it stands in says signal or slot, and Q_INVOKABLE
+  // in front of it says invokable.
+  [[nodiscard]] auto qtMethodKind() const -> QtMethodKind;
+  void setQtMethodKind(QtMethodKind qtMethodKind);
 
   [[nodiscard]] auto hasNoPrototype() const -> bool;
   void setNoPrototype(bool hasNoPrototype);
@@ -1263,6 +1279,7 @@ class FunctionSymbol final
       std::uint32_t hasExceptionSpecifier_ : 1;
       std::uint32_t isDefinitionRequired_ : 1;
       std::uint32_t hasExplicitObjectParameter_ : 1;
+      std::uint32_t qtMethodKind_ : 2;
     };
   };
 };

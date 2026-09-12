@@ -409,6 +409,7 @@ struct Preprocessor::Private {
   mutable std::unordered_set<std::string> bodyTexts_;
   LanguageKind language_ = LanguageKind::kCXX;
   bool canResolveFiles_ = true;
+  bool qtExtensions_ = false;
   bool disableCurrentDirSearch_ = false;
   std::vector<std::string> systemIncludePaths_;
   std::vector<std::string> quoteIncludePaths_;
@@ -1528,12 +1529,32 @@ auto Preprocessor::Private::merge(const Tok& left, const Tok& right) -> Tok {
   return tok;
 }
 
+// The words Qt's moc reads, each of which Qt defines as a macro that
+// expands to nothing or to an access specifier. Expanding them is losing
+// them, so where a tool says it reads Qt, they stay as written.
+//
+// Only the ones that say something a tool cannot get back: Q_FOREACH,
+// Q_D and the rest expand to code that means what it says, and are left
+// to expand as any other macro does.
+static auto isQtReservedWord(std::string_view text) -> bool {
+  static constexpr std::string_view words[] = {
+      "signals",       "slots",        "Q_SIGNALS",    "Q_SLOTS",
+      "emit",          "Q_EMIT",       "Q_OBJECT",     "Q_GADGET",
+      "Q_INVOKABLE",   "Q_SIGNAL",     "Q_SLOT",       "Q_SCRIPTABLE",
+      "Q_REVISION",    "Q_PROPERTY",   "Q_CLASSINFO",  "Q_ENUMS",
+      "Q_FLAGS",       "Q_INTERFACES", "Q_MOC_INCLUDE", "Q_PRIVATE_SLOT",
+      "Q_PRIVATE_PROPERTY",
+  };
+  return std::ranges::contains(words, text);
+}
+
 auto Preprocessor::Private::lookupMacro(const Tok& tk) const
     -> std::pair<const Macro*, const cxx::Identifier*> {
   if (tk.isNot(TokenKind::T_IDENTIFIER)) return {nullptr, nullptr};
   if (tk.noexpand) return {nullptr, nullptr};
 
   auto text = getText(tk);
+  if (qtExtensions_ && isQtReservedWord(text)) return {nullptr, nullptr};
   if (auto it = macros_.find(text); it != macros_.end()) {
     auto ident = control_->getIdentifier(text);
     if (!isTainted(ident)) {
@@ -3302,6 +3323,12 @@ auto Preprocessor::canResolveFiles() const -> bool {
 
 void Preprocessor::setCanResolveFiles(bool canResolveFiles) {
   d->canResolveFiles_ = canResolveFiles;
+}
+
+auto Preprocessor::qtExtensions() const -> bool { return d->qtExtensions_; }
+
+void Preprocessor::setQtExtensions(bool qtExtensions) {
+  d->qtExtensions_ = qtExtensions;
 }
 
 auto Preprocessor::currentPath() const -> std::string {

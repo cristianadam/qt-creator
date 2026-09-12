@@ -179,6 +179,15 @@ auto Binder::DeclareFunction::declare() -> FunctionSymbol* {
 
   binder.applyImplicitExceptionSpecification(functionSymbol);
 
+  // What Qt makes of it: the mark written in front of this one member if
+  // there was one, and otherwise the section of the class it stands in.
+  if (auto marked = binder.takePendingQtMethodKind();
+      marked != QtMethodKind::kNone) {
+    functionSymbol->setQtMethodKind(marked);
+  } else {
+    functionSymbol->setQtMethodKind(binder.currentQtMethodKind());
+  }
+
   if (binder.isC() && binder.unit_->config().allowUnprototypedFunctions &&
       functionDeclarator && !functionDeclarator->parameterDeclarationClause) {
     functionSymbol->setNoPrototype(true);

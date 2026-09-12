@@ -71,6 +71,16 @@ CXX_FOR_EACH_SYMBOL(PROCESS_SYMBOL)
 enum class SymbolKind { CXX_FOR_EACH_SYMBOL(PROCESS_SYMBOL) };
 #undef PROCESS_SYMBOL
 
+// What Qt's moc makes of a member function, which is what tells a caller
+// of it apart from a call: a signal is emitted, a slot is connected to,
+// and an invokable one is called by name through the meta object.
+enum class QtMethodKind {
+  kNone,
+  kSignal,
+  kSlot,
+  kInvokable,
+};
+
 enum class AccessSpecifier {
   kPublic,
   kProtected,

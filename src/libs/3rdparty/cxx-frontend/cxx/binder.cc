@@ -198,6 +198,27 @@ auto Binder::defaultAccessSpecifier() const -> AccessSpecifier {
 void Binder::setCurrentAccessSpecifier(AccessSpecifier accessSpecifier) {
   if (classBodyStack_.empty()) return;
   classBodyStack_.back().accessSpecifier = accessSpecifier;
+  // Leaving a signals or slots section is what any other access specifier
+  // amounts to, Qt's sections being written the same way.
+  classBodyStack_.back().qtMethodKind = QtMethodKind::kNone;
+}
+
+auto Binder::currentQtMethodKind() const -> QtMethodKind {
+  if (classBodyStack_.empty()) return QtMethodKind::kNone;
+  return classBodyStack_.back().qtMethodKind;
+}
+
+void Binder::setCurrentQtMethodKind(QtMethodKind qtMethodKind) {
+  if (classBodyStack_.empty()) return;
+  classBodyStack_.back().qtMethodKind = qtMethodKind;
+}
+
+void Binder::setPendingQtMethodKind(QtMethodKind qtMethodKind) {
+  pendingQtMethodKind_ = qtMethodKind;
+}
+
+auto Binder::takePendingQtMethodKind() -> QtMethodKind {
+  return std::exchange(pendingQtMethodKind_, QtMethodKind::kNone);
 }
 
 void Binder::applyAccessSpecifier(Symbol* symbol) const {

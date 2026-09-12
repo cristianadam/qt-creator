@@ -951,6 +951,14 @@ auto ClassSymbol::isFinal() const -> bool { return isFinal_; }
 
 void ClassSymbol::setFinal(bool isFinal) { isFinal_ = isFinal; }
 
+auto ClassSymbol::isQObject() const -> bool { return isQObject_; }
+
+void ClassSymbol::setQObject(bool isQObject) { isQObject_ = isQObject; }
+
+auto ClassSymbol::isQGadget() const -> bool { return isQGadget_; }
+
+void ClassSymbol::setQGadget(bool isQGadget) { isQGadget_ = isQGadget; }
+
 auto ClassSymbol::baseClasses() const -> const std::vector<BaseClassSymbol*>& {
   return baseClasses_;
 }
@@ -1571,6 +1579,14 @@ void FunctionSymbol::setOverride(bool isOverride) { isOverride_ = isOverride; }
 auto FunctionSymbol::isFinal() const -> bool { return isFinal_; }
 
 void FunctionSymbol::setFinal(bool isFinal) { isFinal_ = isFinal; }
+
+auto FunctionSymbol::qtMethodKind() const -> QtMethodKind {
+  return static_cast<QtMethodKind>(qtMethodKind_);
+}
+
+void FunctionSymbol::setQtMethodKind(QtMethodKind qtMethodKind) {
+  qtMethodKind_ = static_cast<std::uint32_t>(qtMethodKind);
+}
 
 auto FunctionSymbol::hasNoPrototype() const -> bool { return hasNoPrototype_; }
 

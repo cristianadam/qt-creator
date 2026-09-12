@@ -212,6 +212,17 @@ class Parser final {
       NestedNameSpecifierAST* nestedNameSpecifier,
       UnqualifiedIdAST* unqualifiedId) -> const Type*;
 
+  // The Qt extensions, all of them no-ops unless config().qtExtensions is
+  // set. Each says whether it read something and leaves the cursor after
+  // it; what they read is written down on the symbols rather than in the
+  // tree, none of it being C++.
+  [[nodiscard]] auto qtExtensions() const -> bool;
+  [[nodiscard]] auto parse_qt_access_specifier(DeclarationAST*& yyast) -> bool;
+  [[nodiscard]] auto parse_qt_class_macro() -> bool;
+  [[nodiscard]] auto parse_qt_method_specifier(QtMethodKind& kind) -> bool;
+  [[nodiscard]] auto parse_qt_emit() -> bool;
+  [[nodiscard]] auto skip_balanced_parens() -> bool;
+
   [[nodiscard]] auto parse_id(const Identifier* id, SourceLocation& loc)
       -> bool;
   [[nodiscard]] auto parse_nospace() -> bool;
@@ -1038,6 +1049,20 @@ class Parser final {
   const Identifier* importId_ = nullptr;
   const Identifier* finalId_ = nullptr;
   const Identifier* overrideId_ = nullptr;
+
+  // The words Qt's moc adds to C++, interned so that meeting one is a
+  // pointer comparison. Read only where config().qtExtensions is set;
+  // everywhere else they are identifiers like any other.
+  struct QtIds {
+    const Identifier* signals = nullptr;
+    const Identifier* slots = nullptr;
+    const Identifier* Q_SIGNALS = nullptr;
+    const Identifier* Q_SLOTS = nullptr;
+    const Identifier* Q_OBJECT = nullptr;
+    const Identifier* Q_GADGET = nullptr;
+    const Identifier* emit = nullptr;
+    const Identifier* Q_EMIT = nullptr;
+  } qtIds_;
   int templArgDepth_ = 0;
   int classDepth_ = 0;
   int uncheckedInitializerDepth_ = 0;

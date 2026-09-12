@@ -76,6 +76,19 @@ class Preprocessor {
   [[nodiscard]] auto canResolveFiles() const -> bool;
   void setCanResolveFiles(bool canResolveFiles);
 
+  // Leave the words Qt's moc reads where they are written. Qt defines each
+  // of them as a macro that expands to nothing or to an access specifier,
+  // so a tool that lets them expand never sees them -- and what they say
+  // about the class they stand in is gone with them.
+  //
+  // Q_OBJECT is among them, and it is the one that costs something: the
+  // members it declares -- tr(), staticMetaObject -- are not declared
+  // then. That is the trade a tool makes to know which classes moc has
+  // work in, and the one Qt Creator has made for as long as it has read
+  // Qt code.
+  [[nodiscard]] auto qtExtensions() const -> bool;
+  void setQtExtensions(bool qtExtensions);
+
   [[nodiscard]] auto currentPath() const -> std::string;
   void setCurrentPath(std::string currentPath);
 

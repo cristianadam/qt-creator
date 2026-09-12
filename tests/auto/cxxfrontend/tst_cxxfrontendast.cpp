@@ -391,16 +391,20 @@ void tst_cxxfrontendast::whereOneTokenStands()
 }
 
 // Error recovery makes a tree that no longer matches the text, and that is
-// the trap for everything that rewrites code by the tree. The case is a real
-// one: "emit" is a macro in a Qt project and reads as nothing, but in a file
-// that never saw Qt it is an unknown name, and the statement comes out
-// ending before its own semicolon.
+// the trap for everything that rewrites code by the tree: a name nobody
+// declared leaves a statement ending before its own semicolon, so a "}" put
+// after what the tree calls the body lands in the middle of what somebody
+// wrote.
+//
+// "emit" used to be the case here, being an unknown name in a file that
+// never saw Qt. It is read now, so this takes a word that is nobody's
+// keyword.
 void tst_cxxfrontendast::aConstructTheFrontEndCouldNotRead()
 {
     const QByteArray source = "void f()\n"
                               "{\n"
                               "    if (true)\n"
-                              "        emit mySig();\n"
+                              "        notAKeyword mySig();\n"
                               "    else\n"
                               "        return;\n"
                               "}\n";
@@ -419,7 +423,7 @@ void tst_cxxfrontendast::aConstructTheFrontEndCouldNotRead()
     // statement somebody wrote.
     const CxxAstRange body = cxxAstRangeOf(document, ifStatement->statement);
     QCOMPARE(body.endLine, 4);
-    QCOMPARE(body.endColumn, 13);
+    QCOMPARE(body.endColumn, 20);
 
     // Which is why this answers true here, and false for the same file with
     // the name declared.

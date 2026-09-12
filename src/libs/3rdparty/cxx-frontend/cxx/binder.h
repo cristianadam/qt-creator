@@ -105,6 +105,10 @@ class Binder {
     ClassSymbol* classSymbol = nullptr;
     AccessSpecifier defaultAccessSpecifier = AccessSpecifier::kPublic;
     AccessSpecifier accessSpecifier = AccessSpecifier::kPublic;
+    // What section of the class the members being read stand in, where
+    // Qt's are read: a signals or slots section runs to the next one, as
+    // an access specifier does.
+    QtMethodKind qtMethodKind = QtMethodKind::kNone;
   };
 
   struct ClassBodyGuard {
@@ -131,6 +135,17 @@ class Binder {
   [[nodiscard]] auto currentAccessSpecifier() const -> AccessSpecifier;
   [[nodiscard]] auto defaultAccessSpecifier() const -> AccessSpecifier;
   void setCurrentAccessSpecifier(AccessSpecifier accessSpecifier);
+
+  // What the section being read makes of the members in it, and what the
+  // mark in front of one makes of that one. Both are Qt's.
+  [[nodiscard]] auto currentQtMethodKind() const -> QtMethodKind;
+  void setCurrentQtMethodKind(QtMethodKind qtMethodKind);
+
+  // What Q_INVOKABLE and its like said about the one member that follows
+  // them, which outranks the section it stands in. Taken by whoever
+  // declares that member, and gone afterwards.
+  void setPendingQtMethodKind(QtMethodKind qtMethodKind);
+  [[nodiscard]] auto takePendingQtMethodKind() -> QtMethodKind;
 
   void applyAccessSpecifier(Symbol* symbol) const;
 
@@ -442,6 +457,7 @@ class Binder {
   TypeTraits traits;
   ScopeSymbol* scope_ = nullptr;
   std::vector<ClassBodyState> classBodyStack_;
+  QtMethodKind pendingQtMethodKind_ = QtMethodKind::kNone;
   Symbol* instantiatingSymbol_ = nullptr;
   SourceLocation instantiationLoc_{};
   LanguageKind languageLinkage_ = LanguageKind::kCXX;

@@ -162,6 +162,7 @@ std::vector<CLIOptionDescr> options{
      CLIOptionDescrKind::kSeparated},
 
     {"-fcheck", "Enable type checker (WIP)", &CLI::opt_fcheck},
+    {"-fqt", "Read the extensions Qt's moc adds to C++", &CLI::opt_fqt},
 
     {"-fvalidate-ast", "Validate completed template instantiations",
      &CLI::opt_fvalidate_ast},
