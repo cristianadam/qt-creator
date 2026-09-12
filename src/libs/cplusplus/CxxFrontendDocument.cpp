@@ -307,6 +307,26 @@ QString anonymousScopeNameOf(cxx::Symbol *symbol, cxx::TokenKind classKey)
     return QLatin1String("<anonymous symbol>");
 }
 
+// What Qt makes of a function, where the file was read as Qt.
+CxxFrontendDocument::QtMethod qtMethodOf(cxx::Symbol *symbol)
+{
+    using QtMethod = CxxFrontendDocument::QtMethod;
+    auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol);
+    if (!function)
+        return QtMethod::None;
+    switch (function->qtMethodKind()) {
+    case cxx::QtMethodKind::kSignal:
+        return QtMethod::Signal;
+    case cxx::QtMethodKind::kSlot:
+        return QtMethod::Slot;
+    case cxx::QtMethodKind::kInvokable:
+        return QtMethod::Invokable;
+    case cxx::QtMethodKind::kNone:
+        break;
+    }
+    return QtMethod::None;
+}
+
 // What kind of thing a symbol is, in the distinctions a reader asking "what
 // is this" cares about.
 CxxFrontendDocument::Kind kindOf(cxx::Symbol *symbol)
@@ -970,6 +990,11 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         symbol.isDefinedHere = !symbol.isForwardDeclaration;
     }
     symbol.icon = iconTypeOf(member, classKey);
+
+    // What Qt makes of it, where the file was read as Qt.
+    symbol.qtMethod = qtMethodOf(member);
+    if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member))
+        symbol.isQObject = cls->isQObject() || cls->isQGadget();
 
     if (const cxx::SourceLocation location = member->location())
         described.insert(location.index());
@@ -1781,6 +1806,11 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
     preprocessor->setCanResolveFiles(false);
     preprocessor->setPreprocessorDelegate(&macroCollector);
     preprocessor->setCommentHandler(&commentCollector);
+
+    // What Qt writes, read as Qt writes it. Set before the first line is
+    // preprocessed, since what it decides is whether the words Qt defines
+    // as macros are expanded away or left where they stand.
+    preprocessor->setQtExtensions(this->config.qtExtensions);
 
     // What the includers established, before the first line of this file.
     {

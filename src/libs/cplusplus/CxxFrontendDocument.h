@@ -45,6 +45,16 @@ public:
     // model makes, and a template is not among them -- a class template is a
     // class here, its parameters being something it has rather than
     // something it is.
+    // What Qt's moc makes of a member function, which is what tells
+    // writing a call to it apart from connecting to it. Nothing where
+    // the file is not Qt, or where the extensions were not read.
+    enum class QtMethod {
+        None,
+        Signal,
+        Slot,
+        Invokable,
+    };
+
     enum class Kind {
         Unknown,
         Class,
@@ -66,6 +76,13 @@ public:
         // returns, so that what one file establishes can be handed to the
         // next.
         QStringList predefinedMacros;
+
+        // Read the extensions Qt adds to C++ -- the signals and slots
+        // sections of a class, Q_OBJECT, Q_INVOKABLE, emit -- rather than
+        // letting Qt's own macros expand them into nothing. On as the
+        // built-in front end has it on, since a file that says "signals:"
+        // says it whether or not Qt is anywhere near it.
+        bool qtExtensions = true;
 
         // Where a header is and what it says.
         struct Include
@@ -163,6 +180,12 @@ public:
         // holds an entity once, at the place it is declared -- so this says
         // what the file does with it rather than what the place is.
         bool isDefinedHere = false;
+
+        // What Qt makes of it: which of a class's members are signals,
+        // slots or invokable, and whether a class said Q_OBJECT or
+        // Q_GADGET. Both are None and false for everything else.
+        QtMethod qtMethod = QtMethod::None;
+        bool isQObject = false;
     };
     const QList<Symbol> &symbols() const;
 
