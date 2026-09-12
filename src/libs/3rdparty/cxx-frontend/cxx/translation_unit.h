@@ -121,7 +121,13 @@ class TranslationUnit {
     templateInstantiationDepth_ = depth;
   }
 
-  static constexpr int kMaxTemplateInstantiationDepth = 1024;
+  // What a recursion that does not end is stopped at. Instantiating one
+  // template from another is a deep native call -- through the rewriter, the
+  // binder and back -- so this has to be a depth the stack lives to reach:
+  // at 1024 a runaway instantiation of ordinary library code took the stack
+  // with it before the guard ever fired. Real code stays far below this; a
+  // translation unit of Qt headers reaches 16.
+  static constexpr int kMaxTemplateInstantiationDepth = 256;
 
   [[nodiscard]] auto fileName() const -> const std::string&;
 

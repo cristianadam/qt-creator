@@ -171,9 +171,13 @@ void Binder::setInstantiationLoc(SourceLocation loc) {
 }
 
 auto Binder::declaringScope() const -> ScopeSymbol* {
-  if (!scope_) return nullptr;
-  if (!scope_->isTemplateParameters()) return scope_;
-  return scope_->parent();
+  // Nothing is declared into a template parameter list, and a declaration
+  // can stand under more than one of them: the out-of-line definition of a
+  // member template of a class template is written under the parameters of
+  // the class and then under those of the member.
+  auto scope = scope_;
+  while (scope && scope->isTemplateParameters()) scope = scope->parent();
+  return scope;
 }
 
 auto Binder::classBeingDefined() const -> ClassSymbol* {
@@ -2876,17 +2880,28 @@ auto Binder::declareVariable(DeclaratorAST* declarator, const Decl& decl,
 
   ClassSymbol* outOfClassMemberClass = nullptr;
   FieldSymbol* outOfClassMemberField = nullptr;
+  VariableSymbol* outOfClassMemberVariable = nullptr;
   if (qualifiedClass) {
     for (auto candidate : qualifiedClass->find(name)) {
-      auto field = symbol_cast<FieldSymbol>(candidate);
-      if (!field || !field->isStatic()) continue;
-      outOfClassMemberClass = qualifiedClass;
-      outOfClassMemberField = field;
-      break;
+      if (auto field = symbol_cast<FieldSymbol>(candidate);
+          field && field->isStatic()) {
+        outOfClassMemberClass = qualifiedClass;
+        outOfClassMemberField = field;
+        break;
+      }
+      // A static data member template is a variable of the class rather
+      // than a field of it, and its definition out of line still belongs
+      // to the class.
+      if (auto variable = symbol_cast<VariableSymbol>(candidate);
+          variable && variable->isStatic()) {
+        outOfClassMemberClass = qualifiedClass;
+        outOfClassMemberVariable = variable;
+        break;
+      }
     }
   }
 
-  const bool isOutOfClassStaticMemberDef = outOfClassMemberField != nullptr;
+  const bool isOutOfClassStaticMemberDef = outOfClassMemberClass != nullptr;
   const bool isOutOfNamespaceMemberDef = qualifiedNamespace != nullptr;
 
   auto targetScope = isOutOfClassStaticMemberDef
@@ -2903,9 +2918,13 @@ auto Binder::declareVariable(DeclaratorAST* declarator, const Decl& decl,
   symbol->setType(type);
 
   if (isOutOfClassStaticMemberDef) {
-    outOfClassMemberField->setDefinition(symbol);
     symbol->setStatic(true);
-    symbol->setInitializer(outOfClassMemberField->initializer());
+    if (outOfClassMemberField) {
+      outOfClassMemberField->setDefinition(symbol);
+      symbol->setInitializer(outOfClassMemberField->initializer());
+    } else {
+      outOfClassMemberVariable->setDefinition(symbol);
+    }
   }
 
   if (auto classType = unqualified_cast<ClassType>(type)) {

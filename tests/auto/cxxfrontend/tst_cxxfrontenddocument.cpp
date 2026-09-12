@@ -190,7 +190,7 @@ private slots:
     void noCompletionWhereNoneWasAsked();
 
     void reportsDiagnostics();
-    void aFileTheFrontEndCannotReadIsNotFatal();
+    void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
     void theDefinitionIsPreferredToTheDeclaration();
@@ -857,32 +857,40 @@ void tst_cxxfrontenddocument::reportsDiagnostics()
     QVERIFY(bad.diagnostics().first().isError);
 }
 
-// What the front end does where it finds itself in a state it does not allow:
-// it throws, and a document that cannot be read has to say so rather than take
-// the process with it. Every answer is then empty, which is what a consumer
-// reads as "ask the other model".
+// A member of a class template defined outside it stands under two template
+// parameter lists, and nothing is declared into either of them. Reading it
+// used to throw out of the front end -- which took the whole editor with it,
+// the document being built on the parser's thread -- and that is how
+// QVarLengthArray is written, so every file including <QVariant> reached it.
 //
-// The source below is the shortest thing found that does it -- the definition
-// of a static data member template of a class template, which is how
-// QVarLengthArray is written and so how every file that includes <QVariant>
-// reaches this.
-void tst_cxxfrontenddocument::aFileTheFrontEndCannotReadIsNotFatal()
+// Kept here because this model is asked about such files all day: what the
+// front end refuses is a diagnostic, never an exception, and a document that
+// threw all the same answers nothing rather than ending the process.
+void tst_cxxfrontenddocument::aMemberOfAClassTemplateDefinedOutsideItIsRead()
 {
     const CxxFrontendDocument document("template <class T>\n"
                                        "struct B {\n"
+                                       "    static int count;\n"
                                        "    template <typename U> static U y;\n"
                                        "};\n"
                                        "\n"
                                        "template <class T>\n"
+                                       "int B<T>::count = 0;\n"
+                                       "\n"
+                                       "template <class T>\n"
                                        "template <typename U>\n"
-                                       "U B<T>::y;\n",
+                                       "U B<T>::y = U();\n",
                                        "<stdin>");
 
-    QVERIFY(document.symbols().isEmpty());
-    QVERIFY(!document.diagnostics().isEmpty());
-    const CxxFrontendDocument::Diagnostic &diagnostic = document.diagnostics().last();
-    QVERIFY(diagnostic.isError);
-    QVERIFY2(diagnostic.text.contains("could not read this file"), qPrintable(diagnostic.text));
+    QVERIFY(document.diagnostics().isEmpty());
+
+    // The definitions are the class's own members, so the file declares the
+    // class and what it holds, and nothing beside it.
+    QStringList names;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols())
+        names.append(symbol.qualified.join("::") + (symbol.qualified.isEmpty() ? "" : "::")
+                     + symbol.name);
+    QCOMPARE(names, QStringList({"B", "B::count", "B::y"}));
 }
 
 // Document's questions that cannot be answered on this model yet, asserted so
