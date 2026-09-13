@@ -118,11 +118,16 @@ private:
     bool globalCompletion(CPlusPlus::Scope *scope);
 
     // What the cxx-frontend model would offer where the cursor is, for the
-    // places it answers about: after a dot, an arrow or a scope. False means
-    // it has nothing to say -- it was not asked for, this is not one of
-    // those places, or it found nothing there -- and the built-in lookup
-    // then answers as it always did. See cxxfrontendmodel.h.
+    // places it answers about: after a dot, an arrow or a scope, and where a
+    // name can go. False means it has nothing to say -- it was not asked
+    // for, this is not one of those places, or it found nothing there -- and
+    // the built-in lookup then answers as it always did. See
+    // cxxfrontendmodel.h.
     bool completeFromCxxFrontendModel();
+
+    // The same for the hint shown while a call is written: which functions
+    // it could be of, and how each of them reads.
+    bool hintFromCxxFrontendModel();
 
     void addKeywordCompletionItem(const QString &text);
     void addCompletionItem(const QString &text,

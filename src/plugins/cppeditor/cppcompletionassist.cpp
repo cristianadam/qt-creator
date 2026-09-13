@@ -1472,6 +1472,10 @@ int InternalCppCompletionAssistProcessor::startCompletionInternal(const Utils::F
 
     switch (m_model->m_completionOperator) {
     case T_LPAREN:
+        // What the call could be of, on the other model where it read this
+        // file; the built-in lookup answers the same question below.
+        if (hintFromCxxFrontendModel())
+            return m_positionForProposal;
         if (completeConstructorOrFunction(results, endOfExpression, false))
             return m_positionForProposal;
         break;
@@ -1520,6 +1524,39 @@ int InternalCppCompletionAssistProcessor::startCompletionInternal(const Utils::F
 
     // nothing to do.
     return -1;
+}
+
+bool InternalCppCompletionAssistProcessor::hintFromCxxFrontendModel()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    // What the call being written could be of, which the front end knows
+    // because it was told where the cursor is before it read the file: the
+    // half-written call is what it stopped at.
+    int line = 0, column = 0;
+    Utils::Text::convertPosition(interface()->textDocument(), m_positionForProposal,
+                                 &line, &column);
+    const std::optional<CxxFrontendDocument::Completion> completion
+        = cxxFrontendCompletion(cppInterface()->snapshot(),
+                                interface()->filePath(),
+                                interface()->textDocument()->toPlainText(),
+                                line,
+                                column + 1);
+    if (!completion || completion->signatures.isEmpty())
+        return false;
+
+    m_hintProposal = createHintProposal(
+        Utils::transform(completion->signatures,
+                         [](const CxxFrontendDocument::Completion::Signature &signature) {
+                             HintSignature shown;
+                             shown.text = signature.text;
+                             for (const auto &parameter : signature.parameters)
+                                 shown.parameters.append({parameter.start, parameter.length});
+                             return shown;
+                         }));
+    return true;
+#else
+    return false;
+#endif
 }
 
 bool InternalCppCompletionAssistProcessor::completeFromCxxFrontendModel()
