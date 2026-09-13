@@ -343,8 +343,10 @@ FindTheDefinitions modelFindTheDefinitions(const CppQuickFixInterface &interface
 {
     QList<CxxFrontendDocument::MemberFunction> asked;
     for (const MemberFunctionDeclaration &declaration : declarations) {
-        asked.append({declaration.name, declaration.parameterCount,
-                      declaration.at.line, declaration.at.column});
+        asked.append({.name = declaration.name,
+                      .parameterCount = declaration.parameterCount,
+                      .line = declaration.at.line,
+                      .column = declaration.at.column});
     }
 
     return [snapshot = interface.snapshot(), filePath = interface.filePath(), asked]

@@ -224,6 +224,7 @@ private slots:
 
     void memberFunctionsOfAClass_data();
     void memberFunctionsOfAClass();
+    void memberFunctionsOfAClassInAHeader();
 
     void classToMove_data();
     void classToMove();
@@ -1784,7 +1785,7 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    void b();\n"
                       "    int a(int, int);\n"
                       "};\n")
-        << QStringList({"S::b/0 @2:10", "S::a/2 @3:9"});
+        << QStringList({"S::b/0 @2:10 = b() : void", "S::a/2 @3:9 = a(int, int) : int"});
 
     // A function defined here says so: its definition is already where its
     // declaration is, which is nothing to put in order and is still
@@ -1794,7 +1795,7 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    void b() {}\n"
                       "    void c();\n"
                       "};\n")
-        << QStringList{"S::b/0 @2:10 defined", "S::c/0 @3:10"};
+        << QStringList{"S::b/0 @2:10 defined = b() : void", "S::c/0 @3:10 = c() : void"};
 
     // What a class below it may do about one, and where a declaration of
     // it would go in that class.
@@ -1806,15 +1807,15 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "private:\n"
                       "    void c();\n"
                       "};\n")
-        << QStringList{"S::a/0 @2:18 virtual",
-                       "S::b/0 @4:18 virtual final protected",
-                       "S::c/0 @6:10 private"};
+        << QStringList{"S::a/0 @2:18 virtual = a() : void",
+                       "S::b/0 @4:18 virtual final protected = b() : void",
+                       "S::c/0 @6:10 private = c() : void"};
 
     QTest::newRow("a template member")
         << QByteArray("struct $S {\n"
                       "    template<typename T> void t(T);\n"
                       "};\n")
-        << QStringList("S::t/1 @2:31");
+        << QStringList("S::t/1 @2:31 = t(T) : void");
 
     // Nobody wrote it where it stands, so there is no order to keep it in.
     QTest::newRow("a function a macro declared")
@@ -1823,14 +1824,14 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    DECL\n"
                       "    void n();\n"
                       "};\n")
-        << QStringList("S::n/0 @4:10");
+        << QStringList("S::n/0 @4:10 = n() : void");
 
     QTest::newRow("the innermost class wins")
         << QByteArray("struct Outer {\n"
                       "    void o();\n"
                       "    struct $Inner { void i(); };\n"
                       "};\n")
-        << QStringList("Outer::Inner::i/0 @3:25");
+        << QStringList("Outer::Inner::i/0 @3:25 = i() : void");
 
     // Declared with "= 0", so this class does not define it -- said here so
     // that whoever looks for the definitions is not looking for this one's.
@@ -1839,7 +1840,7 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    virtual void p() = 0;\n"
                       "    void q();\n"
                       "};\n")
-        << QStringList({"S::p/0 @2:18 pure virtual", "S::q/0 @3:10"});
+        << QStringList({"S::p/0 @2:18 pure virtual = p() : void", "S::q/0 @3:10 = q() : void"});
 
     // Written in the class without being one of its members: somebody else's
     // function, named here to let it in. So it is not among the ones whose
@@ -1849,7 +1850,17 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    friend void f();\n"
                       "    void g();\n"
                       "};\n")
-        << QStringList("S::g/0 @3:10");
+        << QStringList("S::g/0 @3:10 = g() : void");
+
+    // A constructor and a destructor hand nothing back, so there is nothing
+    // to write after the colon. A destructor's own name is what stands
+    // after the tilde, which is where it is recorded.
+    QTest::newRow("what hands nothing back")
+        << QByteArray("struct $S {\n"
+                      "    S();\n"
+                      "    ~S();\n"
+                      "};\n")
+        << QStringList({"S::S/0 @2:5 = S()", "S::~S/0 @3:6 = ~S()"});
 
     QTest::newRow("a position in no class")
         << QByteArray("$void f();\n") << QStringList();
@@ -1884,9 +1895,66 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass()
             said += " protected";
         if (function.access == CxxFrontendDocument::Access::Private)
             said += " private";
+        said += " = " + function.signature;
+        if (!function.returnType.isEmpty())
+            said += " : " + function.returnType;
         described.append(said);
     }
     QCOMPARE(described, expected);
+}
+
+// The class is declared in a header the file reads, which is where a class
+// somebody derives from is as a rule: one translation unit, two files, so
+// the position says which of them it is in.
+void tst_cxxfrontenddocument::memberFunctionsOfAClassInAHeader()
+{
+    CxxFrontendDocument::Config config;
+    config.onInclude = [](const QString &name, bool, const QString &)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
+        if (name != "h.h")
+            return std::nullopt;
+        return CxxFrontendDocument::Config::Include{
+            "h.h", "struct Base {\n    virtual int f(int);\n};\n"};
+    };
+
+    const CxxFrontendDocument document("#include \"h.h\"\n"
+                                       "struct Derived : Base {\n"
+                                       "    int f(int) override;\n"
+                                       "};\n",
+                                       "<stdin>", config);
+
+    // The base, whose name stands on line 1 of the header.
+    const QList<CxxFrontendDocument::MemberFunction> base
+        = document.memberFunctionsAt(1, 8, "h.h");
+    QCOMPARE(base.size(), 1);
+    QCOMPARE(base.first().name, QString("Base::f"));
+    QCOMPARE(base.first().unqualifiedName, QString("f"));
+    QCOMPARE(base.first().filePath, QString("h.h"));
+    QCOMPARE(base.first().line, 2);
+    QVERIFY(base.first().isVirtual);
+
+    // The same place read in this file instead answers about the class
+    // written here, which is what saying the file is for: line 2 of the
+    // header is not line 2 here.
+    const QList<CxxFrontendDocument::MemberFunction> derived
+        = document.memberFunctionsAt(2, 8);
+    QCOMPARE(derived.size(), 1);
+    QCOMPARE(derived.first().name, QString("Derived::f"));
+    QCOMPARE(document.memberFunctionsAt(2, 8, "h.h").first().name, QString("Base::f"));
+
+    // What said "virtual" first is the base's declaration, in the header.
+    const CxxFrontendDocument::Virtuality virtuality = document.virtualityAt(3, 9);
+    QVERIFY(virtuality.isVirtual);
+    QCOMPARE(virtuality.firstVirtuals.size(), 1);
+    QCOMPARE(virtuality.firstVirtuals.first().className, QString("Base"));
+    QCOMPARE(virtuality.firstVirtuals.first().place.filePath, QString("h.h"));
+    QCOMPARE(virtuality.firstVirtuals.first().place.line, 2);
+
+    // The same question asked of the declaration in the header.
+    const CxxFrontendDocument::Virtuality inTheHeader = document.virtualityAt(2, 17, "h.h");
+    QVERIFY(inTheHeader.isVirtual);
+    QCOMPARE(inTheHeader.firstVirtuals.size(), 1);
+    QCOMPARE(inTheHeader.firstVirtuals.first().className, QString("Base"));
 }
 
 // The class a position is on, as the file it stands in reads it: what it is
@@ -2225,22 +2293,22 @@ void tst_cxxfrontenddocument::virtuality_data()
         << QByteArray("struct A { void $f(); };\n") << QString("plain");
 
     QTest::newRow("virtual where it is declared")
-        << QByteArray("struct A { virtual void $f(); };\n") << QString("virtual @1:25");
+        << QByteArray("struct A { virtual void $f(); };\n") << QString("virtual A@1:25");
 
     QTest::newRow("pure virtual")
-        << QByteArray("struct A { virtual void $f() = 0; };\n") << QString("pure @1:25");
+        << QByteArray("struct A { virtual void $f() = 0; };\n") << QString("pure A@1:25");
 
     // The function is virtual because a base said so, and the base's
     // declaration is what a reader is offered.
     QTest::newRow("virtual because a base says so")
         << QByteArray("struct A { virtual void f(); };\n"
                       "struct B : A { void $f(); };\n")
-        << QString("virtual @1:25");
+        << QString("virtual A@1:25");
 
     QTest::newRow("override written out")
         << QByteArray("struct A { virtual void f(); };\n"
                       "struct B : A { void $f() override; };\n")
-        << QString("virtual @1:25");
+        << QString("virtual A@1:25");
 
     // The declarations furthest up are the ones kept: what the middle class
     // says is not where it was first made virtual.
@@ -2248,14 +2316,14 @@ void tst_cxxfrontenddocument::virtuality_data()
         << QByteArray("struct A { virtual void f(); };\n"
                       "struct B : A { virtual void f(); };\n"
                       "struct C : B { void $f(); };\n")
-        << QString("virtual @1:25");
+        << QString("virtual A@1:25");
 
     // Two bases declaring it, both as far up as the other.
     QTest::newRow("two bases at the same height")
         << QByteArray("struct A { virtual void f(); };\n"
                       "struct B { virtual void f(); };\n"
                       "struct C : A, B { void $f(); };\n")
-        << QString("virtual @1:25, @2:25");
+        << QString("virtual A@1:25, B@2:25");
 
     // A base that declares it final ends the search: nothing below it
     // overrides anything.
@@ -2302,8 +2370,10 @@ void tst_cxxfrontenddocument::virtuality()
     QString described = virtuality.isPureVirtual ? "pure"
                                                  : (virtuality.isVirtual ? "virtual" : "plain");
     QStringList places;
-    for (const CxxFrontendDocument::Place &place : virtuality.firstVirtuals)
-        places.append(QString("@%1:%2").arg(place.line).arg(place.column));
+    for (const CxxFrontendDocument::Virtuality::FirstVirtual &first : virtuality.firstVirtuals) {
+        places.append(QString("%1@%2:%3").arg(first.className)
+                          .arg(first.place.line).arg(first.place.column));
+    }
     if (!places.isEmpty())
         described += ' ' + places.join(", ");
     QCOMPARE(described, expected);

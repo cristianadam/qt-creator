@@ -185,8 +185,9 @@ static std::optional<bool> virtualityOnTheModel(const Function *function,
         return std::nullopt;
 
     QList<const Function *> found;
-    for (const CPlusPlus::CxxFrontendDocument::Place &place : read->firstVirtuals) {
-        const Function * const at = functionWrittenAt(context, place);
+    for (const CPlusPlus::CxxFrontendDocument::Virtuality::FirstVirtual &first :
+         read->firstVirtuals) {
+        const Function * const at = functionWrittenAt(context, first.place);
         if (!at)
             return std::nullopt;
         found.append(at);

@@ -2129,8 +2129,33 @@ CxxFrontendDocument::MemberFunction CxxFrontendDocument::Private::describeMember
 {
     MemberFunction member;
     member.name = qualifiedNameOf(function);
+    member.unqualifiedName = function->name() ? fromStd(cxx::to_string(function->name()))
+                                              : QString();
     member.parameterCount = int(parameterCountOf(function));
+
+    // The two halves a list of members writes, as an outline writes them:
+    // what it is called and takes, and then what it hands back. A
+    // constructor and a destructor hand nothing back.
+    if (auto * const type = function->type()
+                                ? cxx::type_cast<cxx::FunctionType>(function->type())
+                                : nullptr) {
+        const cxx::TypePrintOptions options{.omitEnclosingScope = true,
+                                            .omitExceptionSpecification = true,
+                                            .templateParametersOf = function};
+        member.signature = applyStarBinding(
+            fromStd(cxx::to_string(type, member.unqualifiedName.toStdString(),
+                                   {.omitFunctionReturnType = true,
+                                    .omitEnclosingScope = true,
+                                    .omitExceptionSpecification = true,
+                                    .templateParametersOf = function})),
+            config.settings);
+        if (!function->isConstructor() && !function->isDestructor()) {
+            member.returnType = applyStarBinding(
+                fromStd(cxx::to_string(type->returnType(), "", options)), config.settings);
+        }
+    }
     const cxx::SourcePosition position = unit.tokenStartPosition(at);
+    member.filePath = fileOf(at);
     member.line = int(position.line);
     member.column = int(position.column);
     member.isPureVirtual = function->isPure();
@@ -2149,9 +2174,9 @@ CxxFrontendDocument::MemberFunction CxxFrontendDocument::Private::describeMember
 }
 
 QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsAt(
-    int line, int column) const
+    int line, int column, const QString &inFile) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
+    const cxx::SourceLocation location = d->tokenAt(line, column, inFile);
     if (!location || !d->unit.ast())
         return {};
 
@@ -4751,9 +4776,10 @@ QString signatureOf(cxx::FunctionSymbol *function)
 
 } // namespace
 
-CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int column) const
+CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(
+    int line, int column, const QString &inFile) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
+    const cxx::SourceLocation location = d->tokenAt(line, column, inFile);
     if (!location)
         return {};
     auto * const function = dynamic_cast<cxx::FunctionSymbol *>(d->declaredAt(location));
@@ -4763,8 +4789,8 @@ CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int 
     // Whether "virtual" is written on it, which is not the same as being
     // virtual: a function that overrides one is virtual whether it says so
     // or not, and what a reader is offered is the declarations that say it.
-    const auto writesVirtual = [this](int line, int column) {
-        for (cxx::AST * const node : cxxAstPathAt(*this, line, column)) {
+    const auto writesVirtual = [this, &inFile](int line, int column) {
+        for (cxx::AST * const node : cxxAstPathAt(*this, line, column, inFile)) {
             cxx::List<cxx::SpecifierAST *> *specifiers = nullptr;
             if (auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(node))
                 specifiers = simple->declSpecifierList;
@@ -4795,8 +4821,23 @@ CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int 
         return Place{d->fileOf(at), int(position.line), int(position.column)};
     };
 
+    // The class writing it goes over with it: what a reader does about one
+    // of these can turn on which class it is.
+    const auto firstVirtualOf = [&](cxx::Symbol *symbol) {
+        Virtuality::FirstVirtual first;
+        first.place = placeOf(symbol);
+        for (cxx::Symbol *s = symbol->parent(); s; s = s->parent()) {
+            if (auto * const enclosing = dynamic_cast<cxx::ClassSymbol *>(s)) {
+                if (enclosing->name())
+                    first.className = fromStd(cxx::to_string(enclosing->name()));
+                break;
+            }
+        }
+        return first;
+    };
+
     if (answer.isVirtual)
-        answer.firstVirtuals.append(placeOf(function));
+        answer.firstVirtuals.append(firstVirtualOf(function));
 
     cxx::ClassSymbol *cls = nullptr;
     for (cxx::Symbol *s = function->parent(); s && !cls; s = s->parent())
@@ -4839,7 +4880,7 @@ CxxFrontendDocument::Virtuality CxxFrontendDocument::virtualityAt(int line, int 
                     answer.firstVirtuals.clear();
                     depthOfFirstVirtuals = depth;
                 }
-                answer.firstVirtuals.append(placeOf(candidate));
+                answer.firstVirtuals.append(firstVirtualOf(candidate));
             }
         }
 

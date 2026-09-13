@@ -765,10 +765,24 @@ public:
     struct MemberFunction
     {
         QString name; // written out in full, the scopes included
+
+        // The same name with nothing in front of it, which is what a class
+        // below writes when it declares one of its own.
+        QString unqualifiedName;
         int parameterCount = 0;
 
+        // How it reads where it is declared: its name and what it takes,
+        // with what it hands back said apart rather than in front of it --
+        // the two pieces a list of members shows, the way Overview prints
+        // them apart. Empty for what hands nothing back.
+        QString signature;
+        QString returnType;
+
         // Where its own name stands, one-based, which is what a search for
-        // its definition starts from.
+        // its definition starts from. The file is this document's own
+        // unless the class was declared in a header it read, which is why
+        // it is said rather than assumed.
+        QString filePath;
         int line = 0;
         int column = 0;
 
@@ -794,7 +808,13 @@ public:
     // it defines right there included, which say so. A reader putting
     // definitions in order wants the rest; one offering what a class
     // below could implement wants them all.
-    QList<MemberFunction> memberFunctionsAt(int line, int column) const;
+    //
+    // \a inFile says which file the position is in, empty being this
+    // document's own: a class somebody derives from is as often declared in
+    // a header this file reads, and a header is read into whoever includes
+    // it, so this document answers for that one too.
+    QList<MemberFunction> memberFunctionsAt(int line, int column,
+                                            const QString &inFile = {}) const;
 
     // A stretch of text this file writes, counted from one: where its
     // first token begins, and where its last one ends -- which is the
@@ -1241,15 +1261,28 @@ public:
     // read into the file that writes it, so they are all in reach here.
     struct Virtuality
     {
+        // A declaration that said it, and the class that wrote it -- named
+        // with nothing in front of it, since what a reader does about one
+        // of these can turn on which class it is. QObject declares three
+        // that nobody implements by hand.
+        struct FirstVirtual
+        {
+            Place place;
+            QString className;
+        };
+
         bool isVirtual = false;
         bool isPureVirtual = false;
-        QList<Place> firstVirtuals;
+        QList<FirstVirtual> firstVirtuals;
 
         // Whether a function is written at the position at all, which is
         // what tells "not virtual" from "nothing to say".
         bool namesAFunction = false;
     };
-    Virtuality virtualityAt(int line, int column) const;
+    // \a inFile says which file the position is in, empty being this
+    // document's own: the function asked about is as often one a header
+    // this file reads declares.
+    Virtuality virtualityAt(int line, int column, const QString &inFile = {}) const;
 
     // The members of the class whose name is written at \a classPlace that
     // override the function declared at \a function: same name, what it
