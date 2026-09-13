@@ -23,6 +23,7 @@ add_qtc_plugin(CppEditor
     cppcodeformatter.cpp cppcodeformatter.h
     cppcodemodelinspectordialog.cpp cppcodemodelinspectordialog.h
     cppcodemodelinspectordumper.cpp cppcodemodelinspectordumper.h
+    cppcodemodelqueries.cpp cppcodemodelqueries.h
     cppcodemodelsettings.cpp cppcodemodelsettings.h
     cppcodestylesettings.cpp cppcodestylesettings.h
     cppcodestylesettingspage.cpp cppcodestylesettingspage.h

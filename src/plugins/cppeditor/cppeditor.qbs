@@ -99,6 +99,8 @@ QtcPlugin {
         "cppcodemodelinspectordialog.h",
         "cppcodemodelinspectordumper.cpp",
         "cppcodemodelinspectordumper.h",
+        "cppcodemodelqueries.cpp",
+        "cppcodemodelqueries.h",
         "cppcodemodelsettings.cpp",
         "cppcodemodelsettings.h",
         "cppcodestylesettings.cpp",

@@ -12,14 +12,13 @@
 #include <widgethost.h>
 #include <designer/cpp/formclasswizardpage.h>
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorwidget.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/cpptoolsreuse.h>
 #include <cppeditor/cppworkingcopy.h>
 #include <cppeditor/insertionpointlocator.h>
-#include <cppeditor/symbolfinder.h>
 
-#include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 
 #include <coreplugin/icore.h>
@@ -211,80 +210,9 @@ static QList<Document::Ptr> findDocumentsIncluding(const Snapshot &docTable,
     return docList;
 }
 
-// Does klass inherit baseClass?
-static bool inherits(const Overview &o, const Class *klass, const QString &baseClass)
-{
-    const int baseClassCount = klass->baseClassCount();
-    for (int b = 0; b < baseClassCount; ++b)
-        if (o.prettyName(klass->baseClassAt(b)->name()) == baseClass)
-            return true;
-    return false;
-}
-
-static QString fullyQualifiedName(const LookupContext &context, const Name *name, Scope *scope)
-{
-    if (!name || !scope)
-        return QString();
-
-    const QList<LookupItem> items = context.lookup(name, scope);
-    if (items.isEmpty()) // "ui_xxx.h" might not be generated and nothing is forward declared.
-        return Overview().prettyName(name);
-    Symbol *symbol = items.first().declaration();
-    return Overview().prettyName(LookupContext::fullyQualifiedName(symbol));
-}
-
-// Find class definition in namespace (that is, the outer class
-// containing a member of the desired class type) or inheriting the desired class
-// in case of forms using the Multiple Inheritance approach
-static const Class *findClass(const Namespace *parentNameSpace, const LookupContext &context,
-                              const QString &className)
-{
-    if (Designer::Constants::Internal::debug)
-        qDebug() << Q_FUNC_INFO << className;
-
-    const Overview o;
-    const int namespaceMemberCount = parentNameSpace->memberCount();
-    for (int i = 0; i < namespaceMemberCount; ++i) { // we go through all namespace members
-        const Symbol *sym = parentNameSpace->memberAt(i);
-        // we have found a class - we are interested in classes only
-        if (const Class *cl = sym->asClass()) {
-            // 1) we go through class members
-            const int classMemberCount = cl->memberCount();
-            for (int j = 0; j < classMemberCount; ++j)
-                if (Declaration *decl = cl->memberAt(j)->asDeclaration()) {
-                // we want to know if the class contains a member (so we look into
-                // a declaration) of uiClassName type
-                    QString nameToMatch;
-                    if (const NamedType *nt = decl->type()->asNamedType()) {
-                        nameToMatch = fullyQualifiedName(context, nt->name(),
-                                                         decl->enclosingScope());
-                    // handle pointers to member variables
-                    } else if (PointerType *pt = decl->type()->asPointerType()) {
-                        if (NamedType *nt = pt->elementType()->asNamedType()) {
-                            nameToMatch = fullyQualifiedName(context, nt->name(),
-                                                             decl->enclosingScope());
-                        }
-                    }
-                    if (!nameToMatch.isEmpty() && className == nameToMatch)
-                        return cl;
-                } // decl
-            // 2) does it inherit the desired class
-            if (inherits(o, cl, className))
-                return cl;
-        } else {
-            // Check namespaces
-            if (const Namespace *ns = sym->asNamespace()) {
-                if (const Class *cl = findClass(ns, context, className))
-                    return cl;
-            } // member is namespace
-        } // member is no class
-    } // for members
-    return nullptr;
-}
-
-// Everything "Go To Slot" has to read out of the code, which is all either
-// front end is asked for: where a declaration goes, where a definition goes
-// and what is written there are the locator's questions and this file's.
+// Everything "Go To Slot" has to read out of the code, which is all the code
+// model is asked for: where a declaration goes, where a definition goes and
+// what is written there are the locator's questions and this file's.
 struct FormClass
 {
     // The class the form belongs to -- the one that has a member of the ui
@@ -308,36 +236,6 @@ struct FormClass
     bool isValid() const { return line > 0; }
     bool declaresTheSlot() const { return slotDeclaration.isValid(); }
 };
-
-static Function *findDeclaration(const Class *cl, const QString &functionName)
-{
-    const QString funName = QString::fromUtf8(QMetaObject::normalizedSignature(functionName.toUtf8()));
-    const int mCount = cl->memberCount();
-    // we are interested only in declarations (can be decl of function or of a field)
-    // we are only interested in declarations of functions
-    const Overview overview;
-    for (int j = 0; j < mCount; ++j) { // go through all members
-        if (Declaration *decl = cl->memberAt(j)->asDeclaration())
-            if (Function *fun = decl->type()->asFunctionType()) {
-                // Format signature
-                QString memberFunction = overview.prettyName(fun->name());
-                memberFunction += '(';
-                const int aCount = fun->argumentCount();
-                for (int i = 0; i < aCount; i++) { // we build argument types string
-                    const Argument *arg = fun->argumentAt(i)->asArgument();
-                    if (i > 0)
-                        memberFunction += ',';
-                    memberFunction += overview.prettyType(arg->type());
-                }
-                memberFunction += ')';
-                // we compare normalized signatures
-                memberFunction = QString::fromUtf8(QMetaObject::normalizedSignature(memberFunction.toUtf8()));
-                if (memberFunction == funName) // we match function names and argument lists
-                    return fun;
-            }
-    }
-    return nullptr;
-}
 
 static BaseTextEditor *editorAt(const FilePath &filePath, int line, int column)
 {
@@ -443,92 +341,50 @@ static QString addParameterNames(const QString &functionSignature, const QString
     return functionName;
 }
 
-// Recursively find a class definition in the document passed on or in its
-// included files (going down [maxIncludeDepth] includes) and return a pair
-// of <Class*, Document>.
-
-using ClassDocumentPtrPair = QPair<const Class *, Document::Ptr>;
-
-static ClassDocumentPtrPair
-        findClassRecursively(const LookupContext &context, const QString &className,
-                             unsigned maxIncludeDepth)
-{
-    const Document::Ptr doc = context.thisDocument();
-    const Snapshot docTable = context.snapshot();
-    if (Designer::Constants::Internal::debug)
-        qDebug() << Q_FUNC_INFO << doc->filePath() << className << maxIncludeDepth;
-    // Check document
-    if (const Class *cl = findClass(doc->globalNamespace(), context, className))
-        return ClassDocumentPtrPair(cl, doc);
-    if (maxIncludeDepth) {
-        // Check the includes
-        const unsigned recursionMaxIncludeDepth = maxIncludeDepth - 1u;
-        const FilePaths includedFiles = doc->includedFiles();
-        for (const FilePath &include : includedFiles) {
-            const Snapshot::const_iterator it = docTable.find(include);
-            if (it != docTable.end()) {
-                const Document::Ptr &includeDoc = it.value();
-                LookupContext context(includeDoc, docTable);
-                const ClassDocumentPtrPair irc = findClassRecursively(context, className,
-                    recursionMaxIncludeDepth);
-                if (irc.first)
-                    return irc;
-            }
-        }
-    }
-    return ClassDocumentPtrPair(0, Document::Ptr());
-}
-
-// What the built-in front end reads about the class \a doc, or a file it
-// includes, writes the ui class \a uiClassName into -- and what that class
-// says about a slot written as \a slotSignature.
-static FormClass builtinFormClass(const Snapshot &docTable, const Document::Ptr &doc,
-                                  const QString &uiClassName, const QString &slotSignature)
-{
-    const LookupContext context(doc, docTable);
-    const ClassDocumentPtrPair found = findClassRecursively(context, uiClassName, 1u);
-    const Class * const cl = found.first;
-    if (!cl)
-        return {};
-
-    const Overview overview;
-    FormClass formClass;
-    formClass.name = overview.prettyName(cl->name());
-    formClass.filePath = found.second->filePath();
-    formClass.line = cl->line();
-    formClass.column = cl->column();
-
-    const CppEditor::CppRefactoringChanges refactoring(docTable);
-    CppEditor::SymbolFinder symbolFinder;
-    if (Function * const slot = findDeclaration(cl, slotSignature)) {
-        formClass.slotDeclaration = CppEditor::declarationToDefine(slot, refactoring);
-        if (const Function * const definition
-            = symbolFinder.findMatchingDefinition(slot, docTable, true)) {
-            formClass.slotDefinition = {FilePath::fromUtf8(definition->fileName()),
-                                        definition->line(), definition->column()};
-        }
-    }
-
-    for (int i = 0, count = cl->memberCount(); i < count; ++i) {
-        const Declaration * const decl = cl->memberAt(i)->asDeclaration();
-        Function * const ctor = decl ? decl->type()->asFunctionType()
-                                     : cl->memberAt(i)->asFunction();
-        if (!ctor || overview.prettyName(ctor->name()) != formClass.name)
-            continue;
-        const Function *definition = symbolFinder.findMatchingDefinition(ctor, docTable, true);
-        if (!definition)
-            definition = ctor; // possibly an inline definition
-        formClass.constructorDefinitions << Link{FilePath::fromUtf8(definition->fileName()),
-                                                 definition->line(), definition->column()};
-    }
-    return formClass;
-}
-
-// The same, off whichever front end is running.
-static FormClass readFormClass(const Snapshot &docTable, const Document::Ptr &doc,
+// What the code says about the class \a filePath, or a file it includes,
+// writes the ui class \a uiClassName into -- and what that class says about a
+// slot written as \a slotSignature.
+//
+// Everything here is asked of the code model in places rather than in
+// symbols, so whichever front end has the file is the one that answers.
+static FormClass readFormClass(const Snapshot &docTable, const FilePath &filePath,
                                const QString &uiClassName, const QString &slotSignature)
 {
-    return builtinFormClass(docTable, doc, uiClassName, slotSignature);
+    // The class definition (ui class defined as member or base class) in the
+    // file itself or in the directly included files (order 1).
+    const CppEditor::WrittenClass klass
+        = CppEditor::classUsingClass(docTable, filePath, uiClassName, 1);
+    if (!klass.isValid())
+        return {};
+
+    FormClass formClass;
+    formClass.name = klass.name;
+    formClass.filePath = klass.filePath;
+    formClass.line = klass.line;
+    formClass.column = klass.column;
+
+    const CppEditor::CppRefactoringChanges refactoring(docTable);
+    const QByteArray wanted = QMetaObject::normalizedSignature(slotSignature.toUtf8());
+    for (const CppEditor::WrittenFunction &member :
+         CppEditor::memberFunctionsOf(docTable, klass)) {
+        // A constructor is written under the class's own name, and where its
+        // definition stands is where an explicit connect() goes.
+        if (member.name == klass.name) {
+            Link definition = CppEditor::definitionOfFunctionAt(docTable, member.filePath,
+                                                                member.line, member.column);
+            if (!definition.hasValidTarget()) // possibly an inline definition
+                definition = {member.filePath, member.line, member.column};
+            formClass.constructorDefinitions << definition;
+            continue;
+        }
+        if (QMetaObject::normalizedSignature(member.signature.toUtf8()) != wanted)
+            continue;
+        formClass.slotDeclaration = CppEditor::declarationToDefineAt(refactoring, member.filePath,
+                                                                     member.line, member.column);
+        formClass.slotDefinition = CppEditor::definitionOfFunctionAt(docTable, member.filePath,
+                                                                     member.line, member.column);
+    }
+    return formClass;
 }
 
 void QtCreatorIntegration::slotActiveFormWindowChanged(QDesignerFormWindowInterface *formWindow)
@@ -777,10 +633,8 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
         if (Designer::Constants::Internal::debug)
             qDebug() << "Checking docs for " << candidate;
 
-        // Find the class definition (ui class defined as member or base class)
-        // in the file itself or in the directly included files (order 1).
         for (const Document::Ptr &d : std::as_const(docMap)) {
-            formClass = readFormClass(docTable, d, candidate, functionName);
+            formClass = readFormClass(docTable, d->filePath(), candidate, functionName);
             if (formClass.isValid())
                 break;
         }
@@ -821,9 +675,8 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
         }
         docTable = newDocTable;
         getParsedDocument(classFilePath, workingCopy, docTable);
-        const Document::Ptr headerDoc = docTable.document(classFilePath);
-        QTC_ASSERT(headerDoc, return false);
-        formClass = readFormClass(docTable, headerDoc, uiClass, functionName);
+        QTC_ASSERT(docTable.document(classFilePath), return false);
+        formClass = readFormClass(docTable, classFilePath, uiClass, functionName);
         QTC_ASSERT(formClass.isValid(), return false);
     }
     QTC_ASSERT(formClass.declaresTheSlot(), return false);
