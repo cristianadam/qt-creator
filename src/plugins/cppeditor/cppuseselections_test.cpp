@@ -226,6 +226,46 @@ void SelectionsTest::testUseSelections_data()
                 << Selection(6, 19, 5)
                 );
 
+    // What the file writes of the thing under the cursor, where that thing
+    // is not a local: the question the other half of this reading answers,
+    // and one only two macro rows above pinned before.
+    QTest::newRow("a member of a class")
+        << _("struct S {\n"
+             "    int @m;\n"
+             "    void f() { m = 1; }\n"
+             "    void g() { m = 2; }\n"
+             "};\n")
+        << (SelectionList()
+            << Selection(2, 8, 1)
+            << Selection(3, 15, 1)
+            << Selection(4, 15, 1));
+
+    QTest::newRow("something the file declares at the top")
+        << _("int @counter;\n"
+             "void f() { counter = 1; }\n"
+             "void g() { counter = 2; }\n")
+        << (SelectionList()
+            << Selection(1, 4, 7)
+            << Selection(2, 11, 7)
+            << Selection(3, 11, 7));
+
+    QTest::newRow("a function")
+        << _("void @f();\n"
+             "void g() { f(); f(); }\n")
+        << (SelectionList()
+            << Selection(1, 5, 1)
+            << Selection(2, 11, 1)
+            << Selection(2, 16, 1));
+
+    // Another class's member of the same name is another thing, and is not
+    // marked with it.
+    QTest::newRow("a name another class writes too")
+        << _("struct A { int @m; void f() { m = 1; } };\n"
+             "struct B { int m; void f() { m = 2; } };\n")
+        << (SelectionList()
+            << Selection(1, 15, 1)
+            << Selection(1, 29, 1));
+
     const SelectionList macroUseSelections = SelectionList()
             << Selection(1, 8, 3)
             << Selection(2, 0, 3);
