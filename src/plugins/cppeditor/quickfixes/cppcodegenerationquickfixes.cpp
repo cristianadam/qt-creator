@@ -187,6 +187,12 @@ public:
     // What a member is declared with, the type having been read off one
     // that may have said const or static.
     GeneratedType asDeclared() const;
+    // Without the const a member may have been declared with, which a
+    // parameter taking its value has no use for.
+    GeneratedType withoutConst() const;
+    // The same type read as the class being written into sees it, which
+    // for a parameter of a class above is not where it was written.
+    GeneratedType asTheClassSeesIt() const;
     // The value behind it: what a Q_PROPERTY says, a getter handing back
     // a const reference notwithstanding.
     GeneratedType asValue() const;
@@ -198,7 +204,8 @@ public:
     // The same type where a definition is being written, named with as
     // little in front of it as still finds it from there.
     GeneratedType writtenAt(const CppRefactoringFilePtr &file,
-                            const InsertionLocation &location) const;
+                            const InsertionLocation &location,
+                            const QStringList &namespacesOpenedThere = {}) const;
     // And where the class it belongs to is written, which is where a
     // declaration standing outside the class stands.
     GeneratedType writtenOutsideTheClass() const;
@@ -210,8 +217,9 @@ public:
     QString asTextWithoutTemplateParameters() const;
 
     // Whether it is handed over by value: a pointer, an enumeration, a
-    // number or a reference is, and so is whatever the settings name.
-    bool isValueType() const;
+    // number or a reference is, and so is whatever the settings name --
+    // which is what \a saidByName reports.
+    bool isValueType(bool *saidByName = nullptr) const;
 
 private:
     FullySpecifiedType m_type;
@@ -353,8 +361,6 @@ protected:
             const RefactoringFilePtr &file, const InsertionLocation &loc, const QString &text);
     FullySpecifiedType makeConstRef(FullySpecifiedType type) const;
     FullySpecifiedType addConstToReference(FullySpecifiedType type);
-    QString symbolAt(Symbol *symbol, const CppRefactoringFilePtr &targetFile,
-                     InsertionLocation targetLocation);
     FullySpecifiedType typeAt(
             FullySpecifiedType type,
             Scope *originalScope,
@@ -371,7 +377,6 @@ protected:
      * @return true if it is a pointer, enum, integer, floating point, reference, custom value type
      */
     bool isValueType(FullySpecifiedType type, Scope *enclosingScope, bool *customValueType = nullptr);
-    bool isValueType(Symbol *symbol, bool *customValueType = nullptr);
 
     void addHeaderCode(InsertionPointLocator::AccessSpec spec, const QString &code);
     void addSourceFileCode(const QString &code);
@@ -483,7 +488,6 @@ public:
         : memberVariableName(name)
         , parameterName(CppQuickFixSettings::memberBaseName(name))
         , symbol(symbol)
-        , type(symbol->type())
         , numberOfMember(numberOfMember)
     {}
     ConstructorMemberInfo(const QString &memberName,
@@ -497,7 +501,6 @@ public:
         , defaultValue(defaultValue)
         , init(defaultValue.isEmpty())
         , symbol(symbol)
-        , type(symbol->type())
     {}
     const ParentClassConstructorInfo *parentClassConstructor = nullptr;
     QString memberVariableName;
@@ -506,7 +509,6 @@ public:
     bool init = true;
     bool customValueType; // for the generation later
     Symbol *symbol; // for the right type later
-    FullySpecifiedType type;
     int numberOfMember; // first member, second member, ...
 };
 
@@ -1273,22 +1275,22 @@ private:
                 QString inClassDeclaration = m_class.name() + "(";
                 QString constructorBody = members.empty() ? QString(") {}") : QString(") : ");
                 for (auto &member : members) {
-                    if (isValueType(member->symbol, &member->customValueType))
-                        member->type.setConst(false);
-                    else
-                        member->type = makeConstRef(member->type);
+                    GeneratedType type(member->symbol->type(),
+                                       member->symbol->enclosingScope(),
+                                       this);
+                    type = type.isValueType(&member->customValueType)
+                               ? type.withoutConst()
+                               : type.constReference();
 
-                    inClassDeclaration += overview.prettyType(member->type, member->parameterName);
+                    inClassDeclaration += type.asDeclarationOf(member->parameterName);
                     if (!member->defaultValue.isEmpty())
                         inClassDeclaration += " = " + member->defaultValue;
                     inClassDeclaration += ", ";
                     if (implFile) {
-                        FullySpecifiedType type = typeAt(member->type,
-                                                         m_class.scope(),
-                                                         implFile,
-                                                         implLoc,
-                                                         insertedNamespaces);
-                        implCode += overview.prettyType(type, member->parameterName) + ", ";
+                        implCode += type.asTheClassSeesIt()
+                                        .writtenAt(implFile, implLoc, insertedNamespaces)
+                                        .asDeclarationOf(member->parameterName)
+                                    + ", ";
                     }
                 }
                 Utils::sort(members, &ConstructorMemberInfo::numberOfMember);
@@ -1891,12 +1893,6 @@ CPlusPlus::FullySpecifiedType GetterSetterRefactoringHelper::addConstToReference
     return type;
 }
 
-QString GetterSetterRefactoringHelper::symbolAt(
-        Symbol *symbol, const CppRefactoringFilePtr &targetFile, InsertionLocation targetLocation)
-{
-    return symbolAtDifferentLocation(*m_operation, symbol, targetFile, targetLocation);
-}
-
 CPlusPlus::FullySpecifiedType GetterSetterRefactoringHelper::typeAt(
         FullySpecifiedType type,
         Scope *originalScope,
@@ -1957,11 +1953,6 @@ bool GetterSetterRefactoringHelper::isValueType(
     return isTypeValueType(type);
 }
 
-bool GetterSetterRefactoringHelper::isValueType(Symbol *symbol, bool *customValueType)
-{
-    return isValueType(symbol->type(), symbol->enclosingScope(), customValueType);
-}
-
 GeneratedType::GeneratedType(const FullySpecifiedType &type, Scope *scope,
                              GetterSetterRefactoringHelper *helper)
     : m_type(type)
@@ -1985,6 +1976,13 @@ GeneratedType GeneratedType::asDeclared() const
     FullySpecifiedType type = m_type;
     type.setConst(false);
     type.setStatic(false);
+    return GeneratedType(type, m_scope, m_helper);
+}
+
+GeneratedType GeneratedType::withoutConst() const
+{
+    FullySpecifiedType type = m_type;
+    type.setConst(false);
     return GeneratedType(type, m_scope, m_helper);
 }
 
@@ -2015,9 +2013,18 @@ GeneratedType GeneratedType::firstTemplateArgument() const
 }
 
 GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
-                                 const InsertionLocation &location) const
+                                       const InsertionLocation &location,
+                                       const QStringList &namespacesOpenedThere) const
 {
-    return GeneratedType(m_helper->typeAt(m_type, m_scope, file, location), m_scope, m_helper);
+    return GeneratedType(
+        m_helper->typeAt(m_type, m_scope, file, location, namespacesOpenedThere),
+        m_scope,
+        m_helper);
+}
+
+GeneratedType GeneratedType::asTheClassSeesIt() const
+{
+    return GeneratedType(m_type, m_helper->m_class.scope(), m_helper);
 }
 
 GeneratedType GeneratedType::writtenOutsideTheClass() const
@@ -2048,9 +2055,9 @@ QString GeneratedType::asTextWithoutTemplateParameters() const
     return overview.prettyType(m_type);
 }
 
-bool GeneratedType::isValueType() const
+bool GeneratedType::isValueType(bool *saidByName) const
 {
-    return m_helper->isValueType(m_type, m_scope);
+    return m_helper->isValueType(m_type, m_scope, saidByName);
 }
 
 GeneratedClass::GeneratedClass(Class *clazz, GetterSetterRefactoringHelper *helper)
