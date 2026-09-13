@@ -43,11 +43,15 @@ Utils::CodeModelIcon::Type iconTypeForSymbol(const Symbol *symbol)
             function = symbol->type()->asFunctionType();
 
         if (function->isSlot()) {
-            if (function->isPublic())
+            // Asked of the symbol rather than of its type: a member function
+            // declared in a class is a declaration whose type is a function,
+            // and it is the declaration that says who may name it. The type
+            // says nobody wrote an access for it, which reads as public.
+            if (symbol->isPublic())
                 return SlotPublic;
-            else if (function->isProtected())
+            else if (symbol->isProtected())
                 return SlotProtected;
-            else if (function->isPrivate())
+            else if (symbol->isPrivate())
                 return SlotPrivate;
         } else if (function->isSignal()) {
             return Signal;

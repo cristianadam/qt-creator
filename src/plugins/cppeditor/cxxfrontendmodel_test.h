@@ -28,6 +28,8 @@ private slots:
     void testLocalUses();
     void testOutline_data();
     void testOutline();
+    void testIcons_data();
+    void testIcons();
     void testNames_data();
     void testNames();
     void testNamesAcrossFiles();

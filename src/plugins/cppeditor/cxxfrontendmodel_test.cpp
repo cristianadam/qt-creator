@@ -24,6 +24,7 @@
 #include <cplusplus/ASTVisitor.h>
 #include <cplusplus/AST.h>
 #include <cplusplus/CxxFrontendDocument.h>
+#include <cplusplus/Icons.h>
 #include <cplusplus/CxxFrontendSnapshot.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/TranslationUnit.h>
@@ -715,6 +716,97 @@ void CxxFrontendModelTest::testOutline()
 
     if (const char *reason = knownOutlineDivergence(QString::fromUtf8(QTest::currentDataTag())))
         QEXPECT_FAIL("", reason, Abort);
+    QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));
+}
+
+namespace {
+
+// What the built-in front end shows beside each thing a file declares, in
+// the order it declares them: the same walk an outline makes, and the icon
+// is the number Icons::iconTypeForSymbol() answers with.
+void iconsOf(const CPlusPlus::Scope *scope, QStringList *shown)
+{
+    Overview overview;
+    for (int i = 0, members = scope->memberCount(); i < members; ++i) {
+        CPlusPlus::Symbol * const member = scope->memberAt(i);
+        if (!member->name() || member->isGenerated())
+            continue;
+        shown->append(QString("%1 %2").arg(overview.prettyName(member->name()))
+                          .arg(int(::CPlusPlus::Icons::iconTypeForSymbol(member))));
+        if (const CPlusPlus::Scope * const nested = member->asScope())
+            iconsOf(nested, shown);
+    }
+}
+
+} // namespace
+
+// The icon beside each thing a file declares, from both models.
+//
+// The outline above compares the tree and leaves the icon out of it -- it is
+// a picture there -- so nothing compared what the two front ends make of a
+// member. A slot was shown as a plain function for as long as that was so.
+void CxxFrontendModelTest::testIcons_data()
+{
+    QTest::addColumn<QByteArray>("source");
+
+    QTest::newRow("what a class holds")
+        << QByteArray("class C {\n"
+                      "public:\n"
+                      "    void open();\n"
+                      "    static int count();\n"
+                      "    int m_size;\n"
+                      "    static int s_total;\n"
+                      "protected:\n"
+                      "    void tick();\n"
+                      "private:\n"
+                      "    void hide();\n"
+                      "    int m_hidden;\n"
+                      "};\n");
+
+    QTest::newRow("what Qt makes of a member")
+        << QByteArray("class C {\n"
+                      "signals:\n"
+                      "    void changed();\n"
+                      "public slots:\n"
+                      "    void open();\n"
+                      "protected slots:\n"
+                      "    void tick();\n"
+                      "private slots:\n"
+                      "    void hide();\n"
+                      "};\n");
+
+    QTest::newRow("what a file declares around a class")
+        << QByteArray("namespace N { }\n"
+                      "struct S { int m; };\n"
+                      "enum E { First, Second };\n"
+                      "typedef int Number;\n"
+                      "int counter;\n"
+                      "void f();\n");
+}
+
+void CxxFrontendModelTest::testIcons()
+{
+    QFETCH(QByteArray, source);
+
+    const Parsed parsed({{"main.cpp", source}}, "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const Document::Ptr document
+        = CppEditor::Tests::TestCase::globalSnapshot().document(parsed.mainFilePath());
+    QVERIFY(document);
+
+    QStringList fromBuiltin;
+    iconsOf(document->globalNamespace(), &fromBuiltin);
+
+    QStringList fromModel;
+    const CxxFrontendDocument * const read = parsed.mainDocument();
+    QVERIFY(read);
+    for (const CxxFrontendDocument::Symbol &symbol : read->symbols()) {
+        if (symbol.isGenerated || symbol.name.isEmpty())
+            continue;
+        fromModel.append(QString("%1 %2").arg(symbol.name).arg(int(symbol.icon)));
+    }
+
     QCOMPARE(fromModel.join('\n'), fromBuiltin.join('\n'));
 }
 
