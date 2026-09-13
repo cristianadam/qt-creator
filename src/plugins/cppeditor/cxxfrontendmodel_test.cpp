@@ -754,6 +754,12 @@ void iconsOf(const CPlusPlus::Scope *scope, QStringList *shown)
 // The outline above compares the tree and leaves the icon out of it -- it is
 // a picture there -- so nothing compared what the two front ends make of a
 // member. A slot was shown as a plain function for as long as that was so.
+//
+// Over sources the two list the same things for, which is what keeps this
+// about the icon: which things are listed at all is the outline's question,
+// and where they differ -- a template, whose parameters and whose class the
+// built-in front end makes symbols of their own, or a function, whose
+// arguments it holds -- that test says so.
 void CxxFrontendModelTest::testIcons_data()
 {
     QTest::addColumn<QByteArray>("source");
@@ -782,6 +788,14 @@ void CxxFrontendModelTest::testIcons_data()
                       "    void tick();\n"
                       "private slots:\n"
                       "    void hide();\n"
+                      "};\n");
+
+    QTest::newRow("a class inside a class")
+        << QByteArray("class Outer {\n"
+                      "public:\n"
+                      "    struct Inner { int m; };\n"
+                      "    enum Kind { First, Second };\n"
+                      "    union Both { int i; float f; };\n"
                       "};\n");
 
     QTest::newRow("what a file declares around a class")
