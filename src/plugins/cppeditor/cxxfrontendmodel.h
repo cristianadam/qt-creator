@@ -8,6 +8,7 @@
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
 #include "indexitem.h"
+#include "insertionpointlocator.h"
 #include "semantichighlighter.h"
 
 #include <cplusplus/CxxFrontendDocument.h>
@@ -512,6 +513,56 @@ QList<CPlusPlus::CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctions
 std::optional<QList<CPlusPlus::CxxFrontendDocument::MemberFunction>>
 cxxFrontendMemberFunctionsDeclaredAt(const Utils::FilePath &filePath,
                                      const Utils::FilePath &classFile, int line, int column);
+
+// Files read with this model, and kept: a reader that asks several questions
+// about one file pays for one parse.
+//
+// The store answers where the editor is running over the file; anything else
+// is read then and there, since what asks here is not the editor -- a form's
+// class is in whichever files the project has, open or not. A reading is
+// worth what it cost, so it is worth keeping: a parse of a file and its
+// headers is a third of a second.
+//
+// Every answer is nothing where the model is off or the file cannot be read,
+// which is when the caller asks the built-in front end instead. An empty
+// answer is an answer.
+class CxxFrontendReading
+{
+public:
+    // \a workingCopy has to be taken where the editor documents live.
+    CxxFrontendReading(const CPlusPlus::Snapshot &builtinSnapshot,
+                       const WorkingCopy &workingCopy);
+    ~CxxFrontendReading();
+
+    // The classes \a filePath writes that use \a className -- a member of
+    // that type, or a base -- written out in full. The headers it reads are
+    // among them, each class's place saying which file it is in.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::ClassUsingAClass>> classesUsing(
+        const Utils::FilePath &filePath, const QString &className) const;
+
+    // Every member function the class whose name stands at \a line and
+    // \a column of \a classFile declares, the ones it defines right there
+    // included. \a filePath is the file to read, which is not always the one
+    // the class is in: a header is read into whoever includes it.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::MemberFunction>> memberFunctionsIn(
+        const Utils::FilePath &filePath, const Utils::FilePath &classFile,
+        int line, int column) const;
+
+    // What the locator needs of the function whose own name stands at
+    // \a line and \a column of \a filePath.
+    std::optional<DeclarationToDefine> declarationToDefineIn(
+        const Utils::FilePath &filePath, int line, int column) const;
+
+    // Where the project defines the function declared at \a line and
+    // \a column of \a filePath -- the same search cxxFrontendCounterpart
+    // makes, under the same bound on how many files it reads.
+    std::optional<Utils::Link> definitionOfFunctionIn(
+        const Utils::FilePath &filePath, int line, int column) const;
+
+private:
+    class Private;
+    const std::unique_ptr<Private> d;
+};
 
 // A literal at \a line and \a column of \a filePath, both counted from one,
 // written inside a function.

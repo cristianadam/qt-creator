@@ -1387,6 +1387,136 @@ std::optional<QString> cxxFrontendDeclarationHeadFor(
     return declaration;
 }
 
+class CxxFrontendReading::Private
+{
+public:
+    Snapshot builtinSnapshot;
+    WorkingCopy workingCopy;
+
+    // Kept rather than read again: a caller asks four questions about the
+    // same file, and each reading is a parse of it and everything it
+    // includes.
+    mutable QHash<FilePath, HoldingDocument> read;
+
+    const CxxFrontendDocument *document(const FilePath &filePath) const
+    {
+        if (!cxxFrontendModelRequested())
+            return nullptr;
+        const auto known = read.constFind(filePath);
+        if (known != read.constEnd())
+            return known->document;
+
+        // Read rather than taken out of the store, even where the store has
+        // the file: the store holds the editor's last parse, and a caller
+        // here may have just written into the file -- which is what adding a
+        // declaration and then looking for it is. The working copy it was
+        // handed is the one that has what was written.
+        return read.insert(filePath,
+                           readWith(builtinSnapshot, workingCopy, filePath, {}, {}))->document;
+    }
+};
+
+CxxFrontendReading::CxxFrontendReading(const Snapshot &builtinSnapshot,
+                                       const WorkingCopy &workingCopy)
+    : d(new Private{builtinSnapshot, workingCopy, {}})
+{}
+
+CxxFrontendReading::~CxxFrontendReading() = default;
+
+std::optional<QList<CxxFrontendDocument::ClassUsingAClass>> CxxFrontendReading::classesUsing(
+    const FilePath &filePath, const QString &className) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    return document->classesUsing(className);
+}
+
+std::optional<QList<CxxFrontendDocument::MemberFunction>> CxxFrontendReading::memberFunctionsIn(
+    const FilePath &filePath, const FilePath &classFile, int line, int column) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    // Its own file where a header declares the class, and nothing where this
+    // file does: the tokens of the file a unit started from carry no name.
+    const QString writtenIn = classFile == filePath ? QString() : classFile.toFSPathString();
+    return document->memberFunctionsAt(line, column, writtenIn);
+}
+
+std::optional<DeclarationToDefine> CxxFrontendReading::declarationToDefineIn(
+    const FilePath &filePath, int line, int column) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Declaration declared = document->declarationOfNameAt(line, column);
+    if (!declared.isValid())
+        return DeclarationToDefine();
+
+    DeclarationToDefine declaration;
+    declaration.filePath = filePath;
+    declaration.line = line;
+    declaration.column = column;
+
+    // What it is written inside, outermost first, with its own name at the
+    // end -- which is what the path written out in full says already.
+    declaration.enclosingNames = declared.name.split("::", Qt::SkipEmptyParts);
+
+    // Of those, the namespaces: a class is written into the definition's own
+    // name rather than opened around it, so only these have to be given to a
+    // file that writes none of them. Which of the names is which is not in
+    // the path, so the tree is asked.
+    for (cxx::AST * const node : cxxAstPathAt(*document, line, column)) {
+        if (auto * const ns = dynamic_cast<cxx::NamespaceDefinitionAST *>(node);
+            ns && ns->identifier) {
+            declaration.enclosingNamespaces << QString::fromStdString(ns->identifier->name());
+        } else if (auto * const cls = dynamic_cast<cxx::ClassSpecifierAST *>(node)) {
+            // Where a member's definition goes when nothing better is found:
+            // just past the ";" of the class it is written in. The innermost
+            // class wins, which is the last one the path reaches.
+            const CxxAstRange brace = cxxTokenRangeAt(*document, cls->rbraceLoc);
+            if (brace.isValid()) {
+                declaration.afterItsClass.line = brace.endLine;
+                declaration.afterItsClass.column = brace.endColumn + 1; // Skipping the ";"
+            }
+        }
+    }
+    return declaration;
+}
+
+std::optional<Link> CxxFrontendReading::definitionOfFunctionIn(
+    const FilePath &filePath, int line, int column) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Counterpart counterpart = document->counterpartAt(line, column);
+    if (counterpart.isValid())
+        return linkTo(counterpart);
+    if (!counterpart.namesAFunction())
+        return Link();
+
+    int read = 0;
+    for (const FilePath &candidate : filesToSearch(d->builtinSnapshot, filePath)) {
+        if (candidate == filePath)
+            continue;
+        if (!mayWrite(d->builtinSnapshot, candidate, counterpart.name))
+            continue;
+        if (++read > maxFilesRead)
+            return Link();
+
+        if (const std::optional<CxxFrontendDocument::Counterpart> definition
+            = definitionIn(d->builtinSnapshot, candidate, counterpart.name,
+                           counterpart.parameterCount)) {
+            return linkTo(*definition);
+        }
+    }
+    return Link();
+}
+
 std::optional<QList<CxxFrontendDocument::MemberFunction>> cxxFrontendMemberFunctionsDeclaredAt(
     const FilePath &filePath, const FilePath &classFile, int line, int column)
 {

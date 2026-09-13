@@ -347,13 +347,13 @@ static QString addParameterNames(const QString &functionSignature, const QString
 //
 // Everything here is asked of the code model in places rather than in
 // symbols, so whichever front end has the file is the one that answers.
-static FormClass readFormClass(const Snapshot &docTable, const FilePath &filePath,
+static FormClass readFormClass(const CppEditor::CodeModelQueries &code,
+                               const Snapshot &docTable, const FilePath &filePath,
                                const QString &uiClassName, const QString &slotSignature)
 {
     // The class definition (ui class defined as member or base class) in the
     // file itself or in the directly included files (order 1).
-    const CppEditor::WrittenClass klass
-        = CppEditor::classUsingClass(docTable, filePath, uiClassName, 1);
+    const CppEditor::WrittenClass klass = code.classUsingClass(filePath, uiClassName, 1);
     if (!klass.isValid())
         return {};
 
@@ -365,13 +365,12 @@ static FormClass readFormClass(const Snapshot &docTable, const FilePath &filePat
 
     const CppEditor::CppRefactoringChanges refactoring(docTable);
     const QByteArray wanted = QMetaObject::normalizedSignature(slotSignature.toUtf8());
-    for (const CppEditor::WrittenFunction &member :
-         CppEditor::memberFunctionsOf(docTable, klass)) {
+    for (const CppEditor::WrittenFunction &member : code.memberFunctionsOf(klass)) {
         // A constructor is written under the class's own name, and where its
         // definition stands is where an explicit connect() goes.
         if (member.name == klass.name) {
-            Link definition = CppEditor::definitionOfFunctionAt(docTable, member.filePath,
-                                                                member.line, member.column);
+            Link definition = code.definitionOfFunctionAt(member.filePath, member.line,
+                                                          member.column);
             if (!definition.hasValidTarget()) // possibly an inline definition
                 definition = {member.filePath, member.line, member.column};
             formClass.constructorDefinitions << definition;
@@ -379,10 +378,10 @@ static FormClass readFormClass(const Snapshot &docTable, const FilePath &filePat
         }
         if (QMetaObject::normalizedSignature(member.signature.toUtf8()) != wanted)
             continue;
-        formClass.slotDeclaration = CppEditor::declarationToDefineAt(refactoring, member.filePath,
-                                                                     member.line, member.column);
-        formClass.slotDefinition = CppEditor::definitionOfFunctionAt(docTable, member.filePath,
-                                                                     member.line, member.column);
+        formClass.slotDeclaration = code.declarationToDefineAt(refactoring, member.filePath,
+                                                               member.line, member.column);
+        formClass.slotDefinition = code.definitionOfFunctionAt(member.filePath, member.line,
+                                                               member.column);
     }
     return formClass;
 }
@@ -627,6 +626,10 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     const QString functionName = slotBaseName + signalParams;
     const QString functionNameWithParameterNames = addParameterNames(functionName, parameterNames);
 
+    // The working copy is what is being typed rather than what is on disk,
+    // and has to be taken where the editor documents live -- here.
+    const CppEditor::CodeModelQueries code(docTable, CppEditor::CppModelManager::workingCopy());
+
     QString uiClass;
     FormClass formClass;
     for (const QString &candidate : uiClassNames(fwi->mainContainer()->objectName())) {
@@ -634,7 +637,7 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
             qDebug() << "Checking docs for " << candidate;
 
         for (const Document::Ptr &d : std::as_const(docMap)) {
-            formClass = readFormClass(docTable, d->filePath(), candidate, functionName);
+            formClass = readFormClass(code, docTable, d->filePath(), candidate, functionName);
             if (formClass.isValid())
                 break;
         }
@@ -676,7 +679,9 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
         docTable = newDocTable;
         getParsedDocument(classFilePath, workingCopy, docTable);
         QTC_ASSERT(docTable.document(classFilePath), return false);
-        formClass = readFormClass(docTable, classFilePath, uiClass, functionName);
+        // Over the snapshot as it now is: the declaration was just written.
+        const CppEditor::CodeModelQueries reread(docTable, workingCopy);
+        formClass = readFormClass(reread, docTable, classFilePath, uiClass, functionName);
         QTC_ASSERT(formClass.isValid(), return false);
     }
     QTC_ASSERT(formClass.declaresTheSlot(), return false);

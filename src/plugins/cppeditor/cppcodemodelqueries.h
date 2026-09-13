@@ -5,6 +5,7 @@
 
 #include "cppeditor_global.h"
 #include "cpprefactoringchanges.h"
+#include "cppworkingcopy.h"
 #include "insertionpointlocator.h"
 
 #include <utils/filepath.h>
@@ -12,6 +13,8 @@
 
 #include <QList>
 #include <QString>
+
+#include <memory>
 
 namespace CPlusPlus { class Snapshot; }
 
@@ -55,33 +58,46 @@ struct CPPEDITOR_EXPORT WrittenFunction
     int column = 0;
 };
 
-// The class \a filePath -- or a file it includes, at most \a maxIncludeDepth
-// deep -- writes that uses \a className: one that declares a member of that
-// type, a value or a pointer to it, or one that derives from it.
-// \a className is written out in full, as "Ui::Form" is.
-//
-// The first such class, the file itself before the files it includes.
-// Nothing where none of them writes one.
-CPPEDITOR_EXPORT WrittenClass classUsingClass(const CPlusPlus::Snapshot &snapshot,
+class CPPEDITOR_EXPORT CodeModelQueries
+{
+public:
+    // \a workingCopy is what is being typed rather than what is on disk. It
+    // has to be taken where the editor documents live, which is the GUI
+    // thread, so it is handed in rather than fetched: the reading below may
+    // run anywhere, and it reads files nobody has open.
+    CodeModelQueries(const CPlusPlus::Snapshot &snapshot, const WorkingCopy &workingCopy);
+    ~CodeModelQueries();
+
+    // The class \a filePath -- or a file it includes, at most
+    // \a maxIncludeDepth deep -- writes that uses \a className: one that
+    // declares a member of that type, a value or a pointer to it, or one
+    // that derives from it. \a className is written out in full, as
+    // "Ui::Form" is.
+    //
+    // The first such class, the file itself before the files it includes.
+    // Nothing where none of them writes one.
+    WrittenClass classUsingClass(const Utils::FilePath &filePath, const QString &className,
+                                 int maxIncludeDepth) const;
+
+    // The member functions \a klass declares, in the order it declares them.
+    QList<WrittenFunction> memberFunctionsOf(const WrittenClass &klass) const;
+
+    // What the locator needs of the function whose own name stands at \a line
+    // and \a column of \a filePath. Nothing where no function is declared
+    // there.
+    DeclarationToDefine declarationToDefineAt(const CppRefactoringChanges &changes,
                                               const Utils::FilePath &filePath,
-                                              const QString &className,
-                                              int maxIncludeDepth);
+                                              int line, int column) const;
 
-// The member functions \a klass declares, in the order it declares them.
-CPPEDITOR_EXPORT QList<WrittenFunction> memberFunctionsOf(const CPlusPlus::Snapshot &snapshot,
-                                                          const WrittenClass &klass);
+    // Where the project defines the function declared at \a line and
+    // \a column of \a filePath -- where its own name stands, again -- or
+    // nothing where no file defines it.
+    Utils::Link definitionOfFunctionAt(const Utils::FilePath &filePath,
+                                       int line, int column) const;
 
-// What the locator needs of the function whose own name stands at \a line and
-// \a column of \a filePath. Nothing where no function is declared there.
-CPPEDITOR_EXPORT DeclarationToDefine declarationToDefineAt(const CppRefactoringChanges &changes,
-                                                           const Utils::FilePath &filePath,
-                                                           int line, int column);
-
-// Where the project defines the function declared at \a line and \a column of
-// \a filePath -- where its own name stands, again -- or nothing where no file
-// defines it.
-CPPEDITOR_EXPORT Utils::Link definitionOfFunctionAt(const CPlusPlus::Snapshot &snapshot,
-                                                    const Utils::FilePath &filePath,
-                                                    int line, int column);
+private:
+    class Private;
+    const std::unique_ptr<Private> d;
+};
 
 } // namespace CppEditor

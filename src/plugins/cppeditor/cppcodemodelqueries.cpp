@@ -5,6 +5,10 @@
 
 #include "symbolfinder.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
@@ -134,34 +138,102 @@ QString signatureOf(const Function *function)
     return signature + ')';
 }
 
-} // namespace
+// What the built-in front end says, which is the answer wherever the
+// cxx-frontend model has not read the file.
 
-WrittenClass classUsingClass(const Snapshot &snapshot, const FilePath &filePath,
-                             const QString &className, int maxIncludeDepth)
+WrittenClass builtinClassUsingClass(const Snapshot &snapshot, const FilePath &filePath,
+                                    const QString &className, int maxIncludeDepth)
 {
     const Document::Ptr doc = snapshot.document(filePath);
     if (!doc)
         return {};
 
     const LookupContext context(doc, snapshot);
-    if (const Class * const klass = classUsing(doc->globalNamespace(), context, className)) {
+    if (const Class * const klass = classUsing(doc->globalNamespace(), context, className))
         return {Overview().prettyName(klass->name()), filePath, klass->line(), klass->column()};
-    }
     if (maxIncludeDepth <= 0)
         return {};
 
     for (const FilePath &include : doc->includedFiles()) {
-        const WrittenClass found = classUsingClass(snapshot, include, className,
-                                                   maxIncludeDepth - 1);
+        const WrittenClass found = builtinClassUsingClass(snapshot, include, className,
+                                                          maxIncludeDepth - 1);
         if (found.isValid())
             return found;
     }
     return {};
 }
 
-QList<WrittenFunction> memberFunctionsOf(const Snapshot &snapshot, const WrittenClass &klass)
+} // namespace
+
+class CodeModelQueries::Private
 {
-    const Class * const found = classWrittenAt(snapshot.document(klass.filePath),
+public:
+    Snapshot snapshot;
+#ifdef QTC_WITH_CXX_FRONTEND
+    Internal::CxxFrontendReading model;
+#endif
+};
+
+CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &workingCopy)
+#ifdef QTC_WITH_CXX_FRONTEND
+    : d(new Private{snapshot, {snapshot, workingCopy}})
+#else
+    : d(new Private{snapshot})
+#endif
+{
+    Q_UNUSED(workingCopy)
+}
+
+CodeModelQueries::~CodeModelQueries() = default;
+
+WrittenClass CodeModelQueries::classUsingClass(const FilePath &filePath, const QString &className,
+                                               int maxIncludeDepth) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    // A header is read into whoever includes it, so one document holds every
+    // file this walks -- which is why the depth is applied to the answers
+    // rather than to the reading.
+    if (const std::optional<QList<CxxFrontendDocument::ClassUsingAClass>> classes
+        = d->model.classesUsing(filePath, className)) {
+        FilePaths reachable{filePath};
+        if (maxIncludeDepth > 0) {
+            if (const Document::Ptr doc = d->snapshot.document(filePath))
+                reachable += doc->includedFiles();
+        }
+        for (const FilePath &candidate : std::as_const(reachable)) {
+            for (const CxxFrontendDocument::ClassUsingAClass &klass : *classes) {
+                if (FilePath::fromUserInput(klass.place.filePath) != candidate)
+                    continue;
+                return {klass.name, candidate, klass.place.line, klass.place.column};
+            }
+        }
+        // Nothing found is not the same as nothing there: a type nothing
+        // declares names no class on this model, and a ui header that has
+        // not been generated yet is exactly that. The built-in front end
+        // takes such a type for a class of the name that was written, and
+        // where this model has no answer that one's is the answer.
+    }
+#endif
+    return builtinClassUsingClass(d->snapshot, filePath, className, maxIncludeDepth);
+}
+
+QList<WrittenFunction> CodeModelQueries::memberFunctionsOf(const WrittenClass &klass) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<CxxFrontendDocument::MemberFunction>> members
+        = d->model.memberFunctionsIn(klass.filePath, klass.filePath, klass.line, klass.column);
+        members && !members->isEmpty()) {
+        QList<WrittenFunction> functions;
+        for (const CxxFrontendDocument::MemberFunction &member : *members) {
+            functions << WrittenFunction{member.unqualifiedName, member.signature,
+                                         FilePath::fromUserInput(member.filePath),
+                                         member.line, member.column};
+        }
+        return functions;
+    }
+#endif
+
+    const Class * const found = classWrittenAt(d->snapshot.document(klass.filePath),
                                                klass.line, klass.column);
     if (!found)
         return {};
@@ -183,24 +255,40 @@ QList<WrittenFunction> memberFunctionsOf(const Snapshot &snapshot, const Written
     return functions;
 }
 
-DeclarationToDefine declarationToDefineAt(const CppRefactoringChanges &changes,
-                                          const FilePath &filePath, int line, int column)
+DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoringChanges &changes,
+                                                            const FilePath &filePath,
+                                                            int line, int column) const
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<DeclarationToDefine> declaration
+        = d->model.declarationToDefineIn(filePath, line, column);
+        declaration && declaration->isValid()) {
+        return *declaration;
+    }
+#endif
+
     const CppRefactoringFilePtr file = changes.cppFile(filePath);
     Function * const function = functionWrittenAt(file ? file->cppDocument() : Document::Ptr(),
                                                   line, column);
     return function ? declarationToDefine(function, changes) : DeclarationToDefine();
 }
 
-Link definitionOfFunctionAt(const Snapshot &snapshot, const FilePath &filePath,
-                            int line, int column)
+Link CodeModelQueries::definitionOfFunctionAt(const FilePath &filePath, int line, int column) const
 {
-    Function * const function = functionWrittenAt(snapshot.document(filePath), line, column);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<Link> definition
+        = d->model.definitionOfFunctionIn(filePath, line, column);
+        definition && definition->hasValidTarget()) {
+        return *definition;
+    }
+#endif
+
+    Function * const function = functionWrittenAt(d->snapshot.document(filePath), line, column);
     if (!function)
         return {};
 
     SymbolFinder symbolFinder;
-    const Function * const definition = symbolFinder.findMatchingDefinition(function, snapshot,
+    const Function * const definition = symbolFinder.findMatchingDefinition(function, d->snapshot,
                                                                             true);
     if (!definition)
         return {};
