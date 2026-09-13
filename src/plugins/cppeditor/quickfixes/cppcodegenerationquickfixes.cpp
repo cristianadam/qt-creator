@@ -190,9 +190,6 @@ public:
     // Without the const a member may have been declared with, which a
     // parameter taking its value has no use for.
     GeneratedType withoutConst() const;
-    // The same type read as the class being written into sees it, which
-    // for a parameter of a class above is not where it was written.
-    GeneratedType asTheClassSeesIt() const;
     // The value behind it: what a Q_PROPERTY says, a getter handing back
     // a const reference notwithstanding.
     GeneratedType asValue() const;
@@ -258,10 +255,6 @@ public:
     // constructor has to go by: it is not declared anywhere yet, so its
     // class stands in for it.
     DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const;
-
-    // The scope a type of the constructor generation is written from,
-    // which is the one thing still asked in the front end's own terms.
-    Scope *scope() const { return m_class; }
 
 private:
     friend class GeneratedType;
@@ -1287,8 +1280,7 @@ private:
                         inClassDeclaration += " = " + member->defaultValue;
                     inClassDeclaration += ", ";
                     if (implFile) {
-                        implCode += type.asTheClassSeesIt()
-                                        .writtenAt(implFile, implLoc, insertedNamespaces)
+                        implCode += type.writtenAt(implFile, implLoc, insertedNamespaces)
                                         .asDeclarationOf(member->parameterName)
                                     + ", ";
                     }
@@ -2020,11 +2012,6 @@ GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
         m_helper->typeAt(m_type, m_scope, file, location, namespacesOpenedThere),
         m_scope,
         m_helper);
-}
-
-GeneratedType GeneratedType::asTheClassSeesIt() const
-{
-    return GeneratedType(m_type, m_helper->m_class.scope(), m_helper);
 }
 
 GeneratedType GeneratedType::writtenOutsideTheClass() const
