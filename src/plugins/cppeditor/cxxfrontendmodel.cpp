@@ -1361,21 +1361,33 @@ std::optional<QString> cxxFrontendDeclarationHeadFor(
     return declaration;
 }
 
+std::optional<QList<CxxFrontendDocument::MemberFunction>> cxxFrontendMemberFunctionsDeclaredAt(
+    const FilePath &filePath, const FilePath &classFile, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    const CxxFrontendDocument * const document
+        = model ? model->document(filePath.toFSPathString()) : nullptr;
+    if (!document)
+        return std::nullopt;
+    // Its own file where a header declares the class, and nothing where
+    // this file does: the tokens of the file a unit started from carry no
+    // name.
+    const QString writtenIn = classFile == filePath ? QString() : classFile.toFSPathString();
+    return document->memberFunctionsAt(line, column, writtenIn);
+}
+
 QList<CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const FilePath &filePath, int line, int column)
 {
-    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
-    if (!model)
-        return {};
-    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
-    if (!document)
+    const std::optional<QList<CxxFrontendDocument::MemberFunction>> declared
+        = cxxFrontendMemberFunctionsDeclaredAt(filePath, filePath, line, column);
+    if (!declared)
         return {};
     // What this answers is the ones with a definition to put in order,
     // which is what both of its readers are asking about.
-    return Utils::filtered(document->memberFunctionsAt(line, column),
-                           [](const CxxFrontendDocument::MemberFunction &function) {
-                               return !function.isDefinedHere;
-                           });
+    return Utils::filtered(*declared, [](const CxxFrontendDocument::MemberFunction &function) {
+        return !function.isDefinedHere;
+    });
 }
 
 std::optional<CxxFrontendDocument::LiteralInAFunction> cxxFrontendLiteralInAFunctionAt(
@@ -1832,7 +1844,7 @@ std::optional<QList<CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
 }
 
 std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
-    const FilePath &filePath, int line, int column)
+    const FilePath &filePath, int line, int column, const FilePath &writtenIn)
 {
     const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
     if (!model)
@@ -1841,7 +1853,12 @@ std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
     if (!document)
         return std::nullopt;
 
-    const CxxFrontendDocument::Virtuality virtuality = document->virtualityAt(line, column);
+    // Its own file where a header declares it, and nothing where this file
+    // does: the tokens of the file a unit started from carry no name.
+    const QString inFile = writtenIn.isEmpty() || writtenIn == filePath
+                               ? QString() : writtenIn.toFSPathString();
+    const CxxFrontendDocument::Virtuality virtuality
+        = document->virtualityAt(line, column, inFile);
     if (!virtuality.namesAFunction)
         return std::nullopt;
     return virtuality;

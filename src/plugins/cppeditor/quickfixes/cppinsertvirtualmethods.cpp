@@ -745,6 +745,27 @@ static InsertionPointLocator::AccessSpec accessSpecOf(const Symbol *symbol)
     return spec;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same, read off what the cxx-frontend model says of a member: who may
+// name it, and what Qt makes of it.
+static InsertionPointLocator::AccessSpec accessSpecOf(CxxFrontendDocument::Access access,
+                                                      CxxFrontendDocument::QtMethod qtMethod)
+{
+    if (qtMethod == CxxFrontendDocument::QtMethod::Signal)
+        return InsertionPointLocator::Signals;
+    const bool isSlot = qtMethod == CxxFrontendDocument::QtMethod::Slot;
+    switch (access) {
+    case CxxFrontendDocument::Access::Private:
+        return isSlot ? InsertionPointLocator::PrivateSlot : InsertionPointLocator::Private;
+    case CxxFrontendDocument::Access::Protected:
+        return isSlot ? InsertionPointLocator::ProtectedSlot : InsertionPointLocator::Protected;
+    case CxxFrontendDocument::Access::Public:
+        return isSlot ? InsertionPointLocator::PublicSlot : InsertionPointLocator::Public;
+    }
+    return InsertionPointLocator::Invalid;
+}
+#endif
+
 // Whether \a targetClass declares \a func already, in which case there is
 // nothing for this fix to write there.
 static bool declaredAlready(const Class *targetClass, const Function *func)
@@ -814,6 +835,121 @@ static QList<OfferedFunction> builtinFunctionsOffered(const CppQuickFixInterface
     return offered;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// The same reading on the cxx-frontend model, and nothing where it cannot
+// answer the whole of it. The classes above one are read together and their
+// functions point at each other, so half of them read one way and half the
+// other is no list at all -- one front end reads every base or none does.
+static std::optional<QList<OfferedFunction>> modelFunctionsOffered(
+    const CppQuickFixInterface &interface, const Class *targetClass, const Class *baseClass,
+    int declarationGoesAt, int definitionGoesAt)
+{
+    if (targetClass->filePath().isEmpty() || baseClass->filePath().isEmpty())
+        return std::nullopt;
+
+    const Utils::FilePath inFile = interface.filePath();
+    const Utils::FilePath baseFile = baseClass->filePath();
+    const std::optional<QList<CxxFrontendDocument::MemberFunction>> members
+        = cxxFrontendMemberFunctionsDeclaredAt(inFile, baseFile, baseClass->line(),
+                                               baseClass->column());
+    // A class this model cannot find is not one with nothing to offer, and
+    // there is no telling the two apart from here -- so a class it says
+    // nothing about is one the other front end reads. Nothing is what it
+    // says of a class that declares no functions too, and then the other
+    // one has nothing to offer either.
+    if (!members || members->isEmpty())
+        return std::nullopt;
+
+    // The place a declaration stands, said the way the built-in reading says
+    // it, since one hash holds the answers of whichever front end read them.
+    const auto placeOf = [](const QString &className, const QString &filePath,
+                            int line, int column) {
+        return className + '|' + filePath + ':' + QString::number(line)
+               + ':' + QString::number(column);
+    };
+    // The class a member is written in, as this model names it: what stands
+    // in front of its own name in the path.
+    const auto classOf = [](const CxxFrontendDocument::MemberFunction &member) {
+        const QStringList path = member.name.split("::");
+        return path.size() > 1 ? path.at(path.size() - 2) : QString();
+    };
+
+    int line = 0, column = 0;
+    Utils::Text::convertPosition(interface.currentFile()->document(), declarationGoesAt,
+                                 &line, &column);
+    int definitionLine = 0, definitionColumn = 0;
+    Utils::Text::convertPosition(interface.currentFile()->document(), definitionGoesAt,
+                                 &definitionLine, &definitionColumn);
+    const QString targetName
+        = CppCodeStyleSettings::currentProjectCodeStyleOverview().prettyName(targetClass->name());
+    const CxxFrontendDocument::Place targetPlace{
+        targetClass->filePath() == inFile ? QString() : targetClass->filePath().toFSPathString(),
+        targetClass->line(), targetClass->column()};
+
+    QList<OfferedFunction> offered;
+    for (const CxxFrontendDocument::MemberFunction &member : *members) {
+        // Not virtual at all, which this model says of the declaration
+        // itself: one that overrides a virtual function is virtual whether
+        // it writes the word or not.
+        if (!member.isVirtual)
+            continue;
+
+        const std::optional<CxxFrontendDocument::Virtuality> virtuality
+            = cxxFrontendVirtualityAt(inFile, member.line, member.column, baseFile);
+        if (!virtuality)
+            return std::nullopt;
+        if (!virtuality->isVirtual)
+            continue;
+
+        OfferedFunction one;
+        one.declaredAt = placeOf(classOf(member), member.filePath, member.line, member.column);
+        one.name = member.unqualifiedName;
+        one.signature = member.signature;
+        one.returnType = member.returnType;
+        for (const CxxFrontendDocument::Virtuality::FirstVirtual &first :
+             virtuality->firstVirtuals) {
+            one.firstVirtuals.append({placeOf(first.className, first.place.filePath,
+                                              first.place.line, first.place.column),
+                                      first.className});
+        }
+        one.isDestructor = member.unqualifiedName.startsWith('~');
+        one.isPureVirtual = member.isPureVirtual;
+        one.isFinal = member.isFinal;
+
+        // What the class below declares already: the same name, the same
+        // parameters and the same constness, which is what overriding one
+        // amounts to.
+        const std::optional<QList<CxxFrontendDocument::Place>> overrides
+            = cxxFrontendOverridesIn(interface.snapshot(), CppModelManager::workingCopy(), inFile,
+                                     targetPlace,
+                                     {member.filePath, member.line, member.column});
+        if (!overrides)
+            return std::nullopt;
+        one.declaredInTargetClass = !overrides->isEmpty();
+
+        one.accessSpec = accessSpecOf(member.access, member.qtMethod);
+
+        // What writing it into the class being added to amounts to. A
+        // declaration this model will not write -- one under a template is
+        // the case -- is one this fix cannot offer at all.
+        const std::optional<QString> declaration
+            = cxxFrontendDeclarationHeadFor(inFile, baseFile, member.line, member.column,
+                                            one.name, line, column + 1);
+        const std::optional<QString> definition
+            = cxxFrontendDeclarationHeadFor(inFile, baseFile, member.line, member.column,
+                                            targetName + "::" + one.name,
+                                            definitionLine, definitionColumn + 1);
+        if (!declaration || !definition)
+            return std::nullopt;
+        one.declarationText = *declaration;
+        one.definitionText = *definition;
+
+        offered.append(one);
+    }
+    return offered;
+}
+#endif
+
 class InsertVirtualMethodsOp : public CppQuickFixOperation
 {
 public:
@@ -867,13 +1003,34 @@ public:
         m_factory->classFunctionModel->clear();
         Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
         printer.showFunctionSignatures = true;
-        QHash<QString, FunctionItem *> virtualFunctions;
+        // What each of them offers, read by one front end for all of them:
+        // the answers point at each other, so a list half read one way and
+        // half the other is no list at all.
+        QList<QList<OfferedFunction>> offeredByEach;
+#ifdef QTC_WITH_CXX_FRONTEND
         for (const Class *clazz : std::as_const(baseClasses)) {
+            const std::optional<QList<OfferedFunction>> offered
+                = modelFunctionsOffered(interface, m_classAST->symbol, clazz,
+                                        m_insertPosDecl, m_insertPosOutside);
+            if (!offered) {
+                offeredByEach.clear();
+                break;
+            }
+            offeredByEach.append(*offered);
+        }
+#endif
+        if (offeredByEach.isEmpty()) {
+            for (const Class *clazz : std::as_const(baseClasses)) {
+                offeredByEach.append(builtinFunctionsOffered(interface, m_classAST->symbol, clazz,
+                                                             m_insertPosDecl, m_insertPosOutside));
+            }
+        }
+
+        QHash<QString, FunctionItem *> virtualFunctions;
+        for (int i = 0; i < baseClasses.size(); ++i) {
+            const Class * const clazz = baseClasses.at(i);
             ClassItem *itemBase = new ClassItem(printer.prettyName(clazz->name()));
-            const QList<OfferedFunction> offered
-                = builtinFunctionsOffered(interface, m_classAST->symbol, clazz,
-                                          m_insertPosDecl, m_insertPosOutside);
-            for (const OfferedFunction &function : offered) {
+            for (const OfferedFunction &function : offeredByEach.at(i)) {
                 // Filter virtual destructors
                 if (function.isDestructor)
                     continue;

@@ -383,8 +383,13 @@ std::optional<QList<CPlusPlus::CxxFrontendDocument::Place>> cxxFrontendOverrides
 // Asked of the store only: whoever wants this is following a name in a file
 // the editor is running over, and a class's bases are read into that file,
 // so no other file has to be read to answer it.
+//
+// \a writtenIn says which file the position is in where that is not \a
+// filePath itself -- a base class is as often declared in a header the
+// edited file reads, and the document for that file answers about it.
 std::optional<CPlusPlus::CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
-    const Utils::FilePath &filePath, int line, int column);
+    const Utils::FilePath &filePath, int line, int column,
+    const Utils::FilePath &writtenIn = {});
 
 // Every place \a filePath names what is declared at \a declaration, and
 // nothing where this model cannot read the file -- which is then a file for
@@ -488,6 +493,20 @@ std::optional<QString> cxxFrontendDeclarationHeadFor(
 // put in order there is nothing to offer either way.
 QList<CPlusPlus::CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const Utils::FilePath &filePath, int line, int column);
+
+// Every member function that class declares, the ones it defines right
+// there included: what a reader offering what a class below could
+// implement wants, where one putting definitions in order wants the rest.
+//
+// \a classFile says which file the class is written in and \a filePath is
+// the document to ask -- the file being edited, which is the one that reads
+// whatever header declares the class somebody derives from.
+//
+// Nothing where the model has not read that file, which is not the same as
+// a class with nothing to offer.
+std::optional<QList<CPlusPlus::CxxFrontendDocument::MemberFunction>>
+cxxFrontendMemberFunctionsDeclaredAt(const Utils::FilePath &filePath,
+                                     const Utils::FilePath &classFile, int line, int column);
 
 // A literal at \a line and \a column of \a filePath, both counted from one,
 // written inside a function.
