@@ -492,8 +492,8 @@ namespace {
 // The kinds the other model claims to answer for. What is left out is not a
 // name -- a macro, which the preprocessor reports and the processor merges
 // in; the angle brackets of a template argument list and the two halves of
-// a ternary, which are punctuation; a label; and the Qt keywords, which are
-// macros before the parser sees them.
+// a ternary, which are punctuation; and the Qt keywords, which are macros
+// before the parser sees them.
 QString nameOf(SemanticHighlighter::Kind kind)
 {
     switch (kind) {

@@ -5410,11 +5410,11 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // cannot tell -- the class that comes back is a complete one.
         "which specialization of a template an object is, in a file that "
         "does not declare the types the specialization names",
-        // What the editor colours besides names: a label, a Qt keyword,
-        // the angle brackets of a template argument list and the two
-        // halves of a ternary. namesIn() answers for names, and those are
-        // punctuation or macros.
-        "where the labels and the angle brackets are",
+        // What the editor colours besides names: the angle brackets of a
+        // template argument list and the two halves of a ternary, which are
+        // punctuation, and the Qt keywords, which are macros before the
+        // parser sees them. A label is a name and is answered.
+        "where the angle brackets and the halves of a ternary are",
         // What a name means where a variable of the same name shadows the
         // type it is of: "enum E E;" and then "E" as an expression, which
         // C++ says is the variable. The parser resolves that name to

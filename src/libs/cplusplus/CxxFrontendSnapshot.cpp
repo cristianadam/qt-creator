@@ -287,11 +287,6 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // Which of several declarations a call means. Needs the argument
         // types, which this does not look at.
         "overload resolution across files",
-        // A using directive in one file bringing a name into another.
-        "using directives across files",
-        // Which header wins when two declare the same name: this takes the
-        // nearest include, which is not the language's rule.
-        "shadowing between headers",
         // Going the other way from a declaration in a header: which source
         // file defines it is a question about the project, and a document
         // holds one file and what it includes. counterpartAt() answers the

@@ -113,6 +113,9 @@ private slots:
     void aMemberOfAnUnrelatedClassDoesNotResolve();
     void aMemberOfAnIndirectBaseInAHeaderResolves();
     void aUsingDeclarationInsideAHeaderIsHonoured();
+    void anOverloadIsNotToldFromItsSiblings();
+    void aUsingDirectiveInAHeaderIsHonoured();
+    void aNameIsTakenFromTheNamespaceTheFileOpened();
     void aNameInANestedNamespaceInAHeaderResolves();
     void aBaseChainAcrossThreeFilesResolves();
     void aBaseChainAcrossFourFilesResolves();
@@ -619,6 +622,64 @@ void tst_cxxfrontendsnapshot::aUsingDeclarationInsideAHeaderIsHonoured()
     QCOMPARE(found.name, QString("A::m"));
 }
 
+// Which of several declarations a call means, where they are in a header.
+// The front end resolves the call without weighing what it is called with,
+// so the answer is the first of them whatever the arguments say -- which is
+// why the list says so rather than leaving it to be trusted.
+void tst_cxxfrontendsnapshot::anOverloadIsNotToldFromItsSiblings()
+{
+    Files files;
+    files.add("h.h", "void g(int);\nvoid g(char *);\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { g(\"s\"); }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 12);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.filePath, QString("h.h"));
+    QCOMPARE(found.line, 1); // the one taking an int, called with a string
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
+                .contains("overload resolution across files"));
+}
+
+// A using directive written in a header reaches the file that includes it:
+// the header is read into that file, so the directive is in force where the
+// name is written and the parser applies it.
+void tst_cxxfrontendsnapshot::aUsingDirectiveInAHeaderIsHonoured()
+{
+    Files files;
+    files.add("h.h", "namespace N { int fromN; }\nusing namespace N;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nint f() { return fromN; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 18);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("N::fromN"));
+    QCOMPARE(found.filePath, QString("h.h"));
+}
+
+// And which of two headers wins is the language's rule rather than which
+// was included last: only the namespace the file opened is looked in.
+void tst_cxxfrontendsnapshot::aNameIsTakenFromTheNamespaceTheFileOpened()
+{
+    Files files;
+    files.add("first.h", "namespace A { int both; }\n");
+    files.add("second.h", "namespace B { int both; }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"first.h\"\n#include \"second.h\"\n"
+                              "using namespace A;\nint f() { return both; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 4, 18);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("A::both"));
+    QCOMPARE(found.filePath, QString("first.h"));
+}
+
 void tst_cxxfrontendsnapshot::aNameInANestedNamespaceInAHeaderResolves()
 {
     Files files;
@@ -975,7 +1036,6 @@ void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
     QVERIFY(unsupported.contains("overload resolution across files"));
-    QVERIFY(unsupported.contains("using directives across files"));
 
     // What reading a header into its includer settled, so that the list
     // does not keep saying it. A file that declares over again what a header
@@ -983,6 +1043,13 @@ void tst_cxxfrontendsnapshot::unsupportedLookups()
     // thing and a search reaches both.
     QVERIFY(!unsupported.contains("members named through an object across files"));
     QVERIFY(!unsupported.contains("unqualified redeclarations across files"));
+
+    // And what reading it in settled about the rules: a using directive
+    // written in a header is in force where the includer writes a name, and
+    // which of two headers a name comes from is the language's rule rather
+    // than which was included last. Both have cases of their own above.
+    QVERIFY(!unsupported.contains("using directives across files"));
+    QVERIFY(!unsupported.contains("shadowing between headers"));
 }
 
 // The two places a function is written, and the one direction that is
