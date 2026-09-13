@@ -263,9 +263,9 @@ public:
             return false;
 
         // Since no project is opened and the ui_*.h is not generated,
-        // the following diagnostic messages will be ignored.
-        const QStringList ignoreList = QStringList({"ui_form.h: No such file or directory",
-                                                    "QWidget: No such file or directory"});
+        // the following diagnostic message will be ignored. What the data
+        // needs of Qt it declares itself, so nothing else is missing.
+        const QStringList ignoreList = QStringList("ui_form.h: No such file or directory");
         QList<Document::DiagnosticMessage> cleanedDiagnosticMessages;
         const auto diagnosticMessages = document->diagnosticMessages();
         for (const Document::DiagnosticMessage &message : diagnosticMessages) {

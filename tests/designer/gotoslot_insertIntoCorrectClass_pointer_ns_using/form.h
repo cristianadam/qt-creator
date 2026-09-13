@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <QWidget>
+#include "qwidget.h"
 
 namespace N {
 namespace Ui {

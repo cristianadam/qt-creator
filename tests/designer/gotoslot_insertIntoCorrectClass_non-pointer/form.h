@@ -4,7 +4,7 @@
 
 #include "ui_form.h"
 
-#include <QWidget>
+#include "qwidget.h"
 
 class Form;
 struct MyClass
