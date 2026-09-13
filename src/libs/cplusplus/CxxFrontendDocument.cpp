@@ -824,8 +824,15 @@ public:
     void recordCompletion(const cxx::CodeCompletionContext &context);
     // Everything that could be named in \a scope, its bases included. Sets
     // \a membersMayBeMissing where it could not see all of them.
+    //
+    // \a andEverythingAround walks out of the scope as well -- the function
+    // around a block, the class around that, the namespaces around it, and
+    // whatever a using directive brought into any of them -- which is what
+    // can be written where a name can go, as against what one particular
+    // thing holds.
     [[nodiscard]] QList<CxxFrontendDocument::Completion::Candidate> visibleMembersIn(
-        cxx::ScopeSymbol *scope, bool *membersMayBeMissing = nullptr) const;
+        cxx::ScopeSymbol *scope, bool *membersMayBeMissing = nullptr,
+        bool andEverythingAround = false) const;
 
     // The keyword a class was written with, which the symbol does not
     // record: the token before its name.
@@ -1544,7 +1551,8 @@ CxxFrontendDocument::Completion::Candidate CxxFrontendDocument::Private::describ
 
 QList<CxxFrontendDocument::Completion::Candidate>
 CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope,
-                                               bool *membersMayBeMissing) const
+                                               bool *membersMayBeMissing,
+                                               bool andEverythingAround) const
 {
     QList<Completion::Candidate> candidates;
     if (!scope)
@@ -1570,10 +1578,18 @@ CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope,
             // Except the class's own name, which stands there for a reader
             // as much as for the front end: the built-in model offers it
             // too.
-            const auto isWritten = [current](cxx::Symbol *symbol) {
+            //
+            // Nor anything out of the front end's own preamble: a
+            // translation unit begins with the declarations it makes for
+            // itself, and __builtin_memcpy is not a word anybody is reaching
+            // for. They are told by the file they stand in.
+            const auto isWritten = [this, current](cxx::Symbol *symbol) {
                 if (dynamic_cast<cxx::InjectedClassNameSymbol *>(symbol))
                     return true;
-                return symbol->location() && symbol->location() != current->location();
+                if (!symbol->location() || symbol->location() == current->location())
+                    return false;
+                return int(unit.tokenAt(symbol->location()).fileId())
+                       != unit.preprocessor()->builtinsFileId();
             };
 
             for (cxx::Symbol *member : current->members()) {
@@ -1638,7 +1654,31 @@ CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope,
         };
 
     QSet<cxx::ScopeSymbol *> seen;
-    collect(scope, seen);
+    // Out through the scopes a name written here would be looked up in: the
+    // innermost first, so that what it declares itself comes before what it
+    // shares its name with further out.
+    for (cxx::Symbol *around = scope; around; around = around->parent()) {
+        cxx::ScopeSymbol * const current = around->asScopeSymbol();
+        if (!current)
+            continue;
+        collect(current, seen);
+        // A using directive makes another namespace's names writable here
+        // without anything in front of them.
+        for (cxx::ScopeSymbol *broughtIn : current->usingDirectives())
+            collect(broughtIn, seen);
+        if (!andEverythingAround)
+            break;
+
+        // What a template calls its parameters can be written inside it,
+        // and they hang off the template rather than standing between it
+        // and what encloses it, so the walk does not pass through them.
+        // Only from the inside: "Foo::" is a question about what Foo holds,
+        // and a template parameter is not something it holds.
+        if (auto * const klass = dynamic_cast<cxx::ClassSymbol *>(current))
+            collect(klass->templateParameters(), seen);
+        else if (auto * const function = dynamic_cast<cxx::FunctionSymbol *>(current))
+            collect(function->templateParameters(), seen);
+    }
 
     // One entry per name, in the order a proposal shows them.
     std::stable_sort(candidates.begin(), candidates.end(),
@@ -1665,8 +1705,12 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
 
             if constexpr (std::is_same_v<T, cxx::UnqualifiedCompletionContext>) {
                 completion.kind = Kind::Unqualified;
+                // Everything in reach from there, not only what the
+                // innermost scope holds: a name written here finds what the
+                // function, the class and the namespaces around it declare.
                 completion.candidates = visibleMembersIn(what.scope,
-                                                         &completion.membersMayBeMissing);
+                                                         &completion.membersMayBeMissing,
+                                                         /*andEverythingAround=*/true);
             } else if constexpr (std::is_same_v<T, cxx::ScopeCompletionContext>) {
                 completion.kind = Kind::Scope;
                 completion.candidates = visibleMembersIn(what.scope,
