@@ -197,6 +197,11 @@ public:
         QString type;    // as written, "const QString &" and not a path
         int line = 0;    // where the name stands, one-based
         int column = 0;
+        // Where the Q_PROPERTY itself starts, which is where a reader
+        // writing anything beside it has to write: a property declares
+        // nothing, so its name is no place to start from.
+        int startLine = 0;
+        int startColumn = 0;
         // READ -> "title", WRITE -> "setTitle", FINAL -> "". In the order
         // the property wrote them.
         QList<QPair<QString, QString>> items;

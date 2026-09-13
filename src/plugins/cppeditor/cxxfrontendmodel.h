@@ -485,6 +485,13 @@ std::optional<CPlusPlus::CxxFrontendDocument::DiscardedValue> cxxFrontendDiscard
 std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendLookup(
     const Utils::FilePath &filePath, const QString &name);
 
+// The Q_PROPERTY a position is written on -- the macro's own name and the
+// parentheses around what it says, a position inside them being a
+// question about the type, the name or an item. Nothing where this model
+// has not read the file or the position is on no property.
+std::optional<CPlusPlus::CxxFrontendDocument::QtProperty> cxxFrontendQtPropertyAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 // What is made of a type before it is written down. A getter hands back
 // what a member holds, a setter takes it by const reference, a Q_PROPERTY
 // says the value behind either, and a getter of a container hands back

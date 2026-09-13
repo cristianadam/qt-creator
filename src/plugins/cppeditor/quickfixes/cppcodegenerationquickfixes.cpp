@@ -707,27 +707,90 @@ static void findExistingFunctions(ExistingGetterSetterData &existing, QStringLis
     }
 }
 
-static void extractNames(const CppRefactoringFilePtr &file,
-                  QtPropertyDeclarationAST *qtPropertyDeclaration,
-                  ExistingGetterSetterData &data)
+// What a Q_PROPERTY the cursor is on says. A property declares nothing --
+// no symbol of it stands anywhere -- so what is read of one is the text
+// it was written with and the place it was written at, and that is what
+// each front end hands over.
+struct WrittenProperty
 {
-    QtPropertyDeclarationItemListAST *it = qtPropertyDeclaration->property_declaration_item_list;
-    for (; it; it = it->next) {
-        const char *tokenString = file->tokenAt(it->value->item_name_token).spell();
-        if (!qstrcmp(tokenString, "READ")) {
-            data.getterName = file->textOf(it->value->expression);
-        } else if (!qstrcmp(tokenString, "WRITE")) {
-            data.setterName = file->textOf(it->value->expression);
-        } else if (!qstrcmp(tokenString, "RESET")) {
-            data.resetName = file->textOf(it->value->expression);
-        } else if (!qstrcmp(tokenString, "NOTIFY")) {
-            data.signalName = file->textOf(it->value->expression);
-        } else if (!qstrcmp(tokenString, "MEMBER")) {
-            data.memberVariableName = file->textOf(it->value->expression);
-        } else if (!qstrcmp(tokenString, "BINDABLE")) {
-            data.bindableName = file->textOf(it->value->expression);
-        }
+    QString name;
+    QString type; // as written: a type and not a declaration of one
+    QString getterName;         // READ
+    QString setterName;         // WRITE
+    QString resetName;          // RESET
+    QString signalName;         // NOTIFY
+    QString memberVariableName; // MEMBER
+    QString bindableName;       // BINDABLE
+
+    // Where the Q_PROPERTY begins, in the text of the file.
+    int startPosition = 0;
+
+    bool isValid() const { return !type.isEmpty(); }
+};
+
+// One of its items, by the word moc reads it by.
+static void readItem(WrittenProperty &property, const QString &item, const QString &value)
+{
+    if (item == "READ")
+        property.getterName = value;
+    else if (item == "WRITE")
+        property.setterName = value;
+    else if (item == "RESET")
+        property.resetName = value;
+    else if (item == "NOTIFY")
+        property.signalName = value;
+    else if (item == "MEMBER")
+        property.memberVariableName = value;
+    else if (item == "BINDABLE")
+        property.bindableName = value;
+}
+
+// As the built-in front end reads it: a node of its own, which the
+// cursor has to be on.
+static WrittenProperty builtinWrittenProperty(const CppQuickFixInterface &interface)
+{
+    const QList<AST *> &path = interface.path();
+    if (path.isEmpty())
+        return {};
+    QtPropertyDeclarationAST * const declaration = path.last()->asQtPropertyDeclaration();
+    if (!declaration || !declaration->type_id)
+        return {};
+
+    const CppRefactoringFilePtr file = interface.currentFile();
+    WrittenProperty written;
+    written.name = file->textOf(declaration->property_name);
+    written.type = file->textOf(declaration->type_id);
+    written.startPosition = file->startOf(declaration);
+    for (QtPropertyDeclarationItemListAST *it = declaration->property_declaration_item_list; it;
+         it = it->next) {
+        readItem(written,
+                 QString::fromUtf8(file->tokenAt(it->value->item_name_token).spell()),
+                 file->textOf(it->value->expression));
     }
+    return written;
+}
+
+// And as the cxx-frontend model reads it, where it has the file.
+static WrittenProperty writtenPropertyAt(const CppQuickFixInterface &interface)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const QTextCursor cursor = interface.currentFile()->cursor();
+    int line = 0, column = 0;
+    Utils::Text::convertPosition(interface.currentFile()->document(), cursor.position(),
+                                 &line, &column);
+    if (const std::optional<CxxFrontendDocument::QtProperty> property
+        = cxxFrontendQtPropertyAt(interface.filePath(), line, column + 1)) {
+        WrittenProperty written;
+        written.name = property->name;
+        written.type = property->type;
+        written.startPosition = interface.currentFile()->position(property->startLine,
+                                                                  property->startColumn);
+        for (const QPair<QString, QString> &item : property->items)
+            readItem(written, item.first, item.second);
+        return written;
+    }
+#endif
+    return builtinWrittenProperty(interface);
 }
 
 class GetterSetterRefactoringHelper
@@ -3217,15 +3280,20 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
     void doMatch(const CppQuickFixInterface &interface, QuickFixOperations &result) override
     {
         ExistingGetterSetterData existing;
-        // check for Q_PROPERTY
 
-        const QList<AST *> &path = interface.path();
-        if (path.isEmpty())
+        // What the property says, read by whichever front end is running.
+        const WrittenProperty written = writtenPropertyAt(interface);
+        if (!written.isValid())
             return;
 
-        AST *const ast = path.last();
-        QtPropertyDeclarationAST *qtPropertyDeclaration = ast->asQtPropertyDeclaration();
-        if (!qtPropertyDeclaration || !qtPropertyDeclaration->type_id)
+        // The built-in tree is still what says where a definition of the
+        // member goes: a property declares nothing, so one is made to
+        // stand for the member about to be written, and that is a symbol.
+        const QList<AST *> &path = interface.path();
+        AST *const ast = path.isEmpty() ? nullptr : path.last();
+        QtPropertyDeclarationAST * const qtPropertyDeclaration
+            = ast ? ast->asQtPropertyDeclaration() : nullptr;
+        if (!qtPropertyDeclaration)
             return;
 
         ClassSpecifierAST *klass = nullptr;
@@ -3242,9 +3310,13 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
         existing.clazz = readTheClass(interface, readWith, clazz);
 
         CppRefactoringFilePtr file = interface.currentFile();
-        const QString propertyName = file->textOf(qtPropertyDeclaration->property_name);
-        existing.qPropertyName = propertyName;
-        extractNames(file, qtPropertyDeclaration, existing);
+        existing.qPropertyName = written.name;
+        existing.getterName = written.getterName;
+        existing.setterName = written.setterName;
+        existing.resetName = written.resetName;
+        existing.signalName = written.signalName;
+        existing.memberVariableName = written.memberVariableName;
+        existing.bindableName = written.bindableName;
 
         Control *control = interface.currentFile()->cppDocument()->control();
 
@@ -3264,10 +3336,10 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
             // if we have Q_PROPERTY(int test ...) then we only get a NamedType for 'int', but we want
             // a IntegerType. So create a new dummy file with a dummy declaration to get the right
             // object
-            QByteArray type = file->textOf(qtPropertyDeclaration->type_id).toUtf8();
+            const QByteArray type = written.type.toUtf8();
             QByteArray newSource = file->document()
                                        ->toPlainText()
-                                       .insert(file->startOf(qtPropertyDeclaration),
+                                       .insert(written.startPosition,
                                                QString::fromUtf8(type + " __dummy;\n"))
                                        .toUtf8();
 

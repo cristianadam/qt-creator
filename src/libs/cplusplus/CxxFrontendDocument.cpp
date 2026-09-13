@@ -4492,6 +4492,11 @@ CxxFrontendDocument::QtProperty CxxFrontendDocument::Private::describeProperty(
         answer.line = int(position.line);
         answer.column = int(position.column);
     }
+    if (const cxx::SourceLocation at = property.firstToken) {
+        const cxx::SourcePosition position = unit.tokenStartPosition(at);
+        answer.startLine = int(position.line);
+        answer.startColumn = int(position.column);
+    }
     for (const cxx::QtPropertyItem &item : property.items)
         answer.items.append({fromStd(item.name), textOf(item.firstToken, item.lastToken)});
     return answer;

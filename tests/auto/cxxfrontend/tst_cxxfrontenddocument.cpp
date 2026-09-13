@@ -1040,6 +1040,10 @@ void tst_cxxfrontenddocument::readsWhatAQtPropertyDeclares()
     QCOMPARE(properties.first().name, QString("title"));
     QCOMPARE(properties.first().type, QString("const QString &"));
     QCOMPARE(properties.first().line, 5);
+    // And where the property itself starts, which is where anything
+    // written beside it goes.
+    QCOMPARE(properties.first().startLine, 5);
+    QCOMPARE(properties.first().startColumn, 5);
     const QList<QPair<QString, QString>> expected{{"READ", "title"},
                                                   {"WRITE", "setTitle"},
                                                   {"NOTIFY", "titleChanged"},
