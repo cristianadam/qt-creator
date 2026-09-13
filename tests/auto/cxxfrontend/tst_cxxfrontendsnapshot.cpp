@@ -1,16 +1,24 @@
 // Copyright (C) 2026 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-// One translation unit per file, the way Qt Creator holds a code model.
+// A file with its headers read into it, the way a compiler reads them.
 //
-// A compiler reads a file and everything it includes as one translation unit.
-// Qt Creator cannot: a header is included by hundreds of files, and parsing it
-// once per includer would be too slow to type against. So each file gets a
-// document of its own, and what crosses from a header to its includer is the
-// macros it established, not its text. Snapshot is that collection.
+// That is what a document is here, and this file asserts what follows from
+// it. A header is not a document of its own: it is part of every document
+// that includes it, so a file is searched or edited only once process() has
+// been called for it, and the macros a header establishes are in force
+// afterwards because its text was read and not because anything carried
+// them.
 //
-// What is asserted here is that arrangement, since that is what the built-in
-// model guarantees and what everything above it relies on.
+// It was not always so. Each file used to be a translation unit that stopped
+// at its own text, with a header's macros crossing to its includer and
+// nothing else -- which made a file that uses its headers, and that is every
+// file, unreadable: a type a header declared was not a type here, and a
+// declaration whose type is unknown is not read at all.
+//
+// What the arrangement costs is reuse: the built-in model parses a header
+// once for every file that reaches it and shares the result, and this parses
+// it again per file. What it buys is a file being readable at all.
 
 #include <cplusplus/CxxFrontendSnapshot.h>
 

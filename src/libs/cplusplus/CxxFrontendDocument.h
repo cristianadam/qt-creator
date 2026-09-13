@@ -30,10 +30,12 @@ namespace CPlusPlus {
 // in, which scope, which symbol was last declared above it. Snapshot is a
 // collection of them, and the lookup that resolves a name walks it.
 //
-// This is the same thing on the other model, as far as that model reaches. It
-// holds one file: the collection and the lookup across it are the slices
-// after this one. unsupportedQueries() says which of Document's questions
-// cannot be answered yet and why, and tests/auto/cxxfrontend asserts on it.
+// This is the same thing on the other model, as far as that model reaches.
+// It holds one file -- with its headers read into it, as a compiler reads
+// them, so most of what a lookup across files was for is answered here.
+// CxxFrontendSnapshot holds the files asked about and what is left of the
+// searching. unsupportedQueries() says which of Document's questions cannot
+// be answered and why, and tests/auto/cxxfrontend asserts on it.
 //
 // Deliberately no cxx/ header is included here: those need C++23, and only
 // the implementation should have to.

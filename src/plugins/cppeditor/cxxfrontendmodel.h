@@ -42,8 +42,9 @@ namespace CppEditor::Internal {
 //
 // Whether to keep it at all. Off unless QTC_CXX_FRONTEND_MODEL is set in the
 // environment, because it is a second parse of everything the edited file
-// includes, on every reparse. The built-in model is untouched either way, and
-// nothing reads this yet.
+// includes, on every reparse. The built-in model is untouched either way:
+// every consumer below reads this where it answers and that one where it
+// does not, so with the variable unset nothing here runs at all.
 //
 // Asked by whoever is about to do the work rather than inside it, so that the
 // work can be asked for directly -- which is how the test drives it.
