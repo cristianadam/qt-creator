@@ -381,11 +381,18 @@ class TypePrinter {
     auto parent = symbol->parent();
     if (!parent) return;
 
-    // Neither of these is a scope a name is written through: a template's
-    // parameters belong to the declaration, and an overload set is how a
-    // class or a namespace keeps the functions of one name together.
+    // None of these is a scope a name is written through: a template's
+    // parameters belong to the declaration, an overload set is how a class
+    // or a namespace keeps the functions of one name together, and a scope
+    // with no name of its own cannot be written at all -- an unnamed
+    // namespace is reached by standing in the file that declares it, and
+    // writing "::" for it would name the scope above instead. The one
+    // exception is the global scope, which is also nameless and is the
+    // "::" every full path starts with.
     while (symbol_cast<TemplateParametersSymbol>(parent) ||
-           symbol_cast<OverloadSetSymbol>(parent)) {
+           symbol_cast<OverloadSetSymbol>(parent) ||
+           (symbol_cast<NamespaceSymbol>(parent) && !parent->name() &&
+            parent->parent())) {
       parent = parent->parent();
     }
     if (!parent) return;
