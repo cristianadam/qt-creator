@@ -174,6 +174,11 @@ static Overview generationOverview()
 
 class GeneratedClass;
 
+// What a type or a class was read with, kept for the writing that comes
+// later: what reads a member runs in the quick fix's match, and what
+// writes it runs when the fix is chosen.
+using ReadWith = std::shared_ptr<const CppQuickFixInterface>;
+
 // A type the getter and setter generation writes down, and the only
 // thing it knows about a front end's idea of one. A type is not a string
 // here because it is written differently depending on where it goes --
@@ -184,12 +189,11 @@ class GeneratedType
 {
 public:
     GeneratedType() = default;
-    GeneratedType(const FullySpecifiedType &type, Scope *scope,
-                  CppQuickFixOperation *operation);
+    GeneratedType(const FullySpecifiedType &type, Scope *scope, const ReadWith &readWith);
 
     // A type nobody read, spelled out by a setting: it is written as it
     // stands, wherever it is written.
-    static GeneratedType fromText(const QString &text, CppQuickFixOperation *operation);
+    static GeneratedType fromText(const QString &text, const ReadWith &readWith);
 
     bool isValid() const { return m_type.isValid(); }
     bool isPointer() const { return m_type.isValid() && m_type->asPointerType(); }
@@ -236,7 +240,7 @@ public:
 private:
     FullySpecifiedType m_type;
     Scope *m_scope = nullptr;
-    CppQuickFixOperation *m_operation = nullptr;
+    ReadWith m_readWith;
 };
 
 // The class the generation writes into, and the only thing it knows
@@ -247,7 +251,7 @@ class GeneratedClass
 {
 public:
     GeneratedClass() = default;
-    GeneratedClass(Class *clazz, CppQuickFixOperation *operation);
+    GeneratedClass(Class *clazz, const ReadWith &readWith);
 
     // As it was written. A class written with no name of its own has
     // none, and nothing of it can be declared anywhere but inside it,
@@ -271,17 +275,26 @@ public:
     // class stands in for it.
     DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const;
 
+    // What read it, for reading a type of its members with the same.
+    const ReadWith &readWith() const { return m_readWith; }
+
 private:
     friend class GeneratedType;
 
     Class *m_class = nullptr;
-    CppQuickFixOperation *m_operation = nullptr;
+    ReadWith m_readWith;
 };
 
 struct ExistingGetterSetterData
 {
-    Class *clazz = nullptr;
-    Declaration *declarationSymbol = nullptr;
+    // What was read of the class and of the member the functions are for.
+    // Which front end read them is this much and no more: the writing
+    // asks them questions and never looks inside.
+    GeneratedClass clazz;
+    GeneratedType declaredType;
+    // Where the member's definition goes, which is what the insertion
+    // locator needs of a declaration.
+    DeclarationToDefine toDefine;
     QString getterName;
     QString setterName;
     QString resetName;
@@ -354,7 +367,8 @@ static void extractNames(const CppRefactoringFilePtr &file,
 class GetterSetterRefactoringHelper
 {
 public:
-    GetterSetterRefactoringHelper(CppQuickFixOperation *operation, Class *clazz);
+    GetterSetterRefactoringHelper(CppQuickFixOperation *operation,
+                                  const GeneratedClass &clazz);
     void performGeneration(const ExistingGetterSetterData &data, int generationFlags);
     void applyChanges();
     bool hasSourceFile() const { return m_headerFile != m_sourceFile; }
@@ -411,16 +425,15 @@ private:
         bool generateConstQProperty() const;
         bool generateQProperty() const;
 
-        Declaration *decl() const { return m_data.declarationSymbol; }
         const GeneratedClass &theClass() const { return q->m_class; }
-        bool isStatic() const { return m_data.declarationSymbol->type().isStatic(); }
+        bool isStatic() const { return m_data.declaredType.isStatic(); }
 
         // As the member was declared, const and static and all, which two
         // of the definitions written outside the class are made from.
-        const GeneratedType &declaredType() const { return m_declaredType; }
+        const GeneratedType &declaredType() const { return m_data.declaredType; }
         // Where its definition goes, which is all the insertion locator
         // needs of a declaration.
-        const DeclarationToDefine &toDefine() const { return m_toDefine; }
+        const DeclarationToDefine &toDefine() const { return m_data.toDefine; }
         GeneratedType memberVarType() const;
         GeneratedType parameterType() const;
     private:
@@ -435,10 +448,6 @@ private:
         mutable std::optional<GeneratedType> m_returnTypeTemplateParameter;
         mutable std::optional<InsertionPointLocator::AccessSpec> m_setterAccessSpec;
         mutable std::optional<bool> m_isValueType;
-        // The one place the declaration's own type is read; everything
-        // written below is made from it.
-        GeneratedType m_declaredType;
-        DeclarationToDefine m_toDefine;
         ExistingGetterSetterData m_data;
         int m_generateFlags = 0;
     };
@@ -1212,7 +1221,7 @@ private:
             const ClassSpecifierAST *m_classAST;
             InsertionPointLocator::AccessSpec m_accessSpec;
             GenerateConstructorRefactoringHelper(CppQuickFixOperation *operation,
-                                                 Class *clazz,
+                                                 const GeneratedClass &clazz,
                                                  const ClassSpecifierAST *classAST,
                                                  InsertionPointLocator::AccessSpec accessSpec)
                 : GetterSetterRefactoringHelper(operation, clazz)
@@ -1271,7 +1280,7 @@ private:
                 for (auto &member : members) {
                     GeneratedType type(member->symbol->type(),
                                        member->symbol->enclosingScope(),
-                                       m_operation);
+                                       m_class.readWith());
                     type = type.isValueType(&member->customValueType)
                                ? type.withoutConst()
                                : type.constReference();
@@ -1359,10 +1368,11 @@ private:
                 }
             }
         };
-        GenerateConstructorRefactoringHelper helper(this,
-                                                    m_classAST->symbol,
-                                                    m_classAST,
-                                                    accessSpec);
+        GenerateConstructorRefactoringHelper helper(
+            this,
+            GeneratedClass(m_classAST->symbol, std::make_shared<CppQuickFixInterface>(*this)),
+            m_classAST,
+            accessSpec);
 
         auto members = Utils::filtered(infos, [](const auto mi) {
             return mi->init || mi->parentClassConstructor;
@@ -1714,13 +1724,17 @@ public:
             }
         }
         const QStringList memberFunctionsAsStrings = toStringList(memberFunctions);
+        const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
+        const CppRefactoringChanges changes(interface.snapshot());
 
         for (Symbol *const member : std::as_const(dataMembers)) {
             ExistingGetterSetterData existing;
             existing.memberVariableName = QString::fromUtf8(member->identifier()->chars(),
                                                             member->identifier()->size());
-            existing.declarationSymbol = member->asDeclaration();
-            existing.clazz = theClass;
+            existing.declaredType = GeneratedType(member->type(), member->enclosingScope(),
+                                                  readWith);
+            existing.toDefine = declarationToDefine(member, changes);
+            existing.clazz = GeneratedClass(theClass, readWith);
 
             // check if a Q_PROPERTY exist
             const QString baseName = CppQuickFixSettings::memberBaseName(existing.memberVariableName);
@@ -1774,8 +1788,8 @@ private:
 
 int ExistingGetterSetterData::computePossibleFlags() const
 {
-    const bool isConst = declarationSymbol->type().isConst();
-    const bool isStatic = declarationSymbol->type().isStatic();
+    const bool isConst = declaredType.isConst();
+    const bool isStatic = declaredType.isStatic();
     int generateFlags = 0;
     if (getterName.isEmpty())
         generateFlags |= GenerateFlag::GenerateGetter;
@@ -1798,12 +1812,12 @@ int ExistingGetterSetterData::computePossibleFlags() const
 }
 
 GetterSetterRefactoringHelper::GetterSetterRefactoringHelper(
-        CppQuickFixOperation *operation, Class *clazz)
+        CppQuickFixOperation *operation, const GeneratedClass &clazz)
     : m_operation(operation)
     , m_changes(m_operation->snapshot())
     , m_locator(m_changes)
     , m_headerFile(operation->currentFile())
-    , m_class(clazz, operation)
+    , m_class(clazz)
 {}
 void GetterSetterRefactoringHelper::performGeneration(
         const ExistingGetterSetterData &data, int generateFlags)
@@ -1859,14 +1873,14 @@ void GetterSetterRefactoringHelper::insertAndIndent(
     changeSet.insert(targetPosition, loc.prefix() + text + loc.suffix());
 }
 
-static FullySpecifiedType makeConstRef(CppQuickFixOperation *operation,
+static FullySpecifiedType makeConstRef(const CppQuickFixInterface &readWith,
                                       FullySpecifiedType type)
 {
     type.setConst(true);
-    return operation->currentFile()->cppDocument()->control()->referenceType(type, false);
+    return readWith.currentFile()->cppDocument()->control()->referenceType(type, false);
 }
 
-static FullySpecifiedType addConstToReference(CppQuickFixOperation *operation,
+static FullySpecifiedType addConstToReference(const CppQuickFixInterface &readWith,
                                               FullySpecifiedType type)
 {
     if (ReferenceType *ref = type.type()->asReferenceType()) {
@@ -1874,12 +1888,12 @@ static FullySpecifiedType addConstToReference(CppQuickFixOperation *operation,
         if (elemType.isConst())
             return type;
         elemType.setConst(true);
-        return operation->currentFile()->cppDocument()->control()->referenceType(elemType, false);
+        return readWith.currentFile()->cppDocument()->control()->referenceType(elemType, false);
     }
     return type;
 }
 
-static bool isValueType(CppQuickFixOperation *operation,
+static bool isValueType(const CppQuickFixInterface &readWith,
                         FullySpecifiedType type, Scope *enclosingScope, bool *customValueType)
 {
     if (customValueType)
@@ -1891,7 +1905,7 @@ static bool isValueType(CppQuickFixOperation *operation,
     };
     if (type->asNamedType()) {
         // we need a recursive search and a lookup context
-        LookupContext context(operation->currentFile()->cppDocument(), operation->snapshot());
+        LookupContext context(readWith.currentFile()->cppDocument(), readWith.snapshot());
         auto isValueType = [settings = cppQuickFixSettingsForProject(
                                 ProjectTree::currentProject()),
                 &customValueType,
@@ -1930,21 +1944,21 @@ static bool isValueType(CppQuickFixOperation *operation,
 }
 
 GeneratedType::GeneratedType(const FullySpecifiedType &type, Scope *scope,
-                             CppQuickFixOperation *operation)
+                             const ReadWith &readWith)
     : m_type(type)
     , m_scope(scope)
-    , m_operation(operation)
+    , m_readWith(readWith)
 {}
 
-GeneratedType GeneratedType::fromText(const QString &text, CppQuickFixOperation *operation)
+GeneratedType GeneratedType::fromText(const QString &text, const ReadWith &readWith)
 {
     // Through a named type of the front end's, so that a type nobody read
     // is written by whatever writes the ones that were read.
-    Control *control = operation->currentFile()->cppDocument()->control();
+    Control *control = readWith->currentFile()->cppDocument()->control();
     const std::string utf8 = text.toUtf8().toStdString();
     return GeneratedType(FullySpecifiedType(control->namedType(control->identifier(utf8.c_str()))),
                          nullptr,
-                         operation);
+                         readWith);
 }
 
 GeneratedType GeneratedType::asDeclared() const
@@ -1952,14 +1966,14 @@ GeneratedType GeneratedType::asDeclared() const
     FullySpecifiedType type = m_type;
     type.setConst(false);
     type.setStatic(false);
-    return GeneratedType(type, m_scope, m_operation);
+    return GeneratedType(type, m_scope, m_readWith);
 }
 
 GeneratedType GeneratedType::withoutConst() const
 {
     FullySpecifiedType type = m_type;
     type.setConst(false);
-    return GeneratedType(type, m_scope, m_operation);
+    return GeneratedType(type, m_scope, m_readWith);
 }
 
 GeneratedType GeneratedType::asValue() const
@@ -1968,23 +1982,23 @@ GeneratedType GeneratedType::asValue() const
     if (ReferenceType *reference = type.type()->asReferenceType())
         type = reference->elementType();
     type.setConst(false);
-    return GeneratedType(type, m_scope, m_operation);
+    return GeneratedType(type, m_scope, m_readWith);
 }
 
 GeneratedType GeneratedType::constReference() const
 {
-    return GeneratedType(makeConstRef(m_operation, m_type), m_scope, m_operation);
+    return GeneratedType(makeConstRef(*m_readWith, m_type), m_scope, m_readWith);
 }
 
 GeneratedType GeneratedType::withConstOnReference() const
 {
-    return GeneratedType(addConstToReference(m_operation, m_type), m_scope, m_operation);
+    return GeneratedType(addConstToReference(*m_readWith, m_type), m_scope, m_readWith);
 }
 
 GeneratedType GeneratedType::firstTemplateArgument() const
 {
     if (const std::optional<FullySpecifiedType> argument = getFirstTemplateParameter(m_type))
-        return GeneratedType(*argument, m_scope, m_operation);
+        return GeneratedType(*argument, m_scope, m_readWith);
     return {};
 }
 
@@ -1993,15 +2007,15 @@ GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
                                        const QStringList &namespacesOpenedThere) const
 {
     return GeneratedType(
-        typeAtDifferentLocation(*m_operation, m_type, m_scope, file, location,
+        typeAtDifferentLocation(*m_readWith, m_type, m_scope, file, location,
                                 namespacesOpenedThere),
         m_scope,
-        m_operation);
+        m_readWith);
 }
 
 GeneratedType GeneratedType::writtenOutsideTheClass(const GeneratedClass &theClass) const
 {
-    LookupContext context(m_operation->currentFile()->cppDocument(), m_operation->snapshot());
+    LookupContext context(m_readWith->currentFile()->cppDocument(), m_readWith->snapshot());
     SubstitutionEnvironment environment;
     environment.setContext(context);
     environment.switchScope(theClass.m_class);
@@ -2010,8 +2024,8 @@ GeneratedType GeneratedType::writtenOutsideTheClass(const GeneratedClass &theCla
         target = context.globalNamespace();
     UseMinimalNames minimal(target);
     environment.enter(&minimal);
-    Control *control = m_operation->currentFile()->cppDocument()->control();
-    return GeneratedType(rewriteType(m_type, &environment, control), m_scope, m_operation);
+    Control *control = m_readWith->currentFile()->cppDocument()->control();
+    return GeneratedType(rewriteType(m_type, &environment, control), m_scope, m_readWith);
 }
 
 QString GeneratedType::asDeclarationOf(const QString &name) const
@@ -2028,12 +2042,12 @@ QString GeneratedType::asTextWithoutTemplateParameters() const
 
 bool GeneratedType::isValueType(bool *saidByName) const
 {
-    return ::CppEditor::Internal::isValueType(m_operation, m_type, m_scope, saidByName);
+    return ::CppEditor::Internal::isValueType(*m_readWith, m_type, m_scope, saidByName);
 }
 
-GeneratedClass::GeneratedClass(Class *clazz, CppQuickFixOperation *operation)
+GeneratedClass::GeneratedClass(Class *clazz, const ReadWith &readWith)
     : m_class(clazz)
-    , m_operation(operation)
+    , m_readWith(readWith)
 {}
 
 QString GeneratedClass::name() const
@@ -2055,7 +2069,7 @@ bool GeneratedClass::isQObject() const
     // what makes a slot a slot is standing below QObject.
     const QByteArray connectName = "connect";
     const Identifier connectId(connectName.data(), connectName.size());
-    const QList<LookupItem> items = m_operation->context().lookup(&connectId, m_class);
+    const QList<LookupItem> items = m_readWith->context().lookup(&connectId, m_class);
     for (const LookupItem &item : items) {
         if (item.declaration() && item.declaration()->enclosingClass()
             && generationOverview().prettyName(item.declaration()->enclosingClass()->name())
@@ -2069,7 +2083,7 @@ bool GeneratedClass::isQObject() const
 QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
                                   const InsertionLocation &location) const
 {
-    return symbolAtDifferentLocation(*m_operation, m_class, file, location);
+    return symbolAtDifferentLocation(*m_readWith, m_class, file, location);
 }
 
 DeclarationToDefine GeneratedClass::toDefine(const CppRefactoringChanges &changes) const
@@ -2199,7 +2213,7 @@ void GetterSetterRefactoringHelper::generateGetter()
                                 CppQuickFixSettings::GetterSetterTemplate::TYPE_PATTERN,
                                 m_data.memberVarType().writtenAt(targetFile, targetLoc).asText());
                 }
-                return GeneratedType::fromText(returnType, m_operation);
+                return GeneratedType::fromText(returnType, m_class.readWith());
             } else {
                 const GeneratedType returnType
                         = m_data.memberVarType().writtenAt(targetFile, targetLoc);
@@ -2498,10 +2512,6 @@ void GetterSetterRefactoringHelper::Data::setup(
 {
     m_data = data;
     m_generateFlags = generateFlags;
-    m_declaredType = GeneratedType(data.declarationSymbol->type(),
-                                   data.declarationSymbol->enclosingScope(),
-                                   q->m_operation);
-    m_toDefine = declarationToDefine(data.declarationSymbol, q->m_changes);
 
     if (generateGetter() && getterName().isEmpty()) {
         m_data.getterName = q->m_settings->getGetterName(qPropertyName(), memberVarName());
@@ -2557,7 +2567,7 @@ const GeneratedType &GetterSetterRefactoringHelper::Data::returnTypeTemplatePara
         if (getSetTemplate().returnTypeTemplate.has_value()) {
             QString returnTypeTemplate = *getSetTemplate().returnTypeTemplate;
             if (returnTypeTemplate.contains(CppQuickFixSettings::GetterSetterTemplate::TEMPLATE_PARAMETER_PATTERN)) {
-                const GeneratedType parameter = m_declaredType.firstTemplateArgument();
+                const GeneratedType parameter = declaredType().firstTemplateArgument();
                 if (parameter.isValid())
                     m_returnTypeTemplateParameter = parameter;
                 else
@@ -2619,13 +2629,13 @@ GeneratedType GetterSetterRefactoringHelper::Data::getReturnTypeHeader(
     if (typeTemplate.contains(CppQuickFixSettings::GetterSetterTemplate::TYPE_PATTERN))
         typeTemplate.replace(
                     CppQuickFixSettings::GetterSetterTemplate::TYPE_PATTERN,
-                    m_declaredType.asText());
-    return GeneratedType::fromText(typeTemplate, q->m_operation);
+                    declaredType().asText());
+    return GeneratedType::fromText(typeTemplate, q->m_class.readWith());
 }
 
 GeneratedType GetterSetterRefactoringHelper::Data::memberVarType() const
 {
-    return m_declaredType.asDeclared();
+    return declaredType().asDeclared();
 }
 
 GeneratedType GetterSetterRefactoringHelper::Data::parameterType() const
@@ -2732,11 +2742,14 @@ class GenerateGetterSetter : public CppQuickFixFactory
         if (!symbol->asDeclaration()) {
             return;
         }
-        existing.declarationSymbol = symbol->asDeclaration();
-
-        existing.clazz = classSpecifier->symbol;
-        if (!existing.clazz)
+        Class *const clazz = classSpecifier->symbol;
+        if (!clazz)
             return;
+
+        const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
+        existing.declaredType = GeneratedType(symbol->type(), symbol->enclosingScope(), readWith);
+        existing.toDefine = declarationToDefine(symbol, CppRefactoringChanges(interface.snapshot()));
+        existing.clazz = GeneratedClass(clazz, readWith);
 
         auto file = interface.currentFile();
         // check if a Q_PROPERTY exist
@@ -2763,7 +2776,7 @@ class GenerateGetterSetter : public CppQuickFixFactory
             }
         }
 
-        findExistingFunctions(existing, toStringList(getMemberFunctions(existing.clazz)));
+        findExistingFunctions(existing, toStringList(getMemberFunctions(clazz)));
         existing.qPropertyName = CppQuickFixSettings::memberBaseName(existing.memberVariableName);
 
         const int possibleFlags = existing.computePossibleFlags();
@@ -2816,7 +2829,10 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
         }
         if (!klass)
             return;
-        existing.clazz = klass->symbol;
+        Class *const clazz = klass->symbol;
+
+        const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
+        existing.clazz = GeneratedClass(clazz, readWith);
 
         CppRefactoringFilePtr file = interface.currentFile();
         const QString propertyName = file->textOf(qtPropertyDeclaration->property_name);
@@ -2825,10 +2841,16 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
 
         Control *control = interface.currentFile()->cppDocument()->control();
 
-        existing.declarationSymbol = control->newDeclaration(ast->firstToken(),
-                                                             qtPropertyDeclaration->property_name->name);
-        existing.declarationSymbol->setVisibility(Symbol::Private);
-        existing.declarationSymbol->setEnclosingScope(existing.clazz);
+        // A property declares no member, so one is made to stand for the
+        // member that is about to be written -- where the property is
+        // written, which is where its definition is looked for from.
+        Declaration *const declaration
+            = control->newDeclaration(ast->firstToken(),
+                                      qtPropertyDeclaration->property_name->name);
+        declaration->setVisibility(Symbol::Private);
+        declaration->setEnclosingScope(clazz);
+        existing.toDefine = declarationToDefine(declaration,
+                                                CppRefactoringChanges(interface.snapshot()));
 
         {
             // create a 'right' Type Object
@@ -2870,7 +2892,8 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
             finder.accept(doc->translationUnit()->ast());
             if (finder.type.type()->isUndefinedType())
                 return;
-            existing.declarationSymbol->setType(finder.type);
+            declaration->setType(finder.type);
+            existing.declaredType = GeneratedType(finder.type, clazz, readWith);
             existing.doc = doc; // to hold type
         }
         // check which methods are already there
@@ -2887,8 +2910,8 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
         if (!existing.bindableName.isEmpty())
             generateFlags |= GenerateFlag::GenerateBindable;
         Overview overview;
-        for (int i = 0; i < existing.clazz->memberCount(); ++i) {
-            Symbol *member = existing.clazz->memberAt(i);
+        for (int i = 0; i < clazz->memberCount(); ++i) {
+            Symbol *member = clazz->memberAt(i);
             FullySpecifiedType type = member->type();
             if (member->asFunction() || (type.isValid() && type->asFunctionType())) {
                 const QString name = overview.prettyName(member->name());
