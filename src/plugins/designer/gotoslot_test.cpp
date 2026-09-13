@@ -365,6 +365,15 @@ void GoToSlotTest::test_gotoslot_data()
                       testDataDirWithoutProject / "form.ui"}) // reuse
         << true << GoToSlotExpectation{"Form::onPushButtonClicked", {}, false, true};
 
+    // A class named ahead of its body: a front end records it where it was
+    // first named, which is no place to write a declaration into.
+    const FilePath testDataDirForward = dataDir("gotoslot_forwardDeclaredClass");
+    QVERIFY(testDataDirForward.exists());
+    QTest::newRow("forwardDeclaredClass")
+        << FilePaths({testDataDirForward / "form.cpp", testDataDirForward / "form.h",
+                      testDataDirWithoutProject / "form.ui"}) // reuse
+        << true << connectVia("ui->");
+
     // Finding the right class for inserting definitions/declarations is based on
     // finding a class with a member whose type is the class from the "ui_xxx.h" header.
     // In the following test data the header files contain an extra class referencing
