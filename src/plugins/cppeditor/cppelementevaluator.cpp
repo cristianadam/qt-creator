@@ -36,6 +36,10 @@ struct SourceData
     Document::Ptr doc;
     Scope *scope;
     QString expression;
+
+    // What the cursor is on, where a front end has already settled it: the
+    // expression is then nothing to cut out of the text and resolve again.
+    Symbol *resolved = nullptr;
 };
 using SourceFunction = std::function<std::optional<SourceData>(const CPlusPlus::Snapshot &)>;
 
@@ -566,6 +570,34 @@ static std::optional<CppElementFacts> modelFactsAt(const FilePath &filePath, int
 
 #endif // QTC_WITH_CXX_FRONTEND
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// The class the cursor is on, as the cxx-frontend model reads it, handed
+// back as a symbol of the parse a hierarchy is drawn from -- which is what
+// draws it, this model handing out no symbols. Nothing where it has not read
+// the file, where the cursor is on something that is not a class, or where
+// the class is not in that parse.
+//
+// An alias is left alone: the built-in reading follows a typedef through to
+// the class behind it, and what this model says of one is the alias.
+static Symbol *classOnTheModel(const Document::Ptr &document, const Snapshot &snapshot,
+                               int line, int column)
+{
+    const std::optional<CPlusPlus::CxxFrontendDocument::Element> element
+        = cxxFrontendElementAt(document->filePath(), line, column);
+    if (!element || element->kind != CPlusPlus::CxxFrontendDocument::Kind::Class)
+        return nullptr;
+
+    // Out of the parse the hierarchy works in: the editor's own for the file
+    // being edited, the snapshot's for a header it reads.
+    const FilePath classFile = FilePath::fromUserInput(element->place.filePath);
+    return classFile == document->filePath()
+               ? builtinClassWrittenAt(document, element->place)
+               : builtinClassWrittenAt(snapshot, element->place);
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
 static std::shared_ptr<CppElement> handleLookupItemMatch(const ExecData &execData,
                                                          SymbolFinder symbolFinder)
 {
@@ -644,7 +676,15 @@ static QFuture<std::shared_ptr<CppElement>> exec(SourceFunction &&sourceFunction
         return createFinishedFuture();
 
     LookupContext lookupContext;
-    const LookupItem &lookupItem = findLookupItem(snapshot, *inputData, &lookupContext, followTypedef);
+    LookupItem lookupItem;
+    if (inputData->resolved) {
+        lookupItem.setDeclaration(inputData->resolved);
+        lookupItem.setType(inputData->resolved->type());
+        lookupItem.setScope(inputData->scope);
+        lookupContext = LookupContext(inputData->doc, snapshot);
+    } else {
+        lookupItem = findLookupItem(snapshot, *inputData, &lookupContext, followTypedef);
+    }
     if (!lookupItem.declaration())
         return createFinishedFuture();
 
@@ -721,6 +761,16 @@ public:
                 m_element = elementOf(*facts);
                 return {};
             }
+        }
+#endif
+
+#ifdef QTC_WITH_CXX_FRONTEND
+        // The class a hierarchy is drawn from, where the other model can say
+        // which one it is: a place rather than an expression cut out of the
+        // text and resolved again.
+        if (!m_forAnElement) {
+            if (Symbol * const onTheModel = classOnTheModel(doc, snapshot, line, column + 1))
+                return SourceData{doc, doc->scopeAt(line, column), {}, onTheModel};
         }
 #endif
 

@@ -123,6 +123,20 @@ void ElementEvaluatorTest::testElementUnderCursor_data()
                    "icon: class\n"
                    "is a class");
 
+    // The line that declares it is a place to ask about it from, which is
+    // what somebody reading a declaration is pointing at.
+    QTest::newRow("a class where it is declared")
+        << QByteArray("class C@ {};\n")
+        << QString("category: class-or-namespace\n"
+                   "mark: C\n"
+                   "help: C\n"
+                   "tooltip: C\n"
+                   "link: file.cpp:1:6\n"
+                   "name: C\n"
+                   "qualified: C\n"
+                   "icon: class\n"
+                   "is a class");
+
     QTest::newRow("a class in a namespace")
         << QByteArray("namespace N { class C {}; }\n"
                       "N::C@ c;\n")
