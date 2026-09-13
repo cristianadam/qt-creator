@@ -697,6 +697,59 @@ public:
     // so it does not resolve here, and the snapshot has to be asked instead.
     Declaration declarationAt(int line, int column) const;
 
+    // What a reader hovering over a name is shown about the thing it names:
+    // what kind of thing it is, what it is called, how it reads and where it
+    // stands.
+    //
+    // The same name declarationAt resolves, said the way a tooltip shows it,
+    // which takes a few things a declaration does not say: how an alias
+    // reads as a type, what tells one overload from another, the enum an
+    // enumerator belongs to with the value it stands for, and the class this
+    // thing's type names -- what documentation a variable has is its type's.
+    struct Element
+    {
+        Kind kind = Kind::Unknown;
+
+        QString name;          // as it is written, nothing in front of it
+        QString qualifiedName; // the scopes it is written in included
+
+        // Its type with the qualified name written into it, which is how a
+        // declaration is shown; and the same as a type on its own -- no
+        // name for a parameter and nothing about what it hands back --
+        // which is how an alias is shown, an alias being a type and not a
+        // declaration. Both empty for a class or a namespace, which have
+        // no type to show.
+        QString declaration;
+        QString type;
+
+        // A function without what it hands back and without what it calls
+        // its parameters: what tells one overload from another, and so what
+        // documentation is marked with.
+        QString signature;
+
+        Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Unknown;
+
+        // Where it is declared, which for a function this file defines is
+        // where the body is: what a reader following the name wants.
+        Place place;
+
+        // An enumerator stands for a value in an enum and is shown as both.
+        // The value is the one written where it was declared, and nothing
+        // where none was written -- it stands for one either way, but what
+        // is shown is what somebody wrote.
+        QString enumName;
+        QString enumUnqualifiedName;
+        QString enumeratorValue;
+
+        // The class this thing's type names, written out in full, reached
+        // through a pointer or a reference as readily as directly. Empty
+        // where the type names no class.
+        QString typeClassName;
+
+        bool isValid() const { return !qualifiedName.isEmpty(); }
+    };
+    Element elementAt(int line, int column) const;
+
     // The declaration whose own name is written at a position, rather than
     // the one a name at a position refers to.
     //

@@ -287,6 +287,67 @@ QString qualifiedNameOf(cxx::Symbol *symbol)
     return parts.join("::");
 }
 
+// The path a reader would write in front of a name, which is not every
+// scope the thing is inside of: an unscoped enumerator is named without its
+// enum, and nothing inside a function is named from anywhere at all.
+QString pathWrittenInFrontOf(cxx::Symbol *symbol)
+{
+    QStringList parts;
+    for (cxx::Symbol *s = symbol->parent(); s; s = s->parent()) {
+        // A template's parameter list is a scope of its own and stands in
+        // nobody's path.
+        if (dynamic_cast<cxx::TemplateParametersSymbol *>(s))
+            continue;
+        // Inside a function, and so out of reach of any name: a reader
+        // writes such a thing's name and nothing else.
+        if (dynamic_cast<cxx::FunctionSymbol *>(s) || dynamic_cast<cxx::BlockSymbol *>(s))
+            break;
+        // An unscoped enum lends its enumerators to the scope around it, so
+        // it is not part of what stands in front of them; a scoped one is.
+        if (dynamic_cast<cxx::EnumSymbol *>(s))
+            continue;
+        if (s->name())
+            parts.prepend(fromStd(cxx::to_string(s->name())));
+    }
+    return parts.join("::");
+}
+
+// What an enumerator stands for, as a reader is shown it. The value the
+// front end worked out rather than the expression somebody wrote: an
+// enumerator with nothing written after it stands for a value all the same,
+// and that is the one a reader wants to see.
+//
+// Nothing for a value that is not a whole number, which an enumerator's
+// never is.
+QString enumeratorValueOf(cxx::EnumeratorSymbol *enumerator)
+{
+    const std::optional<cxx::ConstValue> &value = enumerator->value();
+    if (!value)
+        return {};
+    if (const auto *number = std::get_if<std::intmax_t>(&*value))
+        return QString::number(qlonglong(*number));
+    return {};
+}
+
+// The class a type names, written out in full, reached through a pointer or
+// a reference as readily as directly. Nothing where the type names no class,
+// which is most types.
+QString qualifiedClassNameOf(const cxx::Type *type)
+{
+    while (type) {
+        if (auto * const pointer = cxx::type_cast<cxx::PointerType>(type))
+            type = pointer->elementType();
+        else if (auto * const reference = cxx::type_cast<cxx::LvalueReferenceType>(type))
+            type = reference->elementType();
+        else if (auto * const reference = cxx::type_cast<cxx::RvalueReferenceType>(type))
+            type = reference->elementType();
+        else
+            break;
+    }
+    auto * const cls = type ? cxx::type_cast<cxx::ClassType>(type) : nullptr;
+    return cls && cls->symbol() ? qualifiedNameOf(cls->symbol()) : QString();
+}
+
 // What stands in a path where a scope has no name of its own. An anonymous
 // namespace declares things this file has, and a path with a gap in it
 // leads nowhere, so something has to be written there -- and these are the
@@ -1368,6 +1429,13 @@ cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column,
         // Inside it, its first character included.
         if (!before(line, column, int(start.line), int(start.column))
             && before(line, column, int(end.line), int(end.column))) {
+            // Unless a name ends exactly where this one begins, which is
+            // the ordinary cursor: somebody standing behind "f" in "f(" is
+            // asking about f, not about the parenthesis it wrote itself
+            // against. The token starting here wins only where no name
+            // ended here.
+            if (endsHere && int(start.line) == line && int(start.column) == column)
+                return endsHere;
             return location;
         }
 
@@ -3513,6 +3581,78 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
         declaration.canonicalColumn = int(position.column);
     }
     return declaration;
+}
+
+CxxFrontendDocument::Element CxxFrontendDocument::elementAt(int line, int column) const
+{
+    cxx::Symbol *symbol = d->resolvedSymbolAt(line, column);
+    if (!symbol)
+        return {};
+
+    // Naming a base in a member initializer resolves to the base-specifier,
+    // as it does for anyone following the name: the class is what was named.
+    if (auto *base = dynamic_cast<cxx::BaseClassSymbol *>(symbol)) {
+        if (cxx::Symbol *target = base->symbol())
+            symbol = target;
+    }
+
+    const Definition definition = d->definitionOf(symbol);
+    symbol = definition.symbol;
+
+    Element element;
+    element.kind = kindOf(symbol);
+    element.name = symbol->name() ? fromStd(cxx::to_string(symbol->name())) : QString();
+    const QString path = pathWrittenInFrontOf(symbol);
+    element.qualifiedName = path.isEmpty() ? element.name : path + "::" + element.name;
+    element.icon = iconTypeOf(symbol, d->classKeyOf(symbol));
+
+    if (const cxx::SourceLocation location = definition.location ? definition.location
+                                                                 : symbol->location()) {
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        element.place = {d->fileOf(location), int(position.line), int(position.column)};
+    }
+
+    // A class and a namespace are shown by their name alone; everything else
+    // is shown as what it was declared as. The scopes are written into the
+    // name rather than in front of each type in it, which is the name a
+    // reader asked about.
+    if (symbol->type() && !dynamic_cast<cxx::ClassSymbol *>(symbol)
+        && !dynamic_cast<cxx::NamespaceSymbol *>(symbol)) {
+        auto * const function = dynamic_cast<cxx::FunctionSymbol *>(symbol);
+        const QStringList names = function ? d->parameterNamesOf(function) : QStringList();
+        std::vector<std::string> parameterNames;
+        for (const QString &name : names)
+            parameterNames.push_back(name.toStdString());
+
+        const auto written = [&](const std::string &name, bool asAType) {
+            cxx::TypePrintOptions options{.omitFunctionReturnType = asAType,
+                                          .writtenIn = d->scopeWrittenAround(symbol->location())};
+            if (!asAType)
+                options.parameterNames = parameterNames;
+            return applyStarBinding(fromStd(cxx::to_string(symbol->type(), name, options)),
+                                    d->config.settings);
+        };
+        element.declaration = written(element.qualifiedName.toStdString(), false);
+        element.type = written(element.qualifiedName.toStdString(), true);
+        if (function)
+            element.signature = written(element.name.toStdString(), true);
+    }
+
+    if (auto * const enumerator = dynamic_cast<cxx::EnumeratorSymbol *>(symbol)) {
+        if (cxx::Symbol * const enumeration = enumerator->parent()) {
+            element.enumName = qualifiedNameOf(enumeration);
+            element.enumUnqualifiedName = enumeration->name()
+                                              ? fromStd(cxx::to_string(enumeration->name()))
+                                              : QString();
+        }
+        element.enumeratorValue = enumeratorValueOf(enumerator);
+    }
+
+    // The class its type names, which is a thing to say about a variable
+    // and no use about a class: a class's type is itself.
+    if (!dynamic_cast<cxx::ClassSymbol *>(symbol))
+        element.typeClassName = qualifiedClassNameOf(symbol->type());
+    return element;
 }
 
 CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int line,

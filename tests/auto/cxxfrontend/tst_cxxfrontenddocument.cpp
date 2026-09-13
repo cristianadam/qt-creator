@@ -163,6 +163,8 @@ private slots:
 
     void declarationAt_data();
     void declarationAt();
+    void elementAt_data();
+    void elementAt();
     void declarationSaysWhatItIs_data();
     void declarationSaysWhatItIs();
     void symbolsSayWhatTheyAre();
@@ -492,6 +494,79 @@ void tst_cxxfrontenddocument::declarationSaysWhatItIs()
     QCOMPARE(described, expected);
 }
 
+// What a reader hovering over a name is shown about the thing it names.
+void tst_cxxfrontenddocument::elementAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("a class")
+        << QByteArray("namespace N { class C {}; }\nN::$C c;\n")
+        << QString("C|N::C||||@1:21");
+
+    // A declaration is shown with the scopes written into the name and the
+    // names its parameters were given; the same thing as a type has
+    // neither.
+    QTest::newRow("a member function")
+        << QByteArray("struct S { void m(int a); };\nvoid f(S *s) { s->$m(1); }\n")
+        << QString("m|S::m|void S::m(int a)|S::m(int)|m(int)|@1:17");
+
+    QTest::newRow("a variable of a class type")
+        << QByteArray("namespace N { class C {}; }\nvoid f() { N::C *p; $p; }\n")
+        << QString("p|p|N::C *p|N::C *p||@2:18|class N::C");
+
+    // An enumerator stands for a value in an enum and is shown as both,
+    // whether or not anybody wrote the value down.
+    QTest::newRow("an enumerator with a value written")
+        << QByteArray("enum Color { Red = 2 };\nColor c = $Red;\n")
+        << QString("Red|Red|Color Red|Color Red||@1:14|enum Color Color 2");
+
+    QTest::newRow("an enumerator with none")
+        << QByteArray("enum Color { Red, Green };\nColor c = $Green;\n")
+        << QString("Green|Green|Color Green|Color Green||@1:19|enum Color Color 1");
+
+    // An alias is a type: what it stands for, with no name for a parameter
+    // and nothing said about what it hands back. An alias is not a
+    // function either, so a parameter has no name to write even where it
+    // is read as a declaration.
+    QTest::newRow("an alias of a function type")
+        << QByteArray("typedef void F(int a);\n$F *f;\n")
+        << QString("F|F|void F(int)|F(int)||@1:14");
+
+    QTest::newRow("a position on no name")
+        << QByteArray("int i;\n$\n") << QString();
+}
+
+void tst_cxxfrontenddocument::elementAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, expected);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::Element element
+        = document.elementAt(positions.first().line, positions.first().column);
+    if (expected.isEmpty()) {
+        QVERIFY(!element.isValid());
+        return;
+    }
+    QVERIFY(element.isValid());
+
+    QStringList said{element.name, element.qualifiedName, element.declaration, element.type,
+                     element.signature,
+                     QString("@%1:%2").arg(element.place.line).arg(element.place.column)};
+    if (!element.enumName.isEmpty()) {
+        said << QString("enum %1 %2 %3").arg(element.enumName, element.enumUnqualifiedName,
+                                             element.enumeratorValue);
+    }
+    if (!element.typeClassName.isEmpty())
+        said << "class " + element.typeClassName;
+    QCOMPARE(said.join('|'), expected);
+}
+
 // What the file declares, for a reader listing it rather than drawing it:
 // each entry says what kind of thing it is and whether the place is the
 // definition.
@@ -570,7 +645,13 @@ void tst_cxxfrontenddocument::typeAt_data()
     QTest::newRow("the object of a member access")
         << QByteArray("struct S { int m; };\nvoid f(S *s) { int y = $s->m; }\n") << QString("S*");
     QTest::newRow("a call")
-        << QByteArray("int g();\nvoid f() { int y = g$(); }\n") << QString("int");
+        << QByteArray("int g();\nvoid f() { int y = g($); }\n") << QString("int");
+
+    // The same call asked about from behind its name, which is where an
+    // editor leaves the cursor: that is a question about the function, and
+    // a function's type is what it takes and hands back.
+    QTest::newRow("the name of a call")
+        << QByteArray("int g();\nvoid f() { int y = g$(); }\n") << QString("int ()");
     QTest::newRow("a comparison")
         << QByteArray("void f() { int a; bool b = a $== 1; }\n") << QString("bool");
     QTest::newRow("not an expression")
