@@ -194,6 +194,7 @@ private slots:
     void readsWhatQtWritesOnTopOfCxx();
     void readsWhatAQtPropertyDeclares();
     void readsWhichQtPropertyAPositionIsOn();
+    void typeOfTheThingDeclaredAt();
     void readsACallAMetaObjectCouldMake();
     void unsupportedQueries();
     void anOverloadedCallIsNotResolved();
@@ -644,6 +645,70 @@ void tst_cxxfrontenddocument::declarationOfATypeAt()
     QCOMPARE(document.declarationOfTypeAt(positions.first().line,
                                           positions.first().column, "total"),
              declaration);
+}
+
+// The type of what a file declares, and the types made from it: what a
+// tool writing a getter, a setter or a property needs, none of which
+// writes the type as it was declared.
+void tst_cxxfrontenddocument::typeOfTheThingDeclaredAt()
+{
+    const CxxFrontendDocument document(
+        "namespace N {\n"
+        "template <typename T> class List {};\n"
+        "class Value {};\n"
+        "enum E { e };\n"
+        "class C\n"
+        "{\n"
+        "    const List<Value> items;\n"
+        "    Value *held;\n"
+        "    E kind;\n"
+        "    int count;\n"
+        "};\n"
+        "}\n"
+        "void f();\n",
+        "<stdin>");
+
+    // Line 7, where "items" is written.
+    const CxxFrontendDocument::Type items = document.typeOfTheThingDeclaredAt(7, 23);
+    QVERIFY(items.isValid());
+    QVERIFY(items.isConst());
+    QVERIFY(!items.isPointer());
+    QVERIFY(!items.isNumber());
+
+    // As the class writes it, and as the file that is going to hold a
+    // definition of the member has to write it.
+    QCOMPARE(items.writtenAs("m_items"), QString("const List<Value> m_items"));
+    QCOMPARE(items.writtenAt({"<stdin>", 13, 1}, "m_items"),
+             QString("const N::List<N::Value> m_items"));
+
+    // The types made from it.
+    QCOMPARE(items.withoutConst().writtenAs(""), QString("List<Value>"));
+    QCOMPARE(items.value().writtenAs(""), QString("List<Value>"));
+    QCOMPARE(items.withoutConst().constReference().writtenAs("value"),
+             QString("const List<Value> &value"));
+    QVERIFY(items.withoutConst().constReference().isReference());
+    QCOMPARE(items.withoutConst().constReference().value().writtenAs(""),
+             QString("List<Value>"));
+
+    // A reference handed over needs its const; anything else is left alone.
+    QCOMPARE(items.withoutConst().writtenAs(""),
+             items.withoutConst().withConstOnReference().writtenAs(""));
+
+    // What it holds, which is what a getter of a container hands back.
+    QCOMPARE(items.firstTemplateArgument().writtenAs(""), QString("Value"));
+    QVERIFY(!document.typeOfTheThingDeclaredAt(10, 9).firstTemplateArgument().isValid());
+
+    // The name a rule per type is written for.
+    QCOMPARE(items.writtenWithoutTemplateParameters(), QString("const List"));
+
+    // And the categories anything deciding how to hand a type over asks.
+    const CxxFrontendDocument::Type held = document.typeOfTheThingDeclaredAt(8, 12);
+    QVERIFY(held.isPointer());
+    QVERIFY(document.typeOfTheThingDeclaredAt(9, 7).isEnumeration());
+    QVERIFY(document.typeOfTheThingDeclaredAt(10, 9).isNumber());
+
+    // Nothing is declared at a use, and nothing where nothing stands.
+    QVERIFY(!document.typeOfTheThingDeclaredAt(13, 3).isValid());
 }
 
 // Completion. The parser works out what could be written at the position on

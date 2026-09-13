@@ -470,6 +470,76 @@ public:
     // every type is written for the scope the text is going into.
     Signature signatureAt(const Place &function, const Place &writtenAt) const;
 
+    // The type of something a file declares, as whatever writes code with
+    // it needs it.
+    //
+    // Not a string, for two reasons. How a type is written depends on where
+    // it is written -- a type named from inside its namespace needs more of
+    // its path from outside it -- and what is written is often not the type
+    // as declared: a getter hands back what the member holds, a setter takes
+    // it by const reference, and a Q_PROPERTY says the value behind either.
+    // So the types made from one are asked for here rather than spelled by
+    // the caller, which could only do it by editing the text.
+    //
+    // It reads the document it came from, so it may not outlive it.
+    class Type
+    {
+    public:
+        Type();
+        Type(const Type &other);
+        Type &operator=(const Type &other);
+        ~Type();
+
+        bool isValid() const;
+
+        // What it is, as far as anything deciding how to hand it over
+        // cares. A pointer, a reference, an enumeration and a number are
+        // what is passed by value; anything else is a caller's own rule.
+        bool isPointer() const;
+        bool isReference() const;
+        bool isEnumeration() const;
+        bool isNumber() const;
+        bool isConst() const;
+
+        // The types made from it.
+        Type withoutConst() const;
+        // Neither const nor a reference: the value behind it.
+        Type value() const;
+        // const T &, and the const that a T & handed over needs -- which
+        // leaves anything that is no reference as it is.
+        Type constReference() const;
+        Type withConstOnReference() const;
+        // QList<int> -> int. Invalid where the type names no template.
+        Type firstTemplateArgument() const;
+
+        // Written as a declaration of \a name, or alone where that is
+        // empty -- a declarator is written *around* a name, so no amount
+        // of putting the name after the type gets there.
+        //
+        // As the place it was read in writes it, or, where \a writtenAt is
+        // given, with as little in front of each name as still finds it
+        // from there. That place is in this file: a type is written where
+        // its declaration is going, and the document to ask is the one
+        // that holds both.
+        QString writtenAs(const QString &name) const;
+        QString writtenAt(const Place &place, const QString &name) const;
+        // Without the template parameters, which is how a caller with a
+        // rule per type names the type it has a rule for.
+        QString writtenWithoutTemplateParameters() const;
+
+    private:
+        friend class CxxFrontendDocument;
+        class Private;
+        std::shared_ptr<Private> d;
+    };
+
+    // The type of the thing declared at a position -- a member, a variable,
+    // a parameter -- where its declarator writes its name. Invalid where
+    // nothing is declared there: a name that declares something is not a
+    // use of it, so this asks the declaration and not whatever stands
+    // there.
+    Type typeOfTheThingDeclaredAt(int line, int column) const;
+
     // The function at \a function, written out as a declaration of \a name
     // for wherever \a writtenAt is: every type in it written with as little
     // in front of it as still finds that type from there, so a nested class

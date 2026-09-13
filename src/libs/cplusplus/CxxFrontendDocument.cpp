@@ -4103,6 +4103,171 @@ QString CxxFrontendDocument::declarationOfTypeAt(int line, int column,
         d->config.settings);
 }
 
+// What a type answers from: a type of this unit, the scope it was read
+// in, and the style to write it with.
+class CxxFrontendDocument::Type::Private
+{
+public:
+    const CxxFrontendDocument *document = nullptr;
+    const cxx::Type *type = nullptr;
+    cxx::ScopeSymbol *readIn = nullptr;
+
+    [[nodiscard]] cxx::TypeTraits traits() const
+    {
+        return cxx::TypeTraits(&const_cast<CxxFrontendDocument *>(document)->d->unit);
+    }
+
+    [[nodiscard]] CxxFrontendDocument::Type madeOf(const cxx::Type *made) const
+    {
+        CxxFrontendDocument::Type answer;
+        if (!made)
+            return answer;
+        answer.d = std::make_shared<Private>(*this);
+        answer.d->type = made;
+        return answer;
+    }
+
+    [[nodiscard]] QString write(const QString &name, cxx::ScopeSymbol *scope) const
+    {
+        if (!type)
+            return name;
+        cxx::TypePrintOptions options = pointerSpacingOf(document->d->config.settings);
+        options.writtenIn = scope;
+        const QString declaration = fromStd(
+            cxx::to_string(type, name.toStdString(), options));
+        return applyStarBinding(declaration, document->d->config.settings);
+    }
+};
+
+CxxFrontendDocument::Type::Type() = default;
+CxxFrontendDocument::Type::Type(const Type &other) = default;
+CxxFrontendDocument::Type &CxxFrontendDocument::Type::operator=(const Type &other) = default;
+CxxFrontendDocument::Type::~Type() = default;
+
+bool CxxFrontendDocument::Type::isValid() const
+{
+    return d && d->type;
+}
+
+bool CxxFrontendDocument::Type::isPointer() const
+{
+    return isValid() && d->traits().is_pointer(d->type);
+}
+
+bool CxxFrontendDocument::Type::isReference() const
+{
+    return isValid() && d->traits().is_reference(d->type);
+}
+
+bool CxxFrontendDocument::Type::isEnumeration() const
+{
+    return isValid() && d->traits().is_enum(d->type);
+}
+
+bool CxxFrontendDocument::Type::isNumber() const
+{
+    return isValid() && d->traits().is_arithmetic(d->type);
+}
+
+bool CxxFrontendDocument::Type::isConst() const
+{
+    return isValid() && d->traits().is_const(d->type);
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::Type::withoutConst() const
+{
+    if (!isValid())
+        return {};
+    return d->madeOf(d->traits().remove_cv(d->type));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::Type::value() const
+{
+    if (!isValid())
+        return {};
+    return d->madeOf(d->traits().remove_cvref(d->type));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::Type::constReference() const
+{
+    if (!isValid())
+        return {};
+    return d->madeOf(d->traits().add_const_ref(d->type));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::Type::withConstOnReference() const
+{
+    if (!isValid())
+        return {};
+    const cxx::TypeTraits traits = d->traits();
+    if (!traits.is_reference(d->type))
+        return *this;
+    return d->madeOf(traits.add_const_ref(traits.remove_reference(d->type)));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::Type::firstTemplateArgument() const
+{
+    if (!isValid())
+        return {};
+    const auto *classType = cxx::type_cast<cxx::ClassType>(d->traits().remove_cvref(d->type));
+    if (!classType)
+        return {};
+    const cxx::ClassSymbol * const symbol = classType->symbol();
+    if (!symbol)
+        return {};
+    // The first of them, whether it was recorded as a type or as the
+    // symbol of one -- a class written as an argument is named by its
+    // symbol.
+    for (const cxx::TemplateArgument &argument : symbol->templateArguments()) {
+        if (const auto *asType = std::get_if<const cxx::Type *>(&argument))
+            return d->madeOf(*asType);
+        if (cxx::Symbol * const *asSymbol = std::get_if<cxx::Symbol *>(&argument))
+            return *asSymbol ? d->madeOf((*asSymbol)->type()) : Type();
+        break;
+    }
+    return {};
+}
+
+QString CxxFrontendDocument::Type::writtenAs(const QString &name) const
+{
+    return isValid() ? d->write(name, d->readIn) : QString();
+}
+
+QString CxxFrontendDocument::Type::writtenAt(const Place &place, const QString &name) const
+{
+    if (!isValid())
+        return {};
+    const cxx::SourceLocation there = d->document->d->tokenAt(place.line, place.column,
+                                                              place.filePath);
+    return d->write(name, d->document->d->scopeWrittenAround(there));
+}
+
+QString CxxFrontendDocument::Type::writtenWithoutTemplateParameters() const
+{
+    if (!isValid())
+        return {};
+    cxx::TypePrintOptions options = pointerSpacingOf(d->document->d->config.settings);
+    options.writtenIn = d->readIn;
+    options.omitTemplateArguments = true;
+    return fromStd(cxx::to_string(d->type, "", options));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::typeOfTheThingDeclaredAt(int line,
+                                                                       int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::Symbol * const declared = d->declaredAt(location);
+    if (!declared || !declared->type())
+        return {};
+
+    Type answer;
+    answer.d = std::make_shared<Type::Private>();
+    answer.d->document = this;
+    answer.d->type = declared->type();
+    answer.d->readIn = d->scopeWrittenAround(location);
+    return answer;
+}
+
 QString CxxFrontendDocument::typeDeclaredAt(int line, int column, const QString &name,
                                             const Place &writtenAt,
                                             const std::optional<Overview> &settings,
