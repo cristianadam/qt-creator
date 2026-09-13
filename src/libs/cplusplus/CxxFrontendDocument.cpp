@@ -3866,9 +3866,11 @@ public:
 
     Usage::Tags get() const
     {
-        // Out from the name: the innermost node is the name itself, and what
-        // stands around it is what decides.
-        for (int i = m_path.size() - 2; i >= 0; --i) {
+        // Out from the name. The innermost node is counted too: a name is a
+        // node with no rule of its own, but a lambda capture holds its
+        // identifier rather than having a name node under it, and it is the
+        // innermost there.
+        for (int i = m_path.size() - 1; i >= 0; --i) {
             cxx::AST * const node = m_path.at(i);
             const auto answer = [&](Usage::Tags tags) { return tags; };
 
@@ -4171,6 +4173,89 @@ private:
     cxx::Symbol * const m_target;
 };
 
+// What an unqualified name means in \a from and in the scopes around it.
+// qualifiedLookup does not answer this: it searches namespaces, classes and
+// enums, and what is being looked for here lives in a block.
+cxx::Symbol *lookupOutwards(cxx::Symbol *from, const cxx::Name *name)
+{
+    if (!name)
+        return nullptr;
+    for (cxx::Symbol *symbol = from; symbol; symbol = symbol->parent()) {
+        cxx::ScopeSymbol * const scope = symbol->asScopeSymbol();
+        if (!scope)
+            continue;
+        for (cxx::Symbol *candidate : scope->find(name)) {
+            if (dynamic_cast<cxx::VariableSymbol *>(candidate)
+                || dynamic_cast<cxx::ParameterSymbol *>(candidate)
+                || dynamic_cast<cxx::FieldSymbol *>(candidate)) {
+                return candidate;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// The thing a lambda captured, where \a symbol is what its body resolved to.
+//
+// A capture gives the lambda a member of its own -- a field of the closure,
+// which is a class with no name -- and the body names that one. The closure
+// stands in the scope the lambda was written in, so what was captured is the
+// thing of that name in reach from there. Nothing where this is an ordinary
+// member of an ordinary class.
+cxx::Symbol *capturedBy(cxx::Symbol *symbol, const QList<cxx::AST *> &path)
+{
+    auto * const field = dynamic_cast<cxx::FieldSymbol *>(symbol);
+    if (!field || !field->name())
+        return nullptr;
+    auto * const closure = dynamic_cast<cxx::ClassSymbol *>(field->parent());
+    if (!closure)
+        return nullptr;
+
+    // Is that class the one a lambda around here made of itself? It carries
+    // a name -- "__lambda_0" -- so what tells it from a class somebody wrote
+    // is that it stands where the lambda stands.
+    const unsigned where = closure->location().index();
+    for (cxx::AST * const node : path) {
+        auto * const lambda = dynamic_cast<cxx::LambdaExpressionAST *>(node);
+        if (!lambda)
+            continue;
+        if (where >= lambda->firstSourceLocation().index()
+            && where < lambda->lastSourceLocation().index()) {
+            return lookupOutwards(closure->parent(), field->name());
+        }
+    }
+    return nullptr;
+}
+
+// The thing the lambda capture written at \a at names, \a path being the
+// nodes around it. The capture itself resolves to nothing -- it declares the
+// closure's member rather than using anything -- so what it stands for is
+// looked for where the lambda is written.
+cxx::Symbol *capturedAt(const QList<cxx::AST *> &path, cxx::SourceLocation at)
+{
+    const auto names = [at](cxx::SourceLocation identifier) {
+        return identifier && identifier.index() == at.index();
+    };
+    for (cxx::AST * const node : path) {
+        auto * const lambda = dynamic_cast<cxx::LambdaExpressionAST *>(node);
+        if (!lambda || !lambda->symbol)
+            continue;
+        for (auto *capture : cxx::ListView{lambda->captureList}) {
+            const cxx::Identifier *wanted = nullptr;
+            if (auto * const byValue = dynamic_cast<cxx::SimpleLambdaCaptureAST *>(capture);
+                byValue && names(byValue->identifierLoc)) {
+                wanted = byValue->identifier;
+            } else if (auto * const byRef = dynamic_cast<cxx::RefLambdaCaptureAST *>(capture);
+                       byRef && names(byRef->identifierLoc)) {
+                wanted = byRef->identifier;
+            }
+            if (wanted)
+                return lookupOutwards(lambda->symbol->parent(), wanted);
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
@@ -4180,7 +4265,7 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
                                               declaration.filePath);
     if (!at)
         return {};
-    cxx::Symbol * const target = d->declaredAt(at);
+    cxx::Symbol *target = d->declaredAt(at);
     if (!target)
         return {};
 
@@ -4213,22 +4298,31 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
 
     QList<NamedPlace> places;
     for (const Occurrence &occurrence : occurrencesOf(name)) {
+        // occurrencesOf() lists what this file writes, so every place is in
+        // this file and the path is asked for without naming one.
+        const QList<cxx::AST *> path = cxxAstPathAt(*this, occurrence.line, occurrence.column);
+        const cxx::SourceLocation here = d->tokenAt(occurrence.line, occurrence.column);
+
         // A use first, since that is what most places are; failing that,
         // whatever the place declares -- the definition of a function a
         // header declared is a place nothing resolves at.
         cxx::Symbol *symbol = d->resolvedSymbolAt(occurrence.line, occurrence.column);
         bool isDeclaration = false;
         if (!symbol) {
-            symbol = d->declaredAt(d->tokenAt(occurrence.line, occurrence.column));
+            symbol = d->declaredAt(here);
             isDeclaration = symbol != nullptr;
         }
+
+        // Inside a lambda, a captured name is the closure's own member, and
+        // the capture itself is nothing at all. Both stand for the thing the
+        // lambda took, which is what a search for it is after.
+        if (!symbol)
+            symbol = capturedAt(path, here);
+        else if (cxx::Symbol * const captured = capturedBy(symbol, path))
+            symbol = captured;
         if (canonical(symbol) != wanted)
             continue;
 
-        // occurrencesOf() lists what this file writes, so every place is in
-        // this file and the path is asked for without naming one.
-        const QList<cxx::AST *> path = cxxAstPathAt(*this, occurrence.line, occurrence.column);
-        const cxx::SourceLocation here = d->tokenAt(occurrence.line, occurrence.column);
         places.append({occurrence, isDeclaration,
                        functionAt(occurrence.line, occurrence.column),
                        UsageTags(const_cast<Private *>(d.get())->unit, path, here, target)
@@ -5824,12 +5918,6 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // is enough to tell a function that throws from one that does not,
         // and not enough to write the specification back as it stood.
         "how an exception specification was written",
-        // Where a lambda writes a name it captured. A capture gives the
-        // lambda a thing of its own, and what the body names is that one --
-        // so a search for the variable outside stops at the capture and the
-        // places inside are not among its usages. Telling the two apart
-        // needs the capture read as naming what it copies from.
-        "the places a lambda writes a name it captured",
     };
 }
 

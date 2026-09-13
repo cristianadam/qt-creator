@@ -207,6 +207,25 @@ class MyClass {
                           "struct B { void run(); };\n"}
         << QByteArrayList() << QString("walk");
 
+    // A variable a lambda in the same function uses. What the lambda
+    // captured is its own thing, and a rename that stops at the capture
+    // leaves the body naming something that is no longer there.
+    QTest::newRow("used inside a lambda")
+        << QStringList{"file.cpp"}
+        << QByteArrayList{"void f() {\n"
+                          "    int cou@nt = 0;\n"
+                          "    auto byRef = [&count] { count = 1; };\n"
+                          "    auto byValue = [count] { return count; };\n"
+                          "    auto byDefault = [&] { count = 2; };\n"
+                          "}\n"}
+        << QByteArrayList{"void f() {\n"
+                          "    int total = 0;\n"
+                          "    auto byRef = [&total] { total = 1; };\n"
+                          "    auto byValue = [total] { return total; };\n"
+                          "    auto byDefault = [&] { total = 2; };\n"
+                          "}\n"}
+        << QByteArrayList() << QString("total");
+
     // A variable, where each place is a use rather than a declaration.
     QTest::newRow("a variable used in two files")
         << QStringList{"file.h", "file.cpp", "other.cpp"}

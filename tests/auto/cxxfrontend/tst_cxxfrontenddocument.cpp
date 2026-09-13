@@ -2897,28 +2897,26 @@ void tst_cxxfrontenddocument::usageTags_data()
         << QStringList({"3:16 Declaration|Write", "4:12 WritableRef"})
         << QStringList({"3:16 Declaration|Write", "4:12 Read"});
 
-    // What a lambda captured is a thing of its own, and what its body names
-    // is that one -- so a search for the variable outside stops at the
-    // capture. On unsupportedQueries(); the rule that would say whether such
-    // a write is a write is written and waiting for the places to reach it.
+    // A name a lambda captured. What the body names is the closure's own
+    // member and the capture itself may name nothing at all, so both have to
+    // be read as standing for the thing the lambda took.
     //
-    // Worth knowing about the built-in answer here: it says Read for a write
-    // through a capture *by reference* as readily as for one by value, so
-    // what is pinned below is not the right answer either.
+    // A write through a capture by value is not a write to what was
+    // captured; through one by reference it is. The built-in front end says
+    // Read for both, which is what its own FIXME is about.
     QTest::newRow("captured by value")
         << QByteArray("void f() {\n"
                       "    int $i = 0;\n"
                       "    auto l = [i]() mutable { i = 1; };\n"
                       "}\n")
-        << QStringList("2:9 Declaration|Write")
-        << QStringList({"2:9 Declaration|Write", "3:15 -", "3:30 Read"});
+        << QStringList({"2:9 Declaration|Write", "3:15 -", "3:30 Read"}) << QStringList();
 
     QTest::newRow("captured by reference")
         << QByteArray("void f() {\n"
                       "    int $i = 0;\n"
                       "    auto l = [&i]() { i = 1; };\n"
                       "}\n")
-        << QStringList("2:9 Declaration|Write")
+        << QStringList({"2:9 Declaration|Write", "3:16 -", "3:23 Write"})
         << QStringList({"2:9 Declaration|Write", "3:16 -", "3:23 Read"});
 
     QTest::newRow("written into a member initializer")
