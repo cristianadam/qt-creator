@@ -1737,6 +1737,21 @@ std::optional<QString> cxxFrontendTypeWithoutTemplateParameters(
     return type.writtenWithoutTemplateParameters();
 }
 
+std::optional<CxxFrontendDocument::Element> cxxFrontendElementAt(
+    const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    const CxxFrontendDocument * const document
+        = model ? model->document(filePath.toFSPathString()) : nullptr;
+    if (!document)
+        return std::nullopt;
+
+    const CxxFrontendDocument::Element element = document->elementAt(line, column);
+    if (!element.isValid())
+        return std::nullopt;
+    return element;
+}
+
 std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
     const FilePath &filePath, int line, int column)
 {

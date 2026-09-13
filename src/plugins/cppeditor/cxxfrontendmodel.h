@@ -328,6 +328,12 @@ std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> cxxFrontendSymbolsI
 std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
     const Utils::FilePath &filePath, int line, int column);
 
+// What a reader hovering over the name at a position is shown about the
+// thing it names. Nothing where this model has not read the file or the
+// position is on no name it resolved, and then the built-in reading answers.
+std::optional<CPlusPlus::CxxFrontendDocument::Element> cxxFrontendElementAt(
+    const Utils::FilePath &filePath, int line, int column);
+
 // The same for a file nobody has open, read here and now: what an answer
 // asked for out of band -- by the MCP server, say -- is about. One file read
 // per question is the cost, which is the trade for asking about a file the

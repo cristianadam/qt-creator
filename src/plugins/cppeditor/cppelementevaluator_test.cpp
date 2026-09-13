@@ -15,6 +15,10 @@
 
 #include <texteditor/texteditor.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <QTest>
 #include <QTextCursor>
 
@@ -23,6 +27,17 @@ using namespace Utils;
 namespace CppEditor::Internal::Tests {
 
 namespace {
+
+// Which front end read the file, for the one row the two answer
+// differently.
+bool onTheCxxFrontendModel()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return cxxFrontendModelRequested();
+#else
+    return false;
+#endif
+}
 
 QString categoryOf(Core::HelpItem::Category category)
 {
@@ -234,6 +249,11 @@ void ElementEvaluatorTest::testElementUnderCursor_data()
     // the one place a declaration is printed differently from everywhere
     // else, which is why how an alias reads is said apart from how a
     // declaration does.
+    //
+    // The icon is the one thing the two front ends disagree about: the
+    // built-in one reads the icon off the type, so an alias of a function
+    // type is shown as a function, while the other model shows an alias as
+    // the declaration it is whatever it stands for. Pinned both ways.
     QTest::newRow("a typedef of a function type")
         << QByteArray("typedef void F(int a);\n"
                       "F@ *f;\n")
@@ -244,7 +264,8 @@ void ElementEvaluatorTest::testElementUnderCursor_data()
                    "link: file.cpp:1:13\n"
                    "name: F\n"
                    "qualified: F\n"
-                   "icon: public function");
+                   "icon: "
+            + QString(onTheCxxFrontendModel() ? "public variable" : "public function"));
 
     // A macro is not a name the parser resolved: it is read off what the
     // preprocessor recorded, with its replacement as the tooltip.

@@ -513,6 +513,53 @@ static CppElementFacts builtinFactsOf(Symbol *declaration, const LookupContext &
     return facts;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// What the cxx-frontend model says is at a position, in the terms an element
+// is built from, and nothing where it has not read the file or the position
+// is on no name it resolved -- and then the built-in reading answers.
+static std::optional<CppElementFacts> modelFactsAt(const FilePath &filePath, int line, int column)
+{
+    const std::optional<CPlusPlus::CxxFrontendDocument::Element> element
+        = cxxFrontendElementAt(filePath, line, column);
+    if (!element)
+        return std::nullopt;
+
+    using Kind = CPlusPlus::CxxFrontendDocument::Kind;
+    CppElementFacts facts;
+    switch (element->kind) {
+    case Kind::Class: facts.kind = CppElementFacts::Kind::Class; break;
+    case Kind::Enum: facts.kind = CppElementFacts::Kind::Enum; break;
+    case Kind::Enumerator: facts.kind = CppElementFacts::Kind::Enumerator; break;
+    case Kind::Namespace: facts.kind = CppElementFacts::Kind::Namespace; break;
+    case Kind::Function: facts.kind = CppElementFacts::Kind::Function; break;
+    case Kind::TypeAlias: facts.kind = CppElementFacts::Kind::Typedef; break;
+    // What a class calls its own is a variable like any other to a reader
+    // of one.
+    case Kind::Variable:
+    case Kind::Field: facts.kind = CppElementFacts::Kind::Variable; break;
+    case Kind::Unknown: break;
+    }
+
+    facts.name = element->name;
+    facts.qualifiedName = element->qualifiedName;
+    // A class and a namespace have no type to show, and are shown by name.
+    facts.type = element->declaration.isEmpty() ? element->qualifiedName : element->declaration;
+    facts.aliasedType = element->type;
+    facts.signature = element->signature;
+    facts.iconType = element->icon;
+    facts.enumName = element->enumName;
+    facts.enumUnqualifiedName = element->enumUnqualifiedName;
+    facts.enumeratorValue = element->enumeratorValue;
+    facts.typeClassName = element->typeClassName;
+    // A link counts its column from zero where this model counts from one.
+    facts.link = Link(FilePath::fromUserInput(element->place.filePath), element->place.line,
+                      qMax(0, element->place.column - 1));
+    return facts;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
+
 static std::shared_ptr<CppElement> handleLookupItemMatch(const ExecData &execData,
                                                          SymbolFinder symbolFinder)
 {
@@ -655,6 +702,20 @@ public:
         if (matchIncludeFile(doc, line) || matchMacroInUse(doc, pos))
             return {};
 
+#ifdef QTC_WITH_CXX_FRONTEND
+        // The cxx-frontend model answers about a place, so nothing has to be
+        // cut out of the text and looked up again. Only where an element is
+        // what is wanted: a hierarchy is drawn from the symbol itself, which
+        // this model does not hand out.
+        if (m_forAnElement) {
+            if (const std::optional<CppElementFacts> facts
+                = modelFactsAt(m_editor->textDocument()->filePath(), line, column + 1)) {
+                m_element = elementOf(*facts);
+                return {};
+            }
+        }
+#endif
+
         moveCursorToEndOfIdentifier(&m_tc);
         ExpressionUnderCursor expressionUnderCursor(doc->languageFeatures());
         return SourceData{doc, doc->scopeAt(line, column), expressionUnderCursor(m_tc)};
@@ -673,6 +734,10 @@ public:
     QTextCursor m_tc;
     std::shared_ptr<CppElement> m_element;
     QString m_diagnosis;
+
+    // What this reading is for: an element a reader is shown, rather than
+    // the symbol a hierarchy is drawn from.
+    bool m_forAnElement = false;
 };
 
 QFuture<std::shared_ptr<CppElement>> FromGuiFunctor::syncExec(const ExecData &execData)
@@ -732,7 +797,13 @@ void FromGuiFunctor::clear()
 class CppElementEvaluatorPrivate
 {
 public:
-    CppElementEvaluatorPrivate(TextEditor::TextEditorWidget *editor) : m_functor(editor) {}
+    CppElementEvaluatorPrivate(TextEditor::TextEditorWidget *editor) : m_functor(editor)
+    {
+        // Whoever holds an evaluator of their own asks it for an element:
+        // the hierarchy goes through asyncExecute(), which reads with a
+        // functor of its own.
+        m_functor.m_forAnElement = true;
+    }
     FromGuiFunctor m_functor;
 };
 
