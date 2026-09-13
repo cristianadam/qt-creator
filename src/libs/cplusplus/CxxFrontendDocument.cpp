@@ -3949,8 +3949,14 @@ public:
             if (dynamic_cast<cxx::PostIncrExpressionAST *>(node))
                 return notCapturedByValue(Usage::Tag::Write);
 
-            if (dynamic_cast<cxx::ParameterDeclarationAST *>(node))
-                return answer(Usage::Tag::Declaration);
+            if (auto * const parameter = dynamic_cast<cxx::ParameterDeclarationAST *>(node)) {
+                if (holds(parameter->declarator))
+                    return answer(Usage::Tag::Declaration);
+                // Written in the value the parameter falls back on, which is
+                // a use of it and not a declaration of anything.
+                return notCapturedByValue(
+                    tagsFromLhsAndRhs(parameter->type, parameter->expression));
+            }
 
             if (dynamic_cast<cxx::IdDeclaratorAST *>(node)) {
                 // A constructor and a destructor are written under the
@@ -4227,6 +4233,34 @@ cxx::Symbol *capturedBy(cxx::Symbol *symbol, const QList<cxx::AST *> &path)
     return nullptr;
 }
 
+// What a place is really about, where what it resolved to only stands in for
+// something else.
+//
+// A using declaration is a name of its own that names another; a member
+// defined outside its class is a variable of its own, the class keeping the
+// declaration that the definition belongs to. A search for the thing wants
+// the thing, so both are followed.
+cxx::Symbol *standsFor(cxx::Symbol *symbol, const QList<cxx::AST *> &path)
+{
+    if (auto * const introduced = dynamic_cast<cxx::UsingDeclarationSymbol *>(symbol))
+        return introduced->target();
+
+    // "int S::m = 0;" -- what it defines is what the qualifier in front of
+    // the name reaches, which the parser has already resolved.
+    if (dynamic_cast<cxx::VariableSymbol *>(symbol) && symbol->name()) {
+        for (cxx::AST * const node : path) {
+            auto * const id = dynamic_cast<cxx::IdDeclaratorAST *>(node);
+            if (!id || !id->nestedNameSpecifier || !id->nestedNameSpecifier->symbol)
+                continue;
+            if (cxx::Symbol * const member
+                = cxx::qualifiedLookup(id->nestedNameSpecifier->symbol, symbol->name())) {
+                return member;
+            }
+        }
+    }
+    return nullptr;
+}
+
 // The thing the lambda capture written at \a at names, \a path being the
 // nodes around it. The capture itself resolves to nothing -- it declares the
 // closure's member rather than using anything -- so what it stands for is
@@ -4258,22 +4292,28 @@ cxx::Symbol *capturedAt(const QList<cxx::AST *> &path, cxx::SourceLocation at)
 
 } // namespace
 
-QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
+std::optional<QList<CxxFrontendDocument::NamedPlace>> CxxFrontendDocument::usagesOf(
     const Place &declaration) const
 {
+    // This unit does not write that place at all, which is what a file that
+    // does not read the declaring header looks like: it has no usages.
     const cxx::SourceLocation at = d->tokenAt(declaration.line, declaration.column,
                                               declaration.filePath);
     if (!at)
-        return {};
+        return QList<NamedPlace>();
+
+    // It does write it, and nothing is declared there as far as this model
+    // can tell. Then it cannot answer, and saying "no usages" would lose
+    // every place in the file.
     cxx::Symbol *target = d->declaredAt(at);
     if (!target)
-        return {};
+        return std::nullopt;
 
     // Written unqualified wherever it is used; whatever path stands in front
     // of it is what this file resolved for itself.
     const QString name = fromStd(d->unit.tokenText(at));
     if (name.isEmpty())
-        return {};
+        return std::nullopt;
 
     // A constructor and a destructor are written under their class's name,
     // so a place naming one of them names the class.
@@ -4320,6 +4360,8 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
             symbol = capturedAt(path, here);
         else if (cxx::Symbol * const captured = capturedBy(symbol, path))
             symbol = captured;
+        if (cxx::Symbol * const meant = standsFor(symbol, path))
+            symbol = meant;
         if (canonical(symbol) != wanted)
             continue;
 

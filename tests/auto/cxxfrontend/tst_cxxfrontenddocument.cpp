@@ -2575,7 +2575,8 @@ void tst_cxxfrontenddocument::usagesInAFile()
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
     QStringList described;
     for (const CxxFrontendDocument::NamedPlace &place :
-         document.usagesOf({{}, positions.first().line, positions.first().column})) {
+         document.usagesOf({{}, positions.first().line, positions.first().column})
+             .value_or(QList<CxxFrontendDocument::NamedPlace>())) {
         QString line = QString("%1:%2%3").arg(place.place.line).arg(place.place.column)
                            .arg(place.isDeclaration ? " declaration" : "");
         if (!place.containingFunction.isEmpty() && !place.isDeclaration)
@@ -2919,6 +2920,75 @@ void tst_cxxfrontenddocument::usageTags_data()
         << QStringList({"2:9 Declaration|Write", "3:16 -", "3:23 Write"})
         << QStringList({"2:9 Declaration|Write", "3:16 -", "3:23 Read"});
 
+    QTest::newRow("a member through this")
+        << QByteArray("struct S {\n"
+                      "    int $m;\n"
+                      "    void f() { this->m = 1; m = 2; }\n"
+                      "};\n")
+        << QStringList({"2:9 Declaration", "3:22 Write", "3:29 Write"}) << QStringList();
+
+    // Defined outside its class, which is a variable of its own here: what
+    // it defines is what the qualifier in front of the name reaches.
+    QTest::newRow("a static member defined outside its class")
+        << QByteArray("struct S { static int $m; };\n"
+                      "int S::m = 0;\n"
+                      "void f() { S::m = 1; }\n")
+        << QStringList({"1:23 Declaration", "2:8 Declaration|Write", "3:15 Write"})
+        << QStringList();
+
+    QTest::newRow("a range-based for variable")
+        << QByteArray("void f(int *begin, int *end) {\n"
+                      "    for (int $v : *begin) { v = 1; }\n"
+                      "}\n")
+        << QStringList({"2:14 Declaration", "2:28 Write"}) << QStringList();
+
+    // The parser records no symbol for a handler's parameter, so this model
+    // cannot say what is declared there -- and says so rather than answering
+    // "no usages", which would drop every place in the file. Whoever asked
+    // reads the built-in front end instead.
+    QTest::newRow("a catch variable, which this model declines")
+        << QByteArray("struct E {};\n"
+                      "void f() { try {} catch (E &$e) { (void)e; } }\n")
+        << QStringList()
+        << QStringList({"2:29 Declaration", "2:40 Read"});
+
+    // Written in the value a parameter falls back on, which is a use of it.
+    QTest::newRow("a default argument")
+        << QByteArray("int $d = 0;\n"
+                      "void f(int a = d);\n")
+        << QStringList({"1:5 Declaration|Write", "2:16 Read"}) << QStringList();
+
+    QTest::newRow("a nested lambda")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    auto outer = [&] { auto inner = [&] { i = 1; }; inner(); };\n"
+                      "}\n")
+        << QStringList({"2:9 Declaration|Write", "3:43 Write"}) << QStringList();
+
+    QTest::newRow("a name inside a template")
+        << QByteArray("int $g();\n"
+                      "template<typename T> int f() { return g(); }\n")
+        << QStringList({"1:5 Declaration", "2:39 -"}) << QStringList();
+
+    // A using declaration is a name of its own that names another one.
+    QTest::newRow("a name a using declaration brought in")
+        << QByteArray("namespace N { int $v; }\n"
+                      "using N::v;\n"
+                      "void f() { v = 1; }\n")
+        << QStringList({"1:19 Declaration", "2:10 -", "3:12 Write"}) << QStringList();
+
+    QTest::newRow("a member of a template class")
+        << QByteArray("template<typename T> struct S {\n"
+                      "    int $m;\n"
+                      "    void f() { m = 1; }\n"
+                      "};\n")
+        << QStringList({"2:9 Declaration|Template", "3:16 Write"}) << QStringList();
+
+    QTest::newRow("a member given a value where it is declared")
+        << QByteArray("struct S { int $m = 0; S() : m(1) {} void f() { m = 2; } };\n")
+        << QStringList({"1:16 Declaration|Write", "1:29 Write", "1:48 Write"})
+        << QStringList();
+
     QTest::newRow("written into a member initializer")
         << QByteArray("struct S {\n"
                       "    S(int v) : m(v) {}\n"
@@ -2961,7 +3031,8 @@ void tst_cxxfrontenddocument::usageTags()
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
     QStringList said;
     for (const CxxFrontendDocument::NamedPlace &place :
-         document.usagesOf({{}, declaration.line, declaration.column})) {
+         document.usagesOf({{}, declaration.line, declaration.column})
+             .value_or(QList<CxxFrontendDocument::NamedPlace>())) {
         said << QString("%1:%2 %3").arg(place.place.line).arg(place.place.column)
                     .arg(describeTags(place.tags));
     }

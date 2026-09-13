@@ -814,7 +814,13 @@ public:
         // the built-in says of such a place too.
         Usage::Tags tags;
     };
-    QList<NamedPlace> usagesOf(const Place &declaration) const;
+    //
+    // Nothing where this unit writes the declaration's place but cannot say
+    // what is declared there -- the parser records no symbol for a handler's
+    // parameter, for one. That is not the same as a file with no usages in
+    // it, and a caller that took it for one would quietly drop every place
+    // in every file: silence read as absence is how a rename half-renames.
+    std::optional<QList<NamedPlace>> usagesOf(const Place &declaration) const;
 
     // The member functions the class written around a position declares
     // without defining there, in the order they are written -- which is

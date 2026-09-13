@@ -226,6 +226,34 @@ class MyClass {
                           "}\n"}
         << QByteArrayList() << QString("total");
 
+    // A static member defined outside its class, and a name a using
+    // declaration brought in: each is a thing of its own where it is
+    // written, standing for the one being renamed.
+    QTest::newRow("a static member and a using declaration")
+        << QStringList{"file.h", "file.cpp"}
+        << QByteArrayList{"namespace N { struct S { static int cou@nt; }; }\n",
+                          "#include \"file.h\"\n"
+                          "int N::S::count = 0;\n"
+                          "using N::S;\n"
+                          "void f() { S::count = 1; }\n"}
+        << QByteArrayList{"namespace N { struct S { static int total; }; }\n",
+                          "#include \"file.h\"\n"
+                          "int N::S::total = 0;\n"
+                          "using N::S;\n"
+                          "void f() { S::total = 1; }\n"}
+        << QByteArrayList() << QString("total");
+
+    // Nothing records a handler's parameter on the other model, so it says
+    // it cannot answer and the built-in front end does the search. Renaming
+    // one has to work all the same.
+    QTest::newRow("a catch variable")
+        << QStringList{"file.cpp"}
+        << QByteArrayList{"struct E { int code; };\n"
+                          "void f() { try {} catch (E &er@r) { (void)err.code; } }\n"}
+        << QByteArrayList{"struct E { int code; };\n"
+                          "void f() { try {} catch (E &caught) { (void)caught.code; } }\n"}
+        << QByteArrayList() << QString("caught");
+
     // A variable, where each place is a use rather than a declaration.
     QTest::newRow("a variable used in two files")
         << QStringList{"file.h", "file.cpp", "other.cpp"}
