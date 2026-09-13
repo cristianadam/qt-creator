@@ -399,13 +399,21 @@ void CompletionTest::testCompletion()
                      "QTCREATORBUG-14141", Abort);
     }
 
-    // And these come out the same on either model.
-    QEXPECT_FAIL("enum_in_function_in_struct_in_function", "QTCREATORBUG-13757", Abort);
+    // QTCREATORBUG-13757, an enum written inside a function: these three
+    // come out the same on either model.
     QEXPECT_FAIL("enum_in_function_in_struct_in_function_cxx11", "QTCREATORBUG-13757", Abort);
-    QEXPECT_FAIL("enum_in_function_in_struct_in_function_anon", "QTCREATORBUG-13757", Abort);
     QEXPECT_FAIL("enum_in_class_accessed_in_member_func_cxx11", "QTCREATORBUG-13757", Abort);
     QEXPECT_FAIL("enum_in_class_accessed_in_member_func_inline_cxx11",
                  "QTCREATORBUG-13757", Abort);
+
+    // And the two the other model gets right: a name written where a name
+    // can go finds what the scopes around it declare, the enum inside a
+    // struct inside a function included.
+    if (!fromTheModel) {
+        QEXPECT_FAIL("enum_in_function_in_struct_in_function", "QTCREATORBUG-13757", Abort);
+        QEXPECT_FAIL("enum_in_function_in_struct_in_function_anon",
+                     "QTCREATORBUG-13757", Abort);
+    }
 
     // Where the model is the one answering, six rows come out differently;
     // see cxxfrontendmodel.h.

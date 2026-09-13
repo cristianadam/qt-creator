@@ -1354,6 +1354,18 @@ int InternalCppCompletionAssistProcessor::startCompletionInternal(const Utils::F
 
     if (expression.isEmpty()) {
         if (m_model->m_completionOperator == T_EOF_SYMBOL || m_model->m_completionOperator == T_COLON_COLON) {
+            // What can be written where a name can go, which the other
+            // model answers about the place itself. The words that are not
+            // names -- the keywords, the macros, the snippets -- are the
+            // consumer's own either way.
+            if (m_model->m_completionOperator == T_EOF_SYMBOL && completeFromCxxFrontendModel()) {
+                addKeywords();
+                addMacros(CppModelManager::configurationFileName(), cppInterface()->snapshot());
+                addMacros(filePath, cppInterface()->snapshot());
+                addSnippets();
+                return m_positionForProposal;
+            }
+
             (void) (*m_model->m_typeOfExpression)(expression.toUtf8(), scope);
             return globalCompletion(scope) ? m_positionForProposal : -1;
         }
@@ -1478,13 +1490,15 @@ bool InternalCppCompletionAssistProcessor::completeFromCxxFrontendModel()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     // Only where the model is answering the same question the built-in
-    // lookup would: the members of something, or what a scope holds. The Qt
-    // triggers, the argument hints and the include and preprocessor paths
-    // are the consumer's own and stay where they are.
+    // lookup would: the members of something, what a scope holds, or what
+    // can be written where a name can go. The Qt triggers, the argument
+    // hints and the include and preprocessor paths are the consumer's own
+    // and stay where they are.
     switch (m_model->m_completionOperator) {
     case T_DOT:
     case T_ARROW:
     case T_COLON_COLON:
+    case T_EOF_SYMBOL:
         break;
     default:
         return false;
@@ -1504,6 +1518,21 @@ bool InternalCppCompletionAssistProcessor::completeFromCxxFrontendModel()
                                 line,
                                 column + 1);
     if (!completion || completion->candidates.isEmpty())
+        return false;
+
+    // The answer has to be about the same thing the question was. Where the
+    // two disagree the front ends read the place differently -- "2." is a
+    // number to one and the start of a member access to the other -- and
+    // what the model offers is then no answer to what was asked.
+    const auto asked = [&] {
+        switch (m_model->m_completionOperator) {
+        case T_DOT:
+        case T_ARROW: return CxxFrontendDocument::Completion::Kind::Member;
+        case T_COLON_COLON: return CxxFrontendDocument::Completion::Kind::Scope;
+        default: return CxxFrontendDocument::Completion::Kind::Unqualified;
+        }
+    }();
+    if (completion->kind != asked)
         return false;
 
     // A part of the list is worse than none: the name somebody is reaching
