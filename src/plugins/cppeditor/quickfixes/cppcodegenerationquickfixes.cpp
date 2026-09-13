@@ -179,6 +179,34 @@ class GeneratedClass;
 // writes it runs when the fix is chosen.
 using ReadWith = std::shared_ptr<const CppQuickFixInterface>;
 
+// What a front end says about a type it read. The generation holds a
+// GeneratedType, which is a value; this is what fills one in, and there
+// is one of these for each front end that reads a member.
+class TypeReading
+{
+public:
+    using Ptr = std::shared_ptr<const TypeReading>;
+    virtual ~TypeReading() = default;
+
+    virtual bool isPointer() const = 0;
+    virtual bool isConst() const = 0;
+    virtual bool isStatic() const = 0;
+    virtual bool isValueType(bool *saidByName) const = 0;
+
+    virtual Ptr asDeclared() const = 0;
+    virtual Ptr withoutConst() const = 0;
+    virtual Ptr asValue() const = 0;
+    virtual Ptr constReference() const = 0;
+    virtual Ptr withConstOnReference() const = 0;
+    virtual Ptr firstTemplateArgument() const = 0;
+    virtual Ptr writtenAt(const CppRefactoringFilePtr &file,
+                          const InsertionLocation &location,
+                          const QStringList &namespacesOpenedThere) const = 0;
+
+    virtual QString asDeclarationOf(const QString &name) const = 0;
+    virtual QString asTextWithoutTemplateParameters() const = 0;
+};
+
 // A type the getter and setter generation writes down, and the only
 // thing it knows about a front end's idea of one. A type is not a string
 // here because it is written differently depending on where it goes --
@@ -189,101 +217,163 @@ class GeneratedType
 {
 public:
     GeneratedType() = default;
-    GeneratedType(const FullySpecifiedType &type, Scope *scope, const ReadWith &readWith);
+    explicit GeneratedType(TypeReading::Ptr reading)
+        : m_reading(std::move(reading))
+    {}
 
+    // Read by the built-in front end, from a type of its own.
+    static GeneratedType readBuiltin(const FullySpecifiedType &type, Scope *scope,
+                                     const ReadWith &readWith);
     // A type nobody read, spelled out by a setting: it is written as it
     // stands, wherever it is written.
     static GeneratedType fromText(const QString &text, const ReadWith &readWith);
 
-    bool isValid() const { return m_type.isValid(); }
-    bool isPointer() const { return m_type.isValid() && m_type->asPointerType(); }
+    bool isValid() const { return m_reading != nullptr; }
+    bool isPointer() const { return isValid() && m_reading->isPointer(); }
 
     // What a member is declared with, the type having been read off one
     // that may have said const or static.
-    GeneratedType asDeclared() const;
+    GeneratedType asDeclared() const { return made(&TypeReading::asDeclared); }
     // Without the const a member may have been declared with, which a
     // parameter taking its value has no use for.
-    GeneratedType withoutConst() const;
+    GeneratedType withoutConst() const { return made(&TypeReading::withoutConst); }
     // The value behind it: what a Q_PROPERTY says, a getter handing back
     // a const reference notwithstanding.
-    GeneratedType asValue() const;
+    GeneratedType asValue() const { return made(&TypeReading::asValue); }
     // const T &, and the const that a T & handed over needs.
-    GeneratedType constReference() const;
-    GeneratedType withConstOnReference() const;
+    GeneratedType constReference() const { return made(&TypeReading::constReference); }
+    GeneratedType withConstOnReference() const
+    {
+        return made(&TypeReading::withConstOnReference);
+    }
     // QList<int> -> int. Invalid where the type names no template.
-    GeneratedType firstTemplateArgument() const;
+    GeneratedType firstTemplateArgument() const
+    {
+        return made(&TypeReading::firstTemplateArgument);
+    }
     // The same type where a definition is being written, named with as
     // little in front of it as still finds it from there.
     GeneratedType writtenAt(const CppRefactoringFilePtr &file,
                             const InsertionLocation &location,
-                            const QStringList &namespacesOpenedThere = {}) const;
+                            const QStringList &namespacesOpenedThere = {}) const
+    {
+        if (!isValid())
+            return {};
+        return GeneratedType(m_reading->writtenAt(file, location, namespacesOpenedThere));
+    }
 
     // Written as a declaration of \a name, or alone where that is empty.
-    QString asDeclarationOf(const QString &name) const;
+    QString asDeclarationOf(const QString &name) const
+    {
+        return isValid() ? m_reading->asDeclarationOf(name) : QString();
+    }
     QString asText() const { return asDeclarationOf({}); }
     // How the settings name a type they have a template for.
-    QString asTextWithoutTemplateParameters() const;
+    QString asTextWithoutTemplateParameters() const
+    {
+        return isValid() ? m_reading->asTextWithoutTemplateParameters() : QString();
+    }
 
     // Whether it is handed over by value: a pointer, an enumeration, a
     // number or a reference is, and so is whatever the settings name --
     // which is what \a saidByName reports.
-    bool isValueType(bool *saidByName = nullptr) const;
+    bool isValueType(bool *saidByName = nullptr) const
+    {
+        return isValid() && m_reading->isValueType(saidByName);
+    }
 
-    // What is written where its const and its references are not: the
-    // one thing the front end's own type still has to be handed to.
-    bool isConst() const { return m_type.isConst(); }
-    bool isStatic() const { return m_type.isStatic(); }
+    bool isConst() const { return isValid() && m_reading->isConst(); }
+    bool isStatic() const { return isValid() && m_reading->isStatic(); }
 
 private:
-    FullySpecifiedType m_type;
-    Scope *m_scope = nullptr;
-    ReadWith m_readWith;
+    GeneratedType made(TypeReading::Ptr (TypeReading::*step)() const) const
+    {
+        return isValid() ? GeneratedType((m_reading.get()->*step)()) : GeneratedType();
+    }
+
+    TypeReading::Ptr m_reading;
 };
 
-// The class the generation writes into, and the only thing it knows
-// about a front end's idea of one. Its name is asked rather than kept
-// for the same reason a type is: a class in a namespace is not named
-// from the source file by the name it was declared under.
+// What a front end says about a class it read, and the class the
+// generation writes into. Its name is asked rather than kept for the
+// same reason a type is: a class in a namespace is not named from the
+// source file by the name it was declared under.
+class ClassReading
+{
+public:
+    using Ptr = std::shared_ptr<const ClassReading>;
+    virtual ~ClassReading() = default;
+
+    virtual QString name() const = 0;
+    virtual bool isAnonymous() const = 0;
+    virtual bool isQObject() const = 0;
+    virtual QString writtenAt(const CppRefactoringFilePtr &file,
+                              const InsertionLocation &location) const = 0;
+    virtual InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const = 0;
+    virtual InsertionLocation placeForDeclaration(const InsertionPointLocator &locator,
+                                                  const Utils::FilePath &filePath,
+                                                  InsertionPointLocator::AccessSpec spec) const = 0;
+    virtual DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const = 0;
+    virtual ReadWith readWith() const = 0;
+};
+
 class GeneratedClass
 {
 public:
     GeneratedClass() = default;
-    GeneratedClass(Class *clazz, const ReadWith &readWith);
+    explicit GeneratedClass(ClassReading::Ptr reading)
+        : m_reading(std::move(reading))
+    {}
+
+    // Read by the built-in front end, from a class of its own.
+    static GeneratedClass readBuiltin(Class *clazz, const ReadWith &readWith);
+
+    bool isValid() const { return m_reading != nullptr; }
 
     // As it was written. A class written with no name of its own has
     // none, and nothing of it can be declared anywhere but inside it,
     // since nothing outside could say which class it is.
-    QString name() const;
-    bool isAnonymous() const;
+    QString name() const { return isValid() ? m_reading->name() : QString(); }
+    bool isAnonymous() const { return !isValid() || m_reading->isAnonymous(); }
     // Whether QObject is above it, which is what lets a setter be a slot
     // and a property be notified of.
-    bool isQObject() const;
+    bool isQObject() const { return isValid() && m_reading->isQObject(); }
     // Its name where a definition of one of its members is going, which
     // for a class in a namespace is more than the name.
     QString writtenAt(const CppRefactoringFilePtr &file,
-                      const InsertionLocation &location) const;
+                      const InsertionLocation &location) const
+    {
+        return isValid() ? m_reading->writtenAt(file, location) : QString();
+    }
     // Where its own name is written, which is where a declaration
     // standing outside it stands: a type written there is written as
     // whatever encloses the class writes it.
-    InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const;
+    InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const
+    {
+        return isValid() ? m_reading->placeItIsWrittenAt(filePath) : InsertionLocation();
+    }
     // Where a declaration of the kind \a spec goes in it.
     InsertionLocation placeForDeclaration(const InsertionPointLocator &locator,
                                           const Utils::FilePath &filePath,
-                                          InsertionPointLocator::AccessSpec spec) const;
+                                          InsertionPointLocator::AccessSpec spec) const
+    {
+        return isValid() ? m_reading->placeForDeclaration(locator, filePath, spec)
+                         : InsertionLocation();
+    }
 
     // The class itself as the thing being defined, which is what a
     // constructor has to go by: it is not declared anywhere yet, so its
     // class stands in for it.
-    DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const;
+    DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const
+    {
+        return isValid() ? m_reading->toDefine(changes) : DeclarationToDefine();
+    }
 
     // What read it, for reading a type of its members with the same.
-    const ReadWith &readWith() const { return m_readWith; }
+    ReadWith readWith() const { return isValid() ? m_reading->readWith() : ReadWith(); }
 
 private:
-    friend class GeneratedType;
-
-    Class *m_class = nullptr;
-    ReadWith m_readWith;
+    ClassReading::Ptr m_reading;
 };
 
 struct ExistingGetterSetterData
@@ -1279,9 +1369,10 @@ private:
                 QString inClassDeclaration = m_class.name() + "(";
                 QString constructorBody = members.empty() ? QString(") {}") : QString(") : ");
                 for (auto &member : members) {
-                    GeneratedType type(member->symbol->type(),
-                                       member->symbol->enclosingScope(),
-                                       m_class.readWith());
+                    GeneratedType type = GeneratedType::readBuiltin(
+                        member->symbol->type(),
+                        member->symbol->enclosingScope(),
+                        m_class.readWith());
                     type = type.isValueType(&member->customValueType)
                                ? type.withoutConst()
                                : type.constReference();
@@ -1371,7 +1462,8 @@ private:
         };
         GenerateConstructorRefactoringHelper helper(
             this,
-            GeneratedClass(m_classAST->symbol, std::make_shared<CppQuickFixInterface>(*this)),
+            GeneratedClass::readBuiltin(m_classAST->symbol,
+                                        std::make_shared<CppQuickFixInterface>(*this)),
             m_classAST,
             accessSpec);
 
@@ -1732,10 +1824,11 @@ public:
             ExistingGetterSetterData existing;
             existing.memberVariableName = QString::fromUtf8(member->identifier()->chars(),
                                                             member->identifier()->size());
-            existing.declaredType = GeneratedType(member->type(), member->enclosingScope(),
-                                                  readWith);
+            existing.declaredType = GeneratedType::readBuiltin(member->type(),
+                                                               member->enclosingScope(),
+                                                               readWith);
             existing.toDefine = declarationToDefine(member, changes);
-            existing.clazz = GeneratedClass(theClass, readWith);
+            existing.clazz = GeneratedClass::readBuiltin(theClass, readWith);
 
             // check if a Q_PROPERTY exist
             const QString baseName = CppQuickFixSettings::memberBaseName(existing.memberVariableName);
@@ -1944,12 +2037,101 @@ static bool isValueType(const CppQuickFixInterface &readWith,
     return isTypeValueType(type);
 }
 
-GeneratedType::GeneratedType(const FullySpecifiedType &type, Scope *scope,
-                             const ReadWith &readWith)
-    : m_type(type)
-    , m_scope(scope)
-    , m_readWith(readWith)
-{}
+// What the built-in front end says about a type it read: one of its own
+// types, the scope it was read in, and what it was read with.
+class BuiltinTypeReading : public TypeReading
+{
+public:
+    BuiltinTypeReading(const FullySpecifiedType &type, Scope *scope, const ReadWith &readWith)
+        : m_type(type)
+        , m_scope(scope)
+        , m_readWith(readWith)
+    {}
+
+    bool isPointer() const override { return m_type.isValid() && m_type->asPointerType(); }
+    bool isConst() const override { return m_type.isConst(); }
+    bool isStatic() const override { return m_type.isStatic(); }
+
+    bool isValueType(bool *saidByName) const override
+    {
+        return ::CppEditor::Internal::isValueType(*m_readWith, m_type, m_scope, saidByName);
+    }
+
+    Ptr asDeclared() const override
+    {
+        FullySpecifiedType type = m_type;
+        type.setConst(false);
+        type.setStatic(false);
+        return madeOf(type);
+    }
+
+    Ptr withoutConst() const override
+    {
+        FullySpecifiedType type = m_type;
+        type.setConst(false);
+        return madeOf(type);
+    }
+
+    Ptr asValue() const override
+    {
+        FullySpecifiedType type = m_type;
+        if (ReferenceType *reference = type.type()->asReferenceType())
+            type = reference->elementType();
+        type.setConst(false);
+        return madeOf(type);
+    }
+
+    Ptr constReference() const override { return madeOf(makeConstRef(*m_readWith, m_type)); }
+
+    Ptr withConstOnReference() const override
+    {
+        return madeOf(addConstToReference(*m_readWith, m_type));
+    }
+
+    Ptr firstTemplateArgument() const override
+    {
+        if (const std::optional<FullySpecifiedType> argument = getFirstTemplateParameter(m_type))
+            return madeOf(*argument);
+        return {};
+    }
+
+    Ptr writtenAt(const CppRefactoringFilePtr &file, const InsertionLocation &location,
+                  const QStringList &namespacesOpenedThere) const override
+    {
+        return madeOf(typeAtDifferentLocation(*m_readWith, m_type, m_scope, file, location,
+                                              namespacesOpenedThere));
+    }
+
+    QString asDeclarationOf(const QString &name) const override
+    {
+        return generationOverview().prettyType(m_type, name);
+    }
+
+    QString asTextWithoutTemplateParameters() const override
+    {
+        Overview overview = generationOverview();
+        overview.showTemplateParameters = false;
+        return overview.prettyType(m_type);
+    }
+
+private:
+    Ptr madeOf(const FullySpecifiedType &type) const
+    {
+        return std::make_shared<BuiltinTypeReading>(type, m_scope, m_readWith);
+    }
+
+    FullySpecifiedType m_type;
+    Scope *m_scope = nullptr;
+    ReadWith m_readWith;
+};
+
+GeneratedType GeneratedType::readBuiltin(const FullySpecifiedType &type, Scope *scope,
+                                         const ReadWith &readWith)
+{
+    if (!type.isValid())
+        return {};
+    return GeneratedType(std::make_shared<BuiltinTypeReading>(type, scope, readWith));
+}
 
 GeneratedType GeneratedType::fromText(const QString &text, const ReadWith &readWith)
 {
@@ -1957,138 +2139,84 @@ GeneratedType GeneratedType::fromText(const QString &text, const ReadWith &readW
     // is written by whatever writes the ones that were read.
     Control *control = readWith->currentFile()->cppDocument()->control();
     const std::string utf8 = text.toUtf8().toStdString();
-    return GeneratedType(FullySpecifiedType(control->namedType(control->identifier(utf8.c_str()))),
-                         nullptr,
-                         readWith);
+    return readBuiltin(FullySpecifiedType(control->namedType(control->identifier(utf8.c_str()))),
+                       nullptr,
+                       readWith);
 }
 
-GeneratedType GeneratedType::asDeclared() const
+// And what it says about a class.
+class BuiltinClassReading : public ClassReading
 {
-    FullySpecifiedType type = m_type;
-    type.setConst(false);
-    type.setStatic(false);
-    return GeneratedType(type, m_scope, m_readWith);
-}
+public:
+    BuiltinClassReading(Class *clazz, const ReadWith &readWith)
+        : m_class(clazz)
+        , m_readWith(readWith)
+    {}
 
-GeneratedType GeneratedType::withoutConst() const
-{
-    FullySpecifiedType type = m_type;
-    type.setConst(false);
-    return GeneratedType(type, m_scope, m_readWith);
-}
-
-GeneratedType GeneratedType::asValue() const
-{
-    FullySpecifiedType type = m_type;
-    if (ReferenceType *reference = type.type()->asReferenceType())
-        type = reference->elementType();
-    type.setConst(false);
-    return GeneratedType(type, m_scope, m_readWith);
-}
-
-GeneratedType GeneratedType::constReference() const
-{
-    return GeneratedType(makeConstRef(*m_readWith, m_type), m_scope, m_readWith);
-}
-
-GeneratedType GeneratedType::withConstOnReference() const
-{
-    return GeneratedType(addConstToReference(*m_readWith, m_type), m_scope, m_readWith);
-}
-
-GeneratedType GeneratedType::firstTemplateArgument() const
-{
-    if (const std::optional<FullySpecifiedType> argument = getFirstTemplateParameter(m_type))
-        return GeneratedType(*argument, m_scope, m_readWith);
-    return {};
-}
-
-GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
-                                       const InsertionLocation &location,
-                                       const QStringList &namespacesOpenedThere) const
-{
-    return GeneratedType(
-        typeAtDifferentLocation(*m_readWith, m_type, m_scope, file, location,
-                                namespacesOpenedThere),
-        m_scope,
-        m_readWith);
-}
-
-QString GeneratedType::asDeclarationOf(const QString &name) const
-{
-    return generationOverview().prettyType(m_type, name);
-}
-
-QString GeneratedType::asTextWithoutTemplateParameters() const
-{
-    Overview overview = generationOverview();
-    overview.showTemplateParameters = false;
-    return overview.prettyType(m_type);
-}
-
-bool GeneratedType::isValueType(bool *saidByName) const
-{
-    return ::CppEditor::Internal::isValueType(*m_readWith, m_type, m_scope, saidByName);
-}
-
-GeneratedClass::GeneratedClass(Class *clazz, const ReadWith &readWith)
-    : m_class(clazz)
-    , m_readWith(readWith)
-{}
-
-QString GeneratedClass::name() const
-{
-    if (isAnonymous())
-        return {};
-    const Identifier *identifier = m_class->name()->identifier();
-    return QString::fromUtf8(identifier->chars(), identifier->size());
-}
-
-bool GeneratedClass::isAnonymous() const
-{
-    return m_class->name()->asAnonymousNameId() != nullptr;
-}
-
-bool GeneratedClass::isQObject() const
-{
-    // Not by the Q_OBJECT it wrote but by the connect() it inherited:
-    // what makes a slot a slot is standing below QObject.
-    const QByteArray connectName = "connect";
-    const Identifier connectId(connectName.data(), connectName.size());
-    const QList<LookupItem> items = m_readWith->context().lookup(&connectId, m_class);
-    for (const LookupItem &item : items) {
-        if (item.declaration() && item.declaration()->enclosingClass()
-            && generationOverview().prettyName(item.declaration()->enclosingClass()->name())
-                   == "QObject") {
-            return true;
-        }
+    QString name() const override
+    {
+        if (isAnonymous())
+            return {};
+        const Identifier *identifier = m_class->name()->identifier();
+        return QString::fromUtf8(identifier->chars(), identifier->size());
     }
-    return false;
-}
 
-QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
-                                  const InsertionLocation &location) const
-{
-    return symbolAtDifferentLocation(*m_readWith, m_class, file, location);
-}
+    bool isAnonymous() const override { return m_class->name()->asAnonymousNameId() != nullptr; }
 
-InsertionLocation GeneratedClass::placeItIsWrittenAt(const Utils::FilePath &filePath) const
-{
-    return InsertionLocation(filePath, {}, {}, m_class->line(), m_class->column());
-}
+    bool isQObject() const override
+    {
+        // Not by the Q_OBJECT it wrote but by the connect() it inherited:
+        // what makes a slot a slot is standing below QObject.
+        const QByteArray connectName = "connect";
+        const Identifier connectId(connectName.data(), connectName.size());
+        const QList<LookupItem> items = m_readWith->context().lookup(&connectId, m_class);
+        for (const LookupItem &item : items) {
+            if (item.declaration() && item.declaration()->enclosingClass()
+                && generationOverview().prettyName(item.declaration()->enclosingClass()->name())
+                       == "QObject") {
+                return true;
+            }
+        }
+        return false;
+    }
 
-DeclarationToDefine GeneratedClass::toDefine(const CppRefactoringChanges &changes) const
-{
-    return declarationToDefine(m_class, changes);
-}
+    QString writtenAt(const CppRefactoringFilePtr &file,
+                      const InsertionLocation &location) const override
+    {
+        return symbolAtDifferentLocation(*m_readWith, m_class, file, location);
+    }
 
-InsertionLocation GeneratedClass::placeForDeclaration(
-    const InsertionPointLocator &locator,
-    const Utils::FilePath &filePath,
-    InsertionPointLocator::AccessSpec spec) const
+    InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const override
+    {
+        return InsertionLocation(filePath, {}, {}, m_class->line(), m_class->column());
+    }
+
+    InsertionLocation placeForDeclaration(
+        const InsertionPointLocator &locator,
+        const Utils::FilePath &filePath,
+        InsertionPointLocator::AccessSpec spec) const override
+    {
+        return locator.methodDeclarationInClass(filePath, m_class, spec,
+                                                InsertionPointLocator::ForceAccessSpec::Yes);
+    }
+
+    DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const override
+    {
+        return declarationToDefine(m_class, changes);
+    }
+
+    ReadWith readWith() const override { return m_readWith; }
+
+private:
+    Class *m_class = nullptr;
+    ReadWith m_readWith;
+};
+
+GeneratedClass GeneratedClass::readBuiltin(Class *clazz, const ReadWith &readWith)
 {
-    return locator.methodDeclarationInClass(filePath, m_class, spec,
-                                            InsertionPointLocator::ForceAccessSpec::Yes);
+    if (!clazz)
+        return {};
+    return GeneratedClass(std::make_shared<BuiltinClassReading>(clazz, readWith));
 }
 
 void GetterSetterRefactoringHelper::addHeaderCode(
@@ -2739,9 +2867,10 @@ class GenerateGetterSetter : public CppQuickFixFactory
             return;
 
         const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
-        existing.declaredType = GeneratedType(symbol->type(), symbol->enclosingScope(), readWith);
+        existing.declaredType = GeneratedType::readBuiltin(symbol->type(),
+                                                           symbol->enclosingScope(), readWith);
         existing.toDefine = declarationToDefine(symbol, CppRefactoringChanges(interface.snapshot()));
-        existing.clazz = GeneratedClass(clazz, readWith);
+        existing.clazz = GeneratedClass::readBuiltin(clazz, readWith);
 
         auto file = interface.currentFile();
         // check if a Q_PROPERTY exist
@@ -2824,7 +2953,7 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
         Class *const clazz = klass->symbol;
 
         const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
-        existing.clazz = GeneratedClass(clazz, readWith);
+        existing.clazz = GeneratedClass::readBuiltin(clazz, readWith);
 
         CppRefactoringFilePtr file = interface.currentFile();
         const QString propertyName = file->textOf(qtPropertyDeclaration->property_name);
@@ -2885,7 +3014,7 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
             if (finder.type.type()->isUndefinedType())
                 return;
             declaration->setType(finder.type);
-            existing.declaredType = GeneratedType(finder.type, clazz, readWith);
+            existing.declaredType = GeneratedType::readBuiltin(finder.type, clazz, readWith);
             existing.doc = doc; // to hold type
         }
         // check which methods are already there
