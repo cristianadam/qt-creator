@@ -162,7 +162,17 @@ static std::optional<FullySpecifiedType> getFirstTemplateParameter(FullySpecifie
     return getFirstTemplateParameter(type.type());
 }
 
-class GetterSetterRefactoringHelper;
+// How this generation prints what it writes: the project's own style,
+// and template parameters spelled out, a type being written down and not
+// summarised.
+static Overview generationOverview()
+{
+    Overview overview = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+    overview.showTemplateParameters = true;
+    return overview;
+}
+
+class GeneratedClass;
 
 // A type the getter and setter generation writes down, and the only
 // thing it knows about a front end's idea of one. A type is not a string
@@ -175,11 +185,11 @@ class GeneratedType
 public:
     GeneratedType() = default;
     GeneratedType(const FullySpecifiedType &type, Scope *scope,
-                  GetterSetterRefactoringHelper *helper);
+                  CppQuickFixOperation *operation);
 
     // A type nobody read, spelled out by a setting: it is written as it
     // stands, wherever it is written.
-    static GeneratedType fromText(const QString &text, GetterSetterRefactoringHelper *helper);
+    static GeneratedType fromText(const QString &text, CppQuickFixOperation *operation);
 
     bool isValid() const { return m_type.isValid(); }
     bool isPointer() const { return m_type.isValid() && m_type->asPointerType(); }
@@ -203,9 +213,9 @@ public:
     GeneratedType writtenAt(const CppRefactoringFilePtr &file,
                             const InsertionLocation &location,
                             const QStringList &namespacesOpenedThere = {}) const;
-    // And where the class it belongs to is written, which is where a
-    // declaration standing outside the class stands.
-    GeneratedType writtenOutsideTheClass() const;
+    // And where \a theClass it belongs to is written, which is where a
+    // declaration standing outside that class stands.
+    GeneratedType writtenOutsideTheClass(const GeneratedClass &theClass) const;
 
     // Written as a declaration of \a name, or alone where that is empty.
     QString asDeclarationOf(const QString &name) const;
@@ -218,10 +228,15 @@ public:
     // which is what \a saidByName reports.
     bool isValueType(bool *saidByName = nullptr) const;
 
+    // What is written where its const and its references are not: the
+    // one thing the front end's own type still has to be handed to.
+    bool isConst() const { return m_type.isConst(); }
+    bool isStatic() const { return m_type.isStatic(); }
+
 private:
     FullySpecifiedType m_type;
     Scope *m_scope = nullptr;
-    GetterSetterRefactoringHelper *m_helper = nullptr;
+    CppQuickFixOperation *m_operation = nullptr;
 };
 
 // The class the generation writes into, and the only thing it knows
@@ -232,7 +247,7 @@ class GeneratedClass
 {
 public:
     GeneratedClass() = default;
-    GeneratedClass(Class *clazz, GetterSetterRefactoringHelper *helper);
+    GeneratedClass(Class *clazz, CppQuickFixOperation *operation);
 
     // As it was written. A class written with no name of its own has
     // none, and nothing of it can be declared anywhere but inside it,
@@ -260,7 +275,7 @@ private:
     friend class GeneratedType;
 
     Class *m_class = nullptr;
-    GetterSetterRefactoringHelper *m_helper = nullptr;
+    CppQuickFixOperation *m_operation = nullptr;
 };
 
 struct ExistingGetterSetterData
@@ -338,11 +353,6 @@ static void extractNames(const CppRefactoringFilePtr &file,
 
 class GetterSetterRefactoringHelper
 {
-    // They ask the front end what they need to write a type or a class
-    // name down, and this is where the front end is reached.
-    friend class GeneratedType;
-    friend class GeneratedClass;
-
 public:
     GetterSetterRefactoringHelper(CppQuickFixOperation *operation, Class *clazz);
     void performGeneration(const ExistingGetterSetterData &data, int generationFlags);
@@ -352,24 +362,6 @@ public:
 protected:
     void insertAndIndent(
             const RefactoringFilePtr &file, const InsertionLocation &loc, const QString &text);
-    FullySpecifiedType makeConstRef(FullySpecifiedType type) const;
-    FullySpecifiedType addConstToReference(FullySpecifiedType type);
-    FullySpecifiedType typeAt(
-            FullySpecifiedType type,
-            Scope *originalScope,
-            const CppRefactoringFilePtr &targetFile,
-            InsertionLocation targetLocation,
-            const QStringList &newNamespaceNamesAtLoc = {});
-
-    /**
-     * @brief checks if the type in the enclosing scope in the header is a value type
-     * @param type a type in the m_headerFile
-     * @param enclosingScope the enclosing scope
-     * @param customValueType if not nullptr set to true when value type comes
-     * from CppQuickFixSettings::isValueType
-     * @return true if it is a pointer, enum, integer, floating point, reference, custom value type
-     */
-    bool isValueType(FullySpecifiedType type, Scope *enclosingScope, bool *customValueType = nullptr);
 
     void addHeaderCode(InsertionPointLocator::AccessSpec spec, const QString &code);
     void addSourceFileCode(const QString &code);
@@ -467,7 +459,6 @@ private:
     InsertionLocation m_sourceFileInsertionPoint;
     QString m_sourceFileCode;
     QMap<InsertionPointLocator::AccessSpec, QString> m_headerFileCode;
-    Overview m_overview = CppCodeStyleSettings::currentProjectCodeStyleOverview();
 
     Data m_data{this};
 };
@@ -1280,7 +1271,7 @@ private:
                 for (auto &member : members) {
                     GeneratedType type(member->symbol->type(),
                                        member->symbol->enclosingScope(),
-                                       this);
+                                       m_operation);
                     type = type.isValueType(&member->customValueType)
                                ? type.withoutConst()
                                : type.constReference();
@@ -1812,10 +1803,8 @@ GetterSetterRefactoringHelper::GetterSetterRefactoringHelper(
     , m_changes(m_operation->snapshot())
     , m_locator(m_changes)
     , m_headerFile(operation->currentFile())
-    , m_class(clazz, this)
-{
-    m_overview.showTemplateParameters = true;
-}
+    , m_class(clazz, operation)
+{}
 void GetterSetterRefactoringHelper::performGeneration(
         const ExistingGetterSetterData &data, int generateFlags)
 {
@@ -1870,39 +1859,28 @@ void GetterSetterRefactoringHelper::insertAndIndent(
     changeSet.insert(targetPosition, loc.prefix() + text + loc.suffix());
 }
 
-CPlusPlus::FullySpecifiedType GetterSetterRefactoringHelper::makeConstRef(
-        FullySpecifiedType type) const
+static FullySpecifiedType makeConstRef(CppQuickFixOperation *operation,
+                                      FullySpecifiedType type)
 {
     type.setConst(true);
-    return m_operation->currentFile()->cppDocument()->control()->referenceType(type, false);
+    return operation->currentFile()->cppDocument()->control()->referenceType(type, false);
 }
 
-CPlusPlus::FullySpecifiedType GetterSetterRefactoringHelper::addConstToReference(
-        FullySpecifiedType type)
+static FullySpecifiedType addConstToReference(CppQuickFixOperation *operation,
+                                              FullySpecifiedType type)
 {
     if (ReferenceType *ref = type.type()->asReferenceType()) {
         FullySpecifiedType elemType = ref->elementType();
         if (elemType.isConst())
             return type;
         elemType.setConst(true);
-        return m_operation->currentFile()->cppDocument()->control()->referenceType(elemType, false);
+        return operation->currentFile()->cppDocument()->control()->referenceType(elemType, false);
     }
     return type;
 }
 
-CPlusPlus::FullySpecifiedType GetterSetterRefactoringHelper::typeAt(
-        FullySpecifiedType type,
-        Scope *originalScope,
-        const CppRefactoringFilePtr &targetFile,
-        InsertionLocation targetLocation,
-        const QStringList &newNamespaceNamesAtLoc)
-{
-    return typeAtDifferentLocation(
-                *m_operation, type, originalScope, targetFile, targetLocation, newNamespaceNamesAtLoc);
-}
-
-bool GetterSetterRefactoringHelper::isValueType(
-        FullySpecifiedType type, Scope *enclosingScope, bool *customValueType)
+static bool isValueType(CppQuickFixOperation *operation,
+                        FullySpecifiedType type, Scope *enclosingScope, bool *customValueType)
 {
     if (customValueType)
         *customValueType = false;
@@ -1913,8 +1891,9 @@ bool GetterSetterRefactoringHelper::isValueType(
     };
     if (type->asNamedType()) {
         // we need a recursive search and a lookup context
-        LookupContext context(m_headerFile->cppDocument(), m_changes.snapshot());
-        auto isValueType = [settings = m_settings,
+        LookupContext context(operation->currentFile()->cppDocument(), operation->snapshot());
+        auto isValueType = [settings = cppQuickFixSettingsForProject(
+                                ProjectTree::currentProject()),
                 &customValueType,
                 &context,
                 &isTypeValueType](const Name *name, Scope *scope, auto &isValueType) {
@@ -1951,21 +1930,21 @@ bool GetterSetterRefactoringHelper::isValueType(
 }
 
 GeneratedType::GeneratedType(const FullySpecifiedType &type, Scope *scope,
-                             GetterSetterRefactoringHelper *helper)
+                             CppQuickFixOperation *operation)
     : m_type(type)
     , m_scope(scope)
-    , m_helper(helper)
+    , m_operation(operation)
 {}
 
-GeneratedType GeneratedType::fromText(const QString &text, GetterSetterRefactoringHelper *helper)
+GeneratedType GeneratedType::fromText(const QString &text, CppQuickFixOperation *operation)
 {
     // Through a named type of the front end's, so that a type nobody read
     // is written by whatever writes the ones that were read.
-    Control *control = helper->m_operation->currentFile()->cppDocument()->control();
+    Control *control = operation->currentFile()->cppDocument()->control();
     const std::string utf8 = text.toUtf8().toStdString();
     return GeneratedType(FullySpecifiedType(control->namedType(control->identifier(utf8.c_str()))),
                          nullptr,
-                         helper);
+                         operation);
 }
 
 GeneratedType GeneratedType::asDeclared() const
@@ -1973,14 +1952,14 @@ GeneratedType GeneratedType::asDeclared() const
     FullySpecifiedType type = m_type;
     type.setConst(false);
     type.setStatic(false);
-    return GeneratedType(type, m_scope, m_helper);
+    return GeneratedType(type, m_scope, m_operation);
 }
 
 GeneratedType GeneratedType::withoutConst() const
 {
     FullySpecifiedType type = m_type;
     type.setConst(false);
-    return GeneratedType(type, m_scope, m_helper);
+    return GeneratedType(type, m_scope, m_operation);
 }
 
 GeneratedType GeneratedType::asValue() const
@@ -1989,23 +1968,23 @@ GeneratedType GeneratedType::asValue() const
     if (ReferenceType *reference = type.type()->asReferenceType())
         type = reference->elementType();
     type.setConst(false);
-    return GeneratedType(type, m_scope, m_helper);
+    return GeneratedType(type, m_scope, m_operation);
 }
 
 GeneratedType GeneratedType::constReference() const
 {
-    return GeneratedType(m_helper->makeConstRef(m_type), m_scope, m_helper);
+    return GeneratedType(makeConstRef(m_operation, m_type), m_scope, m_operation);
 }
 
 GeneratedType GeneratedType::withConstOnReference() const
 {
-    return GeneratedType(m_helper->addConstToReference(m_type), m_scope, m_helper);
+    return GeneratedType(addConstToReference(m_operation, m_type), m_scope, m_operation);
 }
 
 GeneratedType GeneratedType::firstTemplateArgument() const
 {
     if (const std::optional<FullySpecifiedType> argument = getFirstTemplateParameter(m_type))
-        return GeneratedType(*argument, m_scope, m_helper);
+        return GeneratedType(*argument, m_scope, m_operation);
     return {};
 }
 
@@ -2014,47 +1993,47 @@ GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
                                        const QStringList &namespacesOpenedThere) const
 {
     return GeneratedType(
-        m_helper->typeAt(m_type, m_scope, file, location, namespacesOpenedThere),
+        typeAtDifferentLocation(*m_operation, m_type, m_scope, file, location,
+                                namespacesOpenedThere),
         m_scope,
-        m_helper);
+        m_operation);
 }
 
-GeneratedType GeneratedType::writtenOutsideTheClass() const
+GeneratedType GeneratedType::writtenOutsideTheClass(const GeneratedClass &theClass) const
 {
-    LookupContext context(m_helper->m_operation->currentFile()->cppDocument(),
-                          m_helper->m_changes.snapshot());
+    LookupContext context(m_operation->currentFile()->cppDocument(), m_operation->snapshot());
     SubstitutionEnvironment environment;
     environment.setContext(context);
-    environment.switchScope(m_helper->m_class.m_class);
-    ClassOrNamespace *target = context.lookupType(m_helper->m_class.m_class->enclosingScope());
+    environment.switchScope(theClass.m_class);
+    ClassOrNamespace *target = context.lookupType(theClass.m_class->enclosingScope());
     if (!target)
         target = context.globalNamespace();
     UseMinimalNames minimal(target);
     environment.enter(&minimal);
-    Control *control = m_helper->m_operation->currentFile()->cppDocument()->control();
-    return GeneratedType(rewriteType(m_type, &environment, control), m_scope, m_helper);
+    Control *control = m_operation->currentFile()->cppDocument()->control();
+    return GeneratedType(rewriteType(m_type, &environment, control), m_scope, m_operation);
 }
 
 QString GeneratedType::asDeclarationOf(const QString &name) const
 {
-    return m_helper->m_overview.prettyType(m_type, name);
+    return generationOverview().prettyType(m_type, name);
 }
 
 QString GeneratedType::asTextWithoutTemplateParameters() const
 {
-    Overview overview = m_helper->m_overview;
+    Overview overview = generationOverview();
     overview.showTemplateParameters = false;
     return overview.prettyType(m_type);
 }
 
 bool GeneratedType::isValueType(bool *saidByName) const
 {
-    return m_helper->isValueType(m_type, m_scope, saidByName);
+    return ::CppEditor::Internal::isValueType(m_operation, m_type, m_scope, saidByName);
 }
 
-GeneratedClass::GeneratedClass(Class *clazz, GetterSetterRefactoringHelper *helper)
+GeneratedClass::GeneratedClass(Class *clazz, CppQuickFixOperation *operation)
     : m_class(clazz)
-    , m_helper(helper)
+    , m_operation(operation)
 {}
 
 QString GeneratedClass::name() const
@@ -2076,10 +2055,10 @@ bool GeneratedClass::isQObject() const
     // what makes a slot a slot is standing below QObject.
     const QByteArray connectName = "connect";
     const Identifier connectId(connectName.data(), connectName.size());
-    const QList<LookupItem> items = m_helper->m_operation->context().lookup(&connectId, m_class);
+    const QList<LookupItem> items = m_operation->context().lookup(&connectId, m_class);
     for (const LookupItem &item : items) {
         if (item.declaration() && item.declaration()->enclosingClass()
-            && m_helper->m_overview.prettyName(item.declaration()->enclosingClass()->name())
+            && generationOverview().prettyName(item.declaration()->enclosingClass()->name())
                    == "QObject") {
             return true;
         }
@@ -2090,7 +2069,7 @@ bool GeneratedClass::isQObject() const
 QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
                                   const InsertionLocation &location) const
 {
-    return symbolAtDifferentLocation(*m_helper->m_operation, m_class, file, location);
+    return symbolAtDifferentLocation(*m_operation, m_class, file, location);
 }
 
 DeclarationToDefine GeneratedClass::toDefine(const CppRefactoringChanges &changes) const
@@ -2220,7 +2199,7 @@ void GetterSetterRefactoringHelper::generateGetter()
                                 CppQuickFixSettings::GetterSetterTemplate::TYPE_PATTERN,
                                 m_data.memberVarType().writtenAt(targetFile, targetLoc).asText());
                 }
-                return GeneratedType::fromText(returnType, this);
+                return GeneratedType::fromText(returnType, m_operation);
             } else {
                 const GeneratedType returnType
                         = m_data.memberVarType().writtenAt(targetFile, targetLoc);
@@ -2521,7 +2500,7 @@ void GetterSetterRefactoringHelper::Data::setup(
     m_generateFlags = generateFlags;
     m_declaredType = GeneratedType(data.declarationSymbol->type(),
                                    data.declarationSymbol->enclosingScope(),
-                                   q);
+                                   q->m_operation);
     m_toDefine = declarationToDefine(data.declarationSymbol, q->m_changes);
 
     if (generateGetter() && getterName().isEmpty()) {
@@ -2630,7 +2609,7 @@ GeneratedType GetterSetterRefactoringHelper::Data::getReturnTypeHeader(
         const GeneratedType t = q->m_settings->returnByConstRef ? parameterType() : memberVarType();
         if (headerContext == HeaderContext::InsideClass)
             return t;
-        return t.writtenOutsideTheClass();
+        return t.writtenOutsideTheClass(q->m_class);
     }
     QString typeTemplate = *getSetTemplate().returnTypeTemplate;
     if (returnTypeTemplateParameter().isValid())
@@ -2641,7 +2620,7 @@ GeneratedType GetterSetterRefactoringHelper::Data::getReturnTypeHeader(
         typeTemplate.replace(
                     CppQuickFixSettings::GetterSetterTemplate::TYPE_PATTERN,
                     m_declaredType.asText());
-    return GeneratedType::fromText(typeTemplate, q);
+    return GeneratedType::fromText(typeTemplate, q->m_operation);
 }
 
 GeneratedType GetterSetterRefactoringHelper::Data::memberVarType() const
