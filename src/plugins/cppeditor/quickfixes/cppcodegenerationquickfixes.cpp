@@ -246,9 +246,14 @@ public:
                                           const Utils::FilePath &filePath,
                                           InsertionPointLocator::AccessSpec spec) const;
 
-    // The front end's own, for what is still asked in those terms: where
-    // a definition of a member of it goes.
-    Class *symbol() const { return m_class; }
+    // The class itself as the thing being defined, which is what a
+    // constructor has to go by: it is not declared anywhere yet, so its
+    // class stands in for it.
+    DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const;
+
+    // The scope a type of the constructor generation is written from,
+    // which is the one thing still asked in the front end's own terms.
+    Scope *scope() const { return m_class; }
 
 private:
     friend class GeneratedType;
@@ -372,7 +377,8 @@ protected:
     void addSourceFileCode(const QString &code);
 
     InsertionLocation headerLocationFor(InsertionPointLocator::AccessSpec spec);
-    InsertionLocation sourceLocationFor(Symbol *symbol, QStringList *insertedNamespaces = nullptr);
+    InsertionLocation sourceLocationFor(const DeclarationToDefine &declaration,
+                                        QStringList *insertedNamespaces = nullptr);
 
 protected:
     CppQuickFixOperation *const m_operation;
@@ -422,6 +428,9 @@ private:
         // As the member was declared, const and static and all, which two
         // of the definitions written outside the class are made from.
         const GeneratedType &declaredType() const { return m_declaredType; }
+        // Where its definition goes, which is all the insertion locator
+        // needs of a declaration.
+        const DeclarationToDefine &toDefine() const { return m_toDefine; }
         GeneratedType memberVarType() const;
         GeneratedType parameterType() const;
     private:
@@ -439,6 +448,7 @@ private:
         // The one place the declaration's own type is read; everything
         // written below is made from it.
         GeneratedType m_declaredType;
+        DeclarationToDefine m_toDefine;
         ExistingGetterSetterData m_data;
         int m_generateFlags = 0;
     };
@@ -1240,7 +1250,7 @@ private:
                 QString className = m_class.name();
                 QStringList insertedNamespaces;
                 if (constructorLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
-                    implLoc = sourceLocationFor(m_class.symbol(), &insertedNamespaces);
+                    implLoc = sourceLocationFor(m_class.toDefine(m_changes), &insertedNamespaces);
                     implFile = m_sourceFile;
                     if (m_settings->rewriteTypesinCppFile())
                         implCode = m_class.writtenAt(m_sourceFile, implLoc);
@@ -1249,7 +1259,7 @@ private:
                     implCode += "::" + className + "(";
                 } else if (constructorLocation
                            == CppQuickFixSettings::FunctionLocation::OutsideClass) {
-                    implLoc = insertLocationForMethodDefinition(m_class.symbol(),
+                    implLoc = insertLocationForMethodDefinition(m_class.toDefine(m_changes),
                                                                 false,
                                                                 NamespaceHandling::Ignore,
                                                                 m_changes,
@@ -1274,7 +1284,7 @@ private:
                     inClassDeclaration += ", ";
                     if (implFile) {
                         FullySpecifiedType type = typeAt(member->type,
-                                                         m_class.symbol(),
+                                                         m_class.scope(),
                                                          implFile,
                                                          implLoc,
                                                          insertedNamespaces);
@@ -2084,6 +2094,11 @@ QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
     return symbolAtDifferentLocation(*m_helper->m_operation, m_class, file, location);
 }
 
+DeclarationToDefine GeneratedClass::toDefine(const CppRefactoringChanges &changes) const
+{
+    return declarationToDefine(m_class, changes);
+}
+
 InsertionLocation GeneratedClass::placeForDeclaration(
     const InsertionPointLocator &locator,
     const Utils::FilePath &filePath,
@@ -2115,12 +2130,12 @@ InsertionLocation GetterSetterRefactoringHelper::headerLocationFor(
 }
 
 InsertionLocation GetterSetterRefactoringHelper::sourceLocationFor(
-        Symbol *symbol, QStringList *insertedNamespaces)
+        const DeclarationToDefine &declaration, QStringList *insertedNamespaces)
 {
     if (m_sourceFileInsertionPoint.isValid())
         return m_sourceFileInsertionPoint;
     m_sourceFileInsertionPoint = insertLocationForMethodDefinition(
-                symbol,
+                declaration,
                 false,
                 m_settings->createMissingNamespacesinCppFile() ? NamespaceHandling::CreateMissing
                                                                : NamespaceHandling::Ignore,
@@ -2129,8 +2144,7 @@ InsertionLocation GetterSetterRefactoringHelper::sourceLocationFor(
                 insertedNamespaces);
     if (m_settings->addUsingNamespaceinCppFile()) {
         // check if we have to insert a using namespace ...
-        auto requiredNamespaces = getNamespaceNames(
-                    symbol->asClass() ? symbol : symbol->enclosingClass());
+        const QStringList requiredNamespaces = declaration.enclosingNamespaces;
         NSCheckerVisitor visitor(
                     m_sourceFile.get(),
                     requiredNamespaces,
@@ -2219,7 +2233,7 @@ void GetterSetterRefactoringHelper::generateGetter()
         const QString constSpec = m_data.isStatic() ? QLatin1String("")
                                                     : QLatin1String(" const");
         if (getterLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
-            InsertionLocation loc = sourceLocationFor(m_data.decl());
+            InsertionLocation loc = sourceLocationFor(m_data.toDefine());
             GeneratedType returnType;
             QString clazz;
             if (m_settings->rewriteTypesinCppFile()) {
@@ -2234,7 +2248,7 @@ void GetterSetterRefactoringHelper::generateGetter()
             addSourceFileCode(code);
         } else if (getterLocation == CppQuickFixSettings::FunctionLocation::OutsideClass) {
             InsertionLocation loc = insertLocationForMethodDefinition(
-                        m_data.decl(), false, NamespaceHandling::Ignore, m_changes,
+                        m_data.toDefine(), false, NamespaceHandling::Ignore, m_changes,
                         m_headerFile->filePath());
             const GeneratedType returnType = getReturnTypeAt(m_headerFile, loc);
             const QString clazz = m_data.theClass().writtenAt(m_headerFile, loc);
@@ -2278,7 +2292,7 @@ void GetterSetterRefactoringHelper::generateSetter()
     } else {
         headerDeclaration += ";\n";
         if (setterLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
-            InsertionLocation loc = sourceLocationFor(m_data.decl());
+            InsertionLocation loc = sourceLocationFor(m_data.toDefine());
             QString clazz;
             GeneratedType newParameterType = m_data.parameterType();
             if (m_settings->rewriteTypesinCppFile()) {
@@ -2296,7 +2310,7 @@ void GetterSetterRefactoringHelper::generateSetter()
             addSourceFileCode(code);
         } else if (setterLocation == CppQuickFixSettings::FunctionLocation::OutsideClass) {
             InsertionLocation loc = insertLocationForMethodDefinition(
-                        m_data.decl(), false, NamespaceHandling::Ignore, m_changes,
+                        m_data.toDefine(), false, NamespaceHandling::Ignore, m_changes,
                         m_headerFile->filePath());
 
             GeneratedType newParameterType
@@ -2353,7 +2367,7 @@ void GetterSetterRefactoringHelper::generateReset()
     } else {
         headerDeclaration += ";\n";
         if (resetLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
-            const InsertionLocation loc = sourceLocationFor(m_data.decl());
+            const InsertionLocation loc = sourceLocationFor(m_data.toDefine());
             QString clazz;
             GeneratedType type = m_data.memberVarType();
             if (m_settings->rewriteTypesinCppFile()) {
@@ -2367,7 +2381,7 @@ void GetterSetterRefactoringHelper::generateReset()
             addSourceFileCode(code);
         } else if (resetLocation == CppQuickFixSettings::FunctionLocation::OutsideClass) {
             const InsertionLocation loc = insertLocationForMethodDefinition(
-                        m_data.decl(), false, NamespaceHandling::Ignore, m_changes,
+                        m_data.toDefine(), false, NamespaceHandling::Ignore, m_changes,
                         m_headerFile->filePath());
             const GeneratedType type = m_data.declaredType().writtenAt(m_headerFile, loc);
             const QString clazz = m_data.theClass().writtenAt(m_headerFile, loc);
@@ -2507,8 +2521,9 @@ void GetterSetterRefactoringHelper::Data::setup(
     m_data = data;
     m_generateFlags = generateFlags;
     m_declaredType = GeneratedType(data.declarationSymbol->type(),
-                                data.declarationSymbol->enclosingScope(),
-                                q);
+                                   data.declarationSymbol->enclosingScope(),
+                                   q);
+    m_toDefine = declarationToDefine(data.declarationSymbol, q->m_changes);
 
     if (generateGetter() && getterName().isEmpty()) {
         m_data.getterName = q->m_settings->getGetterName(qPropertyName(), memberVarName());
