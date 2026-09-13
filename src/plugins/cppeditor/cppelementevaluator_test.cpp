@@ -229,6 +229,23 @@ void ElementEvaluatorTest::testElementUnderCursor_data()
                    "qualified: D\n"
                    "icon: public variable");
 
+    // An alias is shown as a type rather than as a declaration: no name
+    // for a parameter, and nothing said about what it hands back. That is
+    // the one place a declaration is printed differently from everywhere
+    // else, which is why how an alias reads is said apart from how a
+    // declaration does.
+    QTest::newRow("a typedef of a function type")
+        << QByteArray("typedef void F(int a);\n"
+                      "F@ *f;\n")
+        << QString("category: typedef\n"
+                   "mark: F\n"
+                   "help: F\n"
+                   "tooltip: F(int)\n"
+                   "link: file.cpp:1:13\n"
+                   "name: F\n"
+                   "qualified: F\n"
+                   "icon: public function");
+
     // A macro is not a name the parser resolved: it is read off what the
     // preprocessor recorded, with its replacement as the tooltip.
     QTest::newRow("a macro")

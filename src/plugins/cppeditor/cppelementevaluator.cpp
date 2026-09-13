@@ -69,18 +69,6 @@ CppClass *CppElement::toCppClass()
     return nullptr;
 }
 
-class Unknown : public CppElement
-{
-public:
-    explicit Unknown(const QString &type) : type(type)
-    {
-        tooltip = type;
-    }
-
-public:
-    QString type;
-};
-
 class CppInclude : public CppElement
 {
 public:
@@ -114,37 +102,37 @@ public:
     }
 };
 
+// What the built-in front end says about a declaration. The scope and the
+// context are what a variable's type is looked up in, and are nothing where
+// the caller only wants the declaration itself said.
+static CppElementFacts builtinFactsOf(Symbol *declaration, const LookupContext &context,
+                                      Scope *scope);
+
 // CppDeclarableElement
 CppDeclarableElement::CppDeclarableElement(Symbol *declaration)
-    : CppElement()
-    , iconType(CPlusPlus::Icons::iconTypeForSymbol(declaration))
-{
-    Overview overview;
-    overview.showArgumentNames = true;
-    overview.showReturnTypes = true;
-    overview.showTemplateParameters = true;
-    name = overview.prettyName(declaration->name());
-    if (declaration->enclosingScope()->asClass() ||
-        declaration->enclosingScope()->asNamespace() ||
-        declaration->enclosingScope()->asEnum() ||
-        declaration->enclosingScope()->asTemplate()) {
-        qualifiedName = overview.prettyName(LookupContext::fullyQualifiedName(declaration));
-        helpIdCandidates = stripName(qualifiedName);
-    } else {
-        qualifiedName = name;
-        helpIdCandidates.append(name);
-    }
+    : CppDeclarableElement(builtinFactsOf(declaration, LookupContext(), nullptr))
+{}
 
-    tooltip = overview.prettyType(declaration->type(), qualifiedName);
-    link = declaration->toLink();
-    helpMark = name;
+CppDeclarableElement::CppDeclarableElement(const CppElementFacts &facts)
+    : CppElement()
+    , iconType(facts.iconType)
+{
+    name = facts.name;
+    qualifiedName = facts.qualifiedName;
+    // A name inside a named scope is looked up under every tail of its
+    // path; one written at file scope or inside a function is its own
+    // whole path, which stripName answers with just as well.
+    helpIdCandidates = stripName(facts.qualifiedName);
+    tooltip = facts.type;
+    link = facts.link;
+    helpMark = facts.name;
 }
 
 class CppNamespace : public CppDeclarableElement
 {
 public:
-    explicit CppNamespace(Symbol *declaration)
-        : CppDeclarableElement(declaration)
+    explicit CppNamespace(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
         helpCategory = Core::HelpItem::ClassOrNamespace;
         tooltip = qualifiedName;
@@ -152,6 +140,12 @@ public:
 };
 
 CppClass::CppClass(Symbol *declaration) : CppDeclarableElement(declaration)
+{
+    helpCategory = Core::HelpItem::ClassOrNamespace;
+    tooltip = qualifiedName;
+}
+
+CppClass::CppClass(const CppElementFacts &facts) : CppDeclarableElement(facts)
 {
     helpCategory = Core::HelpItem::ClassOrNamespace;
     tooltip = qualifiedName;
@@ -264,29 +258,23 @@ void CppClass::addDerivedHierarchy(const TypeHierarchy &hierarchy)
 class CppFunction : public CppDeclarableElement
 {
 public:
-    explicit CppFunction(Symbol *declaration)
-        : CppDeclarableElement(declaration)
+    explicit CppFunction(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
         helpCategory = Core::HelpItem::Function;
 
-        const FullySpecifiedType &type = declaration->type();
-
         // Functions marks can be found either by the main overload or signature based
         // (with no argument names and no return). Help ids have no signature at all.
-        Overview overview;
-        overview.showDefaultArguments = false;
-        helpMark = overview.prettyType(type, name);
-
-        overview.showFunctionSignatures = false;
-        helpIdCandidates.append(overview.prettyName(declaration->name()));
+        helpMark = facts.signature;
+        helpIdCandidates.append(facts.name);
     }
 };
 
 class CppEnum : public CppDeclarableElement
 {
 public:
-    explicit CppEnum(Enum *declaration)
-        : CppDeclarableElement(declaration)
+    explicit CppEnum(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
         helpCategory = Core::HelpItem::Enum;
         tooltip = qualifiedName;
@@ -296,55 +284,30 @@ public:
 class CppTypedef : public CppDeclarableElement
 {
 public:
-    explicit CppTypedef(Symbol *declaration)
-        : CppDeclarableElement(declaration)
+    explicit CppTypedef(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
         helpCategory = Core::HelpItem::Typedef;
-        Overview overview;
-        overview.showTemplateParameters = true;
-        tooltip = overview.prettyType(declaration->type(), qualifiedName);
+        tooltip = facts.aliasedType;
     }
 };
 
 class CppVariable : public CppDeclarableElement
 {
 public:
-    explicit CppVariable(Symbol *declaration, const LookupContext &context, Scope *scope)
-        : CppDeclarableElement(declaration)
+    explicit CppVariable(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
-        const FullySpecifiedType &type = declaration->type();
-
-        const Name *typeName = nullptr;
-        if (type->asNamedType()) {
-            typeName = type->asNamedType()->name();
-        } else if (type->asPointerType() || type->asReferenceType()) {
-            FullySpecifiedType associatedType;
-            if (type->asPointerType())
-                associatedType = type->asPointerType()->elementType();
-            else
-                associatedType = type->asReferenceType()->elementType();
-            if (associatedType->asNamedType())
-                typeName = associatedType->asNamedType()->name();
-        }
-
-        if (typeName) {
-            if (ClassOrNamespace *clazz = context.lookupType(typeName, scope)) {
-                if (!clazz->symbols().isEmpty()) {
-                    Overview overview;
-                    Symbol *symbol = clazz->symbols().at(0);
-                    const QString &name = overview.prettyName(
-                        LookupContext::fullyQualifiedName(symbol));
-                    if (!name.isEmpty()) {
-                        tooltip = name;
-                        helpCategory = Core::HelpItem::ClassOrNamespace;
-                        const QStringList &allNames = stripName(name);
-                        if (!allNames.isEmpty()) {
-                            helpMark = allNames.last();
-                            helpIdCandidates = allNames;
-                        }
-                    }
-                }
-            }
+        // What documentation a variable has is its type's, so where the
+        // type names a class the reader is sent there instead.
+        if (facts.typeClassName.isEmpty())
+            return;
+        tooltip = facts.typeClassName;
+        helpCategory = Core::HelpItem::ClassOrNamespace;
+        const QStringList &allNames = stripName(facts.typeClassName);
+        if (!allNames.isEmpty()) {
+            helpMark = allNames.last();
+            helpIdCandidates = allNames;
         }
     }
 };
@@ -352,29 +315,43 @@ public:
 class CppEnumerator : public CppDeclarableElement
 {
 public:
-    explicit CppEnumerator(EnumeratorDeclaration *declaration)
-        : CppDeclarableElement(declaration)
+    explicit CppEnumerator(const CppElementFacts &facts)
+        : CppDeclarableElement(facts)
     {
         helpCategory = Core::HelpItem::Enum;
+        helpMark = facts.enumUnqualifiedName;
 
-        Overview overview;
-
-        Symbol *enumSymbol = declaration->enclosingScope();
-        const QString enumName = overview.prettyName(LookupContext::fullyQualifiedName(enumSymbol));
-        const QString enumeratorName = overview.prettyName(declaration->name());
-        QString enumeratorValue;
-        if (const StringLiteral *value = declaration->constantValue())
-            enumeratorValue = QString::fromUtf8(value->chars(), value->size());
-
-        helpMark = overview.prettyName(enumSymbol->name());
-
-        tooltip = enumeratorName;
-        if (!enumName.isEmpty())
-            tooltip.prepend(enumName + QLatin1Char(' '));
-        if (!enumeratorValue.isEmpty())
-            tooltip.append(QLatin1String(" = ") + enumeratorValue);
+        tooltip = facts.name;
+        if (!facts.enumName.isEmpty())
+            tooltip.prepend(facts.enumName + QLatin1Char(' '));
+        if (!facts.enumeratorValue.isEmpty())
+            tooltip.append(QLatin1String(" = ") + facts.enumeratorValue);
     }
 };
+
+// The element a reader is shown, out of what a front end said is there.
+static std::shared_ptr<CppElement> elementOf(const CppElementFacts &facts)
+{
+    switch (facts.kind) {
+    case CppElementFacts::Kind::Namespace:
+        return std::make_shared<CppNamespace>(facts);
+    case CppElementFacts::Kind::Class:
+        return std::make_shared<CppClass>(facts);
+    case CppElementFacts::Kind::Enum:
+        return std::make_shared<CppEnum>(facts);
+    case CppElementFacts::Kind::Enumerator:
+        return std::make_shared<CppEnumerator>(facts);
+    case CppElementFacts::Kind::Typedef:
+        return std::make_shared<CppTypedef>(facts);
+    case CppElementFacts::Kind::Function:
+        return std::make_shared<CppFunction>(facts);
+    case CppElementFacts::Kind::Variable:
+        return std::make_shared<CppVariable>(facts);
+    case CppElementFacts::Kind::Unknown:
+        break;
+    }
+    return std::make_shared<CppDeclarableElement>(facts);
+}
 
 static bool isCppClass(Symbol *symbol)
 {
@@ -439,40 +416,115 @@ static void createTypeHierarchy(QPromise<std::shared_ptr<CppElement>> &promise,
     promise.addResult(cppClass);
 }
 
+// What kind of thing a declaration is, as far as a reader of it cares. The
+// order is the one the built-in reading has always applied: a class before
+// an enum, a function before a variable, and whatever is left over said as
+// a declaration and nothing more.
+static CppElementFacts::Kind kindOf(Symbol *declaration)
+{
+    const FullySpecifiedType &type = declaration->type();
+    if (declaration->asNamespace())
+        return CppElementFacts::Kind::Namespace;
+    if (isCppClass(declaration))
+        return CppElementFacts::Kind::Class;
+    if (declaration->asEnum())
+        return CppElementFacts::Kind::Enum;
+    if (dynamic_cast<EnumeratorDeclaration *>(declaration))
+        return CppElementFacts::Kind::Enumerator;
+    if (declaration->isTypedef())
+        return CppElementFacts::Kind::Typedef;
+    if (declaration->asFunction() || (type.isValid() && type->asFunctionType())
+        || declaration->asTemplate()) {
+        return CppElementFacts::Kind::Function;
+    }
+    if (declaration->asDeclaration() && type.isValid())
+        return CppElementFacts::Kind::Variable;
+    return CppElementFacts::Kind::Unknown;
+}
+
+// The class a variable's type names, written out in full, or nothing where
+// its type names none.
+static QString classOfTheTypeOf(Symbol *declaration, const LookupContext &context, Scope *scope)
+{
+    const FullySpecifiedType &type = declaration->type();
+    const Name *typeName = nullptr;
+    if (type->asNamedType()) {
+        typeName = type->asNamedType()->name();
+    } else if (type->asPointerType() || type->asReferenceType()) {
+        FullySpecifiedType associatedType;
+        if (type->asPointerType())
+            associatedType = type->asPointerType()->elementType();
+        else
+            associatedType = type->asReferenceType()->elementType();
+        if (associatedType->asNamedType())
+            typeName = associatedType->asNamedType()->name();
+    }
+    if (!typeName)
+        return {};
+
+    ClassOrNamespace * const clazz = context.lookupType(typeName, scope);
+    if (!clazz || clazz->symbols().isEmpty())
+        return {};
+    return Overview().prettyName(LookupContext::fullyQualifiedName(clazz->symbols().at(0)));
+}
+
+static CppElementFacts builtinFactsOf(Symbol *declaration, const LookupContext &context,
+                                      Scope *scope)
+{
+    Overview overview;
+    overview.showArgumentNames = true;
+    overview.showReturnTypes = true;
+    overview.showTemplateParameters = true;
+
+    CppElementFacts facts;
+    facts.kind = kindOf(declaration);
+    facts.iconType = CPlusPlus::Icons::iconTypeForSymbol(declaration);
+    facts.name = overview.prettyName(declaration->name());
+    // A name inside a named scope is written out in full; one inside a
+    // function or at file scope is its own whole path.
+    if (declaration->enclosingScope()->asClass() || declaration->enclosingScope()->asNamespace()
+        || declaration->enclosingScope()->asEnum()
+        || declaration->enclosingScope()->asTemplate()) {
+        facts.qualifiedName = overview.prettyName(LookupContext::fullyQualifiedName(declaration));
+    } else {
+        facts.qualifiedName = facts.name;
+    }
+    facts.type = overview.prettyType(declaration->type(), facts.qualifiedName);
+    facts.link = declaration->toLink();
+
+    if (facts.kind == CppElementFacts::Kind::Typedef) {
+        Overview asWritten;
+        asWritten.showTemplateParameters = true;
+        facts.aliasedType = asWritten.prettyType(declaration->type(), facts.qualifiedName);
+    } else if (facts.kind == CppElementFacts::Kind::Function) {
+        Overview asASignature;
+        asASignature.showDefaultArguments = false;
+        facts.signature = asASignature.prettyType(declaration->type(), facts.name);
+    } else if (facts.kind == CppElementFacts::Kind::Variable && context.thisDocument()) {
+        facts.typeClassName = classOfTheTypeOf(declaration, context, scope);
+    } else if (facts.kind == CppElementFacts::Kind::Enumerator) {
+        Symbol * const enumSymbol = declaration->enclosingScope();
+        facts.enumName = overview.prettyName(LookupContext::fullyQualifiedName(enumSymbol));
+        facts.enumUnqualifiedName = overview.prettyName(enumSymbol->name());
+        const auto enumerator = dynamic_cast<EnumeratorDeclaration *>(declaration);
+        if (const StringLiteral * const value = enumerator ? enumerator->constantValue() : nullptr)
+            facts.enumeratorValue = QString::fromUtf8(value->chars(), value->size());
+    }
+    return facts;
+}
+
 static std::shared_ptr<CppElement> handleLookupItemMatch(const ExecData &execData,
                                                          SymbolFinder symbolFinder)
 {
-    std::shared_ptr<CppElement> element;
+    // Never null: whoever got here found a declaration, and a lookup item
+    // without one never gets this far.
     Symbol *declaration = execData.lookupItem.declaration();
-    if (!declaration) {
-        const QString &type = Overview().prettyType(execData.lookupItem.type(), QString());
-        element = std::shared_ptr<CppElement>(new Unknown(type));
-    } else {
-        const FullySpecifiedType &type = declaration->type();
-        if (declaration->asNamespace()) {
-            element = std::shared_ptr<CppElement>(new CppNamespace(declaration));
-        } else if (isCppClass(declaration)) {
-            LookupContext contextToUse = execData.context;
-            declaration = followClassDeclaration(declaration, execData.snapshot, symbolFinder, &contextToUse);
-            element = std::shared_ptr<CppElement>(new CppClass(declaration));
-        } else if (Enum *enumDecl = declaration->asEnum()) {
-            element = std::shared_ptr<CppElement>(new CppEnum(enumDecl));
-        } else if (auto enumerator = dynamic_cast<EnumeratorDeclaration *>(declaration)) {
-            element = std::shared_ptr<CppElement>(new CppEnumerator(enumerator));
-        } else if (declaration->isTypedef()) {
-            element = std::shared_ptr<CppElement>(new CppTypedef(declaration));
-        } else if (declaration->asFunction()
-                   || (type.isValid() && type->asFunctionType())
-                   || declaration->asTemplate()) {
-            element = std::shared_ptr<CppElement>(new CppFunction(declaration));
-        } else if (declaration->asDeclaration() && type.isValid()) {
-            element = std::shared_ptr<CppElement>(
-                new CppVariable(declaration, execData.context, execData.lookupItem.scope()));
-        } else {
-            element = std::shared_ptr<CppElement>(new CppDeclarableElement(declaration));
-        }
+    LookupContext contextToUse = execData.context;
+    if (isCppClass(declaration)) {
+        declaration = followClassDeclaration(declaration, execData.snapshot, symbolFinder,
+                                             &contextToUse);
     }
-    return element;
+    return elementOf(builtinFactsOf(declaration, contextToUse, execData.lookupItem.scope()));
 }
 
 //  special case for bug QTCREATORBUG-4780

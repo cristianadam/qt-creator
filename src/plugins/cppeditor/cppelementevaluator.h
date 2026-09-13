@@ -69,10 +69,60 @@ public:
     QString tooltip;
 };
 
+// What a front end says about the thing under the cursor: what kind of thing
+// it is, what it is called, how it reads and where it stands. The element a
+// reader is shown -- its tooltip, the help it offers, the icon beside it --
+// is built from these and from nothing else, so whichever front end read the
+// position fills the same facts in.
+struct CppElementFacts
+{
+    enum class Kind {
+        Unknown,
+        Namespace,
+        Class,
+        Enum,
+        Enumerator,
+        Typedef,
+        Function,
+        Variable
+    };
+    Kind kind = Kind::Unknown;
+
+    QString name;          // as it is written, with nothing in front of it
+    QString qualifiedName; // the scopes it is written in included
+
+    // Its type with the qualified name written into it, which is how a
+    // tooltip shows a declaration, and the same for an alias -- written
+    // without the names of a function's parameters, since an alias is a
+    // type and a type has none.
+    QString type;
+    QString aliasedType;
+
+    // A function without what it hands back and without what it calls its
+    // parameters: what tells one overload from another, which is what
+    // documentation is marked with.
+    QString signature;
+
+    Utils::CodeModelIcon::Type iconType = Utils::CodeModelIcon::Unknown;
+    Utils::Link link;
+
+    // An enumerator stands for a value in an enum and is shown as both: the
+    // enum's name in front of its own, and the value where one was written.
+    QString enumName;
+    QString enumUnqualifiedName;
+    QString enumeratorValue;
+
+    // The class a variable's type names, written out in full. What
+    // documentation a variable has is its type's -- nobody documents a
+    // variable -- so the help goes under this where there is one.
+    QString typeClassName;
+};
+
 class CppDeclarableElement : public CppElement
 {
 public:
     explicit CppDeclarableElement(CPlusPlus::Symbol *declaration);
+    explicit CppDeclarableElement(const CppElementFacts &facts);
 
 public:
     Utils::CodeModelIcon::Type iconType;
@@ -86,6 +136,7 @@ class CppClass : public CppDeclarableElement
 public:
     CppClass();
     explicit CppClass(CPlusPlus::Symbol *declaration);
+    explicit CppClass(const CppElementFacts &facts);
 
     CppClass *toCppClass() final;
 
