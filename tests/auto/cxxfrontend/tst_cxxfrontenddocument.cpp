@@ -990,8 +990,18 @@ void tst_cxxfrontenddocument::argumentHints()
     QCOMPARE(completion.kind, CxxFrontendDocument::Completion::Kind::Unqualified);
     QCOMPARE(completion.activeParameter, 0);
     QVERIFY2(!completion.signatures.isEmpty(), "no candidate signature");
-    QVERIFY2(completion.signatures.first().contains("g("),
-             qPrintable(completion.signatures.join(", ")));
+
+    // How it reads, and where each parameter stands in that -- what a
+    // reader marks as the one being written.
+    const CxxFrontendDocument::Completion::Signature &signature = completion.signatures.first();
+    QCOMPARE(signature.text, QString("int g(int a, char b)"));
+    QCOMPARE(signature.parameters.size(), 2);
+    QCOMPARE(signature.text.mid(signature.parameters.at(0).start,
+                                signature.parameters.at(0).length),
+             QString("int a"));
+    QCOMPARE(signature.text.mid(signature.parameters.at(1).start,
+                                signature.parameters.at(1).length),
+             QString("char b"));
 }
 
 void tst_cxxfrontenddocument::noCompletionWhereNoneWasAsked()

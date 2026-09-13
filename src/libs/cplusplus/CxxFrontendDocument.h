@@ -1266,11 +1266,33 @@ public:
         };
         QList<Candidate> candidates;
 
+        // One of the functions a call being written could be of: how it
+        // reads, and where each of its parameters stands in that -- what a
+        // reader marks as the argument being typed, which is not the one
+        // the parser saw a moment ago but whatever has been written since.
+        struct Signature
+        {
+            QString text;
+
+            struct Parameter
+            {
+                int start = 0;
+                int length = 0;
+
+                bool isValid() const { return length > 0; }
+            };
+            // In the order they are written. A parameter the printer wrote
+            // in a way this could not find again stands here with nothing
+            // to mark rather than not at all, so that the rest keep their
+            // places.
+            QList<Parameter> parameters;
+        };
+
         // Inside the parentheses of a call both apply at once: a name can be
         // written there, and the call it belongs to has a signature worth
         // showing. So the hints sit beside the names rather than instead of
         // them, which is also how an editor shows them.
-        QStringList signatures;
+        QList<Signature> signatures;
         int activeParameter = 0;
 
         bool isValid() const { return kind != Kind::None || !signatures.isEmpty(); }

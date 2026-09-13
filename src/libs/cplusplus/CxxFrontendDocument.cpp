@@ -822,6 +822,11 @@ public:
     // Turns what the parser found at the completion point into the names a
     // caller can offer.
     void recordCompletion(const cxx::CodeCompletionContext &context);
+
+    // How a function a call could be of reads, with the place of each of
+    // its parameters in that text.
+    [[nodiscard]] CxxFrontendDocument::Completion::Signature describeSignature(
+        cxx::FunctionSymbol *function) const;
     // Everything that could be named in \a scope, its bases included. Sets
     // \a membersMayBeMissing where it could not see all of them.
     //
@@ -1695,6 +1700,55 @@ CxxFrontendDocument::Private::visibleMembersIn(cxx::ScopeSymbol *scope,
     return candidates;
 }
 
+CxxFrontendDocument::Completion::Signature
+CxxFrontendDocument::Private::describeSignature(cxx::FunctionSymbol *function) const
+{
+    const cxx::TypePrintOptions options{.omitEnclosingScope = true};
+    const QStringList names = parameterNamesOf(function);
+    std::vector<std::string> parameterNames;
+    for (const QString &name : names)
+        parameterNames.push_back(name.toStdString());
+
+    Completion::Signature signature;
+    signature.text = applyStarBinding(
+        fromStd(cxx::to_string(function->type(), cxx::to_string(function->name()),
+                               {.omitEnclosingScope = true, .parameterNames = parameterNames})),
+        config.settings);
+
+    // Where each parameter stands in that. The printer wrote the parameter
+    // list out of these same pieces, so it is in there as they are, joined
+    // by commas and in parentheses -- and looking for the list as a whole is
+    // what keeps a parameter from being found in the return type instead,
+    // "int a" standing at the front of "int add(int a)" as readily as
+    // inside it.
+    auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
+    if (!type)
+        return signature;
+
+    QStringList pieces;
+    int index = 0;
+    for (const cxx::Type *parameter : type->parameterTypes()) {
+        const std::string name = index < int(parameterNames.size())
+                                     ? parameterNames[std::size_t(index)] : std::string();
+        pieces.append(applyStarBinding(fromStd(cxx::to_string(parameter, name, options)),
+                                       config.settings));
+        ++index;
+    }
+    if (pieces.isEmpty())
+        return signature;
+
+    const int list = signature.text.indexOf('(' + pieces.join(", ") + ')');
+    if (list == -1)
+        return signature; // written some other way -- a default argument, "..."
+
+    int written = list + 1;
+    for (const QString &piece : std::as_const(pieces)) {
+        signature.parameters.append({written, int(piece.size())});
+        written += int(piece.size()) + 2; // past the comma and the space
+    }
+    return signature;
+}
+
 void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionContext &context)
 {
     using Kind = CxxFrontendDocument::Completion::Kind;
@@ -1731,10 +1785,7 @@ void CxxFrontendDocument::Private::recordCompletion(const cxx::CodeCompletionCon
                 for (cxx::FunctionSymbol *candidate : what.candidates) {
                     if (!candidate->name())
                         continue;
-                    completion.signatures.append(fromStd(
-                        cxx::to_string(candidate->type(),
-                                       cxx::to_string(candidate->name()),
-                                       {.omitEnclosingScope = true})));
+                    completion.signatures.append(describeSignature(candidate));
                 }
             }
         },
