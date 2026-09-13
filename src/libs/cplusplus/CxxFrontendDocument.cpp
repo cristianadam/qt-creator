@@ -3681,6 +3681,13 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
 CxxFrontendDocument::Element CxxFrontendDocument::elementAt(int line, int column) const
 {
     cxx::Symbol *symbol = d->resolvedSymbolAt(line, column);
+
+    // A name that declares something is a way of pointing at it too, which
+    // is what somebody reading the line that declares it means -- and the
+    // parser resolved nothing there, a declaration being where a name comes
+    // from rather than a use of one.
+    if (!symbol)
+        symbol = d->declaredAt(d->tokenAt(line, column));
     if (!symbol)
         return {};
 

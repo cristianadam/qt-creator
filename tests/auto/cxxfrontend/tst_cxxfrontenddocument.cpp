@@ -533,6 +533,16 @@ void tst_cxxfrontenddocument::elementAt_data()
         << QByteArray("typedef void F(int a);\n$F *f;\n")
         << QString("F|F|void F(int)|F(int)||@1:14");
 
+    // The line that declares it means it as much as a line that uses it,
+    // which is what somebody reading a declaration is pointing at.
+    QTest::newRow("a class where it is declared")
+        << QByteArray("namespace N { class $C {}; }\n")
+        << QString("C|N::C||||@1:21");
+
+    QTest::newRow("a function where it is declared")
+        << QByteArray("void $f(int a);\n")
+        << QString("f|f|void f(int a)|f(int)|f(int)|@1:6");
+
     QTest::newRow("a position on no name")
         << QByteArray("int i;\n$\n") << QString();
 }
