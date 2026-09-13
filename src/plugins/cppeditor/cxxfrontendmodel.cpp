@@ -1769,6 +1769,30 @@ std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
     return declaration;
 }
 
+Class *builtinClassWrittenAt(const Snapshot &snapshot,
+                             const CxxFrontendDocument::Place &place)
+{
+    return builtinClassWrittenAt(snapshot.document(
+                                     Utils::FilePath::fromUserInput(place.filePath)),
+                                 place);
+}
+
+Class *builtinClassWrittenAt(const Document::Ptr &document,
+                             const CxxFrontendDocument::Place &place)
+{
+    if (!document || !document->translationUnit())
+        return nullptr;
+
+    Control * const control = document->translationUnit()->control();
+    for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
+        if (Class * const candidate = (*it)->asClass();
+            candidate && candidate->line() == place.line && candidate->column() == place.column) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
 std::optional<QList<CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassAt(
     const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
     int line, int column)

@@ -336,6 +336,25 @@ std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclaratio
     const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
+// The class whose name is written at \a place, out of the file's own
+// parse. A place is what either front end can say and a Symbol is what
+// the built-in one draws with, so this is how a class the model found is
+// handed to something that still works in symbols.
+//
+// Nothing where that file is not in \a snapshot or declares no class
+// there.
+CPlusPlus::Class *builtinClassWrittenAt(
+    const CPlusPlus::Snapshot &snapshot,
+    const CPlusPlus::CxxFrontendDocument::Place &place);
+
+// The same out of a particular parse, for a caller whose other symbols
+// came from that one: what the snapshot holds for a file is not the same
+// objects as what an editor parsed of it, and two symbols of one class
+// from two parses are not each other.
+CPlusPlus::Class *builtinClassWrittenAt(
+    const CPlusPlus::Document::Ptr &document,
+    const CPlusPlus::CxxFrontendDocument::Place &place);
+
 // What the class written at a position inherits, and what those inherit in
 // turn, and nothing where this model cannot read the file.
 //

@@ -164,26 +164,6 @@ CppClass *CppClass::toCppClass()
 
 #ifdef QTC_WITH_CXX_FRONTEND
 
-// The class written at a place, out of the file's own parse: a place is what
-// either front end can say, and a Symbol is what this one draws.
-static Class *classWrittenAt(const Snapshot &snapshot,
-                             const CPlusPlus::CxxFrontendDocument::Place &place)
-{
-    const Document::Ptr document = snapshot.document(
-        Utils::FilePath::fromUserInput(place.filePath));
-    if (!document || !document->translationUnit())
-        return nullptr;
-
-    Control * const control = document->translationUnit()->control();
-    for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
-        if (Class * const candidate = (*it)->asClass();
-            candidate && candidate->line() == place.line && candidate->column() == place.column) {
-            return candidate;
-        }
-    }
-    return nullptr;
-}
-
 // What the class inherits, as the cxx-frontend model reads it, and nothing
 // where it has not read the file or a base cannot be said as a class of the
 // file's own parse -- half a hierarchy is worse than the other model's whole
@@ -207,7 +187,7 @@ static bool lookupBasesOnTheModel(CppClass *cppClass, Symbol *declaration,
     // ago is not where it is now.
     QList<QList<int>> paths;
     for (const CPlusPlus::CxxFrontendDocument::BaseClass &base : *bases) {
-        Class * const symbol = classWrittenAt(snapshot, base.place);
+        Class * const symbol = builtinClassWrittenAt(snapshot, base.place);
         if (!symbol)
             return false;
 

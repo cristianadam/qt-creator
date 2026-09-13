@@ -516,6 +516,80 @@ private:
     }
 };
 
+// The classes above \a clazz, furthest first -- which is the order their
+// functions are offered in.
+//
+// The rest of this reading works in the file's own symbols, so a class
+// the cxx-frontend model found is handed over as one of those; where any
+// of them cannot be, the built-in walk answers instead. Half a hierarchy
+// is worse than the other model's whole one.
+static QList<const Class *> baseClassesOf(const CppQuickFixInterface &interface, Class *clazz)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (clazz && !clazz->filePath().isEmpty()) {
+        if (const std::optional<QList<CxxFrontendDocument::BaseClass>> bases
+            = cxxFrontendBasesOfTheClassAt(interface.snapshot(), CppModelManager::workingCopy(),
+                                           clazz->filePath(), clazz->line(), clazz->column())) {
+            QList<const Class *> found;
+            for (const CxxFrontendDocument::BaseClass &base : *bases) {
+                // Out of the parse the rest of this reading works in: the
+                // editor's own for the file being edited, the snapshot's
+                // for a header it reads.
+                const Utils::FilePath baseFile
+                    = Utils::FilePath::fromUserInput(base.place.filePath);
+                Class * const symbol
+                    = baseFile == interface.filePath()
+                          ? builtinClassWrittenAt(interface.currentFile()->cppDocument(),
+                                                  base.place)
+                          : builtinClassWrittenAt(interface.snapshot(), base.place);
+                if (!symbol) {
+                    found.clear();
+                    break;
+                }
+                // Read nearest first and offered furthest first.
+                if (!found.contains(symbol))
+                    found.prepend(symbol);
+            }
+            if (!found.isEmpty())
+                return found;
+        }
+    }
+#endif
+
+    QList<const Class *> baseClasses;
+    QQueue<ClassOrNamespace *> baseClassQueue;
+    QSet<ClassOrNamespace *> visitedBaseClasses;
+    if (ClassOrNamespace *coN = interface.context().lookupType(clazz))
+        baseClassQueue.enqueue(coN);
+    while (!baseClassQueue.isEmpty()) {
+        ClassOrNamespace *coN = baseClassQueue.dequeue();
+        visitedBaseClasses.insert(coN);
+        QList<ClassOrNamespace *> bases = coN->usings();
+        while (!bases.isEmpty()) {
+            const ClassOrNamespace *baseClass = bases.takeFirst();
+            const QList<Symbol *> symbols = baseClass->symbols();
+
+            // See QTCREATORBUG-32162.
+            if (symbols.isEmpty() && baseClass->usings().size() == 1) {
+                bases.prepend(baseClass->usings().first());
+                continue;
+            }
+
+            for (Symbol *symbol : symbols) {
+                Class *base = symbol->asClass();
+                if (base
+                        && (coN = interface.context().lookupType(symbol))
+                        && !visitedBaseClasses.contains(coN)
+                        && !baseClasses.contains(base)) {
+                    baseClasses.prepend(base);
+                    baseClassQueue.enqueue(coN);
+                }
+            }
+        }
+    }
+    return baseClasses;
+}
+
 // What writing \a func into \a targetClass amounts to, as text. Every
 // name in it is written with as little in front of it as still finds it
 // from the class being added to -- a base and the class below it may be
@@ -639,37 +713,8 @@ public:
         m_insertPosOutside = endOfClassAST + 1; // Step over ";"
 
         // Determine base classes
-        QList<const Class *> baseClasses;
-        QQueue<ClassOrNamespace *> baseClassQueue;
-        QSet<ClassOrNamespace *> visitedBaseClasses;
-        if (ClassOrNamespace *clazz = interface.context().lookupType(m_classAST->symbol))
-            baseClassQueue.enqueue(clazz);
-        while (!baseClassQueue.isEmpty()) {
-            ClassOrNamespace *clazz = baseClassQueue.dequeue();
-            visitedBaseClasses.insert(clazz);
-            QList<ClassOrNamespace *> bases = clazz->usings();
-            while (!bases.isEmpty()) {
-                const ClassOrNamespace *baseClass = bases.takeFirst();
-                const QList<Symbol *> symbols = baseClass->symbols();
-
-                // See QTCREATORBUG-32162.
-                if (symbols.isEmpty() && baseClass->usings().size() == 1) {
-                    bases.prepend(baseClass->usings().first());
-                    continue;
-                }
-
-                for (Symbol *symbol : symbols) {
-                    Class *base = symbol->asClass();
-                    if (base
-                            && (clazz = interface.context().lookupType(symbol))
-                            && !visitedBaseClasses.contains(clazz)
-                            && !baseClasses.contains(base)) {
-                        baseClasses.prepend(base);
-                        baseClassQueue.enqueue(clazz);
-                    }
-                }
-            }
-        }
+        const QList<const Class *> baseClasses
+            = baseClassesOf(interface, m_classAST->symbol);
 
         // Determine virtual functions
         m_factory->classFunctionModel->clear();
