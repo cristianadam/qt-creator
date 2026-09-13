@@ -485,6 +485,69 @@ std::optional<CPlusPlus::CxxFrontendDocument::DiscardedValue> cxxFrontendDiscard
 std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendLookup(
     const Utils::FilePath &filePath, const QString &name);
 
+// What is made of a type before it is written down. A getter hands back
+// what a member holds, a setter takes it by const reference, a Q_PROPERTY
+// says the value behind either, and a getter of a container hands back
+// what it holds -- so what is written is hardly ever the type as
+// declared. Applied in the order given.
+enum class CxxFrontendTypeStep {
+    WithoutConst,
+    Value,
+    ConstReference,
+    ConstOnReference,
+    FirstTemplateArgument,
+};
+
+// The type of the thing declared at a place, and where the answer is
+// going.
+struct CxxFrontendTypeRequest
+{
+    Utils::FilePath filePath; // where the thing is declared
+    int line = 0;
+    int column = 0;
+    QList<CxxFrontendTypeStep> steps;
+
+    // The file the answer is being written into, which is not always the
+    // one that declares the thing: a member is declared in a header and
+    // defined in the source file that includes it. Both are then read as
+    // one, since that is how a compiler reads them. Empty for "as the file
+    // that declares it writes it".
+    Utils::FilePath writtenIn;
+    int writtenAtLine = 0;
+    int writtenAtColumn = 0;
+};
+
+// What that type is, as far as anything deciding how to hand it over
+// cares. Nothing where the model cannot read the file or nothing is
+// declared at the place.
+struct CxxFrontendTypeFacts
+{
+    bool isPointer = false;
+    bool isReference = false;
+    bool isEnumeration = false;
+    bool isNumber = false;
+    bool isConst = false;
+    // The name it was declared under, without its path or its arguments:
+    // what a caller with a rule per type has the rule for.
+    QString declaredName;
+};
+std::optional<CxxFrontendTypeFacts> cxxFrontendTypeFacts(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request);
+
+// That same type written as a declaration of \a name, or alone where that
+// is empty -- a declarator is written around a name, so no amount of
+// putting the name after the type gets there.
+std::optional<QString> cxxFrontendTypeWritten(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request, const QString &name);
+
+// And written without the arguments of a template, which is how a caller
+// with a rule per type names the type it has a rule for.
+std::optional<QString> cxxFrontendTypeWithoutTemplateParameters(
+    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request);
+
 std::optional<CPlusPlus::CxxFrontendDocument::MetaMethodCall> cxxFrontendMetaMethodCallAt(
     const Utils::FilePath &filePath, int line, int column);
 

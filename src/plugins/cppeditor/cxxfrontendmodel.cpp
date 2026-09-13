@@ -1585,6 +1585,108 @@ std::optional<QList<CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
     return holding.document->symbols();
 }
 
+namespace {
+
+// The document that answers about a type: the one the answer is being
+// written into where that is another file, since it holds both -- a
+// header is read into whatever includes it -- and the declaring file's
+// otherwise.
+HoldingDocument documentForTheType(const Snapshot &builtinSnapshot,
+                                   const WorkingCopy &workingCopy,
+                                   const CxxFrontendTypeRequest &request)
+{
+    const FilePath &filePath = request.writtenIn.isEmpty() ? request.filePath
+                                                           : request.writtenIn;
+    HoldingDocument holding;
+    holding.kept = models().get(filePath);
+    if (holding.kept)
+        holding.document = holding.kept->document(filePath.toFSPathString());
+    if (!holding.document)
+        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+    return holding;
+}
+
+// The type the request asks about, with what it asks made of it.
+CxxFrontendDocument::Type typeFor(const CxxFrontendDocument &document,
+                                  const CxxFrontendTypeRequest &request)
+{
+    CxxFrontendDocument::Type type = document.typeOfTheThingDeclaredAt(
+        {request.filePath.toFSPathString(), request.line, request.column});
+    for (const CxxFrontendTypeStep step : request.steps) {
+        if (!type.isValid())
+            return {};
+        switch (step) {
+        case CxxFrontendTypeStep::WithoutConst: type = type.withoutConst(); break;
+        case CxxFrontendTypeStep::Value: type = type.value(); break;
+        case CxxFrontendTypeStep::ConstReference: type = type.constReference(); break;
+        case CxxFrontendTypeStep::ConstOnReference: type = type.withConstOnReference(); break;
+        case CxxFrontendTypeStep::FirstTemplateArgument:
+            type = type.firstTemplateArgument();
+            break;
+        }
+    }
+    return type;
+}
+
+} // namespace
+
+std::optional<CxxFrontendTypeFacts> cxxFrontendTypeFacts(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    if (!holding.document)
+        return std::nullopt;
+    const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
+    if (!type.isValid())
+        return std::nullopt;
+
+    CxxFrontendTypeFacts facts;
+    facts.isPointer = type.isPointer();
+    facts.isReference = type.isReference();
+    facts.isEnumeration = type.isEnumeration();
+    facts.isNumber = type.isNumber();
+    facts.isConst = type.isConst();
+    facts.declaredName = type.declaredName();
+    return facts;
+}
+
+std::optional<QString> cxxFrontendTypeWritten(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request, const QString &name)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    if (!holding.document)
+        return std::nullopt;
+    const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
+    if (!type.isValid())
+        return std::nullopt;
+    if (request.writtenIn.isEmpty())
+        return type.writtenAs(name);
+    return type.writtenAt({request.writtenIn.toFSPathString(),
+                           request.writtenAtLine, request.writtenAtColumn},
+                          name);
+}
+
+std::optional<QString> cxxFrontendTypeWithoutTemplateParameters(
+    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const CxxFrontendTypeRequest &request)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    if (!holding.document)
+        return std::nullopt;
+    const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
+    if (!type.isValid())
+        return std::nullopt;
+    return type.writtenWithoutTemplateParameters();
+}
+
 std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
     const FilePath &filePath, int line, int column)
 {
