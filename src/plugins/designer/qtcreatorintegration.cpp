@@ -282,6 +282,33 @@ static const Class *findClass(const Namespace *parentNameSpace, const LookupCont
     return nullptr;
 }
 
+// Everything "Go To Slot" has to read out of the code, which is all either
+// front end is asked for: where a declaration goes, where a definition goes
+// and what is written there are the locator's questions and this file's.
+struct FormClass
+{
+    // The class the form belongs to -- the one that has a member of the ui
+    // class's type, or inherits it.
+    QString name;
+    FilePath filePath;
+    int line = 0;   // where its own name is written in its body, from one
+    int column = 0;
+
+    // What it says about the slot being navigated to: where it declares it,
+    // and where the project defines it. A slot it does not declare has
+    // neither; one it declares without defining has only the first.
+    CppEditor::DeclarationToDefine slotDeclaration;
+    Link slotDefinition;
+
+    // Where each of its constructors is defined, in the order it declares
+    // them. Which of them calls setupUi() is read off the text, that being
+    // where the widget-access prefix comes from as well.
+    Links constructorDefinitions;
+
+    bool isValid() const { return line > 0; }
+    bool declaresTheSlot() const { return slotDeclaration.isValid(); }
+};
+
 static Function *findDeclaration(const Class *cl, const QString &functionName)
 {
     const QString funName = QString::fromUtf8(QMetaObject::normalizedSignature(functionName.toUtf8()));
@@ -321,16 +348,17 @@ static BaseTextEditor *editorAt(const FilePath &filePath, int line, int column)
 }
 
 static void addDeclaration(const Snapshot &snapshot,
-                           const FilePath &filePath,
-                           const Class *cl,
+                           const FormClass &formClass,
                            const QString &functionName)
 {
     const QString declaration = "void " + functionName + ";\n";
+    const FilePath &filePath = formClass.filePath;
 
     CppEditor::CppRefactoringChanges refactoring(snapshot);
     CppEditor::InsertionPointLocator find(refactoring);
     const CppEditor::InsertionLocation loc = find.methodDeclarationInClass(
-                filePath, cl, CppEditor::InsertionPointLocator::PrivateSlot);
+                filePath, formClass.line, formClass.column,
+                CppEditor::InsertionPointLocator::PrivateSlot);
 
     //
     //! \todo change this to use the Refactoring changes.
@@ -451,6 +479,58 @@ static ClassDocumentPtrPair
     return ClassDocumentPtrPair(0, Document::Ptr());
 }
 
+// What the built-in front end reads about the class \a doc, or a file it
+// includes, writes the ui class \a uiClassName into -- and what that class
+// says about a slot written as \a slotSignature.
+static FormClass builtinFormClass(const Snapshot &docTable, const Document::Ptr &doc,
+                                  const QString &uiClassName, const QString &slotSignature)
+{
+    const LookupContext context(doc, docTable);
+    const ClassDocumentPtrPair found = findClassRecursively(context, uiClassName, 1u);
+    const Class * const cl = found.first;
+    if (!cl)
+        return {};
+
+    const Overview overview;
+    FormClass formClass;
+    formClass.name = overview.prettyName(cl->name());
+    formClass.filePath = found.second->filePath();
+    formClass.line = cl->line();
+    formClass.column = cl->column();
+
+    const CppEditor::CppRefactoringChanges refactoring(docTable);
+    CppEditor::SymbolFinder symbolFinder;
+    if (Function * const slot = findDeclaration(cl, slotSignature)) {
+        formClass.slotDeclaration = CppEditor::declarationToDefine(slot, refactoring);
+        if (const Function * const definition
+            = symbolFinder.findMatchingDefinition(slot, docTable, true)) {
+            formClass.slotDefinition = {FilePath::fromUtf8(definition->fileName()),
+                                        definition->line(), definition->column()};
+        }
+    }
+
+    for (int i = 0, count = cl->memberCount(); i < count; ++i) {
+        const Declaration * const decl = cl->memberAt(i)->asDeclaration();
+        Function * const ctor = decl ? decl->type()->asFunctionType()
+                                     : cl->memberAt(i)->asFunction();
+        if (!ctor || overview.prettyName(ctor->name()) != formClass.name)
+            continue;
+        const Function *definition = symbolFinder.findMatchingDefinition(ctor, docTable, true);
+        if (!definition)
+            definition = ctor; // possibly an inline definition
+        formClass.constructorDefinitions << Link{FilePath::fromUtf8(definition->fileName()),
+                                                 definition->line(), definition->column()};
+    }
+    return formClass;
+}
+
+// The same, off whichever front end is running.
+static FormClass readFormClass(const Snapshot &docTable, const Document::Ptr &doc,
+                               const QString &uiClassName, const QString &slotSignature)
+{
+    return builtinFormClass(docTable, doc, uiClassName, slotSignature);
+}
+
 void QtCreatorIntegration::slotActiveFormWindowChanged(QDesignerFormWindowInterface *formWindow)
 {
     if (formWindow == nullptr
@@ -556,7 +636,7 @@ static QString widgetClassName(QDesignerFormWindowInterface *fwi, const QString 
 // Insert an explicit pointer-to-member connect() into the constructor that calls
 // setupUi(). The widget-access prefix ("ui->", "ui.", "") is taken from the
 // existing setupUi() call, which sidesteps having to resolve the ui member.
-static bool insertPointerToMemberConnection(const Snapshot &snapshot, const Class *cl,
+static bool insertPointerToMemberConnection(const Links &constructorDefinitions,
                                 const QString &className, const QString &objectName,
                                 const QString &widgetClass, const QString &signalName,
                                 const QString &slotBaseName)
@@ -564,25 +644,17 @@ static bool insertPointerToMemberConnection(const Snapshot &snapshot, const Clas
     if (widgetClass.isEmpty())
         return false;
 
-    // Find a constructor with a definition that calls setupUi().
-    const Overview overview;
-    CppEditor::SymbolFinder symbolFinder;
-    for (int i = 0, count = cl->memberCount(); i < count; ++i) {
-        const Declaration *decl = cl->memberAt(i)->asDeclaration();
-        Function *ctor = decl ? decl->type()->asFunctionType() : cl->memberAt(i)->asFunction();
-        if (!ctor || overview.prettyName(ctor->name()) != className)
-            continue;
-        const Function *def = symbolFinder.findMatchingDefinition(ctor, snapshot, true);
-        if (!def)
-            def = ctor; // possibly an inline definition
-        const FilePath ctorFile = FilePath::fromString(QString::fromUtf8(def->fileName()));
-        BaseTextEditor *editor = editorAt(ctorFile, def->line(), def->column());
+    // Find a constructor whose definition calls setupUi().
+    for (const Link &ctor : constructorDefinitions) {
+        BaseTextEditor *editor = editorAt(ctor.targetFilePath, ctor.target.line,
+                                          ctor.target.column);
         if (!editor)
             continue;
 
         QTextDocument *doc = editor->textDocument()->document();
         const QString text = doc->toPlainText();
-        const int ctorPos = Utils::Text::positionInText(doc, def->line(), def->column());
+        const int ctorPos = Utils::Text::positionInText(doc, ctor.target.line,
+                                                        ctor.target.column);
         const int setupUiPos = text.indexOf("setupUi", ctorPos);
         if (setupUiPos == -1)
             continue;
@@ -684,35 +756,6 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
 
     QDesignerFormWindowInterface *fwi = activeWidgetHost()->formWindow();
 
-    QString uiClass;
-    const Class *cl = nullptr;
-    Document::Ptr declDoc;
-    for (const QString &candidate : uiClassNames(fwi->mainContainer()->objectName())) {
-        if (Designer::Constants::Internal::debug)
-            qDebug() << "Checking docs for " << candidate;
-
-        // Find the class definition (ui class defined as member or base class)
-        // in the file itself or in the directly included files (order 1).
-        for (const Document::Ptr &d : std::as_const(docMap)) {
-            LookupContext context(d, docTable);
-            const ClassDocumentPtrPair cd = findClassRecursively(context, candidate, 1u);
-            if (cd.first) {
-                cl = cd.first;
-                declDoc = cd.second;
-                break;
-            }
-        }
-        if (cl) {
-            uiClass = candidate;
-            break;
-        }
-
-        if (errorMessage->isEmpty())
-            *errorMessage = msgClassNotFound(candidate, docList);
-    }
-    if (!cl)
-        return false;
-
     const int signalParenIdx = signalSignature.indexOf('(');
     const QString signalName = signalSignature.left(signalParenIdx);
     const QString signalParams = signalSignature.mid(signalParenIdx);
@@ -727,19 +770,42 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
                                         : "on_" + objectName + '_' + signalName;
     const QString functionName = slotBaseName + signalParams;
     const QString functionNameWithParameterNames = addParameterNames(functionName, parameterNames);
-    const bool slotDidNotExist = !findDeclaration(cl, functionName);
+
+    QString uiClass;
+    FormClass formClass;
+    for (const QString &candidate : uiClassNames(fwi->mainContainer()->objectName())) {
+        if (Designer::Constants::Internal::debug)
+            qDebug() << "Checking docs for " << candidate;
+
+        // Find the class definition (ui class defined as member or base class)
+        // in the file itself or in the directly included files (order 1).
+        for (const Document::Ptr &d : std::as_const(docMap)) {
+            formClass = readFormClass(docTable, d, candidate, functionName);
+            if (formClass.isValid())
+                break;
+        }
+        if (formClass.isValid()) {
+            uiClass = candidate;
+            break;
+        }
+
+        if (errorMessage->isEmpty())
+            *errorMessage = msgClassNotFound(candidate, docList);
+    }
+    if (!formClass.isValid())
+        return false;
+
+    const bool slotDidNotExist = !formClass.declaresTheSlot();
 
     if (Designer::Constants::Internal::debug)
-        qDebug() << Q_FUNC_INFO << "Found " << uiClass << declDoc->filePath() << " checking " << functionName  << functionNameWithParameterNames;
+        qDebug() << Q_FUNC_INFO << "Found " << uiClass << formClass.filePath << " checking " << functionName  << functionNameWithParameterNames;
 
-    Function *fun = findDeclaration(cl, functionName);
-    FilePath declFilePath;
-    if (!fun) {
-        // add function declaration to cl
+    if (slotDidNotExist) {
+        // add function declaration to the class
         CppEditor::WorkingCopy workingCopy = CppEditor::CppModelManager::workingCopy();
-        declFilePath = declDoc->filePath();
-        getParsedDocument(declFilePath, workingCopy, docTable);
-        addDeclaration(docTable, declFilePath, cl, functionNameWithParameterNames);
+        const FilePath classFilePath = formClass.filePath;
+        getParsedDocument(classFilePath, workingCopy, docTable);
+        addDeclaration(docTable, formClass, functionNameWithParameterNames);
 
         // Re-load C++ documents.
         FilePaths filePaths;
@@ -754,33 +820,29 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
                 newDocTable.insert(doc);
         }
         docTable = newDocTable;
-        getParsedDocument(declFilePath, workingCopy, docTable);
-        const Document::Ptr headerDoc = docTable.document(declFilePath);
+        getParsedDocument(classFilePath, workingCopy, docTable);
+        const Document::Ptr headerDoc = docTable.document(classFilePath);
         QTC_ASSERT(headerDoc, return false);
-        LookupContext context(headerDoc, docTable);
-        cl = findClass(headerDoc->globalNamespace(), context, uiClass);
-        QTC_ASSERT(cl, return false);
-        fun = findDeclaration(cl, functionName);
-    } else {
-        declFilePath = FilePath::fromString(QLatin1String(fun->fileName()));
+        formClass = readFormClass(docTable, headerDoc, uiClass, functionName);
+        QTC_ASSERT(formClass.isValid(), return false);
     }
-    QTC_ASSERT(fun, return false);
+    QTC_ASSERT(formClass.declaresTheSlot(), return false);
 
     CppEditor::CppRefactoringChanges refactoring(docTable);
-    CppEditor::SymbolFinder symbolFinder;
-    if (const Function *funImpl = symbolFinder.findMatchingDefinition(fun, docTable, true)) {
-        Core::EditorManager::openEditorAt(
-            {FilePath::fromString(QString::fromUtf8(funImpl->fileName())), funImpl->line() + 2});
+    if (formClass.slotDefinition.hasValidTarget()) {
+        Core::EditorManager::openEditorAt({formClass.slotDefinition.targetFilePath,
+                                           formClass.slotDefinition.target.line + 2});
         return true;
     }
-    const FilePath implFilePath = CppEditor::correspondingHeaderOrSource(declFilePath);
+    const FilePath implFilePath
+        = CppEditor::correspondingHeaderOrSource(formClass.slotDeclaration.filePath);
     const CppEditor::InsertionLocation location = CppEditor::insertLocationForMethodDefinition
-            (fun, false, CppEditor::NamespaceHandling::CreateMissing, refactoring, implFilePath);
+            (formClass.slotDeclaration, false, CppEditor::NamespaceHandling::CreateMissing,
+             refactoring, implFilePath);
 
     if (BaseTextEditor *editor = editorAt(location.filePath(),
                                           location.line(), location.column())) {
-        Overview o;
-        const QString className = o.prettyName(cl->name());
+        const QString className = formClass.name;
         const QString definition = location.prefix() + "void " + className + "::"
             + functionNameWithParameterNames + "\n{\n\n}\n"
             + location.suffix();
@@ -797,8 +859,8 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
         Utils::Text::convertPosition(file->document(), openPos, &line, &column);
 
         if (usePmf && slotDidNotExist) {
-            insertPointerToMemberConnection(docTable, cl, className, objectName,
-                                            widgetClass, signalName, slotBaseName);
+            insertPointerToMemberConnection(formClass.constructorDefinitions, className,
+                                            objectName, widgetClass, signalName, slotBaseName);
         }
 
         Core::EditorManager::openEditorAt({location.filePath(), line, column});
