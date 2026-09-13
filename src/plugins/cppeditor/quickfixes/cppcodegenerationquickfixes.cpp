@@ -219,6 +219,44 @@ private:
     GetterSetterRefactoringHelper *m_helper = nullptr;
 };
 
+// The class the generation writes into, and the only thing it knows
+// about a front end's idea of one. Its name is asked rather than kept
+// for the same reason a type is: a class in a namespace is not named
+// from the source file by the name it was declared under.
+class GeneratedClass
+{
+public:
+    GeneratedClass() = default;
+    GeneratedClass(Class *clazz, GetterSetterRefactoringHelper *helper);
+
+    // As it was written. A class written with no name of its own has
+    // none, and nothing of it can be declared anywhere but inside it,
+    // since nothing outside could say which class it is.
+    QString name() const;
+    bool isAnonymous() const;
+    // Whether QObject is above it, which is what lets a setter be a slot
+    // and a property be notified of.
+    bool isQObject() const;
+    // Its name where a definition of one of its members is going, which
+    // for a class in a namespace is more than the name.
+    QString writtenAt(const CppRefactoringFilePtr &file,
+                      const InsertionLocation &location) const;
+    // Where a declaration of the kind \a spec goes in it.
+    InsertionLocation placeForDeclaration(const InsertionPointLocator &locator,
+                                          const Utils::FilePath &filePath,
+                                          InsertionPointLocator::AccessSpec spec) const;
+
+    // The front end's own, for what is still asked in those terms: where
+    // a definition of a member of it goes.
+    Class *symbol() const { return m_class; }
+
+private:
+    friend class GeneratedType;
+
+    Class *m_class = nullptr;
+    GetterSetterRefactoringHelper *m_helper = nullptr;
+};
+
 struct ExistingGetterSetterData
 {
     Class *clazz = nullptr;
@@ -294,9 +332,10 @@ static void extractNames(const CppRefactoringFilePtr &file,
 
 class GetterSetterRefactoringHelper
 {
-    // It asks the front end what it needs to write a type down, and this
-    // is where the front end is reached.
+    // They ask the front end what they need to write a type or a class
+    // name down, and this is where the front end is reached.
     friend class GeneratedType;
+    friend class GeneratedClass;
 
 public:
     GetterSetterRefactoringHelper(CppQuickFixOperation *operation, Class *clazz);
@@ -344,7 +383,7 @@ protected:
     const CppRefactoringFilePtr m_sourceFile = determineSourceFile();
     CppQuickFixSettings *const m_settings = cppQuickFixSettingsForProject(
         ProjectTree::currentProject());
-    Class *const m_class;
+    const GeneratedClass m_class;
 
 private:
     class Data {
@@ -377,7 +416,7 @@ private:
         bool generateQProperty() const;
 
         Declaration *decl() const { return m_data.declarationSymbol; }
-        Class *theClass() const { return m_data.clazz; }
+        const GeneratedClass &theClass() const { return q->m_class; }
         bool isStatic() const { return m_data.declarationSymbol->type().isStatic(); }
 
         // As the member was declared, const and static and all, which two
@@ -411,7 +450,6 @@ private:
     void generateMemberVariable();
     void generateQProperty();
     void generateBindable();
-    bool isQObjectSubclass() const;
     QString setterBodyWithSignal();
     CppRefactoringFilePtr determineSourceFile();
 
@@ -1199,30 +1237,30 @@ private:
                 InsertionLocation implLoc;
                 QString implCode;
                 CppRefactoringFilePtr implFile;
-                QString className = overview.prettyName(m_class->name());
+                QString className = m_class.name();
                 QStringList insertedNamespaces;
                 if (constructorLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
-                    implLoc = sourceLocationFor(m_class, &insertedNamespaces);
+                    implLoc = sourceLocationFor(m_class.symbol(), &insertedNamespaces);
                     implFile = m_sourceFile;
                     if (m_settings->rewriteTypesinCppFile())
-                        implCode = symbolAt(m_class, m_sourceFile, implLoc);
+                        implCode = m_class.writtenAt(m_sourceFile, implLoc);
                     else
                         implCode = className;
                     implCode += "::" + className + "(";
                 } else if (constructorLocation
                            == CppQuickFixSettings::FunctionLocation::OutsideClass) {
-                    implLoc = insertLocationForMethodDefinition(m_class,
+                    implLoc = insertLocationForMethodDefinition(m_class.symbol(),
                                                                 false,
                                                                 NamespaceHandling::Ignore,
                                                                 m_changes,
                                                                 m_headerFile->filePath(),
                                                                 &insertedNamespaces);
                     implFile = m_headerFile;
-                    implCode = symbolAt(m_class, m_headerFile, implLoc);
+                    implCode = m_class.writtenAt(m_headerFile, implLoc);
                     implCode += "::" + className + "(";
                 }
 
-                QString inClassDeclaration = overview.prettyName(m_class->name()) + "(";
+                QString inClassDeclaration = m_class.name() + "(";
                 QString constructorBody = members.empty() ? QString(") {}") : QString(") : ");
                 for (auto &member : members) {
                     if (isValueType(member->symbol, &member->customValueType))
@@ -1236,7 +1274,7 @@ private:
                     inClassDeclaration += ", ";
                     if (implFile) {
                         FullySpecifiedType type = typeAt(member->type,
-                                                         m_class,
+                                                         m_class.symbol(),
                                                          implFile,
                                                          implLoc,
                                                          insertedNamespaces);
@@ -1765,7 +1803,7 @@ GetterSetterRefactoringHelper::GetterSetterRefactoringHelper(
     , m_changes(m_operation->snapshot())
     , m_locator(m_changes)
     , m_headerFile(operation->currentFile())
-    , m_class(clazz)
+    , m_class(clazz, this)
 {
     m_overview.showTemplateParameters = true;
 }
@@ -1978,8 +2016,8 @@ GeneratedType GeneratedType::writtenOutsideTheClass() const
                           m_helper->m_changes.snapshot());
     SubstitutionEnvironment environment;
     environment.setContext(context);
-    environment.switchScope(m_helper->m_class);
-    ClassOrNamespace *target = context.lookupType(m_helper->m_class->enclosingScope());
+    environment.switchScope(m_helper->m_class.m_class);
+    ClassOrNamespace *target = context.lookupType(m_helper->m_class.m_class->enclosingScope());
     if (!target)
         target = context.globalNamespace();
     UseMinimalNames minimal(target);
@@ -2005,6 +2043,56 @@ bool GeneratedType::isValueType() const
     return m_helper->isValueType(m_type, m_scope);
 }
 
+GeneratedClass::GeneratedClass(Class *clazz, GetterSetterRefactoringHelper *helper)
+    : m_class(clazz)
+    , m_helper(helper)
+{}
+
+QString GeneratedClass::name() const
+{
+    if (isAnonymous())
+        return {};
+    const Identifier *identifier = m_class->name()->identifier();
+    return QString::fromUtf8(identifier->chars(), identifier->size());
+}
+
+bool GeneratedClass::isAnonymous() const
+{
+    return m_class->name()->asAnonymousNameId() != nullptr;
+}
+
+bool GeneratedClass::isQObject() const
+{
+    // Not by the Q_OBJECT it wrote but by the connect() it inherited:
+    // what makes a slot a slot is standing below QObject.
+    const QByteArray connectName = "connect";
+    const Identifier connectId(connectName.data(), connectName.size());
+    const QList<LookupItem> items = m_helper->m_operation->context().lookup(&connectId, m_class);
+    for (const LookupItem &item : items) {
+        if (item.declaration() && item.declaration()->enclosingClass()
+            && m_helper->m_overview.prettyName(item.declaration()->enclosingClass()->name())
+                   == "QObject") {
+            return true;
+        }
+    }
+    return false;
+}
+
+QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
+                                  const InsertionLocation &location) const
+{
+    return symbolAtDifferentLocation(*m_helper->m_operation, m_class, file, location);
+}
+
+InsertionLocation GeneratedClass::placeForDeclaration(
+    const InsertionPointLocator &locator,
+    const Utils::FilePath &filePath,
+    InsertionPointLocator::AccessSpec spec) const
+{
+    return locator.methodDeclarationInClass(filePath, m_class, spec,
+                                            InsertionPointLocator::ForceAccessSpec::Yes);
+}
+
 void GetterSetterRefactoringHelper::addHeaderCode(
         InsertionPointLocator::AccessSpec spec, const QString &code)
 {
@@ -2020,8 +2108,8 @@ InsertionLocation GetterSetterRefactoringHelper::headerLocationFor(
     const auto insertionPoint = m_headerInsertionPoints.find(spec);
     if (insertionPoint != m_headerInsertionPoints.end())
         return *insertionPoint;
-    const InsertionLocation loc = m_locator.methodDeclarationInClass(
-                m_headerFile->filePath(), m_class, spec, InsertionPointLocator::ForceAccessSpec::Yes);
+    const InsertionLocation loc
+            = m_class.placeForDeclaration(m_locator, m_headerFile->filePath(), spec);
     m_headerInsertionPoints.insert(spec, loc);
     return loc;
 }
@@ -2090,7 +2178,7 @@ void GetterSetterRefactoringHelper::generateGetter()
 
     auto getterLocation = m_settings->determineGetterLocation(1);
     // if we have an anonymous class we must add code inside the class
-    if (m_data.theClass()->name()->asAnonymousNameId())
+    if (m_data.theClass().isAnonymous())
         getterLocation = CppQuickFixSettings::FunctionLocation::InsideClass;
 
     if (getterLocation == CppQuickFixSettings::FunctionLocation::InsideClass) {
@@ -2136,11 +2224,10 @@ void GetterSetterRefactoringHelper::generateGetter()
             QString clazz;
             if (m_settings->rewriteTypesinCppFile()) {
                 returnType = getReturnTypeAt(m_sourceFile, loc);
-                clazz = symbolAt(m_data.theClass(), m_sourceFile, loc);
+                clazz = m_data.theClass().writtenAt(m_sourceFile, loc);
             } else {
                 returnType = m_data.returnTypeHeader();
-                const Identifier *identifier = m_data.theClass()->name()->identifier();
-                clazz = QString::fromUtf8(identifier->chars(), identifier->size());
+                clazz = m_data.theClass().name();
             }
             const QString code = returnType.asDeclarationOf(clazz + "::" + m_data.getterName())
                     + "()" + constSpec + "\n{\nreturn " + returnExpression + ";\n}";
@@ -2150,7 +2237,7 @@ void GetterSetterRefactoringHelper::generateGetter()
                         m_data.decl(), false, NamespaceHandling::Ignore, m_changes,
                         m_headerFile->filePath());
             const GeneratedType returnType = getReturnTypeAt(m_headerFile, loc);
-            const QString clazz = symbolAt(m_data.theClass(), m_headerFile, loc);
+            const QString clazz = m_data.theClass().writtenAt(m_headerFile, loc);
             QString code = returnType.asDeclarationOf(clazz + "::" + m_data.getterName())
                     + "()" + constSpec + "\n{\nreturn " + returnExpression + ";\n}";
             if (m_isHeaderHeaderFile)
@@ -2180,7 +2267,7 @@ void GetterSetterRefactoringHelper::generateSetter()
 
     auto setterLocation = m_settings->determineSetterLocation(body.count('\n') - 2);
     // if we have an anonymous class we must add code inside the class
-    if (m_data.theClass()->name()->asAnonymousNameId())
+    if (m_data.theClass().isAnonymous())
         setterLocation = CppQuickFixSettings::FunctionLocation::InsideClass;
 
     if (setterLocation == CppQuickFixSettings::FunctionLocation::CppFile && !hasSourceFile())
@@ -2198,10 +2285,9 @@ void GetterSetterRefactoringHelper::generateSetter()
                 newParameterType = m_data.memberVarType().writtenAt(m_sourceFile, loc);
                 if (!m_data.isValueType())
                     newParameterType = newParameterType.constReference();
-                clazz = symbolAt(m_data.theClass(), m_sourceFile, loc);
+                clazz = m_data.theClass().writtenAt(m_sourceFile, loc);
             } else {
-                const Identifier *identifier = m_data.theClass()->name()->identifier();
-                clazz = QString::fromUtf8(identifier->chars(), identifier->size());
+                clazz = m_data.theClass().name();
             }
             newParameterType = newParameterType.withConstOnReference();
             const QString code = "void " + clazz + "::" + m_data.setterName() + '('
@@ -2218,7 +2304,7 @@ void GetterSetterRefactoringHelper::generateSetter()
             if (!m_data.isValueType())
                 newParameterType = newParameterType.constReference();
             newParameterType = newParameterType.withConstOnReference();
-            QString clazz = symbolAt(m_data.theClass(), m_headerFile, loc);
+            QString clazz = m_data.theClass().writtenAt(m_headerFile, loc);
 
             QString code = "void " + clazz + "::" + m_data.setterName() + '('
                     + newParameterType.asDeclarationOf(m_data.parameterName()) + ')' + body;
@@ -2256,7 +2342,7 @@ void GetterSetterRefactoringHelper::generateReset()
     // body.count('\n') - 2 : do not count the 2 at start
     auto resetLocation = m_settings->determineSetterLocation(body.count('\n') - 2);
     // if we have an anonymous class we must add code inside the class
-    if (m_data.theClass()->name()->asAnonymousNameId())
+    if (m_data.theClass().isAnonymous())
         resetLocation = CppQuickFixSettings::FunctionLocation::InsideClass;
 
     if (resetLocation == CppQuickFixSettings::FunctionLocation::CppFile && !hasSourceFile())
@@ -2272,10 +2358,9 @@ void GetterSetterRefactoringHelper::generateReset()
             GeneratedType type = m_data.memberVarType();
             if (m_settings->rewriteTypesinCppFile()) {
                 type = m_data.memberVarType().writtenAt(m_sourceFile, loc);
-                clazz = symbolAt(m_data.theClass(), m_sourceFile, loc);
+                clazz = m_data.theClass().writtenAt(m_sourceFile, loc);
             } else {
-                const Identifier *identifier = m_data.theClass()->name()->identifier();
-                clazz = QString::fromUtf8(identifier->chars(), identifier->size());
+                clazz = m_data.theClass().name();
             }
             const QString code = "void " + clazz + "::" + m_data.resetName() + "()"
                     + body.replace("$TYPE", type.asText());
@@ -2285,7 +2370,7 @@ void GetterSetterRefactoringHelper::generateReset()
                         m_data.decl(), false, NamespaceHandling::Ignore, m_changes,
                         m_headerFile->filePath());
             const GeneratedType type = m_data.declaredType().writtenAt(m_headerFile, loc);
-            const QString clazz = symbolAt(m_data.theClass(), m_headerFile, loc);
+            const QString clazz = m_data.theClass().writtenAt(m_headerFile, loc);
             QString code = "void " + clazz + "::" + m_data.resetName() + "()"
                     + body.replace("$TYPE", type.asText());
             if (m_isHeaderHeaderFile)
@@ -2356,20 +2441,6 @@ void GetterSetterRefactoringHelper::generateBindable()
     addHeaderCode(InsertionPointLocator::Public, code);
 }
 
-bool GetterSetterRefactoringHelper::isQObjectSubclass() const
-{
-    const QByteArray connectName = "connect";
-    const Identifier connectId(connectName.data(), connectName.size());
-    const QList<LookupItem> items = m_operation->context().lookup(&connectId, m_class);
-    for (const LookupItem &item : items) {
-        if (item.declaration() && item.declaration()->enclosingClass()
-            && m_overview.prettyName(item.declaration()->enclosingClass()->name()) == "QObject") {
-            return true;
-        }
-    }
-    return false;
-}
-
 QString GetterSetterRefactoringHelper::setterBodyWithSignal()
 {
     QString body;
@@ -2401,9 +2472,9 @@ void GetterSetterRefactoringHelper::generateMemberVariable()
 
     QString storageDeclaration;
     if (m_data.generateBindable()) {
-        const QString className = m_overview.prettyName(m_data.theClass()->name());
+        const QString className = m_data.theClass().name();
         const QString typeName = m_data.memberVarType().asText();
-        if (isQObjectSubclass()) {
+        if (m_class.isQObject()) {
             storageDeclaration = "Q_OBJECT_BINDABLE_PROPERTY(" + className + ", " + typeName
                                  + ", " + m_data.memberVarName();
             if (!m_data.signalName().isEmpty())
@@ -2507,7 +2578,7 @@ const GeneratedType &GetterSetterRefactoringHelper::Data::returnTypeTemplatePara
 InsertionPointLocator::AccessSpec GetterSetterRefactoringHelper::Data::setterAccessSpec() const
 {
     if (!m_setterAccessSpec) {
-        m_setterAccessSpec = q->m_settings->setterAsSlot && q->isQObjectSubclass()
+        m_setterAccessSpec = q->m_settings->setterAsSlot && q->m_class.isQObject()
                 ? InsertionPointLocator::PublicSlot
                 : InsertionPointLocator::Public;
     }
