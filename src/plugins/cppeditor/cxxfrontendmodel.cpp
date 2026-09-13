@@ -1212,9 +1212,16 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     // costs nothing: changes() is asked on a timer, and a cursor moving
     // inside the signature starts it as readily as a keystroke does, while
     // reading the file again is a parse of everything it includes.
+    //
+    // Locked, because it is read from two threads: the editor asks for the
+    // reading off the thread it is typing on and asks again on that thread
+    // when it comes back, and somebody applying the change while one is in
+    // flight asks a third time. Whoever gets there second waits for the
+    // reading rather than starting another.
     class LastReading
     {
     public:
+        QMutex mutex;
         QString text;
         std::shared_ptr<EditedDeclaration> declaration;
         bool answered = false;
@@ -1228,6 +1235,7 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
         if (!request.isValid())
             return {};
 
+        const QMutexLocker locker(&last->mutex);
         if (last->answered && last->text == request.source)
             return last->declaration;
         last->text = request.source;

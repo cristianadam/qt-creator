@@ -284,6 +284,15 @@ public:
     // business; what it is read from is this.
     EditedDeclarationRequest editedDeclarationRequest() const;
 
+    // Whether reading that is a parse of the whole file rather than of the
+    // declaration alone -- true of a front end that resolves names, which
+    // has to read the declaration in its surroundings.
+    //
+    // Whoever asks from the thread somebody is typing on has to ask
+    // elsewhere when this is set: it is a third of a second for a
+    // translation unit of any size.
+    bool readingParsesTheWholeFile = false;
+
     // Reads that. Held as a function because which front end reads it is
     // settled when the link is found, and there is nothing to read until
     // somebody has typed.

@@ -23,6 +23,7 @@
 
 #include "cppfunctiondecldeflink_test.h"
 
+#include "cppeditorwidget.h"
 #include "cppfunctiondecldeflink.h"
 #include "cppmodelmanager.h"
 #include "cpptoolstestcase.h"
@@ -30,6 +31,8 @@
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendmodel.h"
 #endif
+
+#include <texteditor/texteditor.h>
 
 #include <utils/changeset.h>
 #include <utils/fileutils.h>
@@ -404,6 +407,52 @@ void DeclDefLinkTest::testWritesATypeShortWhereTheScopeReachesIt()
     QCOMPARE(driver.applied(), QString("#include \"header.h\"\n"
                                        "\n"
                                        "void N::C::f(T a) {}\n"));
+}
+
+// The marker the editor shows beside a declaration whose other side no
+// longer says the same thing. This is the one place the reading is asked for
+// while somebody is typing -- and the reason it is asked for off the thread
+// they are typing on -- so it is driven through the editor, which is whose
+// path it is.
+void DeclDefLinkTest::testTheMarkerFollowsWhatIsTyped()
+{
+    TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QByteArray source = "class C {\n"
+                              "public:\n"
+                              "    void f(int a);\n"
+                              "};\n"
+                              "\n"
+                              "void C::f(int a) {}\n";
+    CppTestDocument file("file.cpp", source);
+    file.setBaseDirectory(dir.path());
+    QVERIFY(file.writeToDisk());
+
+    TextEditor::BaseTextEditor *editor = nullptr;
+    CppEditorWidget *widget = nullptr;
+    QVERIFY(TestCase::openCppEditor(file.filePath(), &editor, &widget));
+    testCase.closeEditorAtEndOfTestCase(editor);
+    QVERIFY(TestCase::waitForRehighlightedSemanticDocument(widget));
+
+    // The cursor on the declaration's own name, which is where a link is
+    // looked for.
+    QTextCursor cursor = widget->textCursor();
+    cursor.setPosition(source.indexOf("void f(") + 5);
+    widget->setTextCursor(cursor);
+    QTRY_VERIFY(widget->declDefLink());
+
+    // The two sides say the same thing, so there is nothing to mark.
+    QVERIFY(!widget->declDefLink()->isMarkerVisible());
+
+    // Renaming the parameter of the declaration makes them disagree.
+    cursor.setPosition(source.indexOf("void f(int a);") + 11);
+    cursor.setPosition(cursor.position() + 1, QTextCursor::KeepAnchor);
+    cursor.insertText("b");
+    widget->setTextCursor(cursor);
+    QTRY_VERIFY(widget->declDefLink() && widget->declDefLink()->isMarkerVisible());
 }
 
 void DeclDefLinkTest::testNoLinkOffAFunction()

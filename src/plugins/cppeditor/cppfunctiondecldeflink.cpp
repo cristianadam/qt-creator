@@ -641,6 +641,9 @@ static bool findLinkOnTheModel(const std::shared_ptr<FunctionDeclDefLink> &link,
                                                const Snapshot &) {
         return readEdited(request);
     };
+    // It reads the file and everything it includes, which is why the editor
+    // asks for it off the thread it is typing on.
+    link->readingParsesTheWholeFile = true;
     return true;
 }
 #endif

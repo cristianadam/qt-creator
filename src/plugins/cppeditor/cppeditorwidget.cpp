@@ -50,6 +50,7 @@
 #include <cplusplus/ASTPath.h>
 #include <cplusplus/MatchingText.h>
 
+#include <utils/async.h>
 #include <utils/infobar.h>
 #include <utils/progressindicator.h>
 #include <utils/qtcassert.h>
@@ -395,6 +396,11 @@ public:
     QAction *m_parseContextAction = nullptr;
     ParseContextWidget *m_parseContextWidget = nullptr;
     QToolButton *m_preprocessorButton = nullptr;
+
+    // Runs the decl/def link's reading off this thread, one at a time: the
+    // timer that starts it fires while somebody types, and what matters is
+    // the latest answer.
+    QtTaskTree::QSingleTaskTreeRunner m_declDefLinkMarkerRunner;
 
     CppLocalRenaming m_localRenaming;
     CppFunctionParamRenamingHandler m_paramRenamingHandler;
@@ -1350,12 +1356,7 @@ void CppEditorWidget::updateFunctionDeclDefLinkNow()
     const Document::Ptr semanticDoc = d->m_lastSemanticInfo.doc;
 
     if (d->m_declDefLink) {
-        // update the change marker
-        const Utils::ChangeSet changes = d->m_declDefLink->changes(semanticSnapshot);
-        if (changes.isEmpty())
-            d->m_declDefLink->hideMarker(this);
-        else
-            d->m_declDefLink->showMarker(this);
+        updateDeclDefLinkMarker();
         return;
     }
 
@@ -1366,6 +1367,50 @@ void CppEditorWidget::updateFunctionDeclDefLinkNow()
     snapshot.insert(semanticDoc);
 
     d->m_declDefLinkFinder->startFindLinkAt(textCursor(), semanticDoc, snapshot);
+}
+
+// Shows the link's marker where the two sides of the function no longer say
+// the same thing, and hides it where they do. Which it is takes reading the
+// declaration as it now stands, and on a front end that resolves names that
+// reading is a parse of the file and everything it includes -- no work for
+// the thread somebody is typing on.
+//
+// So it is read there and the marker set when it comes back. The link keeps
+// what it read, so the comparison below finds it without reading again, and
+// the timer that starts this fires no faster than it can finish.
+void CppEditorWidget::updateDeclDefLinkMarker()
+{
+    const std::shared_ptr<FunctionDeclDefLink> link = d->m_declDefLink;
+    const Snapshot semanticSnapshot = d->m_lastSemanticInfo.snapshot;
+
+    const auto setMarker = [this, link, semanticSnapshot] {
+        // Somebody moved on while it was being read: another link, or none.
+        if (d->m_declDefLink != link)
+            return;
+        if (link->changes(semanticSnapshot).isEmpty())
+            link->hideMarker(this);
+        else
+            link->showMarker(this);
+    };
+
+    if (!link->readingParsesTheWholeFile) {
+        setMarker();
+        return;
+    }
+
+    const EditedDeclarationRequest request = link->editedDeclarationRequest();
+    const auto read = link->readEditedDeclaration;
+    if (!request.isValid() || !read) {
+        setMarker();
+        return;
+    }
+
+    const auto onSetup = [read, request, semanticSnapshot](Async<void> &task) {
+        task.setConcurrentCallData(
+            [read, request, semanticSnapshot] { read(request, semanticSnapshot); });
+    };
+    const auto onDone = [setMarker](const Async<void> &) { setMarker(); };
+    d->m_declDefLinkMarkerRunner.start({AsyncTask<void>(onSetup, onDone)});
 }
 
 void CppEditorWidget::onFunctionDeclDefLinkFound(std::shared_ptr<FunctionDeclDefLink> link)

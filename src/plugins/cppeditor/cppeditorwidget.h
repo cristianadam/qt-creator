@@ -116,6 +116,7 @@ protected:
 private:
     void updateFunctionDeclDefLink();
     void updateFunctionDeclDefLinkNow();
+    void updateDeclDefLinkMarker();
     void abortDeclDefLink();
     void onFunctionDeclDefLinkFound(std::shared_ptr<Internal::FunctionDeclDefLink> link);
 

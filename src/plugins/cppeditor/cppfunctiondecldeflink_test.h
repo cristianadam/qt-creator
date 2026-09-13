@@ -20,6 +20,7 @@ private slots:
     void testWritesATypeAsTheOtherSideMustSpellIt();
     void testWritesATypeShortWhereTheScopeReachesIt();
     void testNoLinkOffAFunction();
+    void testTheMarkerFollowsWhatIsTyped();
 };
 
 } // namespace CppEditor::Internal::Tests
