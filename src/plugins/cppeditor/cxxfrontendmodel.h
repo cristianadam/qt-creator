@@ -177,12 +177,10 @@ struct CxxFrontendDeclDefLink
     //
     // What it does cost, once per edit, is a parse of the file and
     // everything it includes -- a third of a second for a translation unit
-    // of any size -- and the caller asks for it on the editor's own thread.
-    // That is the reason this whole model is behind an environment
-    // variable, and moving the reading off that thread is what it would
-    // take to offer it to anybody.
-    std::function<std::shared_ptr<EditedDeclaration>(const QTextCursor &linkSelection,
-                                                     const QTextCursor &nameSelection)>
+    // of any size. It takes what the editor said rather than the editor's
+    // own cursors, so that whoever asks can ask from a thread nobody is
+    // typing on.
+    std::function<std::shared_ptr<EditedDeclaration>(const EditedDeclarationRequest &request)>
         readEditedDeclaration;
 };
 

@@ -1223,38 +1223,34 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
 
     link.readEditedDeclaration =
         [builtinSnapshot, workingCopy, filePath, holdingFile, sourcePlace, targetPlace,
-         targetName, last](const QTextCursor &, const QTextCursor &nameSelection)
+         targetName, last](const EditedDeclarationRequest &request)
         -> std::shared_ptr<EditedDeclaration> {
-        const QTextDocument * const text = nameSelection.document();
-        if (!text)
+        if (!request.isValid())
             return {};
 
-        const QString source = text->toPlainText();
-        if (last->answered && last->text == source)
+        if (last->answered && last->text == request.source)
             return last->declaration;
-        last->text = source;
+        last->text = request.source;
         last->answered = true;
         last->declaration = {};
 
         HoldingDocument holding = readWith(builtinSnapshot, workingCopy, holdingFile,
-                                           filePath, source);
+                                           filePath, request.source);
         if (!holding.document)
             return {};
 
         // Where the declaration now is, which is where its name now is: the
         // link's name selection followed what was typed.
-        const QTextBlock block = text->findBlock(nameSelection.selectionStart());
         CxxFrontendDocument::Place place = sourcePlace;
-        place.line = block.blockNumber() + 1;
-        place.column = nameSelection.selectionStart() - block.position() + 1;
+        place.line = request.nameLine;
+        place.column = request.nameColumn;
 
         CxxFrontendDocument::Signature signature = holding.document->signatureAt(place,
                                                                                  targetPlace);
         if (!signature.isValid())
             return {};
         last->declaration = std::make_shared<CxxFrontendEditedDeclaration>(
-            std::move(holding), std::move(signature), nameSelection.selectedText(),
-            targetName);
+            std::move(holding), std::move(signature), request.name, targetName);
         return last->declaration;
     };
 

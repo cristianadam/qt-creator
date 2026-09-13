@@ -637,10 +637,9 @@ static bool findLinkOnTheModel(const std::shared_ptr<FunctionDeclDefLink> &link,
 
     // The snapshot is the built-in model's and this one has no use for it.
     const auto readEdited = found->readEditedDeclaration;
-    link->readEditedDeclaration = [readEdited](const QTextCursor &linkSelection,
-                                               const QTextCursor &nameSelection,
+    link->readEditedDeclaration = [readEdited](const EditedDeclarationRequest &request,
                                                const Snapshot &) {
-        return readEdited(linkSelection, nameSelection);
+        return readEdited(request);
     };
     return true;
 }
@@ -718,10 +717,10 @@ static std::shared_ptr<FunctionDeclDefLink> findLinkHelper(
     const Document::Ptr targetDocument = targetFile->cppDocument();
     link->readEditedDeclaration =
         [sourceDocument, sourceFunction, targetDocument, targetFunction](
-            const QTextCursor &linkSelection, const QTextCursor &, const Snapshot &snapshot)
+            const EditedDeclarationRequest &request, const Snapshot &snapshot)
         -> std::shared_ptr<EditedDeclaration> {
             return std::make_shared<BuiltinEditedDeclaration>(
-                linkSelection.selectedText(), snapshot, sourceDocument, sourceFunction,
+                request.declarationText, snapshot, sourceDocument, sourceFunction,
                 targetDocument, targetFunction);
         };
 
@@ -954,6 +953,24 @@ static QString ensureCorrectParameterSpacing(const QString &text, bool isFirstPa
     return text;
 }
 
+EditedDeclarationRequest FunctionDeclDefLink::editedDeclarationRequest() const
+{
+    EditedDeclarationRequest request;
+    request.declarationText = linkSelection.selectedText();
+    request.name = nameSelection.selectedText();
+
+    const QTextDocument * const text = nameSelection.document();
+    if (!text)
+        return request;
+    request.source = text->toPlainText();
+
+    // Where the name now stands: the selection followed what was typed.
+    const QTextBlock block = text->findBlock(nameSelection.selectionStart());
+    request.nameLine = block.blockNumber() + 1;
+    request.nameColumn = nameSelection.selectionStart() - block.position() + 1;
+    return request;
+}
+
 ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffset)
 {
     ChangeSet changes;
@@ -966,7 +983,7 @@ ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffse
 
     QTC_ASSERT(readEditedDeclaration, return changes);
     const std::shared_ptr<EditedDeclaration> edited
-        = readEditedDeclaration(linkSelection, nameSelection, snapshot);
+        = readEditedDeclaration(editedDeclarationRequest(), snapshot);
     if (!edited || !edited->isValid())
         return changes;
     const FunctionSignature newSignature = edited->signature();

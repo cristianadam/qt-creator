@@ -183,6 +183,32 @@ public:
     virtual QString rewrittenParameterType(int index) const = 0;
 };
 
+// What reading the declaration as it now stands needs of the editor, taken
+// on the thread that owns the text so that the reading itself need not be:
+// reading it is a parse, and a parse is no work for the thread somebody is
+// typing on.
+struct EditedDeclarationRequest
+{
+    // The file as it now stands. What a front end that reads the
+    // declaration in its surroundings parses; a front end that reads the
+    // fragment on its own has no use for it.
+    QString source;
+
+    // The declaration as it is now written, which is what a front end
+    // reading the fragment on its own reads.
+    QString declarationText;
+
+    // The name it is declared under and where that name now stands,
+    // one-based: what a front end that reads the whole file finds the
+    // declaration by, a position on the specifiers in front of it reaching
+    // a definition but not a declaration.
+    QString name;
+    int nameLine = 0;
+    int nameColumn = 0;
+
+    bool isValid() const { return nameLine > 0; }
+};
+
 class FunctionDeclDefLinkFinder : public QObject
 {
     Q_OBJECT
@@ -253,17 +279,20 @@ public:
     // comment above it documents things under.
     QString targetShortName;
 
-    // Reads the declaration as it now stands in the editor. Held as a
-    // function because which front end reads it is settled when the link is
-    // found, and there is nothing to read until somebody has typed.
+    // What the editor holds of the declaration right now, taken off the
+    // cursors that followed what was typed. Where it is read is the caller's
+    // business; what it is read from is this.
+    EditedDeclarationRequest editedDeclarationRequest() const;
+
+    // Reads that. Held as a function because which front end reads it is
+    // settled when the link is found, and there is nothing to read until
+    // somebody has typed.
     //
-    // Both cursors, because the two front ends need different things of the
-    // same edit: the text the declaration now says, and where its name now
-    // stands -- a model that resolves names has to read the file again and
-    // find the declaration in it, and the name is what it is found by. Both
-    // followed what was typed, which is why they are cursors.
-    std::function<std::shared_ptr<EditedDeclaration>(const QTextCursor &linkSelection,
-                                                     const QTextCursor &nameSelection,
+    // Takes what the editor said rather than the editor's own cursors, so
+    // that it can be called from a thread that does not own them: for a
+    // front end that resolves names this is a parse of the file and
+    // everything it includes.
+    std::function<std::shared_ptr<EditedDeclaration>(const EditedDeclarationRequest &request,
                                                      const CPlusPlus::Snapshot &snapshot)>
         readEditedDeclaration;
 
