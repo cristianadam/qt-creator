@@ -5,6 +5,8 @@
 
 #include "typehierarchybuilder.h"
 
+#include "cppworkingcopy.h"
+
 #include <coreplugin/helpitem.h>
 #include <cplusplus/CppDocument.h>
 #include <texteditor/texteditor.h>
@@ -140,8 +142,12 @@ public:
 
     CppClass *toCppClass() final;
 
+    // \a workingCopy is what a front end reading the files again is handed:
+    // it is built off the editor's own documents, so whoever runs this on a
+    // worker has to have taken it where those live.
     void lookupBases(const QFuture<void> &future, CPlusPlus::Symbol *declaration,
-                     const CPlusPlus::LookupContext &context);
+                     const CPlusPlus::LookupContext &context,
+                     const WorkingCopy &workingCopy);
     void lookupDerived(const QFuture<void> &future, CPlusPlus::Symbol *declaration,
                        const CPlusPlus::Snapshot &snapshot);
 

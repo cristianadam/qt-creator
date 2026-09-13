@@ -44,6 +44,10 @@ struct ExecData
     CPlusPlus::Snapshot snapshot;
     CPlusPlus::LookupItem lookupItem;
     CPlusPlus::LookupContext context;
+
+    // Taken where the editor's documents live, because building it reads
+    // what is being typed: the hierarchy below is worked out on a worker.
+    WorkingCopy workingCopy;
 };
 using ExecFunction = std::function<QFuture<std::shared_ptr<CppElement>>(const ExecData &)>;
 
@@ -163,12 +167,12 @@ CppClass *CppClass::toCppClass()
 // file's own parse -- half a hierarchy is worse than the other model's whole
 // one.
 static bool lookupBasesOnTheModel(CppClass *cppClass, Symbol *declaration,
-                                  const Snapshot &snapshot)
+                                  const Snapshot &snapshot, const WorkingCopy &workingCopy)
 {
     if (!declaration || declaration->filePath().isEmpty())
         return false;
     const std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> bases
-        = cxxFrontendBasesOfTheClassAt(snapshot, CppModelManager::workingCopy(),
+        = cxxFrontendBasesOfTheClassAt(snapshot, workingCopy,
                                        declaration->filePath(), declaration->line(),
                                        declaration->column());
     if (!bases)
@@ -199,11 +203,13 @@ static bool lookupBasesOnTheModel(CppClass *cppClass, Symbol *declaration,
 #endif // QTC_WITH_CXX_FRONTEND
 
 void CppClass::lookupBases(const QFuture<void> &future, Symbol *declaration,
-                           const LookupContext &context)
+                           const LookupContext &context, const WorkingCopy &workingCopy)
 {
 #ifdef QTC_WITH_CXX_FRONTEND
-    if (lookupBasesOnTheModel(this, declaration, context.snapshot()))
+    if (lookupBasesOnTheModel(this, declaration, context.snapshot(), workingCopy))
         return;
+#else
+    Q_UNUSED(workingCopy)
 #endif
 
     ClassOrNamespace *hierarchy = context.lookupType(declaration);
@@ -407,7 +413,7 @@ static void createTypeHierarchy(QPromise<std::shared_ptr<CppElement>> &promise,
         return;
     std::shared_ptr<CppClass> cppClass(new CppClass(declaration));
     const QFuture<void> future = QFuture<void>(promise.future());
-    cppClass->lookupBases(future, declaration, contextToUse);
+    cppClass->lookupBases(future, declaration, contextToUse, execData.workingCopy);
     if (promise.isCanceled())
         return;
     cppClass->lookupDerived(future, declaration, execData.snapshot);
@@ -642,7 +648,9 @@ static QFuture<std::shared_ptr<CppElement>> exec(SourceFunction &&sourceFunction
     if (!lookupItem.declaration())
         return createFinishedFuture();
 
-    return std::invoke(std::forward<ExecFunction>(execFunction), ExecData{snapshot, lookupItem, lookupContext});
+    return std::invoke(std::forward<ExecFunction>(execFunction),
+                       ExecData{snapshot, lookupItem, lookupContext,
+                                CppModelManager::workingCopy()});
 }
 
 static QFuture<std::shared_ptr<CppElement>> asyncExec(const ExecData &execData)

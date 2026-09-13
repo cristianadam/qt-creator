@@ -1049,7 +1049,7 @@ void registerMcpTools()
             futureInterface.reportStarted();
             const QFuture<void> future = futureInterface.future();
             CppClass cppClass(symbol);
-            cppClass.lookupBases(future, symbol, context);
+            cppClass.lookupBases(future, symbol, context, CppModelManager::workingCopy());
             cppClass.lookupDerived(future, symbol, context.snapshot());
             futureInterface.reportFinished();
 
