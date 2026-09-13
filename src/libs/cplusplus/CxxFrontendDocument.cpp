@@ -770,6 +770,11 @@ public:
     // record: the token before its name.
     [[nodiscard]] cxx::TokenKind classKeyOf(cxx::Symbol *symbol) const;
 
+    // What a class's member function says of itself, for a reader that
+    // asks the class rather than the function.
+    [[nodiscard]] CxxFrontendDocument::MemberFunction describeMemberFunction(
+        cxx::FunctionSymbol *function, cxx::SourceLocation at) const;
+
     // The file a token was written in, which since a header is read into
     // this translation unit is not always this file.
     [[nodiscard]] QString fileOf(cxx::SourceLocation location) const;
@@ -2119,6 +2124,30 @@ cxx::UnqualifiedIdAST *calledNameOf(cxx::ExpressionAST *expression)
 
 } // namespace
 
+CxxFrontendDocument::MemberFunction CxxFrontendDocument::Private::describeMemberFunction(
+    cxx::FunctionSymbol *function, cxx::SourceLocation at) const
+{
+    MemberFunction member;
+    member.name = qualifiedNameOf(function);
+    member.parameterCount = int(parameterCountOf(function));
+    const cxx::SourcePosition position = unit.tokenStartPosition(at);
+    member.line = int(position.line);
+    member.column = int(position.column);
+    member.isPureVirtual = function->isPure();
+    // It has a body right there, so its definition is where its
+    // declaration is.
+    member.isDefinedHere = function->isDefined();
+    member.isVirtual = function->isVirtual();
+    member.isFinal = function->isFinal();
+    switch (function->accessSpecifier()) {
+    case cxx::AccessSpecifier::kProtected: member.access = Access::Protected; break;
+    case cxx::AccessSpecifier::kPrivate: member.access = Access::Private; break;
+    default: member.access = Access::Public; break;
+    }
+    member.qtMethod = qtMethodOf(function);
+    return member;
+}
+
 QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsAt(
     int line, int column) const
 {
@@ -2153,6 +2182,19 @@ QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsA
         while (auto * const templated = dynamic_cast<cxx::TemplateDeclarationAST *>(declaration))
             declaration = templated->declaration;
 
+        // Defined right here, which is a node of its own rather than a
+        // declaration with a body hanging off it.
+        if (auto * const defined
+            = dynamic_cast<cxx::FunctionDefinitionAST *>(declaration)) {
+            auto * const function = dynamic_cast<cxx::FunctionSymbol *>(defined->symbol);
+            const cxx::SourceLocation at
+                = defined->declarator ? d->nameLocationOfDeclarator(defined->declarator)
+                                      : cxx::SourceLocation();
+            if (function && at && !d->unit.tokenAt(at).macroGenerated())
+                functions.append(d->describeMemberFunction(function, at));
+            continue;
+        }
+
         auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(declaration);
         if (!simple)
             continue;
@@ -2171,21 +2213,13 @@ QList<CxxFrontendDocument::MemberFunction> CxxFrontendDocument::memberFunctionsA
             auto * const function = dynamic_cast<cxx::FunctionSymbol *>(declared->symbol);
             if (!function || !declared->declarator)
                 continue;
-            // Defined right here, so its definition is where its
-            // declaration is and there is nothing to put in order.
-            if (function->definition() == function)
-                continue;
 
             const cxx::SourceLocation at
                 = d->nameLocationOfDeclarator(declared->declarator);
             if (!at || d->unit.tokenAt(at).macroGenerated())
                 continue;
 
-            const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
-            functions.append({qualifiedNameOf(function),
-                              int(d->parameterCountOf(function)),
-                              int(position.line), int(position.column),
-                              function->isPure()});
+            functions.append(d->describeMemberFunction(function, at));
         }
     }
     return functions;

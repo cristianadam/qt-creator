@@ -1370,7 +1370,12 @@ QList<CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
     if (!document)
         return {};
-    return document->memberFunctionsAt(line, column);
+    // What this answers is the ones with a definition to put in order,
+    // which is what both of its readers are asking about.
+    return Utils::filtered(document->memberFunctionsAt(line, column),
+                           [](const CxxFrontendDocument::MemberFunction &function) {
+                               return !function.isDefinedHere;
+                           });
 }
 
 std::optional<CxxFrontendDocument::LiteralInAFunction> cxxFrontendLiteralInAFunctionAt(

@@ -55,6 +55,10 @@ public:
         Invokable,
     };
 
+    // Who may name a member, which decides the section a declaration of
+    // one goes into.
+    enum class Access { Public, Protected, Private };
+
     enum class Kind {
         Unknown,
         Class,
@@ -772,7 +776,24 @@ public:
         // -- so whoever is looking for the definitions of a class's members
         // is not looking for this one's.
         bool isPureVirtual = false;
+
+        // Given a body right there, so its definition is where its
+        // declaration is: whoever is putting definitions in order has
+        // nothing to do about it, and whoever is offering what a class
+        // below could implement still has.
+        bool isDefinedHere = false;
+
+        // What a class below it may do about it, and where a declaration
+        // of it would go in that class.
+        bool isVirtual = false;
+        bool isFinal = false;
+        Access access = Access::Public;
+        QtMethod qtMethod = QtMethod::None;
     };
+    // Every member function the class at a position declares -- the ones
+    // it defines right there included, which say so. A reader putting
+    // definitions in order wants the rest; one offering what a class
+    // below could implement wants them all.
     QList<MemberFunction> memberFunctionsAt(int line, int column) const;
 
     // A stretch of text this file writes, counted from one: where its

@@ -1786,13 +1786,29 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "};\n")
         << QStringList({"S::b/0 @2:10", "S::a/2 @3:9"});
 
-    // Defined here, so its definition is already where its declaration is.
+    // A function defined here says so: its definition is already where its
+    // declaration is, which is nothing to put in order and is still
+    // something a class below it could implement.
     QTest::newRow("a function defined inside the class")
         << QByteArray("struct $S {\n"
                       "    void b() {}\n"
                       "    void c();\n"
                       "};\n")
-        << QStringList("S::c/0 @3:10");
+        << QStringList{"S::b/0 @2:10 defined", "S::c/0 @3:10"};
+
+    // What a class below it may do about one, and where a declaration of
+    // it would go in that class.
+    QTest::newRow("what a class below may do about a member")
+        << QByteArray("struct $S {\n"
+                      "    virtual void a();\n"
+                      "protected:\n"
+                      "    virtual void b() final;\n"
+                      "private:\n"
+                      "    void c();\n"
+                      "};\n")
+        << QStringList{"S::a/0 @2:18 virtual",
+                       "S::b/0 @4:18 virtual final protected",
+                       "S::c/0 @6:10 private"};
 
     QTest::newRow("a template member")
         << QByteArray("struct $S {\n"
@@ -1823,7 +1839,7 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass_data()
                       "    virtual void p() = 0;\n"
                       "    void q();\n"
                       "};\n")
-        << QStringList({"S::p/0 @2:18 pure", "S::q/0 @3:10"});
+        << QStringList({"S::p/0 @2:18 pure virtual", "S::q/0 @3:10"});
 
     // Written in the class without being one of its members: somebody else's
     // function, named here to let it in. So it is not among the ones whose
@@ -1853,10 +1869,22 @@ void tst_cxxfrontenddocument::memberFunctionsOfAClass()
     const QList<CxxFrontendDocument::MemberFunction> functions
         = document.memberFunctionsAt(positions.first().line, positions.first().column);
     for (const CxxFrontendDocument::MemberFunction &function : functions) {
-        described.append(QString("%1/%2 @%3:%4%5").arg(function.name)
-                             .arg(function.parameterCount)
-                             .arg(function.line).arg(function.column)
-                             .arg(function.isPureVirtual ? " pure" : ""));
+        QString said = QString("%1/%2 @%3:%4").arg(function.name)
+                           .arg(function.parameterCount)
+                           .arg(function.line).arg(function.column);
+        if (function.isPureVirtual)
+            said += " pure";
+        if (function.isDefinedHere)
+            said += " defined";
+        if (function.isVirtual)
+            said += " virtual";
+        if (function.isFinal)
+            said += " final";
+        if (function.access == CxxFrontendDocument::Access::Protected)
+            said += " protected";
+        if (function.access == CxxFrontendDocument::Access::Private)
+            said += " private";
+        described.append(said);
     }
     QCOMPARE(described, expected);
 }
