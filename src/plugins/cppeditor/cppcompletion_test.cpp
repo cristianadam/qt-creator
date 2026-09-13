@@ -16,6 +16,7 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <texteditor/codeassist/assistproposaliteminterface.h>
 #include <texteditor/codeassist/iassistproposal.h>
+#include <texteditor/codeassist/ifunctionhintproposalmodel.h>
 #include <texteditor/completionsettings.h>
 #include <texteditor/syntaxhighlighter.h>
 #include <texteditor/textdocument.h>
@@ -175,6 +176,28 @@ public:
             return line.trimmed();
         }
         return {};
+    }
+
+    // The hints shown while a call is being written: one line per candidate
+    // signature, with the argument being typed in bold. \a typedSoFar is
+    // what stands after the opening parenthesis, which is what tells the
+    // model which argument that is.
+    QStringList getFunctionHints(const QString &typedSoFar = {}) const
+    {
+        const QScopedPointer<IAssistProposal> proposal(proposalAtMarker());
+        if (!proposal)
+            return {};
+        const FunctionHintProposalModelPtr hints
+            = proposal->model().dynamicCast<IFunctionHintProposalModel>();
+        if (!hints)
+            return {};
+
+        hints->activeArgument(typedSoFar);
+        QStringList texts;
+        for (int i = 0; i < hints->size(); ++i)
+            texts << hints->text(i);
+        texts.sort();
+        return texts;
     }
 
     void insertText(const QByteArray &text)
@@ -538,6 +561,70 @@ void CompletionTest::testGlobalCompletion()
     const QStringList completions = test.getCompletions();
     QVERIFY(isProbablyGlobalCompletion(completions));
     QVERIFY(Utils::toSet(completions).contains(Utils::toSet(requiredCompletionItems)));
+}
+
+// The signatures shown while a call is being written, and which argument of
+// them is being typed. Nothing covered this before.
+void CompletionTest::testFunctionHints_data()
+{
+    QTest::addColumn<QByteArray>("code");
+    QTest::addColumn<QByteArray>("prefix");
+    QTest::addColumn<QString>("typedSoFar");
+    QTest::addColumn<QStringList>("expectedHints");
+
+    QTest::newRow("a function")
+        << _("int add(int a, char b);\n"
+             "void f() { @ }\n")
+        << _("add(")
+        << QString()
+        << QStringList("int add(<b>int a</b>, char b)");
+
+    // Which argument is being written is read off what stands after the
+    // parenthesis, so the second one is marked once a comma has been typed.
+    QTest::newRow("the argument after a comma")
+        << _("int add(int a, char b);\n"
+             "void f() { @ }\n")
+        << _("add(")
+        << QString("1, ")
+        << QStringList("int add(int a, <b>char b</b>)");
+
+    QTest::newRow("an overload set")
+        << _("void h(int a);\n"
+             "void h(char *s, int n);\n"
+             "void f() { @ }\n")
+        << _("h(")
+        << QString()
+        << QStringList({"void h(<b>char *s</b>, int n)", "void h(<b>int a</b>)"});
+
+    QTest::newRow("a member function through a pointer")
+        << _("struct S { void m(int a) const; };\n"
+             "void f(S *s) { @ }\n")
+        << _("s->m(")
+        << QString()
+        << QStringList("void m(<b>int a</b>) const");
+
+    // Nothing to mark, and the marking is written out all the same: the
+    // printer leaves the marked stretch empty and it stands at the front.
+    // A wart, pinned as it is.
+    QTest::newRow("a function taking nothing")
+        << _("void g();\n"
+             "void f() { @ }\n")
+        << _("g(")
+        << QString()
+        << QStringList("<b></b>void g()");
+}
+
+void CompletionTest::testFunctionHints()
+{
+    QFETCH(QByteArray, code);
+    QFETCH(QByteArray, prefix);
+    QFETCH(QString, typedSoFar);
+    QFETCH(QStringList, expectedHints);
+
+    CompletionTestCase test(code, prefix);
+    QVERIFY(test.succeededSoFar());
+
+    QCOMPARE(test.getFunctionHints(typedSoFar), expectedHints);
 }
 
 void CompletionTest::testDoxygenTagCompletion_data()

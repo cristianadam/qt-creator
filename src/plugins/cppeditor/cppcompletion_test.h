@@ -23,6 +23,8 @@ private slots:
     void testGlobalCompletion_data();
     void testGlobalCompletion();
 
+    void testFunctionHints_data();
+    void testFunctionHints();
     void testDoxygenTagCompletion_data();
     void testDoxygenTagCompletion();
 
