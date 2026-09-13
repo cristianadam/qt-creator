@@ -3,6 +3,7 @@
 
 #include "cpprenaming_test.h"
 
+#include "cppcodemodelsettings.h"
 #include "cppeditorwidget.h"
 #include "cppmodelmanager.h"
 #include "quickfixes/cppquickfix_test.h"
@@ -54,6 +55,9 @@ void GlobalRenamingTest::test_data()
     QTest::addColumn<QStringList>("fileNames");
     QTest::addColumn<QByteArrayList>("originals");
     QTest::addColumn<QByteArrayList>("expected");
+    // What it writes when the search is asked to say what each place does
+    // with the thing, where that is not the same. Empty where it is.
+    QTest::addColumn<QByteArrayList>("whenCategorized");
     QTest::addColumn<QString>("replacement");
 
     const char testClassHeader[] = R"cpp(
@@ -99,10 +103,35 @@ MyNewClass::~MyNewClass() {}
 
 void MyNewClass::run() {}
 )cpp";
+    // What the comments say is left alone when the results are categorised,
+    // which is a wart of that setting rather than of either front end: the
+    // occurrences in comments are found and added to the results, and then
+    // the replacement does not reach them. Pinned so that it is visible.
+    const QByteArray categorizedHeaderClassName = R"cpp(
+/**
+ * \brief MyClass
+ */
+class MyNewClass {
+  /** \brief MyClass::MyClass */
+  MyNewClass() {}
+  ~MyNewClass();
+  /** \brief MyClass::run */
+  void run();
+};
+)cpp";
+    const QByteArray categorizedSourceClassName = R"cpp(
+#include "file.h"
+/** \brief MyClass::~MyClass */
+MyNewClass::~MyNewClass() {}
+
+void MyNewClass::run() {}
+)cpp";
     QTest::newRow("class name")
         << QStringList{"file.h", "file.cpp"}
         << QByteArrayList{origHeaderClassName, testClassSource}
-        << QByteArrayList{newHeaderClassName, newSourceClassName} << QString("MyNewClass");
+        << QByteArrayList{newHeaderClassName, newSourceClassName}
+        << QByteArrayList{categorizedHeaderClassName, categorizedSourceClassName}
+        << QString("MyNewClass");
 
     QByteArray origSourceMethodName(testClassSource);
     const int methodOffset = origSourceMethodName.indexOf("::run()");
@@ -127,10 +156,24 @@ MyClass::~MyClass() {}
 
 void MyClass::runAgain() {}
 )cpp";
+    const QByteArray categorizedHeaderMethodName = R"cpp(
+/**
+ * \brief MyClass
+ */
+class MyClass {
+  /** \brief MyClass::MyClass */
+  MyClass() {}
+  ~MyClass();
+  /** \brief MyClass::run */
+  void runAgain();
+};
+)cpp";
     QTest::newRow("method name")
         << QStringList{"file.h", "file.cpp"}
         << QByteArrayList{testClassHeader, origSourceMethodName}
-        << QByteArrayList{newHeaderMethodName, newSourceMethodName} << QString("runAgain");
+        << QByteArrayList{newHeaderMethodName, newSourceMethodName}
+        << QByteArrayList{categorizedHeaderMethodName, newSourceMethodName}
+        << QString("runAgain");
 
     // A file the search has to reach on its own: nothing in the header says
     // that this one uses what it declares.
@@ -142,7 +185,7 @@ void MyClass::runAgain() {}
         << QByteArrayList{"void renamed();\n",
                           "#include \"file.h\"\nvoid renamed() {}\n",
                           "#include \"file.h\"\nvoid g() { renamed(); }\n"}
-        << QString("renamed");
+        << QByteArrayList() << QString("renamed");
 
     // A name spelled the same and meaning something else is left alone,
     // which is the difference between this and a text replacement.
@@ -162,7 +205,7 @@ void MyClass::runAgain() {}
                           "void B::run() {}\n"
                           "void g(A &a, B &b) { a.walk(); b.run(); }\n",
                           "struct B { void run(); };\n"}
-        << QString("walk");
+        << QByteArrayList() << QString("walk");
 
     // A variable, where each place is a use rather than a declaration.
     QTest::newRow("a variable used in two files")
@@ -173,7 +216,7 @@ void MyClass::runAgain() {}
         << QByteArrayList{"extern int total;\n",
                           "#include \"file.h\"\nint total = 0;\nvoid f() { total = 1; }\n",
                           "#include \"file.h\"\nint g() { return total; }\n"}
-        << QString("total");
+        << QByteArrayList() << QString("total");
 }
 
 void GlobalRenamingTest::test()
@@ -181,17 +224,34 @@ void GlobalRenamingTest::test()
     QFETCH(QStringList, fileNames);
     QFETCH(QByteArrayList, originals);
     QFETCH(QByteArrayList, expected);
+    QFETCH(QByteArrayList, whenCategorized);
     QFETCH(QString, replacement);
 
     QCOMPARE(originals.size(), fileNames.size());
     QCOMPARE(expected.size(), fileNames.size());
 
-    QList<TestDocumentPtr> testDocuments;
-    for (int i = 0; i < fileNames.size(); ++i) {
-        testDocuments << CppTestDocument::create(fileNames.at(i).toUtf8(), originals.at(i),
-                                                 expected.at(i));
+    // The same rename with the search saying what each place does with the
+    // thing and without. It is one search either way and the places it finds
+    // must be the same ones; the setting only decides whether they are
+    // sorted into reads and writes for the view.
+    for (const bool categorize : {false, true}) {
+        const bool saved = CppCodeModelSettings::categorizeFindReferences();
+        CppCodeModelSettings::setCategorizeFindReferences(categorize);
+        const QScopeGuard restore([saved] {
+            CppCodeModelSettings::setCategorizeFindReferences(saved);
+        });
+
+        const QByteArrayList &wanted = categorize && !whenCategorized.isEmpty() ? whenCategorized
+                                                                                : expected;
+        QList<TestDocumentPtr> testDocuments;
+        for (int i = 0; i < fileNames.size(); ++i) {
+            testDocuments << CppTestDocument::create(fileNames.at(i).toUtf8(), originals.at(i),
+                                                     wanted.at(i));
+        }
+        RenamingTestRunner testRunner(testDocuments, replacement);
+        if (QTest::currentTestFailed())
+            return;
     }
-    RenamingTestRunner testRunner(testDocuments, replacement);
 }
 
 } // namespace CppEditor::Internal::Tests

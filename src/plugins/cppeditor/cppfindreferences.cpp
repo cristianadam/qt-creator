@@ -260,7 +260,8 @@ public:
             const QString lineText = place.place.line >= 1 && place.place.line <= lines.size()
                                          ? lines.at(place.place.line - 1)
                                          : QString();
-            usages.append(CPlusPlus::Usage(filePath, lineText, place.containingFunction, {},
+            usages.append(CPlusPlus::Usage(filePath, lineText, place.containingFunction,
+                                           place.tags,
                                            place.place.line, place.place.column - 1,
                                            place.place.length));
         }
@@ -307,10 +308,11 @@ public:
         const CPlusPlus::Identifier *symbolId = symbol->identifier();
 
 #ifdef QTC_WITH_CXX_FRONTEND
-        // Where the search does not have to say how each place uses the
-        // thing, the other model can answer: which of them is a read and
-        // which a write is a reading of each place that it does not do.
-        if (!categorize && cxxFrontendModelRequested()) {
+        // The other model answers either way now: what each place does with
+        // the thing is a reading it does too. With the setting off neither
+        // front end tags anything, so the tags it hands over are simply not
+        // looked at.
+        if (cxxFrontendModelRequested()) {
             const ProcessFileOnTheModel onTheModel(workingCopy, snapshot, symbol);
             if (const std::optional<QList<CPlusPlus::Usage>> found = onTheModel(filePath)) {
                 m_promise->suspendIfRequested();
