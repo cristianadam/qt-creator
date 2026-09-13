@@ -587,12 +587,13 @@ QStringList drawnBy(OutlineModel &model, const QModelIndex &parent = {}, int dep
         if (depth == 0 && row == 0)
             continue;
         const Utils::Link link = model.linkFromIndex(index);
-        lines.append(QString("%1%2 @%3 ->%4:%5%6")
+        lines.append(QString("%1%2 @%3 ->%4:%5:%6%7")
                          .arg(QString(depth * 2, ' '),
                               index.data(Qt::DisplayRole).toString())
                          .arg(model.positionFromIndex(index).line)
                          .arg(link.targetFilePath.fileName())
                          .arg(link.target.line)
+                         .arg(link.target.column)
                          .arg(model.isGenerated(index) ? " generated" : ""));
         lines.append(drawnBy(model, index, depth + 1));
     }
@@ -693,6 +694,14 @@ static const char *knownOutlineDivergence(const QString &row)
     // outline filters those rows out -- see OutlineProxyModel.
     if (row == "members a macro declared")
         return "the two put a macro's declaration in different places";
+
+    // Where a row with no name of its own takes a reader: this model sends
+    // them to the brace the namespace opens with, the built-in one to the
+    // start of the line, having no name token to have recorded a column of.
+    // The same line either way, and nothing else in these rows differs by a
+    // column -- which is why the column is compared.
+    if (row == "a namespace written without a name")
+        return "the two put an unnamed namespace at different columns";
 
     return nullptr;
 }
