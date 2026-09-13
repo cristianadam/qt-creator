@@ -173,6 +173,17 @@ public:
     Qt::CheckState checkState() const override { return checked ? Qt::Checked : Qt::Unchecked; }
 
     const Function *function = nullptr;
+
+    // What writing it into the class being added to amounts to: the
+    // declaration as it has to be written there -- every name in it as
+    // little qualified as still finds it from there -- the same with the
+    // class's own name in front, for a definition standing outside, and
+    // the name it is written under. Read where the function is read,
+    // since that is the front end's part of the work.
+    QString declarationText;
+    QString definitionText;
+    QString functionName;
+
     CppEditor::InsertionPointLocator::AccessSpec accessSpec
         = CppEditor::InsertionPointLocator::Invalid;
     bool reimplemented = false;
@@ -501,6 +512,57 @@ private:
     }
 };
 
+// What writing \a func into \a targetClass amounts to, as text. Every
+// name in it is written with as little in front of it as still finds it
+// from the class being added to -- a base and the class below it may be
+// in different namespaces -- which takes qualifying the type in full
+// where it was declared first, and then shortening it for where it is
+// going.
+static void writeInTheClass(const CppQuickFixInterface &interface,
+                            const Class *targetClass, const Class *baseClass,
+                            const Function *func, FunctionItem *item)
+{
+    Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+    printer.showFunctionSignatures = true;
+    printer.showReturnTypes = true;
+    printer.showArgumentNames = true;
+    printer.showTemplateParameters = true;
+
+    const LookupContext targetContext(interface.currentFile()->cppDocument(),
+                                      interface.snapshot());
+    ClassOrNamespace *targetCoN = targetContext.lookupType(targetClass->enclosingScope());
+    if (!targetCoN)
+        targetCoN = targetContext.globalNamespace();
+    Control * const control = interface.context().bindings()->control().get();
+
+    Clone cloner(control);
+    Function newFunc(&cloner, nullptr, const_cast<Function *>(func));
+    newFunc.setEnclosingScope(const_cast<Class *>(targetClass));
+    SubstitutionEnvironment envQualified;
+    envQualified.setContext(interface.context());
+    envQualified.switchScope(baseClass->enclosingScope());
+    UseQualifiedNames useQualifiedNames;
+    envQualified.enter(&useQualifiedNames);
+    newFunc.setReturnType(rewriteType(newFunc.returnType(), &envQualified, control));
+    const int argc = newFunc.argumentCount();
+    for (int i = 0; i < argc; ++i) {
+        Argument * const arg = newFunc.argumentAt(i)->asArgument();
+        QTC_ASSERT(arg, continue);
+        arg->setType(rewriteType(arg->type(), &envQualified, control));
+    }
+
+    SubstitutionEnvironment envMinimized;
+    envMinimized.setContext(interface.context());
+    envMinimized.switchScope(targetClass->enclosingScope());
+    UseMinimalNames useMinimalNames(targetCoN);
+    envMinimized.enter(&useMinimalNames);
+    const FullySpecifiedType tn = rewriteType(newFunc.type(), &envMinimized, control);
+
+    item->declarationText = printer.prettyType(tn, newFunc.unqualifiedName());
+    item->definitionText = printer.prettyType(
+        tn, printer.prettyName(targetClass->name()) + "::" + item->functionName);
+}
+
 class InsertVirtualMethodsOp : public CppQuickFixOperation
 {
 public:
@@ -657,6 +719,8 @@ public:
                     if (isReimplemented)
                         itemName += QLatin1String(" (redeclared)");
                     auto funcItem = new FunctionItem(func, itemName, itemBase);
+                    funcItem->functionName = printer.prettyName(func->name());
+                    writeInTheClass(interface, m_classAST->symbol, clazz, func, funcItem);
                     if (isReimplemented) {
                         factory->setHasReimplementedFunctions(true);
                         funcItem->reimplemented = true;
@@ -774,12 +838,7 @@ public:
         const LookupContext targetContext(headerFile->cppDocument(), snapshot());
 
         const Class *targetClass = m_classAST->symbol;
-        ClassOrNamespace *targetCoN = targetContext.lookupType(targetClass->enclosingScope());
-        if (!targetCoN)
-            targetCoN = targetContext.globalNamespace();
-        UseMinimalNames useMinimalNames(targetCoN);
-        Control *control = context().bindings()->control().get();
-        QList<const Function *> insertedFunctions;
+        QStringList insertedFunctions;
         for (ClassItem *classItem : std::as_const(m_factory->classFunctionModel->classes)) {
             if (classItem->checkState() == Qt::Unchecked)
                 continue;
@@ -791,47 +850,20 @@ public:
                 if (funcItem->reimplemented || funcItem->alreadyFound || !funcItem->checked)
                     continue;
 
-                const auto cmp = [funcItem](const Function *f) {
-                    return f->name()->match(funcItem->function->name())
-                                    && f->type().match(funcItem->function->type());
-                };
-                if (Utils::contains(insertedFunctions, cmp))
+                // One function, however many of the bases declare it.
+                if (insertedFunctions.contains(funcItem->declarationText))
                     continue;
-                insertedFunctions.append(funcItem->function);
+                insertedFunctions.append(funcItem->declarationText);
 
                 if (first) {
                     // Add comment
-                    const QString comment = QLatin1String("\n// ") +
-                            printer.prettyName(classItem->klass->name()) +
+                    const QString comment = QLatin1String("\n// ") + classItem->name +
                             QLatin1String(" interface\n");
                     headerChangeSet.insert(m_insertPosDecl, comment);
                     first = false;
                 }
 
-                // Function type minimalization: As base class and derived class could be in
-                // different namespaces, we must first make the type fully qualified before
-                // it can get minimized.
-                Clone cloner(control);
-                Function newFunc(&cloner, nullptr, const_cast<Function *>(funcItem->function));
-                newFunc.setEnclosingScope(const_cast<Class *>(targetClass));
-                SubstitutionEnvironment envQualified;
-                envQualified.setContext(context());
-                envQualified.switchScope(classItem->klass->enclosingScope());
-                UseQualifiedNames useQualifiedNames;
-                envQualified.enter(&useQualifiedNames);
-                newFunc.setReturnType(rewriteType(newFunc.returnType(), &envQualified, control));
-                const int argc = newFunc.argumentCount();
-                for (int i = 0; i < argc; ++i) {
-                    Argument * const arg = newFunc.argumentAt(i)->asArgument();
-                    QTC_ASSERT(arg, continue);
-                    arg->setType(rewriteType(arg->type(), &envQualified, control));
-                }
-                SubstitutionEnvironment envMinimized;
-                envMinimized.setContext(context());
-                envMinimized.switchScope(targetClass->enclosingScope());
-                envMinimized.enter(&useMinimalNames);
-                const FullySpecifiedType tn = rewriteType(newFunc.type(), &envMinimized, control);
-                QString declaration = printer.prettyType(tn, newFunc.unqualifiedName());
+                QString declaration = funcItem->declarationText;
 
                 if (m_factory->settings()->insertVirtualKeyword)
                     declaration = QLatin1String("virtual ") + declaration;
@@ -860,9 +892,7 @@ public:
                 // Insert definition outside class
                 if (m_factory->settings()->implementationMode
                         & InsertVirtualMethodsDialog::ModeOutsideClass) {
-                    const QString name = printer.prettyName(targetClass->name()) +
-                            QLatin1String("::") + printer.prettyName(funcItem->function->name());
-                    const QString defText = printer.prettyType(tn, name) + QLatin1String("\n{\n}");
+                    const QString defText = funcItem->definitionText + QLatin1String("\n{\n}");
                     headerChangeSet.insert(m_insertPosOutside,  QLatin1String("\n\n") + defText);
                 }
             }
