@@ -17,7 +17,7 @@
 #include <cplusplus/Control.h>
 #include <functional>
 #include <cplusplus/CxxFrontendDocument.h>
-#include <cplusplus/findusages.h>
+#include <cplusplus/FindUsages.h>
 #include <cplusplus/Literals.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>

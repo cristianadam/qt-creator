@@ -4,7 +4,7 @@
 #pragma once
 
 #include <cplusplus/Overview.h>
-#include <cplusplus/findusages.h>
+#include <cplusplus/FindUsages.h>
 
 #include <utils/utilsicons.h>
 
