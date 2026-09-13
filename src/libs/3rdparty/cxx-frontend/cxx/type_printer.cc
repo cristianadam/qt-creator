@@ -337,14 +337,16 @@ class TypePrinter {
   // file entirely -- a source file's "using namespace N" says nothing about
   // what a header can see. Leaving them out can only make a name longer
   // than it had to be, and a longer name still says the right thing.
-  // What \a scope declares under \a name, its base classes included: a
-  // class writes the name of whatever it inherits without saying where it
-  // comes from, so a name reached that way needs nothing in front of it.
+  // What \a scope declares under \a name, counting what it reaches
+  // without anything having to be written in front of it: what a class
+  // inherits, and what a namespace with no name of its own declares --
+  // both are named from here by their own name alone.
   //
-  // Unlike a using directive, which is deliberately not followed here, a
-  // base is neither positional nor a matter of which file is being read:
-  // what a class inherits, it inherits everywhere it is named.
-  [[nodiscard]] auto findThroughBases(ScopeSymbol* scope, const Name* name) const
+  // Unlike a using directive, which is deliberately not followed here,
+  // neither is positional or a matter of which file is being read: what a
+  // class inherits it inherits wherever it is named, and a namespace
+  // nobody can name is part of the one file this is all about.
+  [[nodiscard]] auto findReachableFrom(ScopeSymbol* scope, const Name* name) const
       -> std::vector<Symbol*> {
     std::vector<Symbol*> found;
     std::unordered_set<ScopeSymbol*> visited;
@@ -367,6 +369,14 @@ class TypePrinter {
             pending.push_back(klass->definition() ? klass->definition() : klass);
           }
         }
+        continue;
+      }
+
+      if (symbol_cast<NamespaceSymbol>(lookIn)) {
+        for (auto member : lookIn->members()) {
+          auto inner = symbol_cast<NamespaceSymbol>(member);
+          if (inner && !inner->name()) pending.push_back(inner);
+        }
       }
     }
     return found;
@@ -376,7 +386,7 @@ class TypePrinter {
     const Name* name = symbol->name();
     if (!name) return false;
     for (auto scope = options_.writtenIn; scope; scope = scope->parent()) {
-      for (auto candidate : findThroughBases(scope, name)) {
+      for (auto candidate : findReachableFrom(scope, name)) {
         if (candidate->isHidden()) continue;
         auto found = candidate;
         if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {
