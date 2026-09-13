@@ -380,18 +380,276 @@ public:
 
     // What read it, for reading a type of its members with the same.
     ReadWith readWith() const { return isValid() ? m_reading->readWith() : ReadWith(); }
+    // And the reading itself, for a reading on another front end to carry
+    // for what it cannot say.
+    const ClassReading::Ptr &reading() const { return m_reading; }
 
 private:
     ClassReading::Ptr m_reading;
 };
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// What the cxx-frontend model says about a class it read. Only the four
+// questions the two front ends answer differently are asked of it; where
+// a class is written and where a declaration goes in it are places, which
+// they agree on, and the built-in reading it carries says those.
+class CxxClassReading : public ClassReading
+{
+public:
+    CxxClassReading(const Utils::FilePath &filePath, int line, int column,
+                    ClassReading::Ptr builtin, const ReadWith &readWith)
+        : m_filePath(filePath)
+        , m_line(line)
+        , m_column(column)
+        , m_builtin(std::move(builtin))
+        , m_readWith(readWith)
+    {}
+
+    QString name() const override
+    {
+        const std::optional<CxxFrontendDocument::Declaration> declared
+            = cxxFrontendDeclarationIn(m_readWith->snapshot(), CppModelManager::workingCopy(),
+                                       m_filePath, m_line, m_column);
+        if (!declared || declared->name.isEmpty())
+            return m_builtin->name();
+        // What it is called, which is the last of what it is called after
+        // the scopes that hold it.
+        return declared->name.split("::").last();
+    }
+
+    bool isAnonymous() const override { return m_builtin->isAnonymous(); }
+
+    bool isQObject() const override
+    {
+        const std::optional<QList<CxxFrontendDocument::BaseClass>> bases
+            = cxxFrontendBasesOfTheClassAt(m_readWith->snapshot(),
+                                           CppModelManager::workingCopy(),
+                                           m_filePath, m_line, m_column);
+        if (!bases)
+            return m_builtin->isQObject();
+        // Standing below a class called QObject is what the built-in
+        // reading works out by looking for the connect() it would have
+        // inherited.
+        for (const CxxFrontendDocument::BaseClass &base : *bases) {
+            if (base.qualifiedName == "QObject" || base.qualifiedName.endsWith("::QObject"))
+                return true;
+        }
+        return false;
+    }
+
+    QString writtenAt(const CppRefactoringFilePtr &file,
+                      const InsertionLocation &location) const override
+    {
+        // A class is a type, and its name where a definition of one of its
+        // members goes is the same question asked of any other type.
+        CxxFrontendTypeRequest request;
+        request.filePath = m_filePath;
+        request.line = m_line;
+        request.column = m_column;
+        request.writtenIn = file->filePath();
+        request.writtenAtLine = location.line();
+        request.writtenAtColumn = location.column();
+        const std::optional<QString> written = cxxFrontendTypeWritten(
+            m_readWith->snapshot(), CppModelManager::workingCopy(), request, {});
+        return written && !written->isEmpty() ? *written
+                                              : m_builtin->writtenAt(file, location);
+    }
+
+    InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const override
+    {
+        return m_builtin->placeItIsWrittenAt(filePath);
+    }
+
+    InsertionLocation placeForDeclaration(
+        const InsertionPointLocator &locator,
+        const Utils::FilePath &filePath,
+        InsertionPointLocator::AccessSpec spec) const override
+    {
+        return m_builtin->placeForDeclaration(locator, filePath, spec);
+    }
+
+    DeclarationToDefine toDefine(const CppRefactoringChanges &changes) const override
+    {
+        return m_builtin->toDefine(changes);
+    }
+
+    ReadWith readWith() const override { return m_readWith; }
+
+private:
+    Utils::FilePath m_filePath;
+    int m_line = 0;
+    int m_column = 0;
+    ClassReading::Ptr m_builtin;
+    ReadWith m_readWith;
+};
+#endif
+
+#ifdef QTC_WITH_CXX_FRONTEND
+// What the cxx-frontend model says about a type it read. It holds the
+// place the thing is declared at and what is to be made of its type
+// rather than the type itself: the answer may have to be written into
+// another file, which is read together with this one and is a reading of
+// its own.
+//
+// It carries the built-in reading of the same type for the two things it
+// cannot say. Staticness is not a question about a type at all -- a type
+// does not carry it, the declaration does -- and a type written where
+// namespaces are about to be created has to be written as if they were
+// already there, which is a scope that exists nowhere.
+class CxxTypeReading : public TypeReading
+{
+public:
+    CxxTypeReading(const CxxFrontendTypeRequest &request, TypeReading::Ptr builtin,
+                   const ReadWith &readWith)
+        : m_request(request)
+        , m_builtin(std::move(builtin))
+        , m_readWith(readWith)
+    {}
+
+    bool isPointer() const override { return facts() && facts()->isPointer; }
+    bool isConst() const override { return facts() && facts()->isConst; }
+    bool isStatic() const override { return m_builtin->isStatic(); }
+
+    bool isValueType(bool *saidByName) const override
+    {
+        if (saidByName)
+            *saidByName = false;
+        const std::optional<CxxFrontendTypeFacts> what = facts();
+        if (!what)
+            return m_builtin->isValueType(saidByName);
+
+        // What is handed over by value. No search through the names in
+        // front of it: this model resolved them while it read the file,
+        // so what is left is the type itself.
+        if (what->isPointer || what->isReference || what->isEnumeration || what->isNumber)
+            return true;
+        if (what->declaredName.isEmpty())
+            return false;
+        const CppQuickFixSettings * const settings = cppQuickFixSettingsForProject(
+            ProjectTree::currentProject());
+        if (!settings->isValueType(what->declaredName))
+            return false;
+        if (saidByName)
+            *saidByName = true;
+        return true;
+    }
+
+    Ptr asDeclared() const override { return with(CxxFrontendTypeStep::WithoutConst,
+                                                  m_builtin->asDeclared()); }
+    Ptr withoutConst() const override { return with(CxxFrontendTypeStep::WithoutConst,
+                                                    m_builtin->withoutConst()); }
+    Ptr asValue() const override { return with(CxxFrontendTypeStep::Value,
+                                               m_builtin->asValue()); }
+    Ptr constReference() const override { return with(CxxFrontendTypeStep::ConstReference,
+                                                      m_builtin->constReference()); }
+    Ptr withConstOnReference() const override
+    {
+        return with(CxxFrontendTypeStep::ConstOnReference, m_builtin->withConstOnReference());
+    }
+    Ptr firstTemplateArgument() const override
+    {
+        return with(CxxFrontendTypeStep::FirstTemplateArgument,
+                    m_builtin->firstTemplateArgument());
+    }
+
+    Ptr writtenAt(const CppRefactoringFilePtr &file, const InsertionLocation &location,
+                  const QStringList &namespacesOpenedThere) const override
+    {
+        const Ptr builtin = m_builtin->writtenAt(file, location, namespacesOpenedThere);
+        // A type written where namespaces are about to be created is
+        // written as if they stood there already, and they stand nowhere
+        // yet: nothing to read it in.
+        if (!namespacesOpenedThere.isEmpty())
+            return builtin;
+        CxxFrontendTypeRequest request = m_request;
+        request.writtenIn = file->filePath();
+        request.writtenAtLine = location.line();
+        request.writtenAtColumn = location.column();
+        return std::make_shared<CxxTypeReading>(request, builtin, m_readWith);
+    }
+
+    QString asDeclarationOf(const QString &name) const override
+    {
+        const std::optional<QString> written = cxxFrontendTypeWritten(
+            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request, name);
+        return written ? *written : m_builtin->asDeclarationOf(name);
+    }
+
+    QString asTextWithoutTemplateParameters() const override
+    {
+        const std::optional<QString> written = cxxFrontendTypeWithoutTemplateParameters(
+            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request);
+        return written ? *written : m_builtin->asTextWithoutTemplateParameters();
+    }
+
+private:
+    Ptr with(CxxFrontendTypeStep step, Ptr builtin) const
+    {
+        if (!builtin)
+            return {};
+        CxxFrontendTypeRequest request = m_request;
+        request.steps.append(step);
+        return std::make_shared<CxxTypeReading>(request, builtin, m_readWith);
+    }
+
+    // Read once: reading a file is the whole cost of an answer here.
+    const std::optional<CxxFrontendTypeFacts> &facts() const
+    {
+        if (!m_facts) {
+            m_facts.emplace(cxxFrontendTypeFacts(m_readWith->snapshot(),
+                                                 CppModelManager::workingCopy(), m_request));
+        }
+        return *m_facts;
+    }
+
+    CxxFrontendTypeRequest m_request;
+    TypeReading::Ptr m_builtin;
+    ReadWith m_readWith;
+    mutable std::optional<std::optional<CxxFrontendTypeFacts>> m_facts;
+};
+#endif
+
 // The type of the member declared at \a line and \a column of the file
-// being edited, read by whichever front end is running. Defined below,
-// where both readings are.
+// being edited, read by whichever front end is running. The model reads
+// it where it has the file and can see a type there; the built-in one
+// answers otherwise, and answers the two questions the model leaves to
+// it in any case.
 GeneratedType readTypeOfTheMember(const CppQuickFixInterface &interface,
                                   const ReadWith &readWith,
                                   const FullySpecifiedType &type, Scope *scope,
-                                  int line, int column);
+                                  int line, int column)
+{
+    const TypeReading::Ptr builtin = GeneratedType::builtinReading(type, scope, readWith);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (builtin && line > 0 && column > 0) {
+        CxxFrontendTypeRequest request;
+        request.filePath = interface.filePath();
+        request.line = line;
+        request.column = column;
+        if (cxxFrontendTypeFacts(interface.snapshot(), CppModelManager::workingCopy(), request)) {
+            return GeneratedType(
+                std::make_shared<CxxTypeReading>(request, builtin, readWith));
+        }
+    }
+#endif
+    return GeneratedType(builtin);
+}
+
+// The class written at \a line and \a column of \a filePath, read by
+// whichever front end is running.
+GeneratedClass readTheClass(const CppQuickFixInterface &interface, const ReadWith &readWith,
+                            Class *clazz)
+{
+    const GeneratedClass builtin = GeneratedClass::readBuiltin(clazz, readWith);
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (builtin.isValid() && clazz->line() > 0 && cxxFrontendModelRequested()) {
+        return GeneratedClass(
+            std::make_shared<CxxClassReading>(interface.filePath(), clazz->line(),
+                                              clazz->column(), builtin.reading(), readWith));
+    }
+#endif
+    return builtin;
+}
 
 struct ExistingGetterSetterData
 {
@@ -1479,8 +1737,8 @@ private:
         };
         GenerateConstructorRefactoringHelper helper(
             this,
-            GeneratedClass::readBuiltin(m_classAST->symbol,
-                                        std::make_shared<CppQuickFixInterface>(*this)),
+            readTheClass(*this, std::make_shared<CppQuickFixInterface>(*this),
+                         m_classAST->symbol),
             m_classAST,
             accessSpec);
 
@@ -1845,7 +2103,7 @@ public:
                                                        member->enclosingScope(),
                                                        member->line(), member->column());
             existing.toDefine = declarationToDefine(member, changes);
-            existing.clazz = GeneratedClass::readBuiltin(theClass, readWith);
+            existing.clazz = readTheClass(interface, readWith, theClass);
 
             // check if a Q_PROPERTY exist
             const QString baseName = CppQuickFixSettings::memberBaseName(existing.memberVariableName);
@@ -2242,156 +2500,8 @@ GeneratedClass GeneratedClass::readBuiltin(Class *clazz, const ReadWith &readWit
     return GeneratedClass(std::make_shared<BuiltinClassReading>(clazz, readWith));
 }
 
-#ifdef QTC_WITH_CXX_FRONTEND
-// What the cxx-frontend model says about a type it read. It holds the
-// place the thing is declared at and what is to be made of its type
-// rather than the type itself: the answer may have to be written into
-// another file, which is read together with this one and is a reading of
-// its own.
-//
-// It carries the built-in reading of the same type for the two things it
-// cannot say. Staticness is not a question about a type at all -- a type
-// does not carry it, the declaration does -- and a type written where
-// namespaces are about to be created has to be written as if they were
-// already there, which is a scope that exists nowhere.
-class CxxTypeReading : public TypeReading
-{
-public:
-    CxxTypeReading(const CxxFrontendTypeRequest &request, TypeReading::Ptr builtin,
-                   const ReadWith &readWith)
-        : m_request(request)
-        , m_builtin(std::move(builtin))
-        , m_readWith(readWith)
-    {}
 
-    bool isPointer() const override { return facts() && facts()->isPointer; }
-    bool isConst() const override { return facts() && facts()->isConst; }
-    bool isStatic() const override { return m_builtin->isStatic(); }
 
-    bool isValueType(bool *saidByName) const override
-    {
-        if (saidByName)
-            *saidByName = false;
-        const std::optional<CxxFrontendTypeFacts> what = facts();
-        if (!what)
-            return m_builtin->isValueType(saidByName);
-
-        // What is handed over by value. No search through the names in
-        // front of it: this model resolved them while it read the file,
-        // so what is left is the type itself.
-        if (what->isPointer || what->isReference || what->isEnumeration || what->isNumber)
-            return true;
-        if (what->declaredName.isEmpty())
-            return false;
-        const CppQuickFixSettings * const settings = cppQuickFixSettingsForProject(
-            ProjectTree::currentProject());
-        if (!settings->isValueType(what->declaredName))
-            return false;
-        if (saidByName)
-            *saidByName = true;
-        return true;
-    }
-
-    Ptr asDeclared() const override { return with(CxxFrontendTypeStep::WithoutConst,
-                                                  m_builtin->asDeclared()); }
-    Ptr withoutConst() const override { return with(CxxFrontendTypeStep::WithoutConst,
-                                                    m_builtin->withoutConst()); }
-    Ptr asValue() const override { return with(CxxFrontendTypeStep::Value,
-                                               m_builtin->asValue()); }
-    Ptr constReference() const override { return with(CxxFrontendTypeStep::ConstReference,
-                                                      m_builtin->constReference()); }
-    Ptr withConstOnReference() const override
-    {
-        return with(CxxFrontendTypeStep::ConstOnReference, m_builtin->withConstOnReference());
-    }
-    Ptr firstTemplateArgument() const override
-    {
-        return with(CxxFrontendTypeStep::FirstTemplateArgument,
-                    m_builtin->firstTemplateArgument());
-    }
-
-    Ptr writtenAt(const CppRefactoringFilePtr &file, const InsertionLocation &location,
-                  const QStringList &namespacesOpenedThere) const override
-    {
-        const Ptr builtin = m_builtin->writtenAt(file, location, namespacesOpenedThere);
-        // A type written where namespaces are about to be created is
-        // written as if they stood there already, and they stand nowhere
-        // yet: nothing to read it in.
-        if (!namespacesOpenedThere.isEmpty())
-            return builtin;
-        CxxFrontendTypeRequest request = m_request;
-        request.writtenIn = file->filePath();
-        request.writtenAtLine = location.line();
-        request.writtenAtColumn = location.column();
-        return std::make_shared<CxxTypeReading>(request, builtin, m_readWith);
-    }
-
-    QString asDeclarationOf(const QString &name) const override
-    {
-        const std::optional<QString> written = cxxFrontendTypeWritten(
-            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request, name);
-        return written ? *written : m_builtin->asDeclarationOf(name);
-    }
-
-    QString asTextWithoutTemplateParameters() const override
-    {
-        const std::optional<QString> written = cxxFrontendTypeWithoutTemplateParameters(
-            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request);
-        return written ? *written : m_builtin->asTextWithoutTemplateParameters();
-    }
-
-private:
-    Ptr with(CxxFrontendTypeStep step, Ptr builtin) const
-    {
-        if (!builtin)
-            return {};
-        CxxFrontendTypeRequest request = m_request;
-        request.steps.append(step);
-        return std::make_shared<CxxTypeReading>(request, builtin, m_readWith);
-    }
-
-    // Read once: reading a file is the whole cost of an answer here.
-    const std::optional<CxxFrontendTypeFacts> &facts() const
-    {
-        if (!m_facts) {
-            m_facts.emplace(cxxFrontendTypeFacts(m_readWith->snapshot(),
-                                                 CppModelManager::workingCopy(), m_request));
-        }
-        return *m_facts;
-    }
-
-    CxxFrontendTypeRequest m_request;
-    TypeReading::Ptr m_builtin;
-    ReadWith m_readWith;
-    mutable std::optional<std::optional<CxxFrontendTypeFacts>> m_facts;
-};
-#endif
-
-// The type of the member declared at \a line and \a column of the file
-// being edited, read by whichever front end is running. The model reads
-// it where it has the file and can see a type there; the built-in one
-// answers otherwise, and answers the two questions the model leaves to
-// it in any case.
-GeneratedType readTypeOfTheMember(const CppQuickFixInterface &interface,
-                                  const ReadWith &readWith,
-                                  const FullySpecifiedType &type, Scope *scope,
-                                  int line, int column)
-{
-    const TypeReading::Ptr builtin = GeneratedType::builtinReading(type, scope, readWith);
-#ifdef QTC_WITH_CXX_FRONTEND
-    if (builtin && line > 0 && column > 0) {
-        CxxFrontendTypeRequest request;
-        request.filePath = interface.filePath();
-        request.line = line;
-        request.column = column;
-        if (cxxFrontendTypeFacts(interface.snapshot(), CppModelManager::workingCopy(), request)) {
-            return GeneratedType(
-                std::make_shared<CxxTypeReading>(request, builtin, readWith));
-        }
-    }
-#endif
-    return GeneratedType(builtin);
-}
 
 
 void GetterSetterRefactoringHelper::addHeaderCode(
@@ -3046,7 +3156,7 @@ class GenerateGetterSetter : public CppQuickFixFactory
                                                    symbol->enclosingScope(),
                                                    symbol->line(), symbol->column());
         existing.toDefine = declarationToDefine(symbol, CppRefactoringChanges(interface.snapshot()));
-        existing.clazz = GeneratedClass::readBuiltin(clazz, readWith);
+        existing.clazz = readTheClass(interface, readWith, clazz);
 
         auto file = interface.currentFile();
         // check if a Q_PROPERTY exist
@@ -3129,7 +3239,7 @@ class InsertQtPropertyMembers : public CppQuickFixFactory
         Class *const clazz = klass->symbol;
 
         const ReadWith readWith = std::make_shared<CppQuickFixInterface>(interface);
-        existing.clazz = GeneratedClass::readBuiltin(clazz, readWith);
+        existing.clazz = readTheClass(interface, readWith, clazz);
 
         CppRefactoringFilePtr file = interface.currentFile();
         const QString propertyName = file->textOf(qtPropertyDeclaration->property_name);
