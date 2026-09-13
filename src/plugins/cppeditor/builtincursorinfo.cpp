@@ -188,12 +188,14 @@ public:
     static CursorInfo find(const Document::Ptr document,
                            const QString &content,
                            const Snapshot &snapshot,
+                           const WorkingCopy &workingCopy,
                            int line,
                            int column,
                            Scope *scope,
                            const QString &expression)
     {
-        FindUses findUses(document, content, snapshot, line, column, scope, expression);
+        FindUses findUses(document, content, snapshot, workingCopy, line, column, scope,
+                          expression);
         return findUses.doFind();
     }
 
@@ -201,6 +203,7 @@ private:
     FindUses(const Document::Ptr document,
              const QString &content,
              const Snapshot &snapshot,
+             const WorkingCopy &workingCopy,
              int line,
              int column,
              Scope *scope,
@@ -212,6 +215,7 @@ private:
         , m_scope(scope)
         , m_expression(expression)
         , m_snapshot(snapshot)
+        , m_workingCopy(workingCopy)
     {
     }
 
@@ -370,7 +374,7 @@ private:
             return std::nullopt;
 
         const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
-            = Internal::cxxFrontendUsagesIn(m_snapshot, CppModelManager::workingCopy(),
+            = Internal::cxxFrontendUsagesIn(m_snapshot, m_workingCopy,
                                             m_document->filePath(), first);
         if (!places)
             return std::nullopt;
@@ -423,6 +427,11 @@ private:
     Scope *m_scope;
     QString m_expression;
     Snapshot m_snapshot;
+
+    // Taken where the editor's documents live and carried here, rather than
+    // asked for on this thread: building it reads what is being typed, and
+    // what is being typed belongs to the other one.
+    WorkingCopy m_workingCopy;
 };
 
 bool isSemanticInfoValidExceptLocalUses(const SemanticInfo &semanticInfo, int revision)
@@ -511,6 +520,7 @@ QFuture<CursorInfo> BuiltinCursorInfo::run(const CursorInfoParams &cursorInfoPar
                            document,
                            textCursor.document()->toPlainText(),
                            snapshot,
+                           CppModelManager::workingCopy(),
                            line,
                            column + 1,
                            scope,
