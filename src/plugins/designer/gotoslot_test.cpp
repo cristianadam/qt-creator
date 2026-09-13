@@ -124,10 +124,38 @@ static bool documentContainsMemberFunctionDeclaration(const Document::Ptr &docum
     return DocumentContainsDeclaration()(document->globalNamespace(), declaration);
 }
 
+// What "Go To Slot" is expected to do: which slot it ends up on, what it
+// connects the signal to, and which of the two halves of the slot it had to
+// write -- a slot the code already has is navigated to rather than written.
+struct GoToSlotExpectation
+{
+    QString slot;                // "Form::onPushButtonClicked"
+    QString connectStatement;    // empty: nothing may be connected
+    bool writesTheDeclaration = true;
+    bool writesTheDefinition = true;
+};
+
+// The line "Go To Slot" is expected to leave the cursor on, or 0 where the
+// row does not care. Counted from one, as an editor counts lines.
+static int currentLine()
+{
+    const auto editor = qobject_cast<TextEditor::BaseTextEditor *>(EditorManager::currentEditor());
+    return editor ? editor->currentLine() : 0;
+}
+
+// The line \a text writes \a what on, counted from one, or 0 where it does
+// not write it at all.
+static int lineWriting(const QString &text, const QString &what)
+{
+    const int offset = text.indexOf(what);
+    return offset == -1 ? 0 : text.left(offset).count('\n') + 1;
+}
+
 class GoToSlotTestCase : public CppEditor::Tests::TestCase
 {
 public:
-    GoToSlotTestCase(const FilePaths &files, bool pointerToMember, const QString &expectedConnect)
+    GoToSlotTestCase(const FilePaths &files, bool pointerToMember,
+                     const GoToSlotExpectation &expected)
     {
         QVERIFY(succeededSoFar());
         QCOMPARE(files.size(), 3);
@@ -159,13 +187,27 @@ public:
         integration->emitNavigateToSlot("pushButton", "clicked()", QStringList());
 
         QCOMPARE(EditorManager::currentDocument()->filePath(), cppFile);
-        QVERIFY(EditorManager::currentDocument()->isModified());
+        QCOMPARE(EditorManager::currentDocument()->isModified(), expected.writesTheDefinition);
 
-        // Wait for updated documents
+        // Where the navigation landed, which is all there is to check where it
+        // wrote nothing. Read before waiting: a reparse moves no cursor, but
+        // nothing below leaves it where it is either.
+        const int landedOn = currentLine();
+
+        // Wait for the documents it wrote to. A document it did not touch
+        // never reaches a second revision, so waiting for one would be waiting
+        // for the timeout.
+        FilePaths written;
+        if (expected.writesTheDefinition)
+            written << cppFile;
+        if (expected.writesTheDeclaration)
+            written << hFile;
         for (TextEditor::BaseTextEditor *editor : std::as_const(editors)) {
+            const FilePath filePath = editor->document()->filePath();
+            if (!written.contains(filePath))
+                continue;
             QElapsedTimer t;
             t.start();
-            const FilePath filePath = editor->document()->filePath();
             if (auto parser = BuiltinEditorDocumentParser::get(filePath)) {
                 while (t.elapsed() < 2000) {
                     if (Document::Ptr document = parser->document()) {
@@ -181,7 +223,6 @@ public:
         const auto cppDocumentParser = BuiltinEditorDocumentParser::get(cppFile);
         QVERIFY(cppDocumentParser);
         const Document::Ptr cppDocument = cppDocumentParser->document();
-        QVERIFY(cppDocument->editorRevision() >= 2);
         QVERIFY(checkDiagsnosticMessages(cppDocument));
 
         const auto hDocumentParser = BuiltinEditorDocumentParser::get(hFile);
@@ -190,16 +231,29 @@ public:
         QVERIFY(checkDiagsnosticMessages(hDocument));
 
         const QString cppText = editors.at(0)->textDocument()->plainText();
-        if (pointerToMember) {
-            // New default: camelCase slot + explicit pointer-to-member connect().
-            QVERIFY(documentContainsFunctionDefinition(cppDocument, "Form::onPushButtonClicked"));
-            QVERIFY(documentContainsMemberFunctionDeclaration(hDocument, "Form::onPushButtonClicked"));
-            QVERIFY2(cppText.contains(expectedConnect), qPrintable(cppText));
-        } else {
-            // Legacy behavior: on_...() slot connected via connectSlotsByName().
-            QVERIFY(documentContainsFunctionDefinition(cppDocument, "Form::on_pushButton_clicked"));
-            QVERIFY(documentContainsMemberFunctionDeclaration(hDocument, "Form::on_pushButton_clicked"));
-            QVERIFY(!cppText.contains("connect("));
+        const QString hText = editors.at(1)->textDocument()->plainText();
+
+        QVERIFY(documentContainsFunctionDefinition(cppDocument, expected.slot));
+        QVERIFY(documentContainsMemberFunctionDeclaration(hDocument, expected.slot));
+
+        // Whichever way round it was written, the slot is declared once and
+        // defined once -- a slot that was there already must not be written
+        // a second time.
+        const QString slotName = expected.slot.mid(expected.slot.lastIndexOf("::") + 2);
+        QCOMPARE(hText.count(slotName), 1);
+        QCOMPARE(cppText.count(slotName), expected.connectStatement.isEmpty() ? 1 : 2);
+
+        if (expected.connectStatement.isEmpty())
+            QVERIFY2(!cppText.contains("connect("), qPrintable(cppText));
+        else
+            QVERIFY2(cppText.contains(expected.connectStatement), qPrintable(cppText));
+
+        // A slot that was there already is navigated to rather than written,
+        // which is the body of its existing definition.
+        if (!expected.writesTheDefinition) {
+            const int definition = lineWriting(cppText, "void Form::" + slotName + "()");
+            QVERIFY(definition > 0);
+            QCOMPARE(landedOn, definition + 2);
         }
     }
 
@@ -253,20 +307,22 @@ void GoToSlotTest::test_gotoslot()
 
     QFETCH(FilePaths, files);
     QFETCH(bool, pointerToMember);
-    QFETCH(QString, expectedConnect);
-    (GoToSlotTestCase(files, pointerToMember, expectedConnect));
+    QFETCH(GoToSlotExpectation, expected);
+    (GoToSlotTestCase(files, pointerToMember, expected));
 }
 
 void GoToSlotTest::test_gotoslot_data()
 {
     QTest::addColumn<FilePaths>("files");
     QTest::addColumn<bool>("pointerToMember");
-    QTest::addColumn<QString>("expectedConnect");
+    QTest::addColumn<GoToSlotExpectation>("expected");
 
     // The access prefix of the generated connect() is taken from the setupUi() call.
     const auto connectVia = [](const QString &prefix) {
-        return QString("connect(%1pushButton, &QPushButton::clicked, "
-                       "this, &Form::onPushButtonClicked);").arg(prefix);
+        return GoToSlotExpectation{"Form::onPushButtonClicked",
+                                   QString("connect(%1pushButton, &QPushButton::clicked, "
+                                           "this, &Form::onPushButtonClicked);").arg(prefix),
+                                   true, true};
     };
 
     const auto dataDir = [](const QString &subdir) {
@@ -279,7 +335,9 @@ void GoToSlotTest::test_gotoslot_data()
                                          testDataDirWithoutProject / "form.h",
                                          testDataDirWithoutProject / "form.ui"});
     QTest::newRow("withoutProject") << withoutProjectFiles << true << connectVia("ui->");
-    QTest::newRow("withoutProject_legacy") << withoutProjectFiles << false << QString();
+    QTest::newRow("withoutProject_legacy")
+        << withoutProjectFiles << false
+        << GoToSlotExpectation{"Form::on_pushButton_clicked", {}, true, true};
 
     const FilePath testDataDirMemberUi = dataDir("gotoslot_m_ui");
     QVERIFY(testDataDirMemberUi.exists());
@@ -287,6 +345,25 @@ void GoToSlotTest::test_gotoslot_data()
         << FilePaths({testDataDirMemberUi / "form.cpp", testDataDirMemberUi / "form.h",
                       testDataDirWithoutProject / "form.ui"}) // reuse
         << true << connectVia("m_ui->");
+
+    // A slot the code already has: nothing is written and the navigation goes
+    // to the definition it found. With the declaration there already, no
+    // connect() is written either -- whoever wrote the slot wrote that too.
+    const FilePath testDataDirExisting = dataDir("gotoslot_existingSlot");
+    QVERIFY(testDataDirExisting.exists());
+    QTest::newRow("existingSlot")
+        << FilePaths({testDataDirExisting / "form.cpp", testDataDirExisting / "form.h",
+                      testDataDirWithoutProject / "form.ui"}) // reuse
+        << true << GoToSlotExpectation{"Form::onPushButtonClicked", {}, false, false};
+
+    // Declared but never defined: only the definition is written, and into the
+    // class the declaration was found in.
+    const FilePath testDataDirDeclared = dataDir("gotoslot_declaredNotDefined");
+    QVERIFY(testDataDirDeclared.exists());
+    QTest::newRow("declaredNotDefined")
+        << FilePaths({testDataDirDeclared / "form.cpp", testDataDirDeclared / "form.h",
+                      testDataDirWithoutProject / "form.ui"}) // reuse
+        << true << GoToSlotExpectation{"Form::onPushButtonClicked", {}, false, true};
 
     // Finding the right class for inserting definitions/declarations is based on
     // finding a class with a member whose type is the class from the "ui_xxx.h" header.
