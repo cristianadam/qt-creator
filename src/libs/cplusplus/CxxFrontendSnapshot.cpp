@@ -292,13 +292,6 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // Which header wins when two declare the same name: this takes the
         // nearest include, which is not the language's rule.
         "shadowing between headers",
-        // A definition written apart from its declaration, as void B::f()
-        // {} is: the name there declares nothing new and resolves to
-        // nothing, so a search from the declaration in the header does not
-        // reach it. What it needs is the link between a declaration and
-        // the definition of the same thing, which is in the front end and
-        // not yet read out of it.
-        "a definition written apart from its declaration",
         // Going the other way from a declaration in a header: which source
         // file defines it is a question about the project, and a document
         // holds one file and what it includes. counterpartAt() answers the

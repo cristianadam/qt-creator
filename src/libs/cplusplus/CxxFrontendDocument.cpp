@@ -3808,7 +3808,34 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int li
         }
         return declaration;
     }
-    return {};
+
+    // Not among the things this file declares, which a definition written
+    // apart from its declaration is not: "void B::f() {}" declares nothing
+    // new, the header having declared it. What stands there is that
+    // function all the same, and a name written on it points at it.
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    cxx::Symbol * const declared = d->declaredAt(location);
+    if (!declared)
+        return {};
+
+    Declaration declaration;
+    declaration.name = qualifiedNameOf(declared);
+    declaration.kind = kindOf(declared);
+    declaration.qtMethod = qtMethodOf(declared);
+    declaration.type = d->describeType(declared);
+    const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+    declaration.filePath = d->fileOf(location);
+    declaration.line = int(position.line);
+    declaration.column = int(position.column);
+
+    cxx::Symbol * const first = declared->canonical() ? declared->canonical() : declared;
+    if (const cxx::SourceLocation at = first->location()) {
+        const cxx::SourcePosition where = d->unit.tokenStartPosition(at);
+        declaration.canonicalFilePath = d->fileOf(at);
+        declaration.canonicalLine = int(where.line);
+        declaration.canonicalColumn = int(where.column);
+    }
+    return declaration;
 }
 
 QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(

@@ -125,7 +125,7 @@ private slots:
     void aNameThatMeansSomethingElseIsNotAUsage();
     void aFileThatDoesNotIncludeTheDeclarationIsNotSearched();
     void aQualifiedUsageIsFound();
-    void aDefinitionApartFromItsDeclarationIsNotFoundYet();
+    void aDefinitionApartFromItsDeclarationIsFound();
     void aUsageThroughABaseIsFound();
     void aUsageFromAMacroArgumentIsReportedOnce();
     void aUsageFromAMacroBodyIsNotReported();
@@ -794,7 +794,7 @@ void tst_cxxfrontendsnapshot::aQualifiedUsageIsFound()
 // Declared in a header, defined in a source file: the two are not in one
 // translation unit here, and the definition names the class in front of it,
 // which is what the search follows back to the declaration.
-void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsNotFoundYet()
+void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsFound()
 {
     Files files;
     files.add("b.h", "struct B { void f(); };\n");
@@ -804,13 +804,14 @@ void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsNotFoundYet()
     snapshot.process("a.cpp", "#include \"b.h\"\nvoid B::f() {}\n");
     snapshot.process("b.h", "struct B { void f(); };\n");
 
-    // The name in void B::f() {} declares nothing new and resolves to
-    // nothing, so a search from the declaration does not reach it. Saying
-    // so here rather than leaving it to be noticed.
+    // The name in void B::f() {} declares nothing new, so nothing resolves
+    // there -- and what stands there is that function all the same, which
+    // is what a name written on a declaration means. Both places come back,
+    // each said to be a declaration of the thing rather than a use of it.
     QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 17)),
-             QStringList("b.h:1:17 (declaration)"));
-    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
-                .contains("a definition written apart from its declaration"));
+             QStringList({"a.cpp:2:9 (declaration)", "b.h:1:17 (declaration)"}));
+    QVERIFY(!CxxFrontendSnapshot::unsupportedLookups()
+                 .contains("a definition written apart from its declaration"));
 }
 
 void tst_cxxfrontendsnapshot::aUsageThroughABaseIsFound()
