@@ -365,47 +365,84 @@ void CppAssistProposalItem::applyContextualContent(TextEditorWidget *editorWidge
 }
 
 // --------------------
+// One of the functions a call being written could be of, as a hint shows
+// it: how it reads, and where each of its parameters stands in that -- the
+// one being written is marked, and which that is changes as somebody types
+// without anything being read again. Whichever front end read the call
+// fills the same in.
+struct HintSignature
+{
+    QString text;
+
+    struct Parameter
+    {
+        int start = 0;
+        int length = 0;
+    };
+    QList<Parameter> parameters;
+};
+
+// The same, as the built-in front end prints it. The printer says where a
+// parameter stands while it writes it, so it is asked once per parameter.
+static HintSignature builtinSignatureOf(Function *function)
+{
+    Overview overview;
+    overview.showReturnTypes = true;
+    overview.showArgumentNames = true;
+
+    HintSignature signature;
+    signature.text = overview.prettyType(function->type(), function->name());
+    for (int i = 0, count = function->argumentCount(); i < count; ++i) {
+        Overview marking = overview;
+        marking.markedArgument = i + 1;
+        marking.prettyType(function->type(), function->name());
+        signature.parameters.append({marking.markedArgumentBegin,
+                                     marking.markedArgumentEnd - marking.markedArgumentBegin});
+    }
+    return signature;
+}
+
 // CppFunctionHintModel
 // --------------------
 class CppFunctionHintModel : public IFunctionHintProposalModel
 {
 public:
-    CppFunctionHintModel(const QList<Function *> &functionSymbols,
-                         const QSharedPointer<TypeOfExpression> &typeOfExp)
-        : m_functionSymbols(functionSymbols)
+    explicit CppFunctionHintModel(const QList<HintSignature> &signatures)
+        : m_signatures(signatures)
         , m_currentArg(-1)
-        , m_typeOfExpression(typeOfExp)
     {}
 
     void reset() override {}
-    int size() const override { return m_functionSymbols.size(); }
+    int size() const override { return m_signatures.size(); }
     QString text(int index) const override;
     int activeArgument(const QString &prefix) const override;
 
 private:
-    QList<Function *> m_functionSymbols;
+    QList<HintSignature> m_signatures;
     mutable int m_currentArg;
-    QSharedPointer<TypeOfExpression> m_typeOfExpression;
 };
 
 QString CppFunctionHintModel::text(int index) const
 {
-    Overview overview;
-    overview.showReturnTypes = true;
-    overview.showArgumentNames = true;
-    overview.markedArgument = m_currentArg + 1;
-    Function *f = m_functionSymbols.at(index);
+    const HintSignature &signature = m_signatures.at(index);
 
-    const QString prettyMethod = overview.prettyType(f->type(), f->name());
-    const int begin = overview.markedArgumentBegin;
-    const int end = overview.markedArgumentEnd;
+    // Nothing to mark where the argument being written is not one of its
+    // parameters -- a call with more arguments than the function takes, or
+    // one that takes none -- and the marking is then written out empty, in
+    // front of the signature, as it always has been.
+    int begin = 0;
+    int end = 0;
+    if (m_currentArg >= 0 && m_currentArg < signature.parameters.size()) {
+        begin = signature.parameters.at(m_currentArg).start;
+        end = begin + signature.parameters.at(m_currentArg).length;
+    }
 
     QString hintText;
-    hintText += prettyMethod.left(begin).toHtmlEscaped();
+    hintText += signature.text.left(begin).toHtmlEscaped();
     hintText += QLatin1String("<b>");
-    hintText += prettyMethod.mid(begin, end - begin).toHtmlEscaped();
+    hintText += signature.text.mid(begin, end - begin).toHtmlEscaped();
     hintText += QLatin1String("</b>");
-    hintText += prettyMethod.mid(end).toHtmlEscaped();
+    hintText += signature.text.mid(end).toHtmlEscaped();
     return hintText;
 }
 
@@ -896,10 +933,9 @@ IAssistProposal *InternalCppCompletionAssistProcessor::createContentProposal()
 }
 
 IAssistProposal *InternalCppCompletionAssistProcessor::createHintProposal(
-    QList<Function *> functionSymbols) const
+    const QList<HintSignature> &signatures) const
 {
-    FunctionHintProposalModelPtr model(new CppFunctionHintModel(functionSymbols,
-                                                                m_model->m_typeOfExpression));
+    FunctionHintProposalModelPtr model(new CppFunctionHintModel(signatures));
     return new FunctionHintProposal(m_positionForProposal, model);
 }
 
@@ -2222,7 +2258,8 @@ bool InternalCppCompletionAssistProcessor::completeConstructorOrFunction(const Q
     }
 
     if (!functions.empty() && !isDestructor) {
-        m_hintProposal = createHintProposal(functions);
+        m_hintProposal = createHintProposal(
+            Utils::transform(functions, [](Function *f) { return builtinSignatureOf(f); }));
         return true;
     }
 

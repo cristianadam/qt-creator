@@ -80,7 +80,8 @@ public:
 
 private:
     TextEditor::IAssistProposal *createContentProposal();
-    TextEditor::IAssistProposal *createHintProposal(QList<CPlusPlus::Function *> symbols) const;
+    TextEditor::IAssistProposal *createHintProposal(
+        const QList<struct HintSignature> &signatures) const;
     bool accepts();
 
     int startOfOperator(int positionInDocument, unsigned *kind, bool wantFunctionCall) const;
