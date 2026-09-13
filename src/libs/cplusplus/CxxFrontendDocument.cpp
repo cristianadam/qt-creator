@@ -5302,6 +5302,60 @@ QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheir
     return classes;
 }
 
+QList<CxxFrontendDocument::ClassUsingAClass> CxxFrontendDocument::classesUsing(
+    const QString &className) const
+{
+    QList<ClassUsingAClass> classes;
+    if (className.isEmpty() || !d->unit.ast())
+        return classes;
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!specifier || !specifier->symbol || !specifier->unqualifiedId)
+            continue;
+
+        // Where the class's name is written. A name a macro's replacement
+        // wrote stands nowhere anybody can be sent to.
+        const cxx::SourceLocation name = specifier->unqualifiedId->firstSourceLocation();
+        if (!name || d->unit.tokenAt(name).macroGenerated())
+            continue;
+
+        bool uses = false;
+        for (const auto &base : specifier->symbol->baseClasses()) {
+            if (base && base->symbol() && qualifiedNameOf(base->symbol()) == className)
+                uses = true;
+        }
+        for (auto *member : cxx::ListView{specifier->declarationList}) {
+            auto * const simple = dynamic_cast<cxx::SimpleDeclarationAST *>(member);
+            if (uses || !simple)
+                continue;
+            for (auto *declared : cxx::ListView{simple->initDeclaratorList}) {
+                if (declared->symbol
+                    && qualifiedClassNameOf(declared->symbol->type()) == className) {
+                    uses = true;
+                }
+            }
+        }
+        if (!uses)
+            continue;
+
+        ClassUsingAClass written;
+        written.name = specifier->symbol->name()
+                           ? fromStd(cxx::to_string(specifier->symbol->name()))
+                           : QString();
+        if (written.name.isEmpty())
+            continue;
+        written.qualifiedName = qualifiedNameOf(specifier->symbol);
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(name);
+        written.place = {d->fileOf(name), int(position.line), int(position.column)};
+        classes.append(written);
+    }
+    return classes;
+}
+
 QStringList CxxFrontendDocument::basesOf(const QString &className) const
 {
     if (className.isEmpty())

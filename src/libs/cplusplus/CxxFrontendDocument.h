@@ -1410,6 +1410,32 @@ public:
     };
     QList<ClassWithBases> classesWithTheirBases() const;
 
+    // A class that uses another one: it declares a member of that type -- a
+    // value, a pointer or a reference to it -- or it derives from it. That
+    // is how the class a form belongs to is told from the class uic writes
+    // for the form, the one being written into the other.
+    struct ClassUsingAClass
+    {
+        QString name;          // its own name, with nothing in front of it
+        QString qualifiedName; // written out in full
+        Place place;           // where its name stands in its own body
+    };
+
+    // Every class this translation unit writes that uses \a className, which
+    // is a path written out in full ("Ui::Form"), in the order they are
+    // written.
+    //
+    // The headers this file reads are among them: a header is read into
+    // whoever includes it, so a class declared in one is written here too,
+    // and the place says which file it is in. A caller that cares how far
+    // from this file a class may stand reads that.
+    //
+    // A type nothing declares names no class here, where the built-in front
+    // end takes it for one of that name -- so a form whose ui header was
+    // never generated, and which nothing forward declares either, is a class
+    // this answers nothing about.
+    QList<ClassUsingAClass> classesUsing(const QString &className) const;
+
     // Looks a name up in what this file declares, through the front end's own
     // lookup rather than by scanning what symbols() flattened.
     //

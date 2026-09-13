@@ -242,6 +242,8 @@ private slots:
     void usagesInAFile();
     void classesWithTheirBases_data();
     void classesWithTheirBases();
+    void classesUsing_data();
+    void classesUsing();
     void enclosingFunction_data();
     void enclosingFunction();
     void typeDeclared_data();
@@ -2653,6 +2655,94 @@ void tst_cxxfrontenddocument::classesWithTheirBases()
         if (!written.bases.isEmpty())
             line += " : " + written.bases.join(", ");
         described.append(line);
+    }
+    QCOMPARE(described, expected);
+}
+
+// Which class uses another one, which is how the class a form belongs to is
+// told from the class uic writes for the form.
+void tst_cxxfrontenddocument::classesUsing_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<QString>("className");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("a member of that type")
+        << QByteArray("namespace Ui { class Form; }\n"
+                      "class Form { Ui::Form *ui; };\n")
+        << "Ui::Form" << QStringList("Form (Form) @2:7");
+
+    QTest::newRow("a member that is one, not a pointer to one")
+        << QByteArray("namespace Ui { class Form {}; }\n"
+                      "class Form { Ui::Form ui; };\n")
+        << "Ui::Form" << QStringList("Form (Form) @2:7");
+
+    QTest::newRow("a reference to one")
+        << QByteArray("namespace Ui { class Form {}; }\n"
+                      "class Form { Ui::Form &ui; };\n")
+        << "Ui::Form" << QStringList("Form (Form) @2:7");
+
+    QTest::newRow("deriving from it")
+        << QByteArray("namespace Ui { class Form {}; }\n"
+                      "class Form : public Ui::Form {};\n")
+        << "Ui::Form" << QStringList("Form (Form) @2:7");
+
+    // The path is what tells two classes of one name apart, so a member of
+    // the other one is no use of this one.
+    QTest::newRow("another class of the same name")
+        << QByteArray("namespace Ui { class Form; }\n"
+                      "class Form;\n"
+                      "class User { Form *form; };\n"
+                      "class Real { Ui::Form *ui; };\n")
+        << "Ui::Form" << QStringList("Real (Real) @4:7");
+
+    QTest::newRow("in a namespace, written out in full")
+        << QByteArray("namespace N { namespace Ui { class Form; }\n"
+                      "class Form { Ui::Form *ui; }; }\n")
+        << "N::Ui::Form" << QStringList("Form (N::Form) @2:7");
+
+    // A using directive is the parser's business: what the member's type
+    // resolved to is the path, whatever was written in front of it.
+    QTest::newRow("reached through a using directive")
+        << QByteArray("namespace N { namespace Ui { class Form; } }\n"
+                      "using namespace N;\n"
+                      "class Form { Ui::Form *ui; };\n")
+        << "N::Ui::Form" << QStringList("Form (Form) @3:7");
+
+    QTest::newRow("more than one")
+        << QByteArray("namespace Ui { class Form; }\n"
+                      "class One { Ui::Form *ui; };\n"
+                      "class Two { Ui::Form *ui; };\n")
+        << "Ui::Form" << QStringList({"One (One) @2:7", "Two (Two) @3:7"});
+
+    QTest::newRow("a nested class")
+        << QByteArray("namespace Ui { class Form; }\n"
+                      "class Outer { class Inner { Ui::Form *ui; }; };\n")
+        << "Ui::Form" << QStringList("Inner (Outer::Inner) @2:21");
+
+    QTest::newRow("nobody using it")
+        << QByteArray("namespace Ui { class Form; }\n"
+                      "class Form { int i; };\n")
+        << "Ui::Form" << QStringList();
+
+    // A type nothing declares names no class, where the built-in front end
+    // takes it for one of that name.
+    QTest::newRow("a type nothing declares")
+        << QByteArray("class Form { Ui::Form *ui; };\n")
+        << "Ui::Form" << QStringList();
+}
+
+void tst_cxxfrontenddocument::classesUsing()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(QString, className);
+    QFETCH(QStringList, expected);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList described;
+    for (const CxxFrontendDocument::ClassUsingAClass &written : document.classesUsing(className)) {
+        described.append(QString("%1 (%2) @%3:%4").arg(written.name, written.qualifiedName)
+                             .arg(written.place.line).arg(written.place.column));
     }
     QCOMPARE(described, expected);
 }
