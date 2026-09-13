@@ -1265,6 +1265,16 @@ private:
                     implCode += "::" + className + "(";
                 }
 
+                // Where it is going in the class, since a type written
+                // there is written as the class sees it and a parameter
+                // taken from a class above was not written there.
+                const InsertionLocation inClassLocation
+                    = m_locator.constructorDeclarationInClass(
+                        m_headerFile->cppDocument()->translationUnit(),
+                        m_classAST,
+                        m_accessSpec,
+                        int(members.size()));
+
                 QString inClassDeclaration = m_class.name() + "(";
                 QString constructorBody = members.empty() ? QString(") {}") : QString(") : ");
                 for (auto &member : members) {
@@ -1275,7 +1285,8 @@ private:
                                ? type.withoutConst()
                                : type.constReference();
 
-                    inClassDeclaration += type.asDeclarationOf(member->parameterName);
+                    inClassDeclaration += type.writtenAt(m_headerFile, inClassLocation)
+                                              .asDeclarationOf(member->parameterName);
                     if (!member->defaultValue.isEmpty())
                         inClassDeclaration += " = " + member->defaultValue;
                     inClassDeclaration += ", ";
@@ -1345,13 +1356,7 @@ private:
                 else
                     inClassDeclaration += QLatin1String(");");
 
-                TranslationUnit *tu = m_headerFile->cppDocument()->translationUnit();
-                insertAndIndent(m_headerFile,
-                                m_locator.constructorDeclarationInClass(tu,
-                                                                        m_classAST,
-                                                                        m_accessSpec,
-                                                                        int(members.size())),
-                                inClassDeclaration);
+                insertAndIndent(m_headerFile, inClassLocation, inClassDeclaration);
 
                 if (constructorLocation == CppQuickFixSettings::FunctionLocation::CppFile) {
                     addSourceFileCode(implCode);
