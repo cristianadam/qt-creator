@@ -347,6 +347,8 @@ QtcPlugin {
             "cppcompletion_test.h",
             "cppdoxygen_test.cpp",
             "cppdoxygen_test.h",
+            "cppelementevaluator_test.cpp",
+            "cppelementevaluator_test.h",
             "cppincludehierarchy_test.cpp",
             "cppincludehierarchy_test.h",
             "cppfunctiondecldeflink_test.cpp",

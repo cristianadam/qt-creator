@@ -141,6 +141,7 @@ extend_qtc_plugin(CppEditor
     cppcodegen_test.cpp cppcodegen_test.h
     cppcompletion_test.cpp cppcompletion_test.h
     cppdoxygen_test.cpp cppdoxygen_test.h
+    cppelementevaluator_test.cpp cppelementevaluator_test.h
     cppincludehierarchy_test.cpp cppincludehierarchy_test.h
     cppfunctiondecldeflink_test.cpp cppfunctiondecldeflink_test.h
     cpplocalsymbols_test.cpp cpplocalsymbols_test.h

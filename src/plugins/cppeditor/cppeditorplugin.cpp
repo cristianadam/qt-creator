@@ -34,6 +34,7 @@
 #include "cppcodegen_test.h"
 #include "cppcompletion_test.h"
 #include "cppdoxygen_test.h"
+#include "cppelementevaluator_test.h"
 #include "cppfollowsymbolundercursor.h"
 #include "cppincludehierarchy_test.h"
 #include "cppfunctiondecldeflink_test.h"
@@ -677,6 +678,7 @@ void CppEditorPlugin::registerTests()
     addTest<Tests::AutoCompleterTest>();
     addTest<Tests::DeclDefLinkTest>();
     addTest<Tests::DoxygenTest>();
+    addTest<Tests::ElementEvaluatorTest>();
     addTest<Tests::FileAndTokenActionsTest>();
     addTest<Tests::FollowSymbolTest>();
     addTest<Tests::IncludeHierarchyTest>();
