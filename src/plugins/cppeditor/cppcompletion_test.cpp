@@ -449,6 +449,63 @@ void CompletionTest::testGlobalCompletion_data()
          << _("&")
          << QStringList();
 
+    // What a name written anywhere a name can go has to offer: everything
+    // in reach from there. Nothing pinned this before -- the rows above
+    // only ask that the list looks like a global one -- and it is what the
+    // reading has to keep saying whichever front end does it.
+    QTest::newRow("a local and a parameter")
+        << _("void f(int param) { int local; @ }\n")
+        << QByteArray()
+        << QStringList({"local", "param", "f"});
+
+    QTest::newRow("a member from inside a member function")
+        << _("struct S { int member; void m() { @ } };\n")
+        << QByteArray()
+        << QStringList({"member", "m", "S"});
+
+    QTest::newRow("a member a base declares")
+        << _("struct B { int inherited; };\n"
+             "struct D : B { void m() { @ } };\n")
+        << QByteArray()
+        << QStringList({"inherited", "m"});
+
+    QTest::newRow("what the file declares around it")
+        << _("int myGlobal;\n"
+             "namespace N { }\n"
+             "class C {};\n"
+             "void f() { @ }\n")
+        << QByteArray()
+        << QStringList({"myGlobal", "N", "C", "f"});
+
+    // An unscoped enum lends its values to the scope around it, so both the
+    // enum and its values can be written here.
+    QTest::newRow("an enum and its values")
+        << _("enum E { Red, Green };\n"
+             "void f() { @ }\n")
+        << QByteArray()
+        << QStringList({"E", "Red", "Green"});
+
+    QTest::newRow("an alias")
+        << _("typedef int Number;\n"
+             "using Other = int;\n"
+             "void f() { @ }\n")
+        << QByteArray()
+        << QStringList({"Number", "Other"});
+
+    QTest::newRow("a name a using declaration brought in")
+        << _("namespace N { int inN; }\n"
+             "using N::inN;\n"
+             "void f() { @ }\n")
+        << QByteArray()
+        << QStringList({"inN"});
+
+    QTest::newRow("a name a using directive brought in")
+        << _("namespace N { int inN; }\n"
+             "using namespace N;\n"
+             "void f() { @ }\n")
+        << QByteArray()
+        << QStringList({"inN"});
+
     // Check global completion after one line comments
     const QByteArray codeTemplate = "int myGlobal;\n"
                                     "<REPLACEMENT>\n"
