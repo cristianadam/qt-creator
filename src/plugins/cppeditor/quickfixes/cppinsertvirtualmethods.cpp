@@ -152,10 +152,68 @@ private:
 
 class FunctionItem;
 
+// What a class above the one being added to offers: a member function
+// somebody below may implement, as far as this fix is concerned. Whichever
+// front end read the class writes the same facts down, and the rules about
+// which of them to offer are applied on these rather than on symbols.
+struct OfferedFunction
+{
+    // Where the declaration stands, written out: what tells one function
+    // from another here. The class it is written in is part of it, since
+    // two instantiations of one template declare their members in the same
+    // place without being the same function.
+    QString declaredAt;
+
+    QString name;       // as it is written, with nothing in front of it
+    QString signature;  // how it reads where it is declared
+    QString returnType; // what it hands back, shown beside it
+
+    // The declarations furthest up the hierarchy that said "virtual", each
+    // with the class writing it: what a reader is offered is one entry per
+    // those, and QObject's three are told from everything else by the name
+    // of that class.
+    struct FirstVirtual
+    {
+        QString declaredAt;
+        QString className;
+    };
+    QList<FirstVirtual> firstVirtuals;
+
+    bool isDestructor = false;
+    bool isPureVirtual = false;
+    bool isFinal = false;
+
+    // The class being added to declares it already, so there is nothing to
+    // write there.
+    bool declaredInTargetClass = false;
+
+    CppEditor::InsertionPointLocator::AccessSpec accessSpec
+        = CppEditor::InsertionPointLocator::Invalid;
+
+    // What writing it into the class being added to amounts to: the
+    // declaration as it has to be written there -- every name in it as
+    // little qualified as still finds it from there -- the same with the
+    // class's own name in front, for a definition standing outside. Read
+    // where the function is read, since that is the front end's part of
+    // the work.
+    QString declarationText;
+    QString definitionText;
+
+    // A class above the one declaring it said "virtual" first, so this
+    // declaration is one more class's way of saying it rather than the
+    // offer itself.
+    bool isReimplementation() const
+    {
+        return !Utils::anyOf(firstVirtuals, [this](const FirstVirtual &first) {
+            return first.declaredAt == declaredAt;
+        });
+    }
+};
+
 class ClassItem : public InsertVirtualMethodsItem
 {
 public:
-    ClassItem(const QString &className, const Class *clazz);
+    ClassItem(const QString &className);
     ~ClassItem() override;
 
     QString description() const override { return name; }
@@ -163,7 +221,6 @@ public:
     Qt::CheckState checkState() const override;
     void removeFunction(int row);
 
-    const Class *klass;
     const QString name;
     QList<FunctionItem *> functions;
 };
@@ -171,25 +228,13 @@ public:
 class FunctionItem : public InsertVirtualMethodsItem
 {
 public:
-    FunctionItem(const Function *func, const QString &functionName, ClassItem *parent);
+    FunctionItem(const OfferedFunction &offered, const QString &description, ClassItem *parent);
     QString description() const override;
     Qt::ItemFlags flags() const override;
     Qt::CheckState checkState() const override { return checked ? Qt::Checked : Qt::Unchecked; }
 
-    const Function *function = nullptr;
+    OfferedFunction offered;
 
-    // What writing it into the class being added to amounts to: the
-    // declaration as it has to be written there -- every name in it as
-    // little qualified as still finds it from there -- the same with the
-    // class's own name in front, for a definition standing outside, and
-    // the name it is written under. Read where the function is read,
-    // since that is the front end's part of the work.
-    QString declarationText;
-    QString definitionText;
-    QString functionName;
-
-    CppEditor::InsertionPointLocator::AccessSpec accessSpec
-        = CppEditor::InsertionPointLocator::Invalid;
     bool reimplemented = false;
     bool alreadyFound = false;
     bool checked = false;
@@ -199,9 +244,8 @@ private:
     QString name;
 };
 
-ClassItem::ClassItem(const QString &className, const Class *clazz) :
+ClassItem::ClassItem(const QString &className) :
     InsertVirtualMethodsItem(nullptr),
-    klass(clazz),
     name(className)
 {
 }
@@ -244,12 +288,13 @@ void ClassItem::removeFunction(int row)
         functions[r]->row = r;
 }
 
-FunctionItem::FunctionItem(const Function *func, const QString &functionName, ClassItem *parent) :
+FunctionItem::FunctionItem(const OfferedFunction &offered, const QString &description,
+                           ClassItem *parent) :
     InsertVirtualMethodsItem(parent),
-    function(func),
+    offered(offered),
     nextOverride(this)
 {
-    name = functionName;
+    name = description;
 }
 
 QString FunctionItem::description() const
@@ -598,7 +643,7 @@ static QList<const Class *> baseClassesOf(const CppQuickFixInterface &interface,
 // going.
 static void writeInTheClass(const CppQuickFixInterface &interface,
                             const Class *targetClass, const Class *baseClass,
-                            const Function *func, FunctionItem *item,
+                            const Function *func, OfferedFunction &item,
                             int declarationGoesAt, int definitionGoesAt)
 {
     Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
@@ -637,9 +682,9 @@ static void writeInTheClass(const CppQuickFixInterface &interface,
     envMinimized.enter(&useMinimalNames);
     const FullySpecifiedType tn = rewriteType(newFunc.type(), &envMinimized, control);
 
-    item->declarationText = printer.prettyType(tn, newFunc.unqualifiedName());
-    item->definitionText = printer.prettyType(
-        tn, printer.prettyName(targetClass->name()) + "::" + item->functionName);
+    item.declarationText = printer.prettyType(tn, newFunc.unqualifiedName());
+    item.definitionText = printer.prettyType(
+        tn, printer.prettyName(targetClass->name()) + "::" + item.name);
 
 #ifdef QTC_WITH_CXX_FRONTEND
     // The same two, as the cxx-frontend model writes them. It is asked of
@@ -652,19 +697,121 @@ static void writeInTheClass(const CppQuickFixInterface &interface,
                                              func->line(), func->column(), name,
                                              line, column + 1);
     };
-    if (const std::optional<QString> declaration
-        = onTheModel(declarationGoesAt, item->functionName)) {
-        item->declarationText = *declaration;
-    }
+    if (const std::optional<QString> declaration = onTheModel(declarationGoesAt, item.name))
+        item.declarationText = *declaration;
     if (const std::optional<QString> definition
         = onTheModel(definitionGoesAt,
-                     printer.prettyName(targetClass->name()) + "::" + item->functionName)) {
-        item->definitionText = *definition;
+                     printer.prettyName(targetClass->name()) + "::" + item.name)) {
+        item.definitionText = *definition;
     }
 #else
     Q_UNUSED(declarationGoesAt)
     Q_UNUSED(definitionGoesAt)
 #endif
+}
+
+// Which section of the class being added to a declaration of \a symbol goes
+// in: what may name it, and what Qt makes of it.
+static InsertionPointLocator::AccessSpec accessSpecOf(const Symbol *symbol)
+{
+    const Function *func = symbol->type()->asFunctionType();
+    if (!func)
+        return InsertionPointLocator::Invalid;
+    if (func->isSignal())
+        return InsertionPointLocator::Signals;
+
+    InsertionPointLocator::AccessSpec spec = InsertionPointLocator::Invalid;
+    if (symbol->isPrivate())
+        spec = InsertionPointLocator::Private;
+    else if (symbol->isProtected())
+        spec = InsertionPointLocator::Protected;
+    else if (symbol->isPublic())
+        spec = InsertionPointLocator::Public;
+    else
+        return InsertionPointLocator::Invalid;
+
+    if (func->isSlot()) {
+        switch (spec) {
+        case InsertionPointLocator::Private:
+            return InsertionPointLocator::PrivateSlot;
+        case InsertionPointLocator::Protected:
+            return InsertionPointLocator::ProtectedSlot;
+        case InsertionPointLocator::Public:
+            return InsertionPointLocator::PublicSlot;
+        default:
+            return spec;
+        }
+    }
+    return spec;
+}
+
+// Whether \a targetClass declares \a func already, in which case there is
+// nothing for this fix to write there.
+static bool declaredAlready(const Class *targetClass, const Function *func)
+{
+    const Name * const funcName = func->name();
+    const OperatorNameId * const opName = funcName->asOperatorNameId();
+    Symbol *symbol = opName ? targetClass->find(opName->kind())
+                            : targetClass->find(funcName->identifier());
+    for (; symbol; symbol = symbol->next()) {
+        if (!opName && (!symbol->name() || !funcName->identifier()->match(symbol->identifier())))
+            continue;
+        if (symbol->type().match(func->type()))
+            return true;
+    }
+    return false;
+}
+
+// The virtual functions \a baseClass declares, in the order it writes them,
+// as the built-in front end reads them.
+static QList<OfferedFunction> builtinFunctionsOffered(const CppQuickFixInterface &interface,
+                                                      const Class *targetClass,
+                                                      const Class *baseClass,
+                                                      int declarationGoesAt, int definitionGoesAt)
+{
+    Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
+    printer.showFunctionSignatures = true;
+
+    // The class a function is written in belongs in the place, so that the
+    // members of two instantiations of one template are told apart.
+    const auto placeOf = [&printer](const Function *func) {
+        const Class * const enclosing = func->enclosingClass();
+        return (enclosing ? printer.prettyName(enclosing->name()) : QString())
+               + '|' + func->filePath().toFSPathString()
+               + ':' + QString::number(func->line()) + ':' + QString::number(func->column());
+    };
+
+    QList<OfferedFunction> offered;
+    for (Scope::iterator it = baseClass->memberBegin(); it != baseClass->memberEnd(); ++it) {
+        const Function * const func = (*it)->type()->asFunctionType();
+        if (!func || !func->name())
+            continue;
+
+        QList<const Function *> firstVirtuals;
+        if (!FunctionUtils::isVirtualFunction(func, interface.context(), &firstVirtuals))
+            continue;
+
+        OfferedFunction one;
+        one.declaredAt = placeOf(func);
+        one.name = printer.prettyName(func->name());
+        one.signature = printer.prettyType(func->type(), func->name());
+        one.returnType = printer.prettyType(func->returnType());
+        for (const Function *first : std::as_const(firstVirtuals)) {
+            const Class * const enclosing = first->enclosingClass();
+            one.firstVirtuals.append(
+                {placeOf(first),
+                 enclosing ? printer.prettyName(enclosing->name()) : QString()});
+        }
+        one.isDestructor = func->name()->asDestructorNameId() != nullptr;
+        one.isPureVirtual = func->isPureVirtual();
+        one.isFinal = func->isFinal();
+        one.declaredInTargetClass = declaredAlready(targetClass, func);
+        one.accessSpec = accessSpecOf(*it);
+        writeInTheClass(interface, targetClass, baseClass, func, one,
+                        declarationGoesAt, definitionGoesAt);
+        offered.append(one);
+    }
+    return offered;
 }
 
 class InsertVirtualMethodsOp : public CppQuickFixOperation
@@ -720,126 +867,98 @@ public:
         m_factory->classFunctionModel->clear();
         Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
         printer.showFunctionSignatures = true;
-        QHash<const Function *, FunctionItem *> virtualFunctions;
+        QHash<QString, FunctionItem *> virtualFunctions;
         for (const Class *clazz : std::as_const(baseClasses)) {
-            ClassItem *itemBase = new ClassItem(printer.prettyName(clazz->name()), clazz);
-            for (Scope::iterator it = clazz->memberBegin(); it != clazz->memberEnd(); ++it) {
-                if (const Function *func = (*it)->type()->asFunctionType()) {
-                    // Filter virtual destructors
-                    const Name *name = func->name();
-                    if (!name || name->asDestructorNameId())
-                        continue;
+            ClassItem *itemBase = new ClassItem(printer.prettyName(clazz->name()));
+            const QList<OfferedFunction> offered
+                = builtinFunctionsOffered(interface, m_classAST->symbol, clazz,
+                                          m_insertPosDecl, m_insertPosOutside);
+            for (const OfferedFunction &function : offered) {
+                // Filter virtual destructors
+                if (function.isDestructor)
+                    continue;
 
-                    QList<const Function * > firstVirtuals;
-                    const bool isVirtual = FunctionUtils::isVirtualFunction(
-                                func, interface.context(), &firstVirtuals);
-                    if (!isVirtual)
-                        continue;
-
-                    if (func->isFinal()) {
-                        for (const Function *firstVirtual : std::as_const(firstVirtuals)) {
-                            if (FunctionItem *first = virtualFunctions[firstVirtual]) {
-                                FunctionItem *next = nullptr;
-                                for (FunctionItem *removed = first; next != first; removed = next) {
-                                    next = removed->nextOverride;
-                                    m_factory->classFunctionModel->removeFunction(removed);
-                                    delete removed;
-                                };
-                                virtualFunctions.remove(firstVirtual);
-                            }
-                        }
-                        continue;
-                    }
-                    // Filter OQbject's
-                    //   - virtual const QMetaObject *metaObject() const;
-                    //   - virtual void *qt_metacast(const char *);
-                    //   - virtual int qt_metacall(QMetaObject::Call, int, void **);
-                    bool skip = false;
-                    for (const Function *firstVirtual : std::as_const(firstVirtuals)) {
-                        if (printer.prettyName(firstVirtual->enclosingClass()->name()) == "QObject"
-                                && magicQObjectFunctions().contains(
-                                    printer.prettyName(func->name()))) {
-                            skip = true;
-                            break;
+                if (function.isFinal) {
+                    for (const OfferedFunction::FirstVirtual &firstVirtual :
+                         function.firstVirtuals) {
+                        if (FunctionItem *first = virtualFunctions.value(firstVirtual.declaredAt)) {
+                            FunctionItem *next = nullptr;
+                            for (FunctionItem *removed = first; next != first; removed = next) {
+                                next = removed->nextOverride;
+                                m_factory->classFunctionModel->removeFunction(removed);
+                                delete removed;
+                            };
+                            virtualFunctions.remove(firstVirtual.declaredAt);
                         }
                     }
-                    if (skip)
-                        continue;
-
-                    // Do not implement existing functions inside target class
-                    bool funcExistsInClass = false;
-                    const Name *funcName = func->name();
-                    const OperatorNameId * const opName = funcName->asOperatorNameId();
-                    Symbol *symbol = opName ? m_classAST->symbol->find(opName->kind())
-                                            : m_classAST->symbol->find(funcName->identifier());
-                    for (; symbol; symbol = symbol->next()) {
-                        if (!opName && (!symbol->name()
-                                        || !funcName->identifier()->match(symbol->identifier()))) {
-                            continue;
-                        }
-                        if (symbol->type().match(func->type())) {
-                            funcExistsInClass = true;
-                            break;
-                        }
-                    }
-
-                    // Construct function item
-                    const bool isReimplemented = !firstVirtuals.contains(func);
-                    const bool isPureVirtual = func->isPureVirtual();
-                    QString itemName = printer.prettyType(func->type(), func->name());
-                    if (isPureVirtual)
-                        itemName += QLatin1String(" = 0");
-                    const QString itemReturnTypeString = printer.prettyType(func->returnType());
-                    itemName += QLatin1String(" : ") + itemReturnTypeString;
-                    if (isReimplemented)
-                        itemName += QLatin1String(" (redeclared)");
-                    auto funcItem = new FunctionItem(func, itemName, itemBase);
-                    funcItem->functionName = printer.prettyName(func->name());
-                    writeInTheClass(interface, m_classAST->symbol, clazz, func, funcItem,
-                                    m_insertPosDecl, m_insertPosOutside);
-                    if (isReimplemented) {
-                        factory->setHasReimplementedFunctions(true);
-                        funcItem->reimplemented = true;
-                        funcItem->alreadyFound = funcExistsInClass;
-                        for (const Function *firstVirtual : std::as_const(firstVirtuals)) {
-                            if (FunctionItem *first = virtualFunctions[firstVirtual]) {
-                                if (!first->alreadyFound) {
-                                    while (first->checked != isPureVirtual) {
-                                        first->checked = isPureVirtual;
-                                        first = first->nextOverride;
-                                    }
-                                }
-                                funcItem->checked = first->checked;
-
-                                FunctionItem *prev = funcItem;
-                                for (FunctionItem *next = funcItem->nextOverride;
-                                     next && next != funcItem; next = next->nextOverride) {
-                                    prev = next;
-                                }
-                                prev->nextOverride = first->nextOverride;
-                                first->nextOverride = funcItem;
-                            }
-                        }
-                    } else {
-                        if (!funcExistsInClass) {
-                            funcItem->checked = isPureVirtual;
-                        } else {
-                            funcItem->alreadyFound = true;
-                            funcItem->checked = true;
-                            factory->setHasReimplementedFunctions(true);
-                        }
-                    }
-
-                    funcItem->accessSpec = acessSpec(*it);
-                    funcItem->row = itemBase->functions.count();
-                    itemBase->functions.append(funcItem);
-
-                    virtualFunctions[func] = funcItem;
-
-                    // update internal counters
-                    if (!funcExistsInClass)
-                        ++m_functionCount;
+                    continue;
                 }
+                // Filter OQbject's
+                //   - virtual const QMetaObject *metaObject() const;
+                //   - virtual void *qt_metacast(const char *);
+                //   - virtual int qt_metacall(QMetaObject::Call, int, void **);
+                const bool isQObjectMagic
+                    = magicQObjectFunctions().contains(function.name)
+                      && Utils::anyOf(function.firstVirtuals,
+                                      [](const OfferedFunction::FirstVirtual &firstVirtual) {
+                                          return firstVirtual.className == "QObject";
+                                      });
+                if (isQObjectMagic)
+                    continue;
+
+                // Construct function item
+                const bool isReimplemented = function.isReimplementation();
+                const bool isPureVirtual = function.isPureVirtual;
+                const bool funcExistsInClass = function.declaredInTargetClass;
+                QString itemName = function.signature;
+                if (isPureVirtual)
+                    itemName += QLatin1String(" = 0");
+                itemName += QLatin1String(" : ") + function.returnType;
+                if (isReimplemented)
+                    itemName += QLatin1String(" (redeclared)");
+                auto funcItem = new FunctionItem(function, itemName, itemBase);
+                if (isReimplemented) {
+                    factory->setHasReimplementedFunctions(true);
+                    funcItem->reimplemented = true;
+                    funcItem->alreadyFound = funcExistsInClass;
+                    for (const OfferedFunction::FirstVirtual &firstVirtual :
+                         function.firstVirtuals) {
+                        if (FunctionItem *first = virtualFunctions.value(firstVirtual.declaredAt)) {
+                            if (!first->alreadyFound) {
+                                while (first->checked != isPureVirtual) {
+                                    first->checked = isPureVirtual;
+                                    first = first->nextOverride;
+                                }
+                            }
+                            funcItem->checked = first->checked;
+
+                            FunctionItem *prev = funcItem;
+                            for (FunctionItem *next = funcItem->nextOverride;
+                                 next && next != funcItem; next = next->nextOverride) {
+                                prev = next;
+                            }
+                            prev->nextOverride = first->nextOverride;
+                            first->nextOverride = funcItem;
+                        }
+                    }
+                } else {
+                    if (!funcExistsInClass) {
+                        funcItem->checked = isPureVirtual;
+                    } else {
+                        funcItem->alreadyFound = true;
+                        funcItem->checked = true;
+                        factory->setHasReimplementedFunctions(true);
+                    }
+                }
+
+                funcItem->row = itemBase->functions.count();
+                itemBase->functions.append(funcItem);
+
+                virtualFunctions[function.declaredAt] = funcItem;
+
+                // update internal counters
+                if (!funcExistsInClass)
+                    ++m_functionCount;
             }
 
             if (itemBase->functions.isEmpty())
@@ -860,39 +979,6 @@ public:
     bool isValid() const
     {
         return m_valid;
-    }
-
-    InsertionPointLocator::AccessSpec acessSpec(const Symbol *symbol)
-    {
-        const Function *func = symbol->type()->asFunctionType();
-        if (!func)
-            return InsertionPointLocator::Invalid;
-        if (func->isSignal())
-            return InsertionPointLocator::Signals;
-
-        InsertionPointLocator::AccessSpec spec = InsertionPointLocator::Invalid;
-        if (symbol->isPrivate())
-            spec = InsertionPointLocator::Private;
-        else if (symbol->isProtected())
-            spec = InsertionPointLocator::Protected;
-        else if (symbol->isPublic())
-            spec = InsertionPointLocator::Public;
-        else
-            return InsertionPointLocator::Invalid;
-
-        if (func->isSlot()) {
-            switch (spec) {
-            case InsertionPointLocator::Private:
-                return InsertionPointLocator::PrivateSlot;
-            case InsertionPointLocator::Protected:
-                return InsertionPointLocator::ProtectedSlot;
-            case InsertionPointLocator::Public:
-                return InsertionPointLocator::PublicSlot;
-            default:
-                return spec;
-            }
-        }
-        return spec;
     }
 
     void perform() override
@@ -927,9 +1013,9 @@ public:
                     continue;
 
                 // One function, however many of the bases declare it.
-                if (insertedFunctions.contains(funcItem->declarationText))
+                if (insertedFunctions.contains(funcItem->offered.declarationText))
                     continue;
-                insertedFunctions.append(funcItem->declarationText);
+                insertedFunctions.append(funcItem->offered.declarationText);
 
                 if (first) {
                     // Add comment
@@ -939,7 +1025,7 @@ public:
                     first = false;
                 }
 
-                QString declaration = funcItem->declarationText;
+                QString declaration = funcItem->offered.declarationText;
 
                 if (m_factory->settings()->insertVirtualKeyword)
                     declaration = QLatin1String("virtual ") + declaration;
@@ -956,7 +1042,7 @@ public:
                 }
 
                 const QString accessSpecString =
-                        InsertionPointLocator::accessSpecToString(funcItem->accessSpec);
+                        InsertionPointLocator::accessSpecToString(funcItem->offered.accessSpec);
                 if (accessSpecString != lastAccessSpecString) {
                     declaration = accessSpecString + QLatin1String(":\n") + declaration;
                     if (!lastAccessSpecString.isEmpty()) // separate if not direct after the comment
@@ -968,7 +1054,7 @@ public:
                 // Insert definition outside class
                 if (m_factory->settings()->implementationMode
                         & InsertVirtualMethodsDialog::ModeOutsideClass) {
-                    const QString defText = funcItem->definitionText + QLatin1String("\n{\n}");
+                    const QString defText = funcItem->offered.definitionText + QLatin1String("\n{\n}");
                     headerChangeSet.insert(m_insertPosOutside,  QLatin1String("\n\n") + defText);
                 }
             }
