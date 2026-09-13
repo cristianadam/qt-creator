@@ -1313,6 +1313,64 @@ void InsertVirtualMethodsTest::test_data()
         "};\n"
     );
 
+    // Check: A destructor is not one of the functions to implement. Every
+    // class below a base with a virtual one has it already, and writing a
+    // body for it is not what asking for the interface means.
+    QTest::newRow("skipDestructor")
+        << InsertVirtualMethodsDialog::ModeOnlyDeclarations << true << false << _(
+        "class BaseA {\n"
+        "public:\n"
+        "    virtual ~BaseA() = 0;\n"
+        "    virtual int virtualFuncA() = 0;\n"
+        "};\n\n"
+        "class Derived : public Bas@eA {\n"
+        "};\n"
+        ) << _(
+        "class BaseA {\n"
+        "public:\n"
+        "    virtual ~BaseA() = 0;\n"
+        "    virtual int virtualFuncA() = 0;\n"
+        "};\n\n"
+        "class Derived : public BaseA {\n"
+        "\n"
+        "    // BaseA interface\n"
+        "public:\n"
+        "    virtual int virtualFuncA();\n"
+        "};\n"
+    );
+
+    // Check: The three virtuals moc writes into every QObject are not
+    // offered. They are declared by the Q_OBJECT macro and reimplemented
+    // by it, so nobody writes one by hand.
+    QTest::newRow("skipMagicQObjectFunctions")
+        << InsertVirtualMethodsDialog::ModeOnlyDeclarations << true << false << _(
+        "class QMetaObject { public: enum Call { InvokeMetaMethod }; };\n"
+        "class QObject {\n"
+        "public:\n"
+        "    virtual const QMetaObject *metaObject() const = 0;\n"
+        "    virtual void *qt_metacast(const char *) = 0;\n"
+        "    virtual int qt_metacall(QMetaObject::Call, int, void **) = 0;\n"
+        "    virtual bool event() = 0;\n"
+        "};\n\n"
+        "class Derived : public QObje@ct {\n"
+        "};\n"
+        ) << _(
+        "class QMetaObject { public: enum Call { InvokeMetaMethod }; };\n"
+        "class QObject {\n"
+        "public:\n"
+        "    virtual const QMetaObject *metaObject() const = 0;\n"
+        "    virtual void *qt_metacast(const char *) = 0;\n"
+        "    virtual int qt_metacall(QMetaObject::Call, int, void **) = 0;\n"
+        "    virtual bool event() = 0;\n"
+        "};\n\n"
+        "class Derived : public QObject {\n"
+        "\n"
+        "    // QObject interface\n"
+        "public:\n"
+        "    virtual bool event();\n"
+        "};\n"
+    );
+
     // Check: Insert only declarations without virtual keyword but with override
     QTest::newRow("onlyDeclWithoutVirtual")
         << InsertVirtualMethodsDialog::ModeOnlyDeclarations << false << true << _(
