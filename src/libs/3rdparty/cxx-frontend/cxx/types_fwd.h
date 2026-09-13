@@ -166,6 +166,13 @@ struct TypePrintOptions {
   // scope it was written in wants the short form.
   bool omitEnclosingScope = false;
 
+  // Print a class template by the name it was declared under, without
+  // the arguments it was given. A tool with a rule per type matches the
+  // type it has a rule for by that name -- a setting about QList is
+  // about every QList -- and cannot take the arguments off the answer
+  // itself, a type being written around a name and not in front of it.
+  bool omitTemplateArguments = false;
+
   // Leave out the exception specification. A tool showing a declaration in a
   // list -- an outline, a completion popup -- has a line to fill and shows
   // what tells one declaration from another, and whether a function throws

@@ -64,7 +64,14 @@ class IdentifierInfo;
 class TypeTraitIdentifierInfo;
 class BuiltinFunctionIdentifierInfo;
 
-auto to_string(const Name* name) -> std::string;
-auto to_string(const TemplateArgument& argument) -> std::string;
+// \a options say where the answer is going, the same as for a type: a
+// name may have types written inside it -- the arguments of a template
+// id -- and they are written the same way as any other.
+auto to_string(const Name* name, const TypePrintOptions& options = {}) -> std::string;
+// \a options say where the answer is going, the same as for a type: an
+// argument is part of the type it is written in and is written the same
+// way.
+auto to_string(const TemplateArgument& argument,
+               const TypePrintOptions& options = {}) -> std::string;
 
 }  // namespace cxx

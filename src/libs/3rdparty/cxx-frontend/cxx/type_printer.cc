@@ -405,21 +405,25 @@ class TypePrinter {
     if (!symbol || !symbol->name()) return {};
 
     appendEnclosingScope(symbol);
-    specifiers_.append(to_string(symbol->name()));
+    specifiers_.append(to_string(symbol->name(), options_));
     return specifiers_;
   }
 
   void operator()(const ClassType* type) {
     appendEnclosingScope(type->symbol());
 
-    std::string out = to_string(type->symbol()->name());
+    std::string out = to_string(type->symbol()->name(), options_);
 
-    if (type->symbol()->isSpecialization()) {
+    if (options_.omitTemplateArguments) {
+      // The name the class was declared under, which is what a tool with
+      // a rule per type has the rule for: a setting about QList is about
+      // every QList.
+    } else if (type->symbol()->isSpecialization()) {
       out += '<';
       std::string_view sep = "";
       for (const auto& arg :
            expand_template_arguments(type->symbol()->templateArguments())) {
-        out += std::format("{}{}", sep, to_string(arg));
+        out += std::format("{}{}", sep, to_string(arg, options_));
         sep = ", ";
       }
       out += '>';
@@ -439,7 +443,7 @@ class TypePrinter {
 
   void operator()(const NamespaceType* type) {
     appendEnclosingScope(type->symbol());
-    specifiers_.append(to_string(type->symbol()->name()));
+    specifiers_.append(to_string(type->symbol()->name(), options_));
   }
 
   void operator()(const MemberObjectPointerType* type) {
@@ -456,12 +460,12 @@ class TypePrinter {
 
   void operator()(const EnumType* type) {
     appendEnclosingScope(type->symbol());
-    specifiers_.append(to_string(type->symbol()->name()));
+    specifiers_.append(to_string(type->symbol()->name(), options_));
   }
 
   void operator()(const ScopedEnumType* type) {
     appendEnclosingScope(type->symbol());
-    specifiers_.append(to_string(type->symbol()->name()));
+    specifiers_.append(to_string(type->symbol()->name(), options_));
   }
 
   // The name the template parameter at \a depth and \a index was given,

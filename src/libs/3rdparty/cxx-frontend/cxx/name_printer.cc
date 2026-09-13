@@ -30,6 +30,10 @@ namespace cxx {
 namespace {
 
 struct TemplateArgumentPrinter {
+  // Where the answer is going, so that a type written as an argument is
+  // written the same way as one written anywhere else in it.
+  const TypePrintOptions& options;
+
   auto const_value_to_string(const ConstValue& value) const -> std::string {
     if (auto v = std::get_if<std::intmax_t>(&value)) return std::to_string(*v);
     if (auto v = std::get_if<float>(&value)) return std::format("{}", *v);
@@ -49,7 +53,7 @@ struct TemplateArgumentPrinter {
   }
 
   auto operator()(const Type* type) const -> std::string {
-    return to_string(type);
+    return to_string(type, "", options);
   }
 
   auto operator()(const ConstValue& value) const -> std::string {
@@ -58,19 +62,24 @@ struct TemplateArgumentPrinter {
 
   auto operator()(const Symbol* symbol) const -> std::string {
     if (!symbol) return "<null-symbol>";
-    if (symbol->isTypeAlias()) return to_string(symbol->type());
+    if (symbol->isTypeAlias()) return to_string(symbol->type(), "", options);
     if (symbol->isVariable()) {
       auto var = static_cast<const VariableSymbol*>(symbol);
       if (auto cst = var->constValue()) return const_value_to_string(*cst);
     }
-    if (auto type = symbol->type()) return to_string(type);
-    return to_string(symbol->name());
+    if (auto type = symbol->type()) return to_string(type, "", options);
+    return to_string(symbol->name(), options);
   }
 
   auto operator()(ExpressionAST* value) const -> std::string { return ""; }
 };
 
 struct NamePrinter {
+  // Where the answer is going, so that a type written inside a name --
+  // the arguments of a template id, what a conversion function hands
+  // back -- is written the same way as one written anywhere else.
+  const TypePrintOptions& options;
+
   auto operator()(const Identifier* name) const -> std::string {
     return name->value();
   }
@@ -99,7 +108,7 @@ struct NamePrinter {
   }
 
   auto operator()(const ConversionFunctionId* name) const -> std::string {
-    return std::format("operator {}", to_string(name->type()));
+    return std::format("operator {}", to_string(name->type(), "", options));
   }
 
   auto operator()(const TemplateId* name) const -> std::string {
@@ -108,7 +117,7 @@ struct NamePrinter {
     std::string_view sep = "";
     for (const auto& arg : expand_template_arguments(name->arguments())) {
       s += sep;
-      s += to_string(arg);
+      s += to_string(arg, options);
       sep = ", ";
     }
     s += '>';
@@ -118,13 +127,14 @@ struct NamePrinter {
 
 }  // namespace
 
-auto to_string(const Name* name) -> std::string {
+auto to_string(const Name* name, const TypePrintOptions& options) -> std::string {
   if (!name) return {};
-  return visit(NamePrinter{}, name);
+  return visit(NamePrinter{options}, name);
 }
 
-auto to_string(const TemplateArgument& argument) -> std::string {
-  auto text = std::visit(TemplateArgumentPrinter{}, argument);
+auto to_string(const TemplateArgument& argument, const TypePrintOptions& options)
+    -> std::string {
+  auto text = std::visit(TemplateArgumentPrinter{options}, argument);
   if (text.empty()) return "?";
   return text;
 }
