@@ -337,15 +337,46 @@ class TypePrinter {
   // file entirely -- a source file's "using namespace N" says nothing about
   // what a header can see. Leaving them out can only make a name longer
   // than it had to be, and a longer name still says the right thing.
+  // What \a scope declares under \a name, its base classes included: a
+  // class writes the name of whatever it inherits without saying where it
+  // comes from, so a name reached that way needs nothing in front of it.
+  //
+  // Unlike a using directive, which is deliberately not followed here, a
+  // base is neither positional nor a matter of which file is being read:
+  // what a class inherits, it inherits everywhere it is named.
+  [[nodiscard]] auto findThroughBases(ScopeSymbol* scope, const Name* name) const
+      -> std::vector<Symbol*> {
+    std::vector<Symbol*> found;
+    std::unordered_set<ScopeSymbol*> visited;
+    std::vector<ScopeSymbol*> pending{scope};
+    while (!pending.empty()) {
+      auto current = pending.back();
+      pending.pop_back();
+      if (!current || !visited.insert(current).second) continue;
+
+      auto lookIn = current;
+      if (auto cls = symbol_cast<ClassSymbol>(lookIn)) {
+        if (auto def = cls->definition()) lookIn = def;
+      }
+      for (auto candidate : lookIn->find(name)) found.push_back(candidate);
+      if (!found.empty()) break;
+
+      if (auto cls = symbol_cast<ClassSymbol>(lookIn)) {
+        for (auto base : cls->baseClasses()) {
+          if (auto klass = symbol_cast<ClassSymbol>(base->symbol())) {
+            pending.push_back(klass->definition() ? klass->definition() : klass);
+          }
+        }
+      }
+    }
+    return found;
+  }
+
   [[nodiscard]] auto isReachedByItsOwnName(Symbol* symbol) const -> bool {
     const Name* name = symbol->name();
     if (!name) return false;
     for (auto scope = options_.writtenIn; scope; scope = scope->parent()) {
-      auto lookIn = scope;
-      if (auto cls = symbol_cast<ClassSymbol>(lookIn)) {
-        if (auto def = cls->definition()) lookIn = def;
-      }
-      for (auto candidate : lookIn->find(name)) {
+      for (auto candidate : findThroughBases(scope, name)) {
         if (candidate->isHidden()) continue;
         auto found = candidate;
         if (auto injected = symbol_cast<InjectedClassNameSymbol>(found)) {

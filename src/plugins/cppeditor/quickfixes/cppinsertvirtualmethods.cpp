@@ -1342,6 +1342,7 @@ private slots:
     void test();
     void testImplementationFile();
     void testBaseClassInNamespace();
+    void testImplementationFileNestedType();
 };
 
 void InsertVirtualMethodsTest::test_data()
@@ -2056,6 +2057,54 @@ void InsertVirtualMethodsTest::testImplementationFile()
 }
 
 /// Check: Qualified names.
+// A type a base declares inside itself is named by the class below it
+// without saying where it comes from -- it inherits the name -- and has to
+// be said in full where the definition goes, which is outside both.
+void InsertVirtualMethodsTest::testImplementationFileNestedType()
+{
+    QList<Tests::TestDocumentPtr> testFiles;
+    QByteArray original;
+    QByteArray expected;
+
+    // Header File
+    original =
+        "class Base {\n"
+        "public:\n"
+        "    class Inner {};\n"
+        "    virtual Inner f() = 0;\n"
+        "};\n"
+        "class Deri@ved : public Base {\n"
+        "};\n";
+    expected =
+        "class Base {\n"
+        "public:\n"
+        "    class Inner {};\n"
+        "    virtual Inner f() = 0;\n"
+        "};\n"
+        "class Derived : public Base {\n"
+        "\n"
+        "    // Base interface\n"
+        "public:\n"
+        "    virtual Inner f();\n"
+        "};\n";
+    testFiles << Tests::CppTestDocument::create("file.h", original, expected);
+
+    // Source File
+    original = "#include \"file.h\"\n";
+    expected =
+        "#include \"file.h\"\n"
+        "\n\n"
+        "Base::Inner Derived::f()\n"
+        "{\n}";
+    testFiles << Tests::CppTestDocument::create("file.cpp", original, expected);
+
+    InsertVirtualMethods factory(new Tests::InsertVirtualMethodsDialogTest(
+                                     InsertVirtualMethodsDialog::ModeImplementationFile,
+                                     true,
+                                     false));
+    Tests::QuickFixOperationTest(testFiles, &factory);
+}
+
 void InsertVirtualMethodsTest::testBaseClassInNamespace()
 {
     QList<Tests::TestDocumentPtr> testFiles;
