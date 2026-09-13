@@ -1340,6 +1340,27 @@ std::optional<QString> cxxFrontendDefinitionHeadFor(
         {filePath.toFSPathString(), line, column}, {{}, targetLine, targetColumn}));
 }
 
+std::optional<QString> cxxFrontendDeclarationHeadFor(
+    const FilePath &inFile, const FilePath &functionFile, int line, int column,
+    const QString &name, int targetLine, int targetColumn)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(inFile);
+    const CxxFrontendDocument * const document
+        = model ? model->document(inFile.toFSPathString()) : nullptr;
+    if (!document)
+        return std::nullopt;
+    // Its own file where a header declares it, and nothing where this file
+    // does: the tokens of the file a unit started from carry no name.
+    const QString writtenIn = functionFile == inFile ? QString()
+                                                     : functionFile.toFSPathString();
+    const QString declaration = document->declarationOfFunctionAt({writtenIn, line, column},
+                                                                  {{}, targetLine, targetColumn},
+                                                                  name);
+    if (declaration.isEmpty())
+        return std::nullopt;
+    return declaration;
+}
+
 QList<CxxFrontendDocument::MemberFunction> cxxFrontendMemberFunctionsAt(
     const FilePath &filePath, int line, int column)
 {

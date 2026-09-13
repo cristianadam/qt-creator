@@ -441,6 +441,26 @@ std::optional<QString> cxxFrontendDefinitionHeadFor(
     int line, int column, const Utils::FilePath &targetFilePath,
     int targetLine, int targetColumn);
 
+// The function declared at \a line and \a column of \a filePath, written
+// out as a declaration of \a name for the place \a targetLine and \a
+// targetColumn of the same file: each name in it written with as little in
+// front of it as still finds it from there.
+//
+// The name is the caller's, which is the difference from the head of a
+// definition above: what a class writing a function of its own calls it is
+// the caller's business, and the same function is "f" written inside a
+// class and "C::f" written outside it.
+//
+// Nothing where the model has not read the file or cannot write the
+// declaration -- a function under a template among them, since what it
+// writes would be half of one.
+// \a inFile is the document to ask, which is the file being edited; the
+// function may be declared in a header it reads, and is then addressed by
+// its own file.
+std::optional<QString> cxxFrontendDeclarationHeadFor(
+    const Utils::FilePath &inFile, const Utils::FilePath &functionFile,
+    int line, int column, const QString &name, int targetLine, int targetColumn);
+
 // The member functions the class at \a line and \a column of \a filePath,
 // both counted from one, declares without defining there.
 //

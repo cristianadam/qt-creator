@@ -38,6 +38,10 @@
 #include <QToolButton>
 #include <QTreeView>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "../cxxfrontendmodel.h"
+#endif
+
 #ifdef WITH_TESTS
 #include "cppquickfix_test.h"
 #include <QTest>
@@ -520,7 +524,8 @@ private:
 // going.
 static void writeInTheClass(const CppQuickFixInterface &interface,
                             const Class *targetClass, const Class *baseClass,
-                            const Function *func, FunctionItem *item)
+                            const Function *func, FunctionItem *item,
+                            int declarationGoesAt, int definitionGoesAt)
 {
     Overview printer = CppCodeStyleSettings::currentProjectCodeStyleOverview();
     printer.showFunctionSignatures = true;
@@ -561,6 +566,31 @@ static void writeInTheClass(const CppQuickFixInterface &interface,
     item->declarationText = printer.prettyType(tn, newFunc.unqualifiedName());
     item->definitionText = printer.prettyType(
         tn, printer.prettyName(targetClass->name()) + "::" + item->functionName);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The same two, as the cxx-frontend model writes them. It is asked of
+    // the file being edited, which is the one that reads whatever header
+    // declares the function.
+    const auto onTheModel = [&](int goesAt, const QString &name) -> std::optional<QString> {
+        int line = 0, column = 0;
+        Utils::Text::convertPosition(interface.currentFile()->document(), goesAt, &line, &column);
+        return cxxFrontendDeclarationHeadFor(interface.filePath(), func->filePath(),
+                                             func->line(), func->column(), name,
+                                             line, column + 1);
+    };
+    if (const std::optional<QString> declaration
+        = onTheModel(declarationGoesAt, item->functionName)) {
+        item->declarationText = *declaration;
+    }
+    if (const std::optional<QString> definition
+        = onTheModel(definitionGoesAt,
+                     printer.prettyName(targetClass->name()) + "::" + item->functionName)) {
+        item->definitionText = *definition;
+    }
+#else
+    Q_UNUSED(declarationGoesAt)
+    Q_UNUSED(definitionGoesAt)
+#endif
 }
 
 class InsertVirtualMethodsOp : public CppQuickFixOperation
@@ -720,7 +750,8 @@ public:
                         itemName += QLatin1String(" (redeclared)");
                     auto funcItem = new FunctionItem(func, itemName, itemBase);
                     funcItem->functionName = printer.prettyName(func->name());
-                    writeInTheClass(interface, m_classAST->symbol, clazz, func, funcItem);
+                    writeInTheClass(interface, m_classAST->symbol, clazz, func, funcItem,
+                                    m_insertPosDecl, m_insertPosOutside);
                     if (isReimplemented) {
                         factory->setHasReimplementedFunctions(true);
                         funcItem->reimplemented = true;
