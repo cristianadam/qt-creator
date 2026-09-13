@@ -336,6 +336,22 @@ FilePaths filesToSearch(const Snapshot &builtinSnapshot, const FilePath &referen
     return order.toFilePaths();
 }
 
+// How many files a search for a definition reads before handing back.
+//
+// Reading one is a parse of it and everything it includes -- a third of a
+// second for a translation unit of any size -- and the filter below lets
+// through every file that so much as *calls* the function, so a search for a
+// common name would read the project while somebody waits for a click. The
+// files come nearest first, so what is being looked for is in the first few
+// of them or in none; past that the built-in finder answers, and it has the
+// project parsed already.
+//
+// Only where handing back means the built-in answer takes over. Where a
+// partial answer would be taken for the whole of it -- the parts of a class,
+// the definitions of a list of members -- the search runs to the end, and
+// what that costs is the cost of that fix on this model.
+const int maxFilesRead = 8;
+
 // Whether \a filePath is worth reading at all when looking for \a name: the
 // built-in parse of it holds every identifier the file wrote, so a file that
 // never wrote this one cannot define it. The same rejection SymbolFinder
@@ -402,11 +418,14 @@ std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
         return std::nullopt;
 
     // A declaration whose definition this translation unit does not hold.
+    int read = 0;
     for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
         if (candidate == filePath)
             continue;
         if (!mayWrite(builtinSnapshot, candidate, counterpart.name))
             continue;
+        if (++read > maxFilesRead)
+            return std::nullopt;
 
         if (const std::optional<CxxFrontendDocument::Counterpart> definition
             = definitionIn(builtinSnapshot, candidate, counterpart.name,
@@ -741,11 +760,14 @@ BothSides bothSidesOf(const Snapshot &builtinSnapshot, const WorkingCopy &workin
     }
 
     // A declaration whose definition this translation unit does not hold.
+    int read = 0;
     for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
         if (candidate == filePath)
             continue;
         if (!mayWrite(builtinSnapshot, candidate, counterpart.name))
             continue;
+        if (++read > maxFilesRead)
+            return {};
 
         BothSides sides;
         sides.holding = readWith(builtinSnapshot, workingCopy, candidate, filePath,
