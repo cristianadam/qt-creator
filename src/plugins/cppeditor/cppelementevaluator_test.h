@@ -14,6 +14,8 @@ class ElementEvaluatorTest : public QObject
 private slots:
     void testElementUnderCursor_data();
     void testElementUnderCursor();
+    void testTheClassUnderTheCursor_data();
+    void testTheClassUnderTheCursor();
 };
 
 } // namespace CppEditor::Internal::Tests

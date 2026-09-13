@@ -284,6 +284,79 @@ void ElementEvaluatorTest::testElementUnderCursor_data()
         << QString("nothing");
 }
 
+// The class the cursor is on, with what it inherits and what inherits it:
+// what opening the type hierarchy starts from. Its own entry -- which class
+// is meant -- had no test either.
+void ElementEvaluatorTest::testTheClassUnderTheCursor_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("a class and what it inherits")
+        << QByteArray("class Base {};\n"
+                      "class Deri@ved : public Base {};\n")
+        << QString("Derived bases: Base derived:");
+
+    QTest::newRow("a class and what inherits it")
+        << QByteArray("class Ba@se {};\n"
+                      "class Derived : public Base {};\n")
+        << QString("Base bases:  derived: Derived");
+
+    // The name written where it is used means the class just as well.
+    QTest::newRow("a class named where it is used")
+        << QByteArray("class Base {};\n"
+                      "class Derived : public Base {};\n"
+                      "void f() { Deriv@ed d; }\n")
+        << QString("Derived bases: Base derived:");
+}
+
+void ElementEvaluatorTest::testTheClassUnderTheCursor()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(QString, expected);
+
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+
+    const int cursorPosition = source.indexOf('@');
+    QVERIFY(cursorPosition != -1);
+    source.remove(cursorPosition, 1);
+
+    CppEditor::Tests::TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    CppTestDocument file("file.cpp", source);
+    file.setBaseDirectory(dir.path());
+    QVERIFY(file.writeToDisk());
+
+    TextEditor::BaseTextEditor *editor = nullptr;
+    CppEditorWidget *widget = nullptr;
+    QVERIFY(CppEditor::Tests::TestCase::openCppEditor(file.filePath(), &editor, &widget));
+    testCase.closeEditorAtEndOfTestCase(editor);
+    QVERIFY(CppEditor::Tests::TestCase::waitForRehighlightedSemanticDocument(widget));
+
+    QTextCursor cursor = widget->textCursor();
+    cursor.setPosition(cursorPosition);
+    widget->setTextCursor(cursor);
+
+    QFuture<std::shared_ptr<CppElement>> future = CppElementEvaluator::asyncExecute(widget);
+    future.waitForFinished();
+    QVERIFY(future.resultCount());
+
+    CppClass * const cppClass = future.result() ? future.result()->toCppClass() : nullptr;
+    QVERIFY(cppClass);
+
+    const auto names = [](const QList<CppClass> &classes) {
+        QStringList found;
+        for (const CppClass &one : classes)
+            found << one.name;
+        found.sort();
+        return found.join(", ");
+    };
+    QCOMPARE(QString("%1 bases: %2 derived: %3").arg(cppClass->name, names(cppClass->bases),
+                                                     names(cppClass->derived)).trimmed(),
+             expected);
+}
+
 void ElementEvaluatorTest::testElementUnderCursor()
 {
     QFETCH(QByteArray, source);
