@@ -523,8 +523,13 @@ public:
         // that holds both.
         QString writtenAs(const QString &name) const;
         QString writtenAt(const Place &place, const QString &name) const;
+        // The name it was declared under, without its path or its
+        // arguments: what a caller with a rule per type has the rule
+        // for. Empty for anything that is not a class, an enumeration
+        // or an alias -- a number is not declared anywhere.
         // Without the template parameters, which is how a caller with a
         // rule per type names the type it has a rule for.
+        QString declaredName() const;
         QString writtenWithoutTemplateParameters() const;
 
     private:
@@ -533,12 +538,17 @@ public:
         std::shared_ptr<Private> d;
     };
 
-    // The type of the thing declared at a position -- a member, a variable,
+    // The type of the thing declared at a place -- a member, a variable,
     // a parameter -- where its declarator writes its name. Invalid where
     // nothing is declared there: a name that declares something is not a
     // use of it, so this asks the declaration and not whatever stands
     // there.
-    Type typeOfTheThingDeclaredAt(int line, int column) const;
+    //
+    // The place may be in a header this file read, which is how a source
+    // file answers about a member declared in the header it includes --
+    // and the document to ask about writing a definition is that one,
+    // since it holds both the member and the place the definition goes.
+    Type typeOfTheThingDeclaredAt(const Place &place) const;
 
     // The function at \a function, written out as a declaration of \a name
     // for wherever \a writtenAt is: every type in it written with as little

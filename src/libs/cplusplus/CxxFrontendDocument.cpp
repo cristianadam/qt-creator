@@ -4252,10 +4252,27 @@ QString CxxFrontendDocument::Type::writtenWithoutTemplateParameters() const
     return fromStd(cxx::to_string(d->type, "", options));
 }
 
-CxxFrontendDocument::Type CxxFrontendDocument::typeOfTheThingDeclaredAt(int line,
-                                                                       int column) const
+QString CxxFrontendDocument::Type::declaredName() const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!isValid())
+        return {};
+    const cxx::Symbol *symbol = nullptr;
+    const cxx::Type * const bare = d->traits().remove_cvref(d->type);
+    if (const auto *classType = cxx::type_cast<cxx::ClassType>(bare))
+        symbol = classType->symbol();
+    else if (const auto *enumType = cxx::type_cast<cxx::EnumType>(bare))
+        symbol = enumType->symbol();
+    else if (const auto *scoped = cxx::type_cast<cxx::ScopedEnumType>(bare))
+        symbol = scoped->symbol();
+    if (!symbol || !symbol->name())
+        return {};
+    return fromStd(cxx::to_string(symbol->name()));
+}
+
+CxxFrontendDocument::Type CxxFrontendDocument::typeOfTheThingDeclaredAt(
+    const Place &place) const
+{
+    const cxx::SourceLocation location = d->tokenAt(place.line, place.column, place.filePath);
     cxx::Symbol * const declared = d->declaredAt(location);
     if (!declared || !declared->type())
         return {};
