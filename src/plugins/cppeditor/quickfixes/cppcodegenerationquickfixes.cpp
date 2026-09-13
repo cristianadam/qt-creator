@@ -217,9 +217,6 @@ public:
     GeneratedType writtenAt(const CppRefactoringFilePtr &file,
                             const InsertionLocation &location,
                             const QStringList &namespacesOpenedThere = {}) const;
-    // And where \a theClass it belongs to is written, which is where a
-    // declaration standing outside that class stands.
-    GeneratedType writtenOutsideTheClass(const GeneratedClass &theClass) const;
 
     // Written as a declaration of \a name, or alone where that is empty.
     QString asDeclarationOf(const QString &name) const;
@@ -265,6 +262,10 @@ public:
     // for a class in a namespace is more than the name.
     QString writtenAt(const CppRefactoringFilePtr &file,
                       const InsertionLocation &location) const;
+    // Where its own name is written, which is where a declaration
+    // standing outside it stands: a type written there is written as
+    // whatever encloses the class writes it.
+    InsertionLocation placeItIsWrittenAt(const Utils::FilePath &filePath) const;
     // Where a declaration of the kind \a spec goes in it.
     InsertionLocation placeForDeclaration(const InsertionPointLocator &locator,
                                           const Utils::FilePath &filePath,
@@ -2013,21 +2014,6 @@ GeneratedType GeneratedType::writtenAt(const CppRefactoringFilePtr &file,
         m_readWith);
 }
 
-GeneratedType GeneratedType::writtenOutsideTheClass(const GeneratedClass &theClass) const
-{
-    LookupContext context(m_readWith->currentFile()->cppDocument(), m_readWith->snapshot());
-    SubstitutionEnvironment environment;
-    environment.setContext(context);
-    environment.switchScope(theClass.m_class);
-    ClassOrNamespace *target = context.lookupType(theClass.m_class->enclosingScope());
-    if (!target)
-        target = context.globalNamespace();
-    UseMinimalNames minimal(target);
-    environment.enter(&minimal);
-    Control *control = m_readWith->currentFile()->cppDocument()->control();
-    return GeneratedType(rewriteType(m_type, &environment, control), m_scope, m_readWith);
-}
-
 QString GeneratedType::asDeclarationOf(const QString &name) const
 {
     return generationOverview().prettyType(m_type, name);
@@ -2084,6 +2070,11 @@ QString GeneratedClass::writtenAt(const CppRefactoringFilePtr &file,
                                   const InsertionLocation &location) const
 {
     return symbolAtDifferentLocation(*m_readWith, m_class, file, location);
+}
+
+InsertionLocation GeneratedClass::placeItIsWrittenAt(const Utils::FilePath &filePath) const
+{
+    return InsertionLocation(filePath, {}, {}, m_class->line(), m_class->column());
 }
 
 DeclarationToDefine GeneratedClass::toDefine(const CppRefactoringChanges &changes) const
@@ -2619,7 +2610,8 @@ GeneratedType GetterSetterRefactoringHelper::Data::getReturnTypeHeader(
         const GeneratedType t = q->m_settings->returnByConstRef ? parameterType() : memberVarType();
         if (headerContext == HeaderContext::InsideClass)
             return t;
-        return t.writtenOutsideTheClass(q->m_class);
+        return t.writtenAt(q->m_headerFile,
+                           q->m_class.placeItIsWrittenAt(q->m_headerFile->filePath()));
     }
     QString typeTemplate = *getSetTemplate().returnTypeTemplate;
     if (returnTypeTemplateParameter().isValid())
