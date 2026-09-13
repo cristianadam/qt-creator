@@ -17,6 +17,7 @@
 #include <cplusplus/Control.h>
 #include <functional>
 #include <cplusplus/CxxFrontendDocument.h>
+#include <cplusplus/findusages.h>
 #include <cplusplus/Literals.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
@@ -244,6 +245,8 @@ private slots:
     void classesWithTheirBases();
     void classesUsing_data();
     void classesUsing();
+    void usageTags_data();
+    void usageTags();
     void enclosingFunction_data();
     void enclosingFunction();
     void typeDeclared_data();
@@ -2745,6 +2748,226 @@ void tst_cxxfrontenddocument::classesUsing()
                              .arg(written.place.line).arg(written.place.column));
     }
     QCOMPARE(described, expected);
+}
+
+// What each place does with the thing it names -- reads it, writes it,
+// declares it -- which is what a categorised search shows beside a line.
+// Compared against the built-in front end's FindUsages, whose rules these
+// are.
+namespace {
+
+QString describeTags(Usage::Tags tags)
+{
+    static const QList<QPair<Usage::Tag, QString>> names{
+        {Usage::Tag::Declaration, "Declaration"},
+        {Usage::Tag::Read, "Read"},
+        {Usage::Tag::Write, "Write"},
+        {Usage::Tag::WritableRef, "WritableRef"},
+        {Usage::Tag::Override, "Override"},
+        {Usage::Tag::MocInvokable, "MocInvokable"},
+        {Usage::Tag::Template, "Template"},
+        {Usage::Tag::ConstructorDestructor, "ConstructorDestructor"},
+        {Usage::Tag::Operator, "Operator"},
+        {Usage::Tag::Used, "Used"},
+    };
+    QStringList said;
+    for (const auto &[tag, name] : names) {
+        if (tags & tag)
+            said << name;
+    }
+    return said.isEmpty() ? QString("-") : said.join('|');
+}
+
+// The symbol the built-in front end records at a position, which is what its
+// FindUsages is asked about.
+Symbol *builtinSymbolAt(const Document::Ptr &doc, int line, int column)
+{
+    Control * const control = doc->translationUnit()->control();
+    for (Symbol **it = control->firstSymbol(), **end = control->lastSymbol(); it != end; ++it) {
+        if ((*it)->line() == line && (*it)->column() == column)
+            return *it;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void tst_cxxfrontenddocument::usageTags_data()
+{
+    QTest::addColumn<QByteArray>("marked");   // $ stands where the thing is declared
+    QTest::addColumn<QStringList>("expected");
+    QTest::addColumn<QStringList>("builtinSays"); // empty where it says the same
+
+    QTest::newRow("a parameter read")
+        << QByteArray("int f(int $a) {\n"
+                      "    return a;\n"
+                      "}\n")
+        << QStringList({"1:11 Declaration", "2:12 Read"}) << QStringList();
+
+    QTest::newRow("declared with a value, then assigned")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    i = 1;\n"
+                      "    int j = i;\n"
+                      "}\n")
+        << QStringList({"2:9 Declaration|Write", "3:5 Write", "4:13 Read"}) << QStringList();
+
+    QTest::newRow("counted up and down")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    ++i;\n"
+                      "    i++;\n"
+                      "    i += 2;\n"
+                      "}\n")
+        << QStringList({"2:9 Declaration|Write", "3:7 Write", "4:5 Write", "5:5 Write"})
+        << QStringList();
+
+    QTest::newRow("handed to a call")
+        << QByteArray("void byValue(int);\n"
+                      "void byConstRef(const int &);\n"
+                      "void byRef(int &);\n"
+                      "void byPointer(int *);\n"
+                      "void f() {\n"
+                      "    int $i = 0;\n"
+                      "    byValue(i);\n"
+                      "    byConstRef(i);\n"
+                      "    byRef(i);\n"
+                      "    byPointer(&i);\n"
+                      "}\n")
+        << QStringList({"6:9 Declaration|Write", "7:13 Read", "8:16 Read", "9:11 WritableRef",
+                        "10:16 WritableRef"})
+        << QStringList();
+
+    QTest::newRow("a member function that may write it")
+        << QByteArray("struct S {\n"
+                      "    void change();\n"
+                      "    void look() const;\n"
+                      "};\n"
+                      "void f() {\n"
+                      "    S $s;\n"
+                      "    s.look();\n"
+                      "    s.change();\n"
+                      "}\n")
+        << QStringList({"6:7 Declaration", "7:5 Read", "8:5 WritableRef"}) << QStringList();
+
+    QTest::newRow("deleted")
+        << QByteArray("void f() {\n"
+                      "    int *$p = 0;\n"
+                      "    delete p;\n"
+                      "}\n")
+        << QStringList({"2:10 Declaration|Write", "3:12 Write"}) << QStringList();
+
+    QTest::newRow("written over an override")
+        << QByteArray("struct B { virtual void f(); };\n"
+                      "struct D : B { void $f() override; };\n")
+        << QStringList("2:21 Declaration|Override") << QStringList();
+
+    QTest::newRow("under a template")
+        << QByteArray("template<typename T> struct S { void $f(); };\n")
+        << QStringList("1:38 Declaration|Template") << QStringList();
+
+    QTest::newRow("a class named by its constructor and destructor")
+        << QByteArray("struct $S {\n"
+                      "    S();\n"
+                      "    ~S();\n"
+                      "};\n"
+                      "S s;\n")
+        << QStringList({"1:8 Declaration", "2:5 ConstructorDestructor",
+                        "3:6 ConstructorDestructor", "5:1 -"})
+        << QStringList();
+
+    QTest::newRow("read in a condition")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    if (i) {}\n"
+                      "    switch (i) {}\n"
+                      "}\n")
+        << QStringList({"2:9 Declaration|Write", "3:9 Read", "4:13 Read"}) << QStringList();
+
+    // Handed back through a reference, so whoever gets it can write it.
+    // The built-in front end always says Read here: its rule asks what the
+    // *function's* type says rather than what it hands back, and a function
+    // type is neither a reference nor a pointer.
+    QTest::newRow("handed back")
+        << QByteArray("int &g();\n"
+                      "int &f() {\n"
+                      "    static int $i = 0;\n"
+                      "    return i;\n"
+                      "}\n")
+        << QStringList({"3:16 Declaration|Write", "4:12 WritableRef"})
+        << QStringList({"3:16 Declaration|Write", "4:12 Read"});
+
+    // What a lambda captured is a thing of its own, and what its body names
+    // is that one -- so a search for the variable outside stops at the
+    // capture. On unsupportedQueries(); the rule that would say whether such
+    // a write is a write is written and waiting for the places to reach it.
+    //
+    // Worth knowing about the built-in answer here: it says Read for a write
+    // through a capture *by reference* as readily as for one by value, so
+    // what is pinned below is not the right answer either.
+    QTest::newRow("captured by value")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    auto l = [i]() mutable { i = 1; };\n"
+                      "}\n")
+        << QStringList("2:9 Declaration|Write")
+        << QStringList({"2:9 Declaration|Write", "3:15 -", "3:30 Read"});
+
+    QTest::newRow("captured by reference")
+        << QByteArray("void f() {\n"
+                      "    int $i = 0;\n"
+                      "    auto l = [&i]() { i = 1; };\n"
+                      "}\n")
+        << QStringList("2:9 Declaration|Write")
+        << QStringList({"2:9 Declaration|Write", "3:16 -", "3:23 Read"});
+
+    QTest::newRow("written into a member initializer")
+        << QByteArray("struct S {\n"
+                      "    S(int v) : m(v) {}\n"
+                      "    int $m;\n"
+                      "};\n")
+        << QStringList({"2:16 Write", "3:9 Declaration"}) << QStringList();
+}
+
+void tst_cxxfrontenddocument::usageTags()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QStringList, expected);
+    QFETCH(QStringList, builtinSays);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+    const Position &declaration = positions.first();
+
+    // What the built-in front end says, which is where these rules come from.
+    // Its own document needs a #line marker or it counts lines from zero.
+    const QByteArray builtinSource = "#line 1 \"<stdin>\"\n" + source;
+    const Document::Ptr doc = Document::create(Utils::FilePath::fromPathPart(u"<stdin>"));
+    doc->setUtf8Source(builtinSource);
+    doc->parse();
+    doc->check();
+    Snapshot snapshot;
+    snapshot.insert(doc);
+    Symbol * const symbol = builtinSymbolAt(doc, declaration.line, declaration.column);
+    QVERIFY(symbol);
+    FindUsages findUsages(builtinSource, doc, snapshot, true);
+    findUsages(symbol);
+    QStringList builtinSaid;
+    for (const Usage &usage : findUsages.usages()) {
+        builtinSaid << QString("%1:%2 %3").arg(usage.line).arg(usage.col + 1)
+                           .arg(describeTags(usage.tags));
+    }
+    QCOMPARE(builtinSaid, builtinSays.isEmpty() ? expected : builtinSays);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    QStringList said;
+    for (const CxxFrontendDocument::NamedPlace &place :
+         document.usagesOf({{}, declaration.line, declaration.column})) {
+        said << QString("%1:%2 %3").arg(place.place.line).arg(place.place.column)
+                    .arg(describeTags(place.tags));
+    }
+    QCOMPARE(said, expected);
 }
 
 // The function written around a position, as a reader about to write

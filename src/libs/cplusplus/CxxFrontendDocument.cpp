@@ -3838,6 +3838,341 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int li
     return declaration;
 }
 
+namespace {
+
+// What a place does with the thing it names: reads it, writes it, declares
+// it, or hands out something that can write it.
+//
+// This is FindUsages::GetUsageTags asked of the other tree. The rules are its
+// rules, walked the same way -- out from the name, the first node that
+// settles the question winning -- but most of them are shorter here: where
+// that one looks a type up at every step, the type checker has settled it
+// already and the answer is read off the node.
+//
+// Three differences the tree itself makes:
+//   - an assignment is a node of its own rather than a binary expression
+//     with an operator token to recognise;
+//   - a capture says outright whether it was by reference, rather than being
+//     recognised by the "&" token in front of it;
+//   - a conversion is a node, so the walk steps over the casts the checker
+//     inserted before it reaches what was written.
+class UsageTags
+{
+public:
+    UsageTags(cxx::TranslationUnit &unit, const QList<cxx::AST *> &path,
+              cxx::SourceLocation at, cxx::Symbol *target)
+        : m_unit(unit), m_traits(&unit), m_path(path), m_at(at), m_target(target)
+    {}
+
+    Usage::Tags get() const
+    {
+        // Out from the name: the innermost node is the name itself, and what
+        // stands around it is what decides.
+        for (int i = m_path.size() - 2; i >= 0; --i) {
+            cxx::AST * const node = m_path.at(i);
+            const auto answer = [&](Usage::Tags tags) { return tags; };
+
+            if (dynamic_cast<cxx::ImplicitCastExpressionAST *>(node))
+                continue; // A conversion the checker asked for, not something written.
+
+            if (dynamic_cast<cxx::ExpressionStatementAST *>(node)
+                || dynamic_cast<cxx::SwitchStatementAST *>(node)
+                || dynamic_cast<cxx::CaseStatementAST *>(node)
+                || dynamic_cast<cxx::IfStatementAST *>(node)) {
+                return answer(Usage::Tag::Read);
+            }
+            if (dynamic_cast<cxx::LambdaCaptureAST *>(node))
+                return {};
+            if (dynamic_cast<cxx::TypenameTypeParameterAST *>(node))
+                return answer(Usage::Tag::Declaration);
+            if (dynamic_cast<cxx::NewExpressionAST *>(node))
+                return {};
+
+            if (auto * const cls = dynamic_cast<cxx::ClassSpecifierAST *>(node)) {
+                if (holds(cls->unqualifiedId))
+                    return answer(Usage::Tag::Declaration);
+                continue;
+            }
+            if (dynamic_cast<cxx::MemInitializerAST *>(node)) {
+                // What a member initializer names it writes; what it is given
+                // it reads.
+                return answer(holdsTheMemberOf(node) ? Usage::Tag::Write : Usage::Tag::Read);
+            }
+            if (auto * const call = dynamic_cast<cxx::CallExpressionAST *>(node))
+                return notCapturedByValue(tagsForCall(call, i));
+            if (dynamic_cast<cxx::DeleteExpressionAST *>(node))
+                return answer(Usage::Tag::Write);
+
+            if (auto * const assignment = dynamic_cast<cxx::AssignmentExpressionAST *>(node)) {
+                if (holds(assignment->leftExpression))
+                    return notCapturedByValue(Usage::Tag::Write);
+                return notCapturedByValue(
+                    tagsFromLhsAndRhs(typeOf(assignment->leftExpression),
+                                      assignment->rightExpression));
+            }
+            if (auto * const assignment
+                = dynamic_cast<cxx::CompoundAssignmentExpressionAST *>(node)) {
+                // What it writes is what was written on the left of the
+                // operator. leftExpression beside it is the read of that the
+                // checker made of it, "a += b" being "a = a + b".
+                if (holds(assignment->targetExpression))
+                    return notCapturedByValue(Usage::Tag::Write);
+                return notCapturedByValue(
+                    tagsFromLhsAndRhs(typeOf(assignment->targetExpression),
+                                      assignment->rightExpression));
+            }
+            if (auto * const binary = dynamic_cast<cxx::BinaryExpressionAST *>(node)) {
+                return notCapturedByValue(
+                    tagsFromLhsAndRhs(typeOf(binary->leftExpression), binary->rightExpression));
+            }
+            if (auto * const unary = dynamic_cast<cxx::UnaryExpressionAST *>(node)) {
+                switch (unary->op) {
+                case cxx::TokenKind::T_PLUS_PLUS:
+                case cxx::TokenKind::T_MINUS_MINUS:
+                    return notCapturedByValue(Usage::Tag::Write);
+                case cxx::TokenKind::T_AMP:
+                case cxx::TokenKind::T_STAR:
+                    continue; // What is done with the address decides, not the address.
+                default:
+                    return answer(Usage::Tag::Read);
+                }
+            }
+            if (auto * const sizeofExpr = dynamic_cast<cxx::SizeofExpressionAST *>(node))
+                return holds(sizeofExpr->expression) ? answer(Usage::Tag::Read) : Usage::Tags();
+            if (auto * const subscript = dynamic_cast<cxx::SubscriptExpressionAST *>(node)) {
+                if (holds(subscript->indexExpression))
+                    return answer(Usage::Tag::Read);
+                continue; // What is done with the element decides.
+            }
+            if (dynamic_cast<cxx::PostIncrExpressionAST *>(node))
+                return notCapturedByValue(Usage::Tag::Write);
+
+            if (dynamic_cast<cxx::ParameterDeclarationAST *>(node))
+                return answer(Usage::Tag::Declaration);
+
+            if (dynamic_cast<cxx::IdDeclaratorAST *>(node)) {
+                // A constructor and a destructor are written under the
+                // class's name, and listing a class's usages must not call
+                // those declarations of it.
+                if (dynamic_cast<cxx::ClassSymbol *>(m_target))
+                    return answer(Usage::Tag::ConstructorDestructor);
+                continue;
+            }
+            if (auto * const declared = dynamic_cast<cxx::InitDeclaratorAST *>(node)) {
+                if (holds(declared->declarator))
+                    return tagsForDeclaration(declared, i);
+                // Written in the value the declaration is given, which is a
+                // use of it: what the thing being declared is says what is
+                // done with it, as an assignment to it would.
+                auto * const declaredType = declared->symbol ? declared->symbol->type() : nullptr;
+                return notCapturedByValue(
+                    tagsFromLhsAndRhs(declaredType, declared->initializer));
+            }
+            if (auto * const returnStmt = dynamic_cast<cxx::ReturnStatementAST *>(node))
+                return notCapturedByValue(tagsForReturn(returnStmt, i));
+        }
+        return {};
+    }
+
+private:
+    // The token this is about is inside \a node.
+    bool holds(cxx::AST *node) const
+    {
+        if (!node)
+            return false;
+        const unsigned first = node->firstSourceLocation().index();
+        const unsigned last = node->lastSourceLocation().index();
+        return m_at.index() >= first && m_at.index() < last;
+    }
+
+    // The member a member initializer names, as against what it is given.
+    bool holdsTheMemberOf(cxx::AST *node) const
+    {
+        if (auto * const paren = dynamic_cast<cxx::ParenMemInitializerAST *>(node))
+            return holds(paren->unqualifiedId);
+        if (auto * const braced = dynamic_cast<cxx::BracedMemInitializerAST *>(node))
+            return holds(braced->unqualifiedId);
+        return false;
+    }
+
+    static const cxx::Type *typeOf(cxx::ExpressionAST *expression)
+    {
+        return expression ? expression->type : nullptr;
+    }
+
+    // What a type on the left says about what is written on the right: a
+    // non-const reference or a pointer that is non-const at any level hands
+    // out something that can write it.
+    Usage::Tags tagsFromDataType(const cxx::Type *type) const
+    {
+        if (!type)
+            return {};
+        if (auto * const reference = cxx::type_cast<cxx::LvalueReferenceType>(type)) {
+            return m_traits.is_const(reference->elementType()) ? Usage::Tag::Read
+                                                               : Usage::Tag::WritableRef;
+        }
+        if (cxx::type_cast<cxx::RvalueReferenceType>(type))
+            return Usage::Tag::WritableRef;
+        while (auto * const pointer = cxx::type_cast<cxx::PointerType>(type)) {
+            type = pointer->elementType();
+            if (!m_traits.is_const(type))
+                return Usage::Tag::WritableRef;
+        }
+        return Usage::Tag::Read;
+    }
+
+    Usage::Tags tagsFromLhsAndRhs(const cxx::Type *lhs, cxx::ExpressionAST *rhs) const
+    {
+        if (const Usage::Tags tags = tagsFromDataType(lhs); tags.toInt())
+            return tags;
+        // Where the left-hand side was written "auto", what is on the right
+        // says what it is.
+        return tagsFromDataType(typeOf(rhs));
+    }
+
+    // A write inside a lambda is only a write where the lambda took the thing
+    // by reference. Unlike the built-in front end, this tree says which.
+    Usage::Tags notCapturedByValue(Usage::Tags tags) const
+    {
+        if (tags != Usage::Tags(Usage::Tag::Write)
+            && tags != Usage::Tags(Usage::Tag::WritableRef)) {
+            return tags;
+        }
+        const std::string name = m_target && m_target->name()
+                                     ? cxx::to_string(m_target->name()) : std::string();
+        if (name.empty())
+            return tags;
+
+        for (cxx::AST * const node : m_path) {
+            auto * const lambda = dynamic_cast<cxx::LambdaExpressionAST *>(node);
+            if (!lambda)
+                continue;
+            for (auto *capture : cxx::ListView{lambda->captureList}) {
+                if (auto * const byValue = dynamic_cast<cxx::SimpleLambdaCaptureAST *>(capture);
+                    byValue && m_unit.tokenText(byValue->identifierLoc) == name) {
+                    return Usage::Tag::Read;
+                }
+            }
+        }
+        return tags;
+    }
+
+    // A call: what it does with the thing is what the function it calls does
+    // with it -- either as the object it is called on, or as an argument.
+    Usage::Tags tagsForCall(cxx::CallExpressionAST *call, int index) const
+    {
+        if (holds(call->baseExpression)) {
+            // Called on the thing, directly or through a member of it. A
+            // member function that is not const can write it.
+            for (int i = index; i < m_path.size(); ++i) {
+                auto * const member = dynamic_cast<cxx::MemberExpressionAST *>(m_path.at(i));
+                if (!member)
+                    continue;
+                if (holds(member->unqualifiedId))
+                    return {}; // The thing named is the member, not the object.
+                auto * const function = dynamic_cast<cxx::FunctionSymbol *>(member->symbol);
+                if (!function)
+                    return {};
+                if (function->isStatic())
+                    return {};
+                auto * const type = function->type()
+                                        ? cxx::type_cast<cxx::FunctionType>(function->type())
+                                        : nullptr;
+                if (!type)
+                    return {};
+                return type->cvQualifiers() == cxx::CvQualifiers::kConst
+                           ? Usage::Tag::Read : Usage::Tag::WritableRef;
+            }
+            return {};
+        }
+
+        // Handed to the call. What the parameter it lands in says decides.
+        int argument = -1;
+        int position = 0;
+        for (auto *given : cxx::ListView{call->expressionList}) {
+            if (holds(given))
+                argument = position;
+            ++position;
+        }
+        if (argument < 0)
+            return {};
+
+        auto * const called = typeOf(call->baseExpression);
+        auto * const type = called ? cxx::type_cast<cxx::FunctionType>(called) : nullptr;
+        if (!type || int(type->parameterTypes().size()) <= argument)
+            return {};
+        return tagsFromDataType(type->parameterTypes().at(argument));
+    }
+
+    // Handed back: what the function's return type says.
+    Usage::Tags tagsForReturn(cxx::ReturnStatementAST *statement, int index) const
+    {
+        for (int i = index; i >= 0; --i) {
+            auto * const definition
+                = dynamic_cast<cxx::FunctionDefinitionAST *>(m_path.at(i));
+            if (!definition || !definition->symbol)
+                continue;
+            auto * const type = definition->symbol->type()
+                                    ? cxx::type_cast<cxx::FunctionType>(definition->symbol->type())
+                                    : nullptr;
+            if (!type)
+                return {};
+            return tagsFromLhsAndRhs(type->returnType(), statement->expression);
+        }
+        return {};
+    }
+
+    // A declaration of it, and what else is written around the name.
+    Usage::Tags tagsForDeclaration(cxx::InitDeclaratorAST *declared, int index) const
+    {
+        auto * const declarator = declared->declarator;
+        cxx::FunctionDeclaratorChunkAST *asFunction = nullptr;
+        if (declarator) {
+            for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+                if (auto * const function
+                    = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk)) {
+                    asFunction = function;
+                }
+            }
+        }
+        const bool isFunction = asFunction != nullptr;
+        // Declared and given a value in one line, which writes it.
+        if (declared->initializer && !isFunction)
+            return {Usage::Tag::Declaration, Usage::Tag::Write};
+
+        Usage::Tags tags = Usage::Tag::Declaration;
+        if (auto * const id = declarator
+                                  ? dynamic_cast<cxx::IdDeclaratorAST *>(declarator->coreDeclarator)
+                                  : nullptr) {
+            if (dynamic_cast<cxx::OperatorFunctionIdAST *>(id->unqualifiedId))
+                tags |= Usage::Tag::Operator;
+        }
+        // What a reader is offered is where somebody wrote the word, which
+        // this tree says outright.
+        if (asFunction && (asFunction->isOverride || asFunction->isFinal))
+            tags |= Usage::Tag::Override;
+        if (qtMethodOf(declared->symbol) != CxxFrontendDocument::QtMethod::None)
+            tags |= Usage::Tag::MocInvokable;
+        if (auto * const function = dynamic_cast<cxx::FunctionSymbol *>(declared->symbol);
+            function && (function->isConstructor() || function->isDestructor())) {
+            tags |= Usage::Tag::ConstructorDestructor;
+        }
+        for (int i = index; i >= 0; --i) {
+            if (dynamic_cast<cxx::TemplateDeclarationAST *>(m_path.at(i)))
+                tags |= Usage::Tag::Template;
+        }
+        return tags;
+    }
+
+    cxx::TranslationUnit &m_unit;
+    const cxx::TypeTraits m_traits;
+    const QList<cxx::AST *> &m_path;
+    const cxx::SourceLocation m_at;
+    cxx::Symbol * const m_target;
+};
+
+} // namespace
+
 QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
     const Place &declaration) const
 {
@@ -3889,8 +4224,15 @@ QList<CxxFrontendDocument::NamedPlace> CxxFrontendDocument::usagesOf(
         }
         if (canonical(symbol) != wanted)
             continue;
+
+        // occurrencesOf() lists what this file writes, so every place is in
+        // this file and the path is asked for without naming one.
+        const QList<cxx::AST *> path = cxxAstPathAt(*this, occurrence.line, occurrence.column);
+        const cxx::SourceLocation here = d->tokenAt(occurrence.line, occurrence.column);
         places.append({occurrence, isDeclaration,
-                       functionAt(occurrence.line, occurrence.column)});
+                       functionAt(occurrence.line, occurrence.column),
+                       UsageTags(const_cast<Private *>(d.get())->unit, path, here, target)
+                           .get()});
     }
     return places;
 }
@@ -5482,6 +5824,12 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // is enough to tell a function that throws from one that does not,
         // and not enough to write the specification back as it stood.
         "how an exception specification was written",
+        // Where a lambda writes a name it captured. A capture gives the
+        // lambda a thing of its own, and what the body names is that one --
+        // so a search for the variable outside stops at the capture and the
+        // places inside are not among its usages. Telling the two apart
+        // needs the capture read as naming what it copies from.
+        "the places a lambda writes a name it captured",
     };
 }
 

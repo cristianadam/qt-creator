@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cplusplus/Overview.h>
+#include <cplusplus/findusages.h>
 
 #include <utils/utilsicons.h>
 
@@ -804,6 +805,14 @@ public:
         // empty at file scope. What a list of call sites is grouped by, and
         // what a usages view shows beside a line.
         QString containingFunction;
+
+        // What the place does with the thing: reads it, writes it, declares
+        // it, hands out something that can write it. The same answer
+        // FindUsages::GetUsageTags gives of the built-in tree, so that a
+        // categorised search reads the same words either way. No tag at all
+        // where the place is one this model has no rule for, which is what
+        // the built-in says of such a place too.
+        Usage::Tags tags;
     };
     QList<NamedPlace> usagesOf(const Place &declaration) const;
 
