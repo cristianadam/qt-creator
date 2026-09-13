@@ -345,11 +345,53 @@ private:
     bool splitLocalUsesFromCxxFrontend(CursorInfo *) const { return false; }
 #endif
 
+    // Every place this file names what the cursor is on, as the
+    // cxx-frontend model reads it, and nothing where it has not read the
+    // file or resolved the name -- and then the built-in lookup answers.
+    //
+    // The same question find usages asks of each file it looks at, asked of
+    // this one: the model resolved every name when it read the file, so
+    // nothing has to be cut out of the text and looked up again.
+    std::optional<CursorInfo::Ranges> referencesFromCxxFrontend() const
+    {
+#ifdef QTC_WITH_CXX_FRONTEND
+        const std::optional<CPlusPlus::CxxFrontendDocument::Declaration> declaration
+            = Internal::cxxFrontendDeclarationAt(m_document->filePath(), m_line, m_column);
+        if (!declaration)
+            return std::nullopt;
+
+        // Where it was first declared, which is what tells one thing from
+        // another: a header's declaration and this file's use of it are one
+        // thing written in two places.
+        const CPlusPlus::CxxFrontendDocument::Place first{declaration->canonicalFilePath,
+                                                          declaration->canonicalLine,
+                                                          declaration->canonicalColumn};
+        if (first.line == 0)
+            return std::nullopt;
+
+        const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
+            = Internal::cxxFrontendUsagesIn(m_snapshot, CppModelManager::workingCopy(),
+                                            m_document->filePath(), first);
+        if (!places)
+            return std::nullopt;
+
+        CursorInfo::Ranges result;
+        for (const CPlusPlus::CxxFrontendDocument::NamedPlace &place : *places)
+            result.append({place.place.line, place.place.column, place.place.length});
+        return result;
+#else
+        return std::nullopt;
+#endif
+    }
+
     CursorInfo::Ranges findReferences() const
     {
         CursorInfo::Ranges result;
         if (!m_scope || m_expression.isEmpty())
             return result;
+
+        if (const std::optional<CursorInfo::Ranges> onTheModel = referencesFromCxxFrontend())
+            return *onTheModel;
 
         TypeOfExpression typeOfExpression;
         Snapshot theSnapshot = m_snapshot;

@@ -5,6 +5,9 @@
 
 #include "cppeditorwidget.h"
 #include "cppmodelmanager.h"
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 #include "cpptoolstestcase.h"
 
 #include <QElapsedTimer>
@@ -101,8 +104,18 @@ UseSelectionsTestCase::UseSelectionsTestCase(CppTestDocument &testFile,
     QVERIFY(!hasTimedOut);
 //    for (const Selection &selection : selections)
 //        qDebug() << QTest::toString(selection);
-    QEXPECT_FAIL("non-local use as macro argument - argument expanded 2",
-                 clangCodeModel ? "FIXME: One occurrence comes in twice" : "TODO", Abort);
+    // The built-in reading misses one of the two places here, and the
+    // cxx-frontend model does not: a name written as a macro's argument
+    // keeps the place it was written at, which is what it is marked by.
+#ifdef QTC_WITH_CXX_FRONTEND
+    const bool onTheModel = cxxFrontendModelRequested();
+#else
+    const bool onTheModel = false;
+#endif
+    if (clangCodeModel || !onTheModel) {
+        QEXPECT_FAIL("non-local use as macro argument - argument expanded 2",
+                     clangCodeModel ? "FIXME: One occurrence comes in twice" : "TODO", Abort);
+    }
     QEXPECT_FAIL("local use as macro argument 2 - argument eaten",
                  "expansion takes away the original token", Abort);
     QCOMPARE(selections, expectedSelections);
