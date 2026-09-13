@@ -1284,19 +1284,22 @@ void tst_cxxfrontenddocument::unsupportedQueries()
     QVERIFY(!namesOf(notMatched.candidates).contains("fromTheArrayOne"));
     QVERIFY(!notMatched.membersMayBeMissing);
 
-    // A slot is written with a macro that expands to an access specifier, so
-    // the parser is handed a member function and nothing says otherwise --
-    // asserted here rather than left to be found in an outline.
-    QVERIFY(unsupported.contains("whether a member function is a signal or a slot"));
+    // A slot is written with a macro that expands to an access specifier,
+    // and this front end reads the section rather than letting the macro
+    // take it away -- so what Qt makes of a member is said, the icon
+    // beside it included, which is what a reader of a list of them sees.
+    QVERIFY(!unsupported.contains("whether a member function is a signal or a slot"));
     const CxxFrontendDocument qtClass("#define slots\n"
-                                      "class C { public slots: void s(); };\n",
+                                      "#define signals public\n"
+                                      "class C { public slots: void s(); signals: void g(); };\n",
                                       "<stdin>");
-    QStringList slotIcons;
+    QStringList qtIcons;
     for (const CxxFrontendDocument::Symbol &symbol : qtClass.symbols()) {
-        if (symbol.name == "s")
-            slotIcons.append(QString::number(int(symbol.icon)));
+        if (symbol.name == "s" || symbol.name == "g")
+            qtIcons.append(QString("%1 %2").arg(symbol.name).arg(int(symbol.icon)));
     }
-    QCOMPARE(slotIcons, QStringList(QString::number(int(Utils::CodeModelIcon::FuncPublic))));
+    QCOMPARE(qtIcons, QStringList({QString("s %1").arg(int(Utils::CodeModelIcon::SlotPublic)),
+                                   QString("g %1").arg(int(Utils::CodeModelIcon::Signal))}));
 
     // What the list said before, and it went stale the moment the document
     // began recording which macros it consulted. The document answers it, so

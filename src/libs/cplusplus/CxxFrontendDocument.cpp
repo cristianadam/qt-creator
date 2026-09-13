@@ -186,15 +186,15 @@ QString classNamedBy(const cxx::Type *type)
     return name.startsWith("__") ? QString() : name;
 }
 
+// What Qt makes of a function, where the file was read as Qt.
+CxxFrontendDocument::QtMethod qtMethodOf(cxx::Symbol *symbol);
+
 // Which icon stands for a symbol, as Icons::iconTypeForSymbol() decides it
 // for a built-in one: what the thing is, who may see it, and whether it
 // belongs to the class rather than to an object.
 //
-// Two of that function's answers cannot be reached from here. A Qt signal or
-// slot is one: signals and slots are macros that expand to an access
-// specifier, so what arrives is a plain member function -- see
-// unsupportedQueries(). Objective-C is the other, and this front end has
-// none.
+// One of that function's answers cannot be reached from here: Objective-C,
+// which this front end has none of.
 // \a classKey is the keyword a class was written with, which the symbol does
 // not record and the caller reads off the token before the name.
 Utils::CodeModelIcon::Type iconTypeOf(cxx::Symbol *symbol, cxx::TokenKind classKey)
@@ -214,6 +214,19 @@ Utils::CodeModelIcon::Type iconTypeOf(cxx::Symbol *symbol, cxx::TokenKind classK
     };
 
     if (auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol)) {
+        // What Qt makes of it first: a signal is emitted and a slot is
+        // connected to, which is what somebody reading a list of a class's
+        // members is looking for -- and what the built-in front end shows
+        // for them too.
+        switch (qtMethodOf(function)) {
+        case CxxFrontendDocument::QtMethod::Signal:
+            return Signal;
+        case CxxFrontendDocument::QtMethod::Slot:
+            return byAccess(SlotPublic, SlotProtected, SlotPrivate);
+        case CxxFrontendDocument::QtMethod::Invokable:
+        case CxxFrontendDocument::QtMethod::None:
+            break;
+        }
         return function->isStatic()
                    ? byAccess(FuncPublicStatic, FuncProtectedStatic, FuncPrivateStatic)
                    : byAccess(FuncPublic, FuncProtected, FuncPrivate);
@@ -5361,11 +5374,6 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // how anything can be said about an include that is not used; this
         // reports the headers and not the lines.
         "the line each include is on",
-        // Whether a member function is a Qt signal or slot. Both are macros
-        // that expand to an access specifier, so what reaches the parser is
-        // an ordinary member function and an outline gives it an ordinary
-        // icon.
-        "whether a member function is a signal or a slot",
         // Which specialization of a template an object is, where the
         // specialization is written with a type the file does not declare.
         // "template <typename T, size_t N> struct S<T[N]>" in a file with
