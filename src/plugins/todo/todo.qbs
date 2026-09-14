@@ -49,4 +49,8 @@ QtcPlugin {
         "todoprojectpanel.h",
         "todotr.h",
     ]
+
+    QtcTestFiles {
+        files: [ "cpptodoitemsscanner_test.cpp" ]
+    }
 }

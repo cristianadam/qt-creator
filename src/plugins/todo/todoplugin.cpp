@@ -12,6 +12,10 @@
 
 namespace Todo::Internal {
 
+#ifdef WITH_TESTS
+QObject *createCppTodoScannerTest();
+#endif
+
 class TodoPlugin final : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -36,6 +40,10 @@ public:
         setupTodoSettingsPage();
 
         setupTodoProjectPanel();
+
+#ifdef WITH_TESTS
+        addTestCreator(createCppTodoScannerTest);
+#endif
     }
 };
 

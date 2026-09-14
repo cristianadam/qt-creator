@@ -1,5 +1,5 @@
 add_qtc_plugin(Todo
-  DEPENDS QmlJS
+  DEPENDS CPlusPlus QmlJS
   PLUGIN_DEPENDS Core CppEditor ProjectExplorer
   SOURCES
     constants.h
@@ -22,4 +22,9 @@ add_qtc_plugin(Todo
     todoplugin.qrc
     todoprojectpanel.cpp todoprojectpanel.h
     todotr.h
+)
+
+extend_qtc_plugin(Todo
+  CONDITION WITH_TESTS
+  SOURCES cpptodoitemsscanner_test.cpp
 )

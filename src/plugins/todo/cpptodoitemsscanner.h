@@ -6,7 +6,7 @@
 
 #include "todoitemsscanner.h"
 
-#include <cplusplus/CppDocument.h>
+#include <utils/filepath.h>
 
 namespace Todo {
 namespace Internal {
@@ -16,12 +16,16 @@ class CppTodoItemsScanner : public TodoItemsScanner
 public:
     explicit CppTodoItemsScanner(const KeywordList &keywordList, QObject *parent = nullptr);
 
+    // What the keywords are written in, read off a file's own text. Reachable
+    // for the test, which needs neither a project nor a file on disk for it.
+    QList<TodoItem> itemsInText(const Utils::FilePath &filePath, const QString &text);
+
 protected:
     void scannerParamsChanged() override;
 
 private:
-    void documentUpdated(CPlusPlus::Document::Ptr doc);
-    void processDocument(CPlusPlus::Document::Ptr doc);
+    void fileUpdated(const Utils::FilePath &filePath);
+    void processFile(const Utils::FilePath &filePath);
 };
 
 }

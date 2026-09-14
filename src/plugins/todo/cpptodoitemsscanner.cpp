@@ -5,11 +5,10 @@
 #include "cpptodoitemsscanner.h"
 
 #include <cppeditor/cppmodelmanager.h>
+#include <cppeditor/cppworkingcopy.h>
 #include <cppeditor/projectinfo.h>
 
-#include <cplusplus/TranslationUnit.h>
-
-#include <cctype>
+#include <cplusplus/SimpleLexer.h>
 
 using namespace Utils;
 
@@ -19,10 +18,12 @@ namespace Internal {
 CppTodoItemsScanner::CppTodoItemsScanner(const KeywordList &keywordList, QObject *parent) :
     TodoItemsScanner(keywordList, parent)
 {
-    CppEditor::CppModelManager *modelManager = CppEditor::CppModelManager::instance();
-
-    connect(modelManager, &CppEditor::CppModelManager::documentUpdated,
-            this, &CppTodoItemsScanner::documentUpdated, Qt::DirectConnection);
+    // Queued, where the QML scanner is direct: what is read here is the file's
+    // own text, and for a file being edited that text is the working copy's,
+    // which is worked out from the open editors and so belongs to this thread.
+    connect(CppEditor::CppModelManager::instance(),
+            &CppEditor::CppModelManager::fileUpdated,
+            this, &CppTodoItemsScanner::fileUpdated, Qt::QueuedConnection);
 
     setParams(keywordList);
 }
@@ -42,54 +43,90 @@ void CppTodoItemsScanner::scannerParamsChanged()
     modelManager->updateSourceFiles(filesToBeUpdated);
 }
 
-void CppTodoItemsScanner::documentUpdated(CPlusPlus::Document::Ptr doc)
+void CppTodoItemsScanner::fileUpdated(const FilePath &filePath)
 {
-    CppEditor::CppModelManager *modelManager = CppEditor::CppModelManager::instance();
-    if (!modelManager->projectPart(doc->filePath()).isEmpty())
-        processDocument(doc);
+    if (!CppEditor::CppModelManager::projectPart(filePath).isEmpty())
+        processFile(filePath);
 }
 
-void CppTodoItemsScanner::processDocument(CPlusPlus::Document::Ptr doc)
+void CppTodoItemsScanner::processFile(const FilePath &filePath)
 {
+    // A TODO is something somebody wrote, so what is read is the file's own
+    // text rather than the preprocessed source the code model keeps. That
+    // source has been through the conditionals, so a TODO written in a branch
+    // this configuration does not build was not in it; now it is reported.
+    // The text of a file being edited is the one in the editor, not the one on
+    // disk.
+    QString text;
+    if (const std::optional<QByteArray> edited
+        = CppEditor::CppModelManager::workingCopy().source(filePath)) {
+        text = QString::fromUtf8(*edited);
+    } else {
+        const Result<QByteArray> contents = filePath.fileContents();
+        if (!contents)
+            return;
+        text = QString::fromUtf8(*contents);
+    }
+
+    emit itemsFetched(filePath.toUrlishString(), itemsInText(filePath, text));
+}
+
+QList<TodoItem> CppTodoItemsScanner::itemsInText(const FilePath &filePath, const QString &text)
+{
+    // Whichever scanner is installed answers, so this reads the same tokens as
+    // the rest of the editor does.
+    CPlusPlus::SimpleLexer lexer;
+    lexer.setSkipComments(false);
+    const CPlusPlus::Tokens tokens = lexer(text);
+
+    const QString fileName = filePath.toUrlishString();
     QList<TodoItem> itemList;
-    CPlusPlus::TranslationUnit *translationUnit = doc->translationUnit();
 
-    for (int i = 0; i < translationUnit->commentCount(); ++i) {
+    // The comments come in the order they are written, so the line a comment
+    // starts on is counted by carrying on from the one before it.
+    int lineNumber = 1;
+    int counted = 0;
 
-        // Get comment source
-        CPlusPlus::Token token = doc->translationUnit()->commentAt(i);
-        QByteArray source = doc->utf8Source().mid(token.bytesBegin(), token.bytes()).trimmed();
+    for (const CPlusPlus::Token &token : tokens) {
+        if (!token.isComment())
+            continue;
 
-        if ((token.kind() == CPlusPlus::T_COMMENT) || (token.kind() == CPlusPlus::T_DOXY_COMMENT)) {
-            // Remove trailing "*/"
-            source = source.left(source.length() - 2);
+        const int begin = token.utf16charsBegin();
+        for (; counted < begin; ++counted) {
+            if (text.at(counted) == u'\n')
+                ++lineNumber;
         }
 
-        // Process every line of the comment
-        int lineNumber = 0;
-        translationUnit->getPosition(token.utf16charsBegin(), &lineNumber);
+        QString source = text.mid(begin, token.utf16chars()).trimmed();
 
-        for (int from = 0, sz = source.size(); from < sz; ++lineNumber) {
-            int to = source.indexOf('\n', from);
+        // Remove the trailing "*/", where there is one: a block comment the
+        // file never closed has none, and taking two characters off it
+        // regardless loses the last two of what was written.
+        if (source.endsWith(u"*/"))
+            source.chop(2);
+
+        // Process every line of the comment
+        int line = lineNumber;
+        for (int from = 0, sz = source.size(); from < sz; ++line) {
+            int to = source.indexOf(u'\n', from);
             if (to == -1)
                 to = sz - 1;
 
-            const char *start = source.constData() + from;
-            const char *end = source.constData() + to;
-            while (start != end && std::isspace((unsigned char)*start))
+            int start = from;
+            int end = to;
+            while (start < end && source.at(start).isSpace())
                 ++start;
-            while (start != end && std::isspace((unsigned char)*end))
+            while (start < end && source.at(end).isSpace())
                 --end;
             const int length = end - start + 1;
-            if (length > 0) {
-                QString commentLine = QString::fromUtf8(start, length);
-                processCommentLine(doc->filePath().toUrlishString(), commentLine, lineNumber, itemList);
-            }
+            if (length > 0)
+                processCommentLine(fileName, source.mid(start, length), line, itemList);
 
             from = to + 1;
         }
     }
-    emit itemsFetched(doc->filePath().toUrlishString(), itemList);
+
+    return itemList;
 }
 
 }
