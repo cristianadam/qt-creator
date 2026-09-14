@@ -11,16 +11,7 @@ namespace CppEditor {
 
 using namespace Internal;
 
-enum { MaxPendingDocuments = 10 };
-
-CppLocatorData::CppLocatorData()
-{
-    m_search.setSymbolsToSearchFor(SymbolType::Enums |
-                                   SymbolType::Classes |
-                                   SymbolType::Functions |
-                                   SymbolType::TypeAliases);
-    m_pendingDocuments.reserve(MaxPendingDocuments);
-}
+CppLocatorData::CppLocatorData() = default;
 
 QList<IndexItem::Ptr> CppLocatorData::findSymbols(IndexItem::ItemType type,
                                                   const QString &symbolName) const
@@ -40,23 +31,20 @@ QList<IndexItem::Ptr> CppLocatorData::findSymbols(IndexItem::ItemType type,
 
 void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
 {
-    QMutexLocker locker(&m_pendingDocumentsMutex);
+    if (document->filePath().suffix() == "moc")
+        return;
 
-    bool isPending = false;
-    for (int i = 0, ei = m_pendingDocuments.size(); i < ei; ++i) {
-        const CPlusPlus::Document::Ptr &doc = m_pendingDocuments.at(i);
-        if (doc->filePath() == document->filePath()) {
-            isPending = true;
-            if (document->revision() >= doc->revision())
-                m_pendingDocuments[i] = document;
-            break;
-        }
-    }
+    // Walked here rather than under the lock: this is the whole cost of
+    // keeping the index, and holding the lock through it would stop every
+    // locator query for as long as it takes. A searcher of this call's own,
+    // since two files may be indexed at once.
+    SearchSymbols search;
+    search.setSymbolsToSearchFor(SymbolType::Enums | SymbolType::Classes
+                                 | SymbolType::Functions | SymbolType::TypeAliases);
+    const IndexItem::Ptr forThisFile = search(document);
 
-    if (!isPending && document->filePath().suffix() != "moc")
-        m_pendingDocuments.append(document);
-
-    flushPendingDocument(false);
+    QMutexLocker locker(&m_infosByFileMutex);
+    m_infosByFile.insert(document->filePath().intern(), forThisFile);
 }
 
 void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
@@ -64,36 +52,12 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
     if (files.isEmpty())
         return;
 
-    QMutexLocker locker(&m_pendingDocumentsMutex);
+    QMutexLocker locker(&m_infosByFileMutex);
 
-    for (const FilePath &file : files) {
+    for (const FilePath &file : files)
         m_infosByFile.remove(file);
 
-        for (int i = 0; i < m_pendingDocuments.size(); ++i) {
-            if (m_pendingDocuments.at(i)->filePath() == file) {
-                m_pendingDocuments.remove(i);
-                break;
-            }
-        }
-    }
-
     StringTable::scheduleGC();
-    flushPendingDocument(false);
-}
-
-void CppLocatorData::flushPendingDocument(bool force) const
-{
-    // TODO: move this off the UI thread and into a future.
-    if (!force && m_pendingDocuments.size() < MaxPendingDocuments)
-        return;
-    if (m_pendingDocuments.isEmpty())
-        return;
-
-    for (CPlusPlus::Document::Ptr doc : std::as_const(m_pendingDocuments))
-        m_infosByFile.insert(doc->filePath().intern(), m_search(doc));
-
-    m_pendingDocuments.clear();
-    m_pendingDocuments.reserve(MaxPendingDocuments);
 }
 
 } // namespace CppEditor

@@ -908,8 +908,11 @@ void CppModelManager::initCppTools()
         updateSourceFiles(toSet(filePaths));
     });
 
+    // Direct, so that what a file declares is worked out on the thread that
+    // parsed it. Queued, this was the whole index being built on the GUI
+    // thread a document at a time.
     connect(m_instance, &CppModelManager::documentUpdated,
-            &d->m_locatorData, &CppLocatorData::onDocumentUpdated);
+            &d->m_locatorData, &CppLocatorData::onDocumentUpdated, Qt::DirectConnection);
 
     connect(m_instance, &CppModelManager::aboutToRemoveFiles,
             &d->m_locatorData, &CppLocatorData::onAboutToRemoveFiles);
