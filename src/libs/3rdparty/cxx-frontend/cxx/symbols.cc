@@ -1764,6 +1764,21 @@ void OverloadSetSymbol::addUsingDeclaration(
 auto OverloadSetSymbol::functions() const -> std::vector<FunctionSymbol*> {
   if (usingDeclarations_.empty()) return declaredFunctions_;
 
+  // Two overload sets can name each other: the C library headers do exactly
+  // that, <math.h> saying "using ::abs" in namespace std and <stdlib.h>
+  // saying "using std::abs" outside it. Asking one what it holds asks the
+  // other, so an expansion already under way contributes what it declares
+  // itself and stops there.
+  static thread_local std::vector<const OverloadSetSymbol*> beingExpanded;
+  if (std::ranges::contains(beingExpanded, this)) return declaredFunctions_;
+
+  struct Expanding {
+    explicit Expanding(const OverloadSetSymbol* set) {
+      beingExpanded.push_back(set);
+    }
+    ~Expanding() { beingExpanded.pop_back(); }
+  } expanding(this);
+
   auto result = declaredFunctions_;
 
   for (auto usingDeclaration : usingDeclarations_) {

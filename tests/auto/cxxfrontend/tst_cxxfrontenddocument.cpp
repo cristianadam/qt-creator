@@ -197,6 +197,7 @@ private slots:
     void theLinesAFunctionWasWrittenBetween();
     void theClassAPlaceIsWrittenIn();
     void whereTheClassOfAGivenNameIsWritten();
+    void aUsingDeclarationThatNamesItsOwnOverloadSet();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
@@ -1275,6 +1276,40 @@ void tst_cxxfrontenddocument::whereTheClassOfAGivenNameIsWritten()
     // A class named before it is written out is the one with the body, which
     // is where a reader is sent.
     QCOMPARE(byTheOther.join(", "), QString("1:7, 5:7, 10:7, nothing"));
+}
+
+// Two overload sets that name each other, which is what the C library
+// headers do: <math.h> says "using ::abs" inside namespace std and
+// <stdlib.h> says "using std::abs" outside it. An overload set asks its
+// using declarations what they introduce and a using declaration asks the
+// set it targets what it holds, so the two asked each other until the stack
+// ran out -- and since every real file includes one of those headers, this
+// crashed on anything but a test case.
+void tst_cxxfrontenddocument::aUsingDeclarationThatNamesItsOwnOverloadSet()
+{
+    const CxxFrontendDocument document("void abs();\n"
+                                       "namespace std { using ::abs; }\n"
+                                       "using std::abs;\n"
+                                       "void use() { abs(); }\n"
+                                       "struct C {\n"
+                                       "    void member();\n"
+                                       "};\n",
+                                       "<stdin>");
+
+    // Reading it at all is the assertion: looking the name up is what walks
+    // the two sets, and the file is read before anything here is asked.
+    QVERIFY(document.diagnostics().isEmpty());
+
+    QStringList names;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols())
+        names.append(symbol.name);
+    QVERIFY(names.contains("use"));
+
+    // And asking a class what it declares reaches an overload set too.
+    const QList<CxxFrontendDocument::MemberFunction> members
+        = document.memberFunctionsAt(5, 8);
+    QCOMPARE(members.size(), 1);
+    QCOMPARE(members.first().unqualifiedName, QString("member"));
 }
 
 // Two things a list of what a file declares has to say about, since neither
