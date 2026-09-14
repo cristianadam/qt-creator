@@ -762,6 +762,20 @@ std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::Fi
 // the declaration.
 std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const Utils::FilePath &filePath);
 
+// The entries the project-wide index keeps for a file, as the tree it keeps
+// them in: one root per file with what it declares hung under it, nested so
+// that a walk can stop at an enum without seeing its enumerators.
+//
+// The file is read here. Not out of the store, an index being about every
+// file a project has rather than the few being edited; and not from the
+// text the indexer hands over, which is the file already preprocessed.
+// That is what this costs: a parse of each file on top of the indexer's.
+//
+// Nothing where the model is off or cannot read the file, and then the
+// built-in walk makes the entries.
+std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CPlusPlus::Snapshot &builtinSnapshot,
+                                                      const Utils::FilePath &filePath);
+
 // What the editor colours in \a filePath: every name it writes, with the
 // kind that decides the colour, in the order they are written. Nothing
 // where the model has no such file.

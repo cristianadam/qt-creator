@@ -22,6 +22,7 @@
 #include <cxx/translation_unit.h>
 
 #include <utils/algorithm.h>
+#include <utils/stringtable.h>
 #include <utils/environment.h>
 
 #include <QHash>
@@ -1559,6 +1560,88 @@ std::optional<Link> CxxFrontendReading::definitionOfFunctionIn(
         }
     }
     return Link();
+}
+
+std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const Snapshot &builtinSnapshot,
+                                                      const FilePath &filePath)
+{
+    if (!cxxFrontendModelRequested())
+        return std::nullopt;
+
+    // Objective-C is not a language this front end reads, and what it makes
+    // of a file written in it is a wrong answer rather than a short one.
+    if (ProjectFile::isObjC(filePath))
+        return std::nullopt;
+
+    // Read here rather than taken from the store, an index being about every
+    // file a project has rather than the few being edited -- and read from
+    // the file rather than from what the indexer hands over, which is the
+    // *preprocessed* text: every macro already expanded, so what one
+    // declares would read as written by hand and stand wherever the line
+    // markers put it.
+    const HoldingDocument holding = readWith(builtinSnapshot, {}, filePath, {}, {});
+    if (!holding.document)
+        return std::nullopt;
+
+    const QList<CxxFrontendDocument::Symbol> symbols = holding.document->symbols();
+    const IndexItem::Ptr root
+        = IndexItem::create(Utils::StringTable::insert(filePath.toUrlishString()),
+                            int(symbols.size()));
+    QList<IndexItem::Ptr> entryFor(symbols.size());
+    for (int i = 0; i < symbols.size(); ++i) {
+        const CxxFrontendDocument::Symbol &symbol = symbols.at(i);
+        if (symbol.isGenerated || symbol.name.isEmpty())
+            continue;
+
+        // What the project-wide index keeps: the things somebody looks for
+        // by name. A variable, a field and an enumerator are not among them
+        // -- the "." filter over one file wants those and asks elsewhere --
+        // and neither is a function this file only promises, which that
+        // index has always counted among the declarations it leaves out.
+        switch (symbol.kind) {
+        case CxxFrontendDocument::Kind::Class:
+        case CxxFrontendDocument::Kind::Enum:
+        case CxxFrontendDocument::Kind::TypeAlias:
+            break;
+        case CxxFrontendDocument::Kind::Function:
+            if (!symbol.isDefinedHere)
+                continue;
+            break;
+        default:
+            continue;
+        }
+        const std::optional<IndexItem::ItemType> type = indexItemTypeOf(symbol.kind);
+        if (!type)
+            continue;
+
+        const bool isFunction = symbol.kind == CxxFrontendDocument::Kind::Function;
+        const IndexItem::Ptr entry
+            = IndexItem::create(indexNameOf(symbol.name),
+                                isFunction ? symbol.signature : symbol.valueType,
+                                symbol.qualified.join("::"),
+                                *type,
+                                filePath.toUrlishString(),
+                                symbol.line,
+                                symbol.column - 1, // An entry counts columns from zero.
+                                Utils::CodeModelIcon::iconForType(symbol.icon),
+                                isFunction && symbol.isDefinedHere);
+
+        // Hung under the nearest thing above it that has an entry of its
+        // own. A scope with none -- an unnamed namespace -- is no step in
+        // the walk, and what it holds belongs to whatever holds it. The
+        // list has a scope before its members, so the parent is already
+        // here.
+        IndexItem::Ptr under = root;
+        for (int above = symbol.parent; above >= 0; above = symbols.at(above).parent) {
+            if (entryFor.at(above)) {
+                under = entryFor.at(above);
+                break;
+            }
+        }
+        under->addChild(entry);
+        entryFor[i] = entry;
+    }
+    return root;
 }
 
 std::optional<QList<CxxFrontendDocument::MemberFunction>> cxxFrontendMemberFunctionsDeclaredAt(

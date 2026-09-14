@@ -3,6 +3,10 @@
 
 #include "cpplocatordata.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <utils/stringtable.h>
 
 using namespace Utils;
@@ -12,6 +16,29 @@ namespace CppEditor {
 using namespace Internal;
 
 CppLocatorData::CppLocatorData() = default;
+
+// What \a document declares, as the entries an index keeps.
+//
+// Worked out here rather than under the lock: this is the whole cost of
+// keeping the index, and holding the lock through it would stop every
+// locator query for as long as it takes.
+static IndexItem::Ptr entriesFor(const CPlusPlus::Document::Ptr &document)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The other model reads the file itself -- a second parse of every file
+    // a project has, which is what running the index on it costs.
+    if (const std::optional<IndexItem::Ptr> fromTheModel
+        = Internal::cxxFrontendIndexTreeFor(CppModelManager::snapshot(), document->filePath())) {
+        return *fromTheModel;
+    }
+#endif
+
+    // A searcher of this call's own, since two files may be indexed at once.
+    SearchSymbols search;
+    search.setSymbolsToSearchFor(SymbolType::Enums | SymbolType::Classes
+                                 | SymbolType::Functions | SymbolType::TypeAliases);
+    return search(document);
+}
 
 QList<IndexItem::Ptr> CppLocatorData::findSymbols(IndexItem::ItemType type,
                                                   const QString &symbolName) const
@@ -34,14 +61,9 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
     if (document->filePath().suffix() == "moc")
         return;
 
-    // Walked here rather than under the lock: this is the whole cost of
-    // keeping the index, and holding the lock through it would stop every
-    // locator query for as long as it takes. A searcher of this call's own,
-    // since two files may be indexed at once.
-    SearchSymbols search;
-    search.setSymbolsToSearchFor(SymbolType::Enums | SymbolType::Classes
-                                 | SymbolType::Functions | SymbolType::TypeAliases);
-    const IndexItem::Ptr forThisFile = search(document);
+    const IndexItem::Ptr forThisFile = entriesFor(document);
+    if (!forThisFile)
+        return;
 
     QMutexLocker locker(&m_infosByFileMutex);
     m_infosByFile.insert(document->filePath().intern(), forThisFile);
