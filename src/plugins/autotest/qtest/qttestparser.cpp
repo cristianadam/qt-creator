@@ -7,7 +7,6 @@
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
-#include <cplusplus/TypeOfExpression.h>
 #include <utils/algorithm.h>
 
 #include <QPromise>

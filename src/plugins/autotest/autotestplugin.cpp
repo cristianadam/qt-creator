@@ -34,7 +34,6 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <cplusplus/CppDocument.h>
-#include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 
 #include <cppeditor/cppcodemodelqueries.h>
