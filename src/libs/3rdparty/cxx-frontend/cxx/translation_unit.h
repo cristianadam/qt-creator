@@ -95,6 +95,25 @@ class TranslationUnit {
                                    std::vector<TemplateArgument> arguments,
                                    bool value);
 
+  // Whether the type of a non-type template parameter survives having the
+  // arguments substituted into it is a property of that parameter and those
+  // arguments, so it is worked out once per unit and remembered. The check
+  // stands inside a substitution, which runs again for every use of the
+  // template, while the arguments it is handed repeat.
+  //
+  // \a parameter is the parameter's own declaration, and the template
+  // declaration it belongs to is named as well: the same parameter is
+  // substituted under the symbol and the depth of whichever declaration is
+  // being instantiated.
+  [[nodiscard]] auto cachedNonTypeParameterCheck(
+      const void* parameter, Symbol* templateSymbol, int depth,
+      const std::vector<TemplateArgument>& arguments) -> std::optional<bool>;
+
+  void cacheNonTypeParameterCheck(const void* parameter, Symbol* templateSymbol,
+                                  int depth,
+                                  std::vector<TemplateArgument> arguments,
+                                  bool value);
+
   // Whether a type is dependent is a property of the type -- of the template
   // parameters, the enclosing scopes and the template arguments the symbol it
   // names was declared with -- so it is worked out once per unit and
@@ -116,6 +135,15 @@ class TranslationUnit {
   }
 
   void noteTypeDependencyCycleBroken() { ++typeDependencyCyclesBroken_; }
+
+  // How often an instantiation was given up on for standing too deep. What
+  // comes of one that was is about the depth it was asked at and not about
+  // the template, so nothing worked out while it was given may be remembered.
+  [[nodiscard]] auto templateInstantiationsCutShort() const -> std::uint64_t {
+    return templateInstantiationsCutShort_;
+  }
+
+  void noteTemplateInstantiationCutShort() { ++templateInstantiationsCutShort_; }
 
   // The names concepts have been declared under in this unit. A type
   // constraint names a concept, and a concept has to be declared before it
@@ -272,6 +300,18 @@ class TranslationUnit {
     std::optional<std::size_t> lastIndex;
   };
 
+  struct NonTypeParameterCheck {
+    Symbol* templateSymbol = nullptr;
+    int depth = 0;
+    std::vector<TemplateArgument> arguments;
+    bool value = false;
+  };
+
+  struct NonTypeParameterCheckCache {
+    std::vector<NonTypeParameterCheck> entries;
+    std::optional<std::size_t> lastIndex;
+  };
+
   std::unique_ptr<Control> control_;
   std::unique_ptr<Arena> arena_;
   std::unique_ptr<Preprocessor> preprocessor_;
@@ -289,9 +329,12 @@ class TranslationUnit {
   std::vector<FunctionSymbol*> pendingBodyCompletions_;
   std::unordered_map<Symbol*, ConstraintSatisfactionCache>
       constraintSatisfactionCaches_;
+  std::unordered_map<const void*, NonTypeParameterCheckCache>
+      nonTypeParameterChecks_;
   std::unordered_set<const Identifier*> conceptNames_;
   std::unordered_map<const Type*, bool> typeDependencies_;
   std::uint64_t typeDependencyCyclesBroken_ = 0;
+  std::uint64_t templateInstantiationsCutShort_ = 0;
   int templateInstantiationDepth_ = 0;
   bool potentiallyEvaluated_ = true;
 };

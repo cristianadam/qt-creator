@@ -653,19 +653,48 @@ auto Substitution::checkNonTypeParameterType(
   if (!isDependent(unit_, declaredType)) return true;
   if (templateArguments_.empty() || !templateDecl_) return true;
 
+  auto reportFailure = [&] {
+    error(parameter->firstSourceLocation(),
+          "substitution failure in the type of a non-type template "
+          "parameter");
+  };
+
+  // The same parameter is substituted with the same arguments over and over,
+  // a substitution being made for every use of the template. What comes of it
+  // is only whether the substitution succeeds, so remembering that saves the
+  // whole rewrite. A failure is reported again from here rather than
+  // remembered as reported: it is the asking caller's error each time.
+  if (auto cached = unit_->cachedNonTypeParameterCheck(
+          parameter, templateDecl_->symbol, templateDecl_->depth,
+          templateArguments_)) {
+    if (!*cached) reportFailure();
+    return *cached;
+  }
+
   auto typeId = TypeIdAST::create(unit_->arena());
   typeId->typeSpecifierList = parameter->declaration->typeSpecifierList;
   typeId->declarator = parameter->declaration->declarator;
+
+  const auto cutShortBefore = unit_->templateInstantiationsCutShort();
 
   auto substituted = ASTRewriter::substituteDefaultTypeId(
       unit_, typeId, templateArguments_, templateDecl_->depth,
       templateDecl_->symbol);
 
-  if (!substituted || !substituted->type ||
-      type_cast<UnresolvedNameType>(substituted->type)) {
-    error(parameter->firstSourceLocation(),
-          "substitution failure in the type of a non-type template "
-          "parameter");
+  const bool ok = substituted && substituted->type &&
+                  !type_cast<UnresolvedNameType>(substituted->type);
+
+  // Remembered only where nothing under it was given up on for standing too
+  // deep: such an answer is about the depth this stood at, and the same
+  // parameter asked about again from nearer the top would be substituted.
+  if (unit_->templateInstantiationsCutShort() == cutShortBefore) {
+    unit_->cacheNonTypeParameterCheck(parameter, templateDecl_->symbol,
+                                      templateDecl_->depth, templateArguments_,
+                                      ok);
+  }
+
+  if (!ok) {
+    reportFailure();
     return false;
   }
 

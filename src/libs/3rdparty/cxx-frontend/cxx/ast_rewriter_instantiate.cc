@@ -644,6 +644,8 @@ auto ASTRewriter::instantiate(
   InstantiationDepthGuard depthGuard{unit};
 
   if (depthGuard.exceeded()) {
+    unit->noteTemplateInstantiationCutShort();
+
     auto message = std::format(
         "recursive template instantiation exceeded maximum depth "
         "of {} while instantiating '{}'",

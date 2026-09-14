@@ -267,6 +267,49 @@ void TranslationUnit::cacheConstraintSatisfaction(
   cache.lastIndex = cache.entries.size() - 1;
 }
 
+auto TranslationUnit::cachedNonTypeParameterCheck(
+    const void* parameter, Symbol* templateSymbol, int depth,
+    const std::vector<TemplateArgument>& arguments) -> std::optional<bool> {
+  if (!parameter) return std::nullopt;
+  auto cacheIt = nonTypeParameterChecks_.find(parameter);
+  if (cacheIt == nonTypeParameterChecks_.end()) return std::nullopt;
+
+  auto& cache = cacheIt->second;
+  auto matches = [&](const NonTypeParameterCheck& entry) {
+    if (entry.templateSymbol != templateSymbol) return false;
+    if (entry.depth != depth) return false;
+    return compare_args(this, entry.arguments, arguments);
+  };
+
+  if (cache.lastIndex) {
+    auto index = *cache.lastIndex;
+    if (index < cache.entries.size()) {
+      if (matches(cache.entries[index])) return cache.entries[index].value;
+    }
+  }
+
+  for (std::size_t i = 0; i < cache.entries.size(); ++i) {
+    if (cache.lastIndex) {
+      if (i == *cache.lastIndex) continue;
+    }
+    if (!matches(cache.entries[i])) continue;
+    cache.lastIndex = i;
+    return cache.entries[i].value;
+  }
+
+  return std::nullopt;
+}
+
+void TranslationUnit::cacheNonTypeParameterCheck(
+    const void* parameter, Symbol* templateSymbol, int depth,
+    std::vector<TemplateArgument> arguments, bool value) {
+  if (!parameter) return;
+  auto& cache = nonTypeParameterChecks_[parameter];
+  cache.entries.push_back(
+      {templateSymbol, depth, std::move(arguments), value});
+  cache.lastIndex = cache.entries.size() - 1;
+}
+
 auto TranslationUnit::cachedTypeDependency(const Type* type) const
     -> std::optional<bool> {
   if (!type) return std::nullopt;
