@@ -641,7 +641,14 @@ public:
     // The fully qualified name of the function enclosing the position, or an
     // empty string if it is not inside one. What Document::functionAt answers,
     // and what the editor puts above the text.
-    QString functionAt(int line, int column) const;
+    //
+    // \a fromLine and \a toLine, where asked for, are the lines the function
+    // was written between -- the first line of what opened its scope and the
+    // line of what closed it, both counted from one. Whoever asks wants to
+    // know whether a line is still inside this function; both are left alone
+    // where nothing is written there to point at.
+    QString functionAt(int line, int column, int *fromLine = nullptr,
+                       int *toLine = nullptr) const;
 
     // The last symbol declared at or before the position, which is how
     // Document decides what the cursor is inside of. Empty if there is none.

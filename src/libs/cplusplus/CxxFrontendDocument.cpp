@@ -5953,7 +5953,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     return declaration;
 }
 
-QString CxxFrontendDocument::functionAt(int line, int column) const
+QString CxxFrontendDocument::functionAt(int line, int column, int *fromLine, int *toLine) const
 {
     if (line < 1 || column < 1)
         return {};
@@ -5969,7 +5969,31 @@ QString CxxFrontendDocument::functionAt(int line, int column) const
         auto *function = dynamic_cast<cxx::FunctionSymbol *>(symbol);
         if (!function)
             continue;
-        return function->name() ? qualifiedNameOf(function) : QString();
+        if (!function->name())
+            return {};
+
+        // The lines it was written between. This list holds an entity where
+        // it was declared, so a function declared in a class and defined
+        // below is reached through the declaration -- which has no body and
+        // therefore no extent, and then what is wanted is the definition's.
+        const cxx::FunctionSymbol *written = function;
+        if (!written->extentBegin() && written->definition())
+            written = written->definition();
+
+        // Where it begins is where its own name stands rather than where its
+        // scope was opened, which is the body's brace: what a reader means
+        // by the first line of a function is the line it is written on.
+        if (fromLine) {
+            if (const cxx::SourceLocation name = written->location())
+                *fromLine = int(d->unit.tokenStartPosition(name).line);
+        }
+        // And the extent stops *after* the token that closed the scope, so
+        // the line wanted is the one the token before it is on.
+        if (toLine) {
+            if (const cxx::SourceLocation end = written->extentEnd())
+                *toLine = int(d->unit.tokenStartPosition(end.previous()).line);
+        }
+        return qualifiedNameOf(function);
     }
     return {};
 }

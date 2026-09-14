@@ -193,6 +193,7 @@ private slots:
     void noCompletionWhereNoneWasAsked();
 
     void reportsDiagnostics();
+    void theLinesAFunctionWasWrittenBetween();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
@@ -1088,6 +1089,73 @@ void tst_cxxfrontenddocument::aMemberOfAClassTemplateDefinedOutsideItIsRead()
         names.append(symbol.qualified.join("::") + (symbol.qualified.isEmpty() ? "" : "::")
                      + symbol.name);
     QCOMPARE(names, QStringList({"B", "B::count", "B::y"}));
+}
+
+// Which lines a function was written between, asked of both front ends over
+// one source. What a debugger tooltip needs beside the name: whether the line
+// the program stopped at is still inside the function the tooltip was pinned
+// in.
+void tst_cxxfrontenddocument::theLinesAFunctionWasWrittenBetween()
+{
+    const QByteArray source = "void free(int a)\n"          // 1
+                              "{\n"                         // 2
+                              "    int local = a;\n"        // 3
+                              "}\n"                         // 4
+                              "struct C {\n"                // 5
+                              "    void member()\n"         // 6
+                              "    {\n"                     // 7
+                              "        int inside = 1;\n"   // 8
+                              "    }\n"                     // 9
+                              "    void declared();\n"      // 10
+                              "};\n"                        // 11
+                              "void C::declared()\n"        // 12
+                              "{\n"                         // 13
+                              "    int here = 2;\n"          // 14
+                              "}\n";                        // 15
+
+    // A #line marker in front, or the built-in translation unit counts lines
+    // from zero and nothing it says lines up with the text.
+    const Document::Ptr builtin = Document::create(Utils::FilePath::fromPathPart(u"<stdin>"));
+    builtin->setUtf8Source("#line 1 \"<stdin>\"\n" + source);
+    builtin->check();
+
+    const CxxFrontendDocument other(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(other.diagnostics().isEmpty());
+
+    const auto saidBy = [](const auto &describe) {
+        QStringList said;
+        // Inside each of the three bodies, and on a line that is in none of
+        // them.
+        for (const Position &position : {Position{3, 9}, Position{8, 13},
+                                         Position{14, 9}, Position{5, 8}}) {
+            said << describe(position);
+        }
+        return said;
+    };
+
+    const QStringList byTheBuiltin = saidBy([&](const Position &position) {
+        int from = 0;
+        int to = 0;
+        QString name = builtin->functionAt(position.line, position.column, &from, &to);
+        if (name.startsWith("::"))
+            name = name.mid(2);
+        return QString("%1 %2-%3").arg(name.isEmpty() ? "nothing" : name).arg(from).arg(to);
+    });
+
+    const QStringList byTheOther = saidBy([&](const Position &position) {
+        int from = 0;
+        int to = 0;
+        QString name = other.functionAt(position.line, position.column, &from, &to);
+        if (name.startsWith("::"))
+            name = name.mid(2);
+        return QString("%1 %2-%3").arg(name.isEmpty() ? "nothing" : name).arg(from).arg(to);
+    });
+
+    QCOMPARE(byTheOther.join(", "), byTheBuiltin.join(", "));
+
+    // And what that is, so that a change to either front end has to say so.
+    QCOMPARE(byTheOther.join(", "),
+             QString("free 1-4, C::member 6-9, C::declared 12-15, nothing 0-0"));
 }
 
 // Two things a list of what a file declares has to say about, since neither
