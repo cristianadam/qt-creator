@@ -6,6 +6,7 @@
 #include "testcodeparser.h"
 #include "testtreemodel.h"
 
+#include "boost/boosttesttreeitem.h"
 #include "qtest/qttestframework.h"
 #include "qtest/qttestparser.h"
 
@@ -309,6 +310,30 @@ void AutotestUnitTests::testCodeParserBoostTest()
     QCOMPARE(expectedSuitesAndTests.size(), foundNamesAndSets.size());
     for (auto it = expectedSuitesAndTests.cbegin(); it != expectedSuitesAndTests.cend(); ++it)
         QCOMPARE(*it, foundNamesAndSets.value(it.key()));
+
+    // What the decorators a file writes settle, which the counts above are
+    // blind to: reading them is a lookup -- the decorator's name resolved at
+    // the file's global scope, through a using declaration or a namespace
+    // alias -- and failing it leaves everything Enabled with every count the
+    // same. Fixture and Parameterized come from the macro's own name instead,
+    // and are here to tell the two apart.
+    using Boost = BoostTestTreeItem;
+    const QMap<QString, int> states = m_model->boostTestStates();
+    QCOMPARE(states.value("SuiteOuter/SuiteInner2"), int(Boost::Disabled));
+    QCOMPARE(states.value("Suite1"), int(Boost::Disabled));
+    QCOMPARE(states.value("Suite1/TestDb"), int(Boost::Disabled));
+    QCOMPARE(states.value("Suite1/Test2"), int(Boost::ExplicitlyEnabled));
+    QCOMPARE(states.value("Suite1/TestIo"), int(Boost::ExplicitlyEnabled));
+    QCOMPARE(states.value("Master Test Suite/test_case2"),
+             int(Boost::Fixture | Boost::Disabled));
+    QCOMPARE(states.value("Master Test Suite/test_case1"), int(Boost::Fixture));
+    QCOMPARE(states.value("Master Test Suite/freeTestFunction2"),
+             int(Boost::Parameterized));
+
+    // A suite being disabled does not disable its tests one by one, and what
+    // carries no decorator is enabled.
+    QCOMPARE(states.value("SuiteOuter/SuiteInner2/Test1"), int(Boost::Enabled));
+    QCOMPARE(states.value("SuiteOuter/SuiteInner1"), int(Boost::Enabled));
 
     // check also that no Qt related tests have been found
     QCOMPARE(m_model->autoTestsCount(), 0);

@@ -65,6 +65,7 @@ public:
     QMultiMap<QString, int> gtestNamesAndSets() const;
     int boostTestNamesCount() const;
     QMap<QString, int> boostTestSuitesAndTests() const;
+    QMap<QString, int> boostTestStates() const;
 #endif
 
     void markAllFrameworkItemsForRemoval();

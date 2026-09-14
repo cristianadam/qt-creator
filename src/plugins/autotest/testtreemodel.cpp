@@ -3,6 +3,8 @@
 
 #include "testtreemodel.h"
 
+#include "boost/boosttesttreeitem.h"
+
 #include "autotestconstants.h"
 #include "autotestplugin.h"
 #include "autotesttr.h"
@@ -989,6 +991,29 @@ QMap<QString, int> TestTreeModel::boostTestSuitesAndTests() const
             result.insert(child->name() + '|' + child->proFile().toUrlishString(), child->childCount());
         });
     }
+    return result;
+}
+
+// The state each Boost suite and test was read as, by the path of names it
+// stands under. What the decorators a file writes settle -- and the only
+// thing in the tree that says the decorators were read at all, the counts
+// above being the same either way.
+QMap<QString, int> TestTreeModel::boostTestStates() const
+{
+    QMap<QString, int> result;
+
+    std::function<void(TestTreeItem *, const QString &)> collect;
+    collect = [&](TestTreeItem *item, const QString &prefix) {
+        item->forFirstLevelChildItems([&](TestTreeItem *child) {
+            const QString path = prefix.isEmpty() ? child->name()
+                                                  : prefix + '/' + child->name();
+            result.insert(path, int(static_cast<BoostTestTreeItem *>(child)->state()));
+            collect(child, path);
+        });
+    };
+
+    if (TestTreeItem *rootNode = boostTestRootNode())
+        collect(rootNode, {});
     return result;
 }
 
