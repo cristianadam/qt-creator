@@ -71,7 +71,10 @@ public:
         Function,
         Variable,
         Field,
-        TypeAlias
+        TypeAlias,
+        // A using declaration, which declares nothing of its own: it makes
+        // a name declared somewhere else reachable here.
+        UsingDeclaration
     };
 
     struct Config
@@ -187,6 +190,10 @@ public:
         // holds an entity once, at the place it is declared -- so this says
         // what the file does with it rather than what the place is.
         bool isDefinedHere = false;
+
+        // Written extern, which says outright that what stands here is a
+        // promise about something declared elsewhere.
+        bool isExtern = false;
 
         // What Qt makes of it: which of a class's members are signals,
         // slots or invokable, and whether a class said Q_OBJECT or

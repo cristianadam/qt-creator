@@ -172,7 +172,8 @@ static QString declarationKind(CPlusPlus::CxxFrontendDocument::Kind kind)
     case Kind::Enumerator:
     case Kind::Variable:
     case Kind::Field: return QStringLiteral("variable");
-    case Kind::TypeAlias: return QStringLiteral("declaration");
+    case Kind::TypeAlias:
+    case Kind::UsingDeclaration: return QStringLiteral("declaration");
     case Kind::Unknown: break;
     }
     return QStringLiteral("symbol");

@@ -225,6 +225,20 @@ void collectDeclarations(const Scope *scope, const FilePath &filePath, int paren
     }
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// What would be written after the name, the way the built-in front end's
+// prettyType writes it: a function's parameter list, the type of anything
+// else, and for a scope its own name over again.
+QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
+{
+    if (!symbol.signature.isEmpty())
+        return symbol.signature;
+    if (!symbol.valueType.isEmpty())
+        return symbol.valueType;
+    return symbol.name;
+}
+#endif
+
 } // namespace
 
 class CodeModelQueries::Private
@@ -350,6 +364,51 @@ QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath
 
 QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &filePath) const
 {
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
+        = d->model.symbolsIn(filePath);
+        symbols && !symbols->isEmpty()) {
+        QList<WrittenDeclaration> declarations;
+
+        // Which entry each symbol became, since what is left out takes what
+        // is written inside it along. The list has a scope before its
+        // members, so the answer is always already here.
+        QList<int> entryFor(symbols->size(), -1);
+
+        for (int i = 0; i < symbols->size(); ++i) {
+            const CxxFrontendDocument::Symbol &symbol = symbols->at(i);
+
+            // A name a macro's body wrote stands nowhere a reader could be
+            // taken to, a class named without its body declares nothing
+            // here to say anything about, something extern is a promise
+            // about a declaration elsewhere, and a using declaration makes
+            // a name reachable rather than declaring it.
+            if (symbol.isGenerated || symbol.isForwardDeclaration || symbol.isExtern
+                || symbol.kind == CxxFrontendDocument::Kind::UsingDeclaration) {
+                continue;
+            }
+
+            int parent = -1;
+            if (symbol.parent >= 0) {
+                parent = entryFor.at(symbol.parent);
+                if (parent < 0)
+                    continue;
+            }
+
+            entryFor[i] = int(declarations.size());
+            declarations.append({symbol.name,
+                                 writtenTypeOf(symbol),
+                                 symbol.icon,
+                                 filePath,
+                                 symbol.line,
+                                 symbol.column,
+                                 parent,
+                                 symbol.kind == CxxFrontendDocument::Kind::Namespace});
+        }
+        return declarations;
+    }
+#endif
+
     const Document::Ptr doc = d->snapshot.document(filePath);
     if (!doc)
         return {};

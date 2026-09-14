@@ -193,6 +193,7 @@ private slots:
     void noCompletionWhereNoneWasAsked();
 
     void reportsDiagnostics();
+    void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
     void readsWhatAQtPropertyDeclares();
@@ -503,6 +504,7 @@ void tst_cxxfrontenddocument::declarationSaysWhatItIs()
         case Kind::Variable: return "variable";
         case Kind::Field: return "field";
         case Kind::TypeAlias: return "alias";
+        case Kind::UsingDeclaration: return "using declaration";
         case Kind::Unknown: break;
         }
         return "unknown";
@@ -624,6 +626,7 @@ void tst_cxxfrontenddocument::symbolsSayWhatTheyAre()
             case CxxFrontendDocument::Kind::Variable: return "variable";
             case CxxFrontendDocument::Kind::Field: return "field";
             case CxxFrontendDocument::Kind::TypeAlias: return "alias";
+            case CxxFrontendDocument::Kind::UsingDeclaration: return "using declaration";
             case CxxFrontendDocument::Kind::Unknown: break;
             }
             return "unknown";
@@ -1085,6 +1088,38 @@ void tst_cxxfrontenddocument::aMemberOfAClassTemplateDefinedOutsideItIsRead()
         names.append(symbol.qualified.join("::") + (symbol.qualified.isEmpty() ? "" : "::")
                      + symbol.name);
     QCOMPARE(names, QStringList({"B", "B::count", "B::y"}));
+}
+
+// Two things a list of what a file declares has to say about, since neither
+// is a declaration a reader can be taken to: something written extern,
+// which is a promise about a definition elsewhere, and a using declaration,
+// which makes a name declared elsewhere reachable here.
+void tst_cxxfrontenddocument::saysWhatOnlyPromisesAndWhatOnlyReaches()
+{
+    const CxxFrontendDocument document("namespace N { int inside; }\n"
+                                       "extern int promised;\n"
+                                       "extern void promise();\n"
+                                       "int here;\n"
+                                       "using N::inside;\n",
+                                       "<stdin>");
+
+    QVERIFY(document.diagnostics().isEmpty());
+
+    QStringList said;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+        said << QString("%1 extern:%2 using:%3")
+                    .arg(symbol.name)
+                    .arg(symbol.isExtern ? "yes" : "no")
+                    .arg(symbol.kind == CxxFrontendDocument::Kind::UsingDeclaration ? "yes"
+                                                                                    : "no");
+    }
+
+    QCOMPARE(said, QStringList({"N extern:no using:no",
+                                "inside extern:no using:no",
+                                "promised extern:yes using:no",
+                                "promise extern:yes using:no",
+                                "here extern:no using:no",
+                                "inside extern:no using:yes"}));
 }
 
 // What Qt writes on top of C++, which a file that says "signals:" says

@@ -420,6 +420,8 @@ CxxFrontendDocument::Kind kindOf(cxx::Symbol *symbol)
     }
     if (dynamic_cast<cxx::TypeAliasSymbol *>(symbol))
         return Kind::TypeAlias;
+    if (dynamic_cast<cxx::UsingDeclarationSymbol *>(symbol))
+        return Kind::UsingDeclaration;
     if (dynamic_cast<cxx::FieldSymbol *>(symbol))
         return Kind::Field;
     if (dynamic_cast<cxx::VariableSymbol *>(symbol)
@@ -1084,8 +1086,11 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
                                        && fileOf(defined->location()) == fileName;
             }
         }
+        symbol.isExtern = function->isExtern();
     } else {
         symbol.isDefinedHere = !symbol.isForwardDeclaration;
+        if (auto *variable = dynamic_cast<cxx::VariableSymbol *>(member))
+            symbol.isExtern = variable->isExtern();
     }
     symbol.icon = iconTypeOf(member, classKey);
 

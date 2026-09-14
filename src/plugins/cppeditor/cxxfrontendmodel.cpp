@@ -618,6 +618,9 @@ std::optional<IndexItem::ItemType> indexItemTypeOf(CxxFrontendDocument::Kind kin
     case CxxFrontendDocument::Kind::TypeAlias:
         return IndexItem::Declaration;
     case CxxFrontendDocument::Kind::Namespace:
+    // A using declaration holds nothing of its own: what somebody looks for
+    // by name is where it was declared, which has an entry there.
+    case CxxFrontendDocument::Kind::UsingDeclaration:
     case CxxFrontendDocument::Kind::Unknown:
         break;
     }

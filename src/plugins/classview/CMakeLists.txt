@@ -19,3 +19,10 @@ extend_qtc_plugin(ClassView
   CONDITION WITH_TESTS
   SOURCES classviewparsertreeitem_test.cpp
 )
+
+# Only so that the test can say which front end answered its questions: the
+# pane itself asks in places and is none the wiser.
+extend_qtc_plugin(ClassView
+  CONDITION QTC_ENABLE_CXX_FRONTEND AND WITH_TESTS
+  DEFINES QTC_WITH_CXX_FRONTEND
+)

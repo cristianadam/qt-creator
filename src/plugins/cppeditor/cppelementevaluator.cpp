@@ -548,6 +548,9 @@ static std::optional<CppElementFacts> modelFactsAt(const FilePath &filePath, int
     // of one.
     case Kind::Variable:
     case Kind::Field: facts.kind = CppElementFacts::Kind::Variable; break;
+    // A using declaration is no kind of thing itself: what a reader wants
+    // to be told about is whatever it made reachable.
+    case Kind::UsingDeclaration:
     case Kind::Unknown: break;
     }
 

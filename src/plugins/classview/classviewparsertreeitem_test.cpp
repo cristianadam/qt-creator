@@ -8,6 +8,7 @@
 
 #include <cplusplus/CppDocument.h>
 
+#include <utils/environment.h>
 #include <utils/filepath.h>
 #include <utils/utilsicons.h>
 
@@ -122,6 +123,18 @@ QStringList treeOf(const QByteArray &source)
     return rows;
 }
 
+// Which front end the query answered off, which is the one thing this test
+// has to know that the pane does not: a row where the two read a file
+// differently says both answers.
+bool onTheOtherFrontEnd()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return qtcEnvironmentVariableIsSet("QTC_CXX_FRONTEND_MODEL");
+#else
+    return false;
+#endif
+}
+
 } // namespace
 
 class ClassViewTreeTest final : public QObject
@@ -137,6 +150,12 @@ void ClassViewTreeTest::testDocumentTree_data()
 {
     QTest::addColumn<QByteArray>("source");
     QTest::addColumn<QStringList>("expectedRows");
+    // What the other front end makes of the same file, where that differs.
+    // Empty means the two read it the same way, which is what most rows say.
+    QTest::addColumn<QStringList>("expectedOnTheOtherFrontEnd");
+
+    // Said once, since most rows have nothing to add.
+    const QStringList same;
 
     // A scope stands under its own name, so the pane leaves the type out of
     // the row; a function's type is the parameters alone, the return type
@@ -158,7 +177,8 @@ void ClassViewTreeTest::testDocumentTree_data()
                "  f [(int)] (public function) at 4:10",
                "  g [()] (private static function) at 8:17",
                "  m_count [int] (protected variable) at 6:9",
-           };
+           }
+        << same;
 
     QTest::newRow("a class in a namespace, and a class in a class")
         << QByteArray(
@@ -174,13 +194,15 @@ void ClassViewTreeTest::testDocumentTree_data()
                "  Outer [Outer] (class) at 2:7",
                "    Inner [Inner] (class) at 3:11",
                "      f [()] (private function) at 4:14",
-           };
+           }
+        << same;
 
     // A namespace is drawn for what is in it, so one holding nothing this
     // pane shows is no row at all.
     QTest::newRow("an empty namespace is no row")
         << QByteArray("namespace Empty {\n}\n")
-        << QStringList{};
+        << QStringList{}
+        << same;
 
     // What a file only names, or borrows, or promises elsewhere: none of it
     // is something the file declares here.
@@ -194,12 +216,16 @@ void ClassViewTreeTest::testDocumentTree_data()
         << QStringList{
                "N [N] (namespace) at 3:11",
                "  inside [int] (public variable) at 3:19",
-           };
+           }
+        << same;
 
     // What a class lets somebody else at is declared by that somebody else,
-    // and the walk says so -- but only for what it is told is a friend.
-    // Pinned as it is: a friend function is drawn beside the class, with no
-    // type and under the icon of a variable.
+    // and the walk says so -- but only for what it is told is a friend, and
+    // neither front end says it of a friend function. Both draw it beside
+    // the class, which is where a friend declaration does declare a name,
+    // and both are pinned as they are: with no type at all and the icon of
+    // a variable, or as the function it is -- under the section it was
+    // written in, which is nothing a name at file scope has.
     QTest::newRow("a friend is drawn beside the class")
         << QByteArray(
                "class C {\n"
@@ -208,6 +234,10 @@ void ClassViewTreeTest::testDocumentTree_data()
         << QStringList{
                "C [C] (class) at 1:7",
                "g (public variable) at 2:17",
+           }
+        << QStringList{
+               "C [C] (class) at 1:7",
+               "g [()] (private function) at 2:17",
            };
 
     // A definition written apart from its declaration is written under a
@@ -221,10 +251,17 @@ void ClassViewTreeTest::testDocumentTree_data()
         << QStringList{
                "C [C] (class) at 1:7",
                "  f [()] (private function) at 2:10",
-           };
+           }
+        << same;
 
-    // The contents of a function are nobody's business here, and a
-    // declaration and a definition in one file are one row with one place.
+    // The contents of a function are nobody's business here.
+    //
+    // The two front ends differ over how many places the row takes a reader
+    // to: one records a name at each place it is written, the other holds an
+    // entity once, where it was declared. So a function declared and defined
+    // in one file has two places there and one here -- across files it has
+    // one from each either way, which is where the pane's cycling earns its
+    // keep.
     QTest::newRow("a function body is not walked into")
         << QByteArray(
                "void f();\n"
@@ -235,12 +272,15 @@ void ClassViewTreeTest::testDocumentTree_data()
                "}\n")
         << QStringList{
                "f [()] (public function) at 1:6, 2:6",
+           }
+        << QStringList{
+               "f [()] (public function) at 1:6",
            };
 
-    // An enumerator's type is what it counts as rather than the
-    // enumeration it belongs to, and an alias stands for its own right-hand
-    // side, under the icon of a variable. Both are pinned as they are; a
-    // reader sees them beside one another.
+    // An alias stands for its own right-hand side, under the icon of a
+    // variable, which both front ends say. What they do not agree on is an
+    // enumerator's type: the enumeration it belongs to, which is what it is,
+    // or what it counts as, which is the older answer.
     QTest::newRow("an enumeration and an alias")
         << QByteArray(
                "enum Plain { One, Two };\n"
@@ -255,12 +295,22 @@ void ClassViewTreeTest::testDocumentTree_data()
                "  Three [int] (enumerator) at 2:21",
                "Count [int] (public variable) at 4:7",
                "Number [int] (public variable) at 3:13",
+           }
+        << QStringList{
+               "Plain [Plain] (enum) at 1:6",
+               "  One [Plain] (enumerator) at 1:14",
+               "  Two [Plain] (enumerator) at 1:19",
+               "Scoped [Scoped] (enum) at 2:12",
+               "  Three [Scoped] (enumerator) at 2:21",
+               "Count [int] (public variable) at 4:7",
+               "Number [int] (public variable) at 3:13",
            };
 
-    // Pinned as it is, warts and all: a template's own parameter stands as a
-    // row of its own under the icon of a class, and a template class is
-    // drawn inside itself -- the template and the class it declares are two
-    // symbols of one name at one place.
+    // Where the two differ most, and the older answer is the odd one: a
+    // template's own parameter stands there as a row under the icon of a
+    // class, and a template class is drawn inside itself, the template and
+    // the class it declares being two symbols of one name at one place. The
+    // other front end draws what somebody wrote.
     QTest::newRow("a template and a function template")
         << QByteArray(
                "template <typename T>\n"
@@ -277,16 +327,26 @@ void ClassViewTreeTest::testDocumentTree_data()
                "take [(T)] (public function) at 6:6",
                "  T (class) at 5:20",
                "  take [(T)] (public function) at 6:6",
+           }
+        << QStringList{
+               "Holder [Holder] (class) at 2:7",
+               "  m_value [T] (private variable) at 3:7",
+               "take [(T)] (public function) at 6:6",
            };
 
     // Two declarations of one thing are one row that takes a reader to
-    // either place, which is what the pane cycles through.
+    // either place, which is what the pane cycles through -- and the same
+    // difference as above: one entity, declared twice, is one place to the
+    // other front end.
     QTest::newRow("one thing declared twice")
         << QByteArray(
                "void f();\n"
                "void f();\n")
         << QStringList{
                "f [()] (public function) at 1:6, 2:6",
+           }
+        << QStringList{
+               "f [()] (public function) at 1:6",
            };
 
     // Two functions of one name are two rows: what tells them apart is the
@@ -298,13 +358,18 @@ void ClassViewTreeTest::testDocumentTree_data()
         << QStringList{
                "f [(double)] (public function) at 2:6",
                "f [(int)] (public function) at 1:6",
-           };
+           }
+        << same;
 
     // A scope with no name of its own has nothing to stand under, so the
     // row it gets is a blank one -- pinned because what is inside it is
-    // reached through that row. An anonymous member stands under the name
-    // the front end made up for it instead, which is where the file it is
-    // in ends.
+    // reached through that row.
+    //
+    // Two differences here, both about a name nobody wrote: an anonymous
+    // member stands under one the older front end made up (where the file it
+    // is in ends) and under none at all on the other, and an unnamed
+    // namespace is recorded at the keyword there and at its brace here,
+    // there being no name in between to point at.
     QTest::newRow("a scope written without a name")
         << QByteArray(
                "namespace {\n"
@@ -321,6 +386,13 @@ void ClassViewTreeTest::testDocumentTree_data()
                "S [S] (struct) at 4:8",
                "  Anonymous:10 [Anonymous:10] (class) at 5:5",
                "    a [int] (public variable) at 6:13",
+           }
+        << QStringList{
+               " (namespace) at 1:11",
+               "  hidden [int] (public variable) at 2:5",
+               "S [S] (struct) at 4:8",
+               "   (class) at 5:5",
+               "    a [int] (public variable) at 6:13",
            };
 }
 
@@ -328,10 +400,15 @@ void ClassViewTreeTest::testDocumentTree()
 {
     QFETCH(QByteArray, source);
     QFETCH(QStringList, expectedRows);
+    QFETCH(QStringList, expectedOnTheOtherFrontEnd);
+
+    const QStringList expected = onTheOtherFrontEnd() && !expectedOnTheOtherFrontEnd.isEmpty()
+                                     ? expectedOnTheOtherFrontEnd
+                                     : expectedRows;
 
     // Compared as one string, so that a failure says the whole tree rather
     // than the first row that differs.
-    QCOMPARE(treeOf(source).join('\n'), expectedRows.join('\n'));
+    QCOMPARE(treeOf(source).join('\n'), expected.join('\n'));
 }
 
 QObject *createClassViewTreeTest()
