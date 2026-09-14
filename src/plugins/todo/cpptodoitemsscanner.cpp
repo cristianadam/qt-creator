@@ -172,7 +172,12 @@ void CppTodoItemsScanner::fileUpdated(const FilePath &filePath)
 {
     if (!CppEditor::CppModelManager::projectPart(filePath).isEmpty()) {
         m_pending.insert(filePath);
-        m_timer.start(); // accumulate a burst of updates into one batch
+        // Started, not restarted: a full index reports files continuously for
+        // minutes, and restarting on each one would hold the batch back until
+        // the whole project went quiet -- the pane would stay empty until
+        // then, where reading a document at a time filled it as it went.
+        if (!m_timer.isActive())
+            m_timer.start();
     }
 }
 
