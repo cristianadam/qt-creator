@@ -10,10 +10,17 @@
 #endif
 
 #include <cplusplus/CppDocument.h>
+#include <cplusplus/ExpressionUnderCursor.h>
 #include <cplusplus/Icons.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Symbols.h>
+#include <cplusplus/TypeOfExpression.h>
+
+#include <utils/textutils.h>
+
+#include <QTextCursor>
+#include <QTextDocument>
 
 using namespace CPlusPlus;
 using namespace Utils;
@@ -240,6 +247,54 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 #endif
 
 } // namespace
+
+QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
+                        const QTextCursor &cursor)
+{
+    // At the end of the name, which is where an expression read backwards
+    // from a cursor has to start.
+    QTextCursor atTheEnd = cursor;
+    const QTextDocument * const text = atTheEnd.document();
+    for (QChar ch = text->characterAt(atTheEnd.position());
+         ch.isLetterOrNumber() || ch == '_';
+         ch = text->characterAt(atTheEnd.position())) {
+        atTheEnd.movePosition(QTextCursor::NextCharacter);
+    }
+
+    int line = 0;
+    int column = 0;
+    Utils::Text::convertPosition(text, atTheEnd.position(), &line, &column);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<CxxFrontendDocument::Declaration> declaration
+        = Internal::cxxFrontendDeclarationAt(filePath, line, column)) {
+        if (!declaration->isValid() || declaration->kind != CxxFrontendDocument::Kind::Function)
+            return {};
+        return declaration->name;
+    }
+#endif
+
+    const Document::Ptr doc = snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    ExpressionUnderCursor expressionUnderCursor(doc->languageFeatures());
+    const QString expression = expressionUnderCursor(atTheEnd);
+
+    TypeOfExpression typeOfExpression;
+    typeOfExpression.init(doc, snapshot);
+    const QList<LookupItem> items = typeOfExpression(expression.toUtf8(),
+                                                     doc->scopeAt(line, column));
+    if (items.isEmpty())
+        return {};
+
+    // The first candidate, as this has always taken: which overload the name
+    // means is not settled by the name alone.
+    Symbol * const symbol = items.first().declaration();
+    if (!symbol || (!symbol->asFunction() && !symbol->type()->asFunctionType()))
+        return {};
+    return Overview().prettyName(LookupContext::fullyQualifiedName(symbol));
+}
 
 EnclosingFunction functionAround(const Snapshot &snapshot, const FilePath &filePath,
                                  int line, int column)

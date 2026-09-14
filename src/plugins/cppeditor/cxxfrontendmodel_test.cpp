@@ -490,6 +490,39 @@ void CxxFrontendModelTest::testTheFunctionAPlaceIsInside()
              QString("free 1-4, C::member 6-9, nothing"));
 }
 
+// The function a name stands for, written out in full, which is what a
+// profiler asked to collect the costs of the function under the cursor puts
+// in its command line.
+void CxxFrontendModelTest::testTheFunctionANameStandsFor()
+{
+    const QByteArray source = "namespace N {\n"                        // 1
+                              "struct C {\n"                           // 2
+                              "    void f(int a);\n"                    // 3
+                              "    int m_count = 0;\n"                  // 4
+                              "};\n"                                    // 5
+                              "void use(C *c) { c->f(c->m_count); }\n"  // 6
+                              "}\n";                                    // 7
+    const Parsed parsed({{"main.cpp", source}}, "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    QTextDocument text(QString::fromUtf8(source));
+    const auto namedAt = [&](int line, int column) {
+        QTextCursor cursor(&text);
+        cursor.setPosition(Utils::Text::positionInText(&text, line, column));
+        return functionNamedAt(CppEditor::Tests::TestCase::globalSnapshot(),
+                               parsed.mainFilePath(), cursor);
+    };
+
+    // On the "f" of the call, on its declaration's own name, on the name the
+    // enclosing function is declared under -- and on a field and on a type,
+    // neither of which names a function. Asked in one comparison, so that a
+    // sabotage says which of them the other model answers.
+    QCOMPARE(QStringList({namedAt(6, 21), namedAt(3, 10), namedAt(6, 6),
+                          namedAt(6, 26), namedAt(6, 9)})
+                 .join(", "),
+             QString("N::C::f, N::C::f, N::use, , "));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

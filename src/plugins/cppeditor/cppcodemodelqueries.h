@@ -16,6 +16,10 @@
 
 #include <memory>
 
+QT_BEGIN_NAMESPACE
+class QTextCursor;
+QT_END_NAMESPACE
+
 namespace CPlusPlus { class Snapshot; }
 
 namespace CppEditor {
@@ -108,6 +112,19 @@ struct CPPEDITOR_EXPORT EnclosingFunction
 CPPEDITOR_EXPORT EnclosingFunction functionAround(const CPlusPlus::Snapshot &snapshot,
                                                   const Utils::FilePath &filePath,
                                                   int line, int column);
+
+// The function the name under \a cursor stands for, written out in full --
+// "N::C::f", with nothing after it -- or empty where the name is of something
+// else, or of nothing this front end resolved.
+//
+// A cursor rather than a place, because reading the expression written there
+// is how the built-in front end answers this and the text is what a cursor
+// carries; \a filePath says which file it is in. The cursor is taken as it
+// comes and moved to the end of the name here, since that is what reading an
+// expression backwards from it needs.
+CPPEDITOR_EXPORT QString functionNamedAt(const CPlusPlus::Snapshot &snapshot,
+                                         const Utils::FilePath &filePath,
+                                         const QTextCursor &cursor);
 
 class CPPEDITOR_EXPORT CodeModelQueries
 {

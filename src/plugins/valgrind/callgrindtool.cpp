@@ -30,11 +30,8 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/perspective.h>
 
-#include <cplusplus/ExpressionUnderCursor.h>
-#include <cplusplus/LookupContext.h>
-#include <cplusplus/Overview.h>
-#include <cplusplus/TypeOfExpression.h>
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppmodelmanager.h>
 
@@ -1071,67 +1068,24 @@ void CallgrindTool::requestContextMenu(TextEditorWidget *widget, int line, QMenu
     }
 }
 
-static void moveCursorToEndOfName(QTextCursor *tc)
-{
-    QTextDocument *doc = tc->document();
-    if (!doc)
-        return;
-
-    QChar ch = doc->characterAt(tc->position());
-    while (ch.isLetterOrNumber() || ch == '_') {
-        tc->movePosition(QTextCursor::NextCharacter);
-        ch = doc->characterAt(tc->position());
-    }
-}
-
-// TODO: Can this be improved? This code is ripped from CppEditor, especially CppElementEvaluater
-// We cannot depend on this since CppEditor plugin code is internal
-// and requires building the implementation files ourselves
-static CPlusPlus::Symbol *findSymbolUnderCursor()
-{
-    TextEditor::TextEditorWidget *widget = TextEditor::TextEditorWidget::currentTextEditorWidget();
-    if (!widget)
-        return nullptr;
-
-    QTextCursor tc = widget->textCursor();
-    int line = 0;
-    int column = 0;
-    const int pos = tc.position();
-    widget->convertPosition(pos, &line, &column);
-
-    const CPlusPlus::Snapshot &snapshot = CppEditor::CppModelManager::snapshot();
-    CPlusPlus::Document::Ptr doc = snapshot.document(widget->textDocument()->filePath());
-    QTC_ASSERT(doc, return nullptr);
-
-    // fetch the expression's code
-    CPlusPlus::ExpressionUnderCursor expressionUnderCursor(doc->languageFeatures());
-    moveCursorToEndOfName(&tc);
-    const QString &expression = expressionUnderCursor(tc);
-    CPlusPlus::Scope *scope = doc->scopeAt(line, column);
-
-    CPlusPlus::TypeOfExpression typeOfExpression;
-    typeOfExpression.init(doc, snapshot);
-    const QList<CPlusPlus::LookupItem> &lookupItems = typeOfExpression(expression.toUtf8(), scope);
-    if (lookupItems.isEmpty())
-        return nullptr;
-
-    const CPlusPlus::LookupItem &lookupItem = lookupItems.first(); // ### TODO: select best candidate.
-    return lookupItem.declaration();
-}
-
 void CallgrindTool::handleShowCostsOfFunction()
 {
-    CPlusPlus::Symbol *symbol = findSymbolUnderCursor();
-    if (!symbol)
+    TextEditor::TextEditorWidget * const widget
+        = TextEditor::TextEditorWidget::currentTextEditorWidget();
+    if (!widget)
         return;
 
-    if (!symbol->asFunction() && !symbol->type()->asFunctionType())
+    // Which function the cursor is on is the code model's to say, and it
+    // says it in places: the name written out in full, off whichever front
+    // end has read the file. This used to be a copy of CppEditor's own
+    // reading, because none of that was reachable from here.
+    const QString function = CppEditor::functionNamedAt(CppEditor::CppModelManager::snapshot(),
+                                                        widget->textDocument()->filePath(),
+                                                        widget->textCursor());
+    if (function.isEmpty())
         return;
 
-    CPlusPlus::Overview view;
-    const QString qualifiedFunctionName = view.prettyName(CPlusPlus::LookupContext::fullyQualifiedName(symbol));
-
-    m_toggleCollectFunction = qualifiedFunctionName + "()";
+    m_toggleCollectFunction = function + "()";
     m_startAction->trigger();
 }
 
