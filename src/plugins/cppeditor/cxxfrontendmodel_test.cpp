@@ -618,6 +618,39 @@ void CxxFrontendModelTest::testAClassPrivateSlotsAndBases()
     QCOMPARE(said("NS::tst_Missing"), QString("nothing"));
 }
 
+// The classes a file hands to a runner, which is how a Qt test's main()
+// says which class it runs.
+void CxxFrontendModelTest::testTheClassesAFileHandsToARunner()
+{
+    const Parsed parsed({{"main.cpp",
+                          "namespace QTest { int qExec(void *, int, char **); }\n"
+                          "namespace NS { class tst_One {}; }\n"
+                          "class tst_Two {};\n"
+                          "int byValue(int);\n"
+                          "int main(int argc, char **argv)\n"
+                          "{\n"
+                          "    NS::tst_One one;\n"
+                          "    tst_Two two;\n"
+                          "    QTest::qExec(&one, argc, argv);\n"
+                          "    QTest::qExec(&two, argc, argv);\n"
+                          "    byValue(argc);\n"
+                          "    return 0;\n"
+                          "}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+
+    // Both of them, in the order they are handed over -- and nothing off a
+    // call handed a value, or off a function nobody calls.
+    QCOMPARE(code.classesPassedTo(parsed.mainFilePath(), "QTest::qExec").join(", "),
+             QString("NS::tst_One, tst_Two"));
+    QCOMPARE(code.classesPassedTo(parsed.mainFilePath(), "byValue").join(", "), QString());
+    QCOMPARE(code.classesPassedTo(parsed.mainFilePath(), "QTest::qExecNot").join(", "),
+             QString());
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

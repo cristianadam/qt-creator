@@ -200,6 +200,16 @@ public:
     ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
                                                 const QString &className) const;
 
+    // The classes \a filePath hands to calls of the function called
+    // \a functionName -- written out in full -- each by the name of what the
+    // call's first argument points at, in the order the calls are written.
+    //
+    // What a Qt test's main() says by calling QTest::qExec(&tst_Simple): the
+    // class to run. An argument that is not a pointer is none of them, a
+    // runner being handed an object rather than a value.
+    QStringList classesPassedTo(const Utils::FilePath &filePath,
+                                const QString &functionName) const;
+
     // What the locator needs of the function whose own name stands at \a line
     // and \a column of \a filePath. Nothing where no function is declared
     // there.

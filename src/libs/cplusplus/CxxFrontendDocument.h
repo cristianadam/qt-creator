@@ -664,6 +664,16 @@ public:
     // What a reader pointing anywhere at a class body means by "this class".
     QString classAround(int line, int column) const;
 
+    // The classes this file hands to calls of the function called
+    // \a qualifiedName: the type of each call's first argument with the
+    // pointer taken off, written out in full, in the order the calls are
+    // written.
+    //
+    // What a test runner is handed, "QTest::qExec(&tst_Simple)" being how a
+    // Qt test says which class it runs. An argument that is not a pointer is
+    // no answer: a runner is handed an object, not a value.
+    QStringList classesPassedTo(const QString &qualifiedName) const;
+
     // Where this translation unit declares the class called
     // \a qualifiedName, or nothing where it declares no such class.
     //

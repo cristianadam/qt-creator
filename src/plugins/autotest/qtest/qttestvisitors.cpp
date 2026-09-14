@@ -16,65 +16,6 @@ using namespace Utils;
 
 namespace Autotest::Internal {
 
-/**************************** Cpp Test AST Visitor ****************************/
-
-TestAstVisitor::TestAstVisitor(Document::Ptr doc, const Snapshot &snapshot)
-    : ASTVisitor(doc->translationUnit()),
-      m_currentDoc(doc),
-      m_snapshot(snapshot)
-{
-}
-
-bool TestAstVisitor::visit(CallAST *ast)
-{
-    if (!m_currentScope || m_currentDoc.isNull())
-        return false;
-
-    if (const auto expressionAST = ast->base_expression) {
-        if (const auto idExpressionAST = expressionAST->asIdExpression()) {
-            if (const auto qualifiedNameAST = idExpressionAST->name->asQualifiedName()) {
-                const Overview o;
-                const QString prettyName = o.prettyName(qualifiedNameAST->name);
-                if (prettyName == "QTest::qExec") {
-                    if (const auto expressionListAST = ast->expression_list) {
-                        // first argument is the one we need
-                        if (const auto argumentExpressionAST = expressionListAST->value) {
-                            TypeOfExpression toe;
-                            toe.init(m_currentDoc, m_snapshot);
-                            QList<LookupItem> toeItems
-                                    = toe(argumentExpressionAST, m_currentDoc, m_currentScope);
-
-                            if (!toeItems.isEmpty()) {
-                                if (const auto pointerType = toeItems.first().type()->asPointerType())
-                                    m_classNames.append(o.prettyType(pointerType->elementType()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return true;
-}
-
-bool TestAstVisitor::visit(CompoundStatementAST *ast)
-{
-    if (!ast || !ast->symbol) {
-        m_currentScope = nullptr;
-        return false;
-    }
-    m_currentScope = ast->symbol->asScope();
-    return true;
-}
-
-TestCases TestAstVisitor::testCases() const
-{
-    const bool multi = m_classNames.size() > 1;
-    return Utils::transform(m_classNames, [multi](const QString &className) {
-        return TestCase{className, multi};
-    });
-}
-
 /********************** Test Data Function AST Visitor ************************/
 
 TestDataFunctionVisitor::TestDataFunctionVisitor(Document::Ptr doc)

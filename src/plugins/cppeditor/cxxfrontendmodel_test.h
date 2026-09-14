@@ -29,6 +29,7 @@ private slots:
     void testTheFunctionAPlaceIsInside();
     void testTheFunctionANameStandsFor();
     void testAClassPrivateSlotsAndBases();
+    void testTheClassesAFileHandsToARunner();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

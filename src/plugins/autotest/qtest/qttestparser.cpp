@@ -102,13 +102,17 @@ TestCases QtTestParser::testCases(const FilePath &filePath) const
         }
     }
     // check if one has used a self-defined macro or QTest::qExec() directly
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+    const QStringList handedOver = queries.classesPassedTo(filePath, "QTest::qExec");
+    if (!handedOver.isEmpty()) {
+        const bool several = handedOver.size() > 1;
+        return Utils::transform(handedOver, [several](const QString &className) {
+            return TestCase{className, several};
+        });
+    }
+
     document = m_cppSnapshot.preprocessedDocument(fileContent, filePath);
     document->check();
-    CPlusPlus::AST *ast = document->translationUnit()->ast();
-    TestAstVisitor astVisitor(document, m_cppSnapshot);
-    astVisitor.accept(ast);
-    if (!astVisitor.testCases().isEmpty())
-        return astVisitor.testCases();
 
     TestCases result;
     static const QRegularExpression regex("\\b(QTEST_(APPLESS_|GUILESS_)?MAIN)"

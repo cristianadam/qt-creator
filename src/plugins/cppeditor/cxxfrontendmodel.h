@@ -554,6 +554,11 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbolsIn(
         const Utils::FilePath &filePath) const;
 
+    // The classes \a filePath hands to calls of the function called
+    // \a functionName, each written out in full.
+    std::optional<QStringList> classesPassedToIn(const Utils::FilePath &filePath,
+                                                 const QString &functionName) const;
+
     // Where the reading of \a filePath writes the class called
     // \a className -- a header's counts, being read into whoever includes
     // it, and the place says which file it is in.

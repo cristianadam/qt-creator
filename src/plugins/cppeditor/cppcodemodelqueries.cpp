@@ -9,6 +9,8 @@
 #include "cxxfrontendmodel.h"
 #endif
 
+#include <cplusplus/AST.h>
+#include <cplusplus/ASTVisitor.h>
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/ExpressionUnderCursor.h>
 #include <cplusplus/Icons.h>
@@ -247,6 +249,63 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 #endif
 
 
+// The classes a file hands to calls of one function, by the name of what
+// each call's first argument points at. The type is looked up where the call
+// stands, which is what says which class a name written there means.
+class ClassesPassedTo : protected ASTVisitor
+{
+public:
+    ClassesPassedTo(const Document::Ptr &document, const Snapshot &snapshot,
+                    const QString &functionName)
+        : ASTVisitor(document->translationUnit())
+        , m_document(document)
+        , m_snapshot(snapshot)
+        , m_functionName(functionName)
+    {
+        accept(document->translationUnit()->ast());
+    }
+
+    QStringList classes() const { return m_classes; }
+
+protected:
+    bool visit(CompoundStatementAST *ast) override
+    {
+        // A call is looked up from the block it stands in, which is what
+        // gives a name written there its meaning.
+        m_scope = ast && ast->symbol ? ast->symbol->asScope() : nullptr;
+        return m_scope != nullptr;
+    }
+
+    bool visit(CallAST *ast) override
+    {
+        if (!m_scope || !ast->base_expression || !ast->expression_list
+            || !ast->expression_list->value) {
+            return true;
+        }
+        const IdExpressionAST * const id = ast->base_expression->asIdExpression();
+        const NameAST * const name = id ? id->name : nullptr;
+        if (!name || Overview().prettyName(name->name) != m_functionName)
+            return true;
+
+        TypeOfExpression typeOfExpression;
+        typeOfExpression.init(m_document, m_snapshot);
+        const QList<LookupItem> items = typeOfExpression(ast->expression_list->value,
+                                                         m_document, m_scope);
+        if (items.isEmpty())
+            return true;
+        if (const PointerType * const pointer = items.first().type()->asPointerType())
+            m_classes.append(Overview().prettyType(pointer->elementType()));
+        return true;
+    }
+
+private:
+    Document::Ptr m_document;
+    const Snapshot &m_snapshot;
+    QString m_functionName;
+    Scope *m_scope = nullptr;
+    QStringList m_classes;
+};
+
 // The class \a snapshot has under \a className as the reading of \a filePath
 // sees it: the name is looked up as a type from the file's own scope, so a
 // class a header declares is found where a file that includes it names it.
@@ -363,20 +422,38 @@ class CodeModelQueries::Private
 {
 public:
     Snapshot snapshot;
+    WorkingCopy workingCopy;
 #ifdef QTC_WITH_CXX_FRONTEND
     Internal::CxxFrontendReading model;
 #endif
+
+    // Parsed again, tree and all: what the model manager leaves in the
+    // snapshot has had its source and syntax tree released, and a walk over
+    // the tree is what the built-in front end answers some of this with.
+    Document::Ptr reparse(const FilePath &filePath) const
+    {
+        QByteArray contents;
+        if (const auto source = workingCopy.source(filePath))
+            contents = *source;
+        else if (const Result<QByteArray> read = filePath.fileContents())
+            contents = *read;
+        else
+            return {};
+
+        const Document::Ptr doc = snapshot.preprocessedDocument(contents, filePath);
+        if (doc)
+            doc->check();
+        return doc;
+    }
 };
 
 CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &workingCopy)
 #ifdef QTC_WITH_CXX_FRONTEND
-    : d(new Private{snapshot, {snapshot, workingCopy}})
+    : d(new Private{snapshot, workingCopy, {snapshot, workingCopy}})
 #else
-    : d(new Private{snapshot})
+    : d(new Private{snapshot, workingCopy})
 #endif
-{
-    Q_UNUSED(workingCopy)
-}
+{}
 
 CodeModelQueries::~CodeModelQueries() = default;
 
@@ -534,6 +611,22 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     QList<WrittenDeclaration> declarations;
     collectDeclarations(doc->globalNamespace(), filePath, -1, &declarations);
     return declarations;
+}
+
+QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,
+                                              const QString &functionName) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QStringList> classes
+        = d->model.classesPassedToIn(filePath, functionName)) {
+        return *classes;
+    }
+#endif
+
+    const Document::Ptr doc = d->reparse(filePath);
+    if (!doc || !doc->translationUnit() || !doc->translationUnit()->ast())
+        return {};
+    return ClassesPassedTo(doc, d->snapshot, functionName).classes();
 }
 
 CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(

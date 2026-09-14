@@ -1498,6 +1498,15 @@ std::optional<QList<CxxFrontendDocument::MemberFunction>> CxxFrontendReading::me
     return document->memberFunctionsAt(line, column, writtenIn);
 }
 
+std::optional<QStringList> CxxFrontendReading::classesPassedToIn(
+    const FilePath &filePath, const QString &functionName) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    return document->classesPassedTo(functionName);
+}
+
 std::optional<CxxFrontendDocument::Place> CxxFrontendReading::classNamedIn(
     const FilePath &filePath, const QString &className) const
 {

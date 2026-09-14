@@ -16,23 +16,6 @@
 
 namespace Autotest::Internal {
 
-class TestAstVisitor : public CPlusPlus::ASTVisitor
-{
-public:
-    explicit TestAstVisitor(CPlusPlus::Document::Ptr doc, const CPlusPlus::Snapshot &snapshot);
-
-    bool visit(CPlusPlus::CallAST *ast) override;
-    bool visit(CPlusPlus::CompoundStatementAST *ast) override;
-
-    TestCases testCases() const;
-
-private:
-    QStringList m_classNames;
-    CPlusPlus::Scope *m_currentScope = nullptr;
-    CPlusPlus::Document::Ptr m_currentDoc;
-    const CPlusPlus::Snapshot &m_snapshot;
-};
-
 class TestDataFunctionVisitor : public CPlusPlus::ASTVisitor
 {
 public:

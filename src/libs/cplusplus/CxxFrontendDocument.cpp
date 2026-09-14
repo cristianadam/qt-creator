@@ -2247,6 +2247,58 @@ QString CxxFrontendDocument::scopeAt(int line, int column) const
     return d->scopeNameAt(line, column);
 }
 
+QStringList CxxFrontendDocument::classesPassedTo(const QString &qualifiedName) const
+{
+    QStringList classes;
+    if (qualifiedName.isEmpty() || !d->unit.ast())
+        return classes;
+
+    const auto withoutTheLeadingScope = [](const QString &name) {
+        return name.startsWith("::") ? name.mid(2) : name;
+    };
+    const QString wanted = withoutTheLeadingScope(qualifiedName);
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const call = dynamic_cast<cxx::CallExpressionAST *>(*slot);
+        if (!call || !call->expressionList || !call->expressionList->value)
+            continue;
+
+        // Called by name, and by the name asked about: what the parser
+        // resolved the call to rather than what stands in the text, so that
+        // a using declaration or an alias makes no difference.
+        cxx::Symbol *callee = nullptr;
+        if (auto * const id = dynamic_cast<cxx::IdExpressionAST *>(call->baseExpression))
+            callee = id->symbol;
+        else if (auto * const member
+                 = dynamic_cast<cxx::MemberExpressionAST *>(call->baseExpression))
+            callee = member->symbol;
+        if (!callee || withoutTheLeadingScope(qualifiedNameOf(callee)) != wanted)
+            continue;
+
+        // The type as it was written, past the conversion the call asked
+        // for: a runner takes a QObject *, and what is wanted here is the
+        // class handed over rather than what it was converted to.
+        cxx::ExpressionAST *argument = call->expressionList->value;
+        while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(argument))
+            argument = cast->expression;
+        const cxx::Type * const type = argument ? argument->type : nullptr;
+        auto * const pointer = type ? cxx::type_cast<cxx::PointerType>(type) : nullptr;
+        if (!pointer)
+            continue;
+
+        // Without the leading "::", which is not what anybody writes and not
+        // what whoever looks the class up next will be looking for.
+        const QString written = withoutTheLeadingScope(
+            fromStd(cxx::to_string(pointer->elementType(), "")));
+        if (!written.isEmpty())
+            classes.append(written);
+    }
+    return classes;
+}
+
 CxxFrontendDocument::Place CxxFrontendDocument::classNamed(
     const QString &qualifiedName) const
 {

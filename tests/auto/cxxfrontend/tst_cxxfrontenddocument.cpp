@@ -197,6 +197,7 @@ private slots:
     void theLinesAFunctionWasWrittenBetween();
     void theClassAPlaceIsWrittenIn();
     void whereTheClassOfAGivenNameIsWritten();
+    void theClassesAFileHandsToARunner();
     void aUsingDeclarationThatNamesItsOwnOverloadSet();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
@@ -1276,6 +1277,39 @@ void tst_cxxfrontenddocument::whereTheClassOfAGivenNameIsWritten()
     // A class named before it is written out is the one with the body, which
     // is where a reader is sent.
     QCOMPARE(byTheOther.join(", "), QString("1:7, 5:7, 10:7, nothing"));
+}
+
+// The classes a file hands to a runner, which for a Qt test is what
+// QTest::qExec() is called with. Both front ends over one source, since
+// which class a test tree lists comes out of this.
+void tst_cxxfrontenddocument::theClassesAFileHandsToARunner()
+{
+    const QByteArray source = "namespace QTest { int qExec(void *, int, char **); }\n"  // 1
+                              "namespace NS { class tst_One {}; }\n"                     // 2
+                              "class tst_Two {};\n"                                      // 3
+                              "int byValue(int);\n"                                       // 4
+                              "int main(int argc, char **argv)\n"                         // 5
+                              "{\n"                                                       // 6
+                              "    NS::tst_One one;\n"                                    // 7
+                              "    tst_Two two;\n"                                        // 8
+                              "    QTest::qExec(&one, argc, argv);\n"                      // 9
+                              "    QTest::qExec(&two, argc, argv);\n"                      // 10
+                              "    byValue(argc);\n"                                       // 11
+                              "    return 0;\n"                                            // 12
+                              "}\n";                                                       // 13
+
+    const CxxFrontendDocument other(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(other.diagnostics().isEmpty());
+
+    // Written out in full, so that whoever looks the class up next finds
+    // the one that was handed over rather than another of the same name.
+    QCOMPARE(other.classesPassedTo("QTest::qExec").join(", "),
+             QString("NS::tst_One, tst_Two"));
+
+    // Nothing for a function nobody calls, and nothing off a call that is
+    // handed a value rather than an object.
+    QCOMPARE(other.classesPassedTo("QTest::qExecSomething").join(", "), QString());
+    QCOMPARE(other.classesPassedTo("byValue").join(", "), QString());
 }
 
 // Two overload sets that name each other, which is what the C library
