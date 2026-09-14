@@ -658,6 +658,12 @@ public:
     // that is the file itself. What Document::scopeAt answers.
     QString scopeAt(int line, int column) const;
 
+    // The class the position is written in, written out in full, and empty
+    // where the innermost scope written around it is not a class -- a
+    // position in a member's *body* is in the function, not in the class.
+    // What a reader pointing anywhere at a class body means by "this class".
+    QString classAround(int line, int column) const;
+
     // Where the name used at a position was declared. What follow symbol
     // needs, and what find usages and completion are built on.
     //

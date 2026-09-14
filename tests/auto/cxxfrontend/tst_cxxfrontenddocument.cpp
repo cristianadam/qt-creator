@@ -194,6 +194,7 @@ private slots:
 
     void reportsDiagnostics();
     void theLinesAFunctionWasWrittenBetween();
+    void theClassAPlaceIsWrittenIn();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
@@ -1156,6 +1157,62 @@ void tst_cxxfrontenddocument::theLinesAFunctionWasWrittenBetween()
     // And what that is, so that a change to either front end has to say so.
     QCOMPARE(byTheOther.join(", "),
              QString("free 1-4, C::member 6-9, C::declared 12-15, nothing 0-0"));
+}
+
+// The class a place is written in, asked of both front ends over one source.
+// What a reader pointing at a member means by "this class" -- and a position
+// in a member's body is in the function, not in the class, which is what the
+// built-in front end says and what this has to say too.
+void tst_cxxfrontenddocument::theClassAPlaceIsWrittenIn()
+{
+    const QByteArray source = "namespace N {\n"              // 1
+                              "struct Outer {\n"             // 2
+                              "    void declared();\n"       // 3
+                              "    void defined()\n"          // 4
+                              "    {\n"                       // 5
+                              "        int local = 0;\n"     // 6
+                              "    }\n"                       // 7
+                              "    struct Inner {\n"         // 8
+                              "        int member = 0;\n"    // 9
+                              "    };\n"                     // 10
+                              "};\n"                         // 11
+                              "int loose = 0;\n"             // 12
+                              "}\n";                         // 13
+
+    const Document::Ptr builtin = Document::create(Utils::FilePath::fromPathPart(u"<stdin>"));
+    builtin->setUtf8Source("#line 1 \"<stdin>\"\n" + source);
+    builtin->check();
+
+    const CxxFrontendDocument other(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(other.diagnostics().isEmpty());
+
+    // On a member's declaration, inside a member's body, inside a nested
+    // class, and at namespace scope.
+    const QList<Position> positions{{3, 10}, {6, 13}, {9, 13}, {12, 5}};
+
+    QStringList byTheBuiltin;
+    for (const Position &position : positions) {
+        Scope * const scope = builtin->scopeAt(position.line, position.column);
+        const Class * const klass = scope ? scope->asClass() : nullptr;
+        QString name = klass ? Overview().prettyName(
+                                   LookupContext::fullyQualifiedName(scope))
+                             : QString();
+        if (name.startsWith("::"))
+            name = name.mid(2);
+        byTheBuiltin << (name.isEmpty() ? "nothing" : name);
+    }
+
+    QStringList byTheOther;
+    for (const Position &position : positions) {
+        QString name = other.classAround(position.line, position.column);
+        if (name.startsWith("::"))
+            name = name.mid(2);
+        byTheOther << (name.isEmpty() ? "nothing" : name);
+    }
+
+    QCOMPARE(byTheOther.join(", "), byTheBuiltin.join(", "));
+    QCOMPARE(byTheOther.join(", "),
+             QString("N::Outer, nothing, N::Outer::Inner, nothing"));
 }
 
 // Two things a list of what a file declares has to say about, since neither

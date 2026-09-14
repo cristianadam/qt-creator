@@ -126,6 +126,15 @@ CPPEDITOR_EXPORT QString functionNamedAt(const CPlusPlus::Snapshot &snapshot,
                                          const Utils::FilePath &filePath,
                                          const QTextCursor &cursor);
 
+// The class \a line and \a column of \a filePath are written in, written out
+// in full, or empty where what is written around them is no class -- a place
+// in a member's *body* is in the function rather than in the class.
+//
+// Answered off whichever front end has already read the file, and nothing is
+// read here either.
+CPPEDITOR_EXPORT QString classAround(const CPlusPlus::Snapshot &snapshot,
+                                     const Utils::FilePath &filePath, int line, int column);
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:

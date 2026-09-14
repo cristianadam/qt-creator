@@ -732,6 +732,10 @@ public:
     // The name of the innermost scope written around the position.
     [[nodiscard]] QString scopeNameAt(int line, int column) const;
 
+    // The innermost scope written around a position, whether it has a name
+    // of its own or not, or null where nothing is written there.
+    [[nodiscard]] cxx::ScopeSymbol *innermostScopeAt(int line, int column) const;
+
     // The bases named by whichever class specifier the predicate accepts.
     [[nodiscard]] QStringList basesOfClass(
         const std::function<bool(cxx::ClassSpecifierAST *)> &wanted) const;
@@ -1532,15 +1536,46 @@ cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column,
     return endsHere;
 }
 
+cxx::ScopeSymbol *CxxFrontendDocument::Private::innermostScopeAt(int line, int column) const
+{
+    const cxx::SourceLocation location = tokenAt(line, column);
+    if (!location)
+        return nullptr;
+
+    // Walk in, taking the innermost scope written around the token. A
+    // function is reached through the overload set it lives in, which is not
+    // itself a scope.
+    cxx::ScopeSymbol *found = nullptr;
+    const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
+        const auto consider = [&](cxx::ScopeSymbol *inner) {
+            if (!inner->contains(location))
+                return;
+            found = inner;
+            walk(inner);
+        };
+        for (cxx::Symbol *member : scope->members()) {
+            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                for (cxx::FunctionSymbol *function : overloadSet->declaredFunctions())
+                    consider(function);
+                continue;
+            }
+            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                consider(inner);
+        }
+    };
+    walk(unit.globalScope());
+    return found;
+}
+
 QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
 {
     const cxx::SourceLocation location = tokenAt(line, column);
     if (!location)
         return {};
 
-    // Walk in, taking the innermost scope written around the token. A
-    // function is reached through the overload set it lives in, which is not
-    // itself a scope.
+    // The innermost *named* scope, which is not always the innermost one: a
+    // scope written without a name has no name to answer with, and what a
+    // reader is told is then the name of whatever holds it.
     QString found;
     const std::function<void(cxx::ScopeSymbol *)> walk = [&](cxx::ScopeSymbol *scope) {
         const auto consider = [&](cxx::ScopeSymbol *inner) {
@@ -2210,6 +2245,14 @@ QString CxxFrontendDocument::lastVisibleSymbolAt(int line, int column) const
 QString CxxFrontendDocument::scopeAt(int line, int column) const
 {
     return d->scopeNameAt(line, column);
+}
+
+QString CxxFrontendDocument::classAround(int line, int column) const
+{
+    cxx::ScopeSymbol * const scope = d->innermostScopeAt(line, column);
+    if (!dynamic_cast<cxx::ClassSymbol *>(scope))
+        return {};
+    return qualifiedNameOf(scope);
 }
 
 CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(

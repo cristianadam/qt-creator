@@ -296,6 +296,25 @@ QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
     return Overview().prettyName(LookupContext::fullyQualifiedName(symbol));
 }
 
+QString classAround(const Snapshot &snapshot, const FilePath &filePath, int line, int column)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QString> klass
+        = Internal::cxxFrontendClassAround(filePath, line, column)) {
+        return *klass;
+    }
+#endif
+
+    const Document::Ptr doc = snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    Scope * const scope = doc->scopeAt(line, column);
+    if (!scope || !scope->asClass())
+        return {};
+    return Overview().prettyName(LookupContext::fullyQualifiedName(scope));
+}
+
 EnclosingFunction functionAround(const Snapshot &snapshot, const FilePath &filePath,
                                  int line, int column)
 {

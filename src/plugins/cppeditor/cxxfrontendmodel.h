@@ -696,6 +696,12 @@ struct CxxFrontendEnclosingFunction
 std::optional<CxxFrontendEnclosingFunction> cxxFrontendFunctionAround(
     const Utils::FilePath &filePath, int line, int column);
 
+// The class a position is written in, written out in full. Nothing where the
+// model has no such file, and not read here either; an empty string is an
+// answer -- what is written around the position is no class.
+std::optional<QString> cxxFrontendClassAround(const Utils::FilePath &filePath,
+                                              int line, int column);
+
 // A comment a file writes: where it stands, and which of the four ways it
 // is written -- which is what tells one run of comments from the next.
 struct CxxFrontendComment

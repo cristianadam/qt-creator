@@ -37,6 +37,7 @@
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppmodelmanager.h>
 
@@ -321,51 +322,37 @@ void AutotestPluginPrivate::onRunUnderCursorTriggered(TestRunMode mode)
     const FilePath filePath = currentEditor->textDocument()->filePath();
 
     const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::snapshot();
-    const CPlusPlus::Document::Ptr doc = snapshot.document(filePath);
-    if (doc.isNull()) // not part of C++ snapshot
-        return;
 
-    CPlusPlus::Scope *scope = doc->scopeAt(line, currentEditor->currentColumn());
     QTextCursor cursor = currentEditor->editorWidget()->textCursor();
+    const QTextCursor wholeCursor = cursor;
     cursor.select(QTextCursor::WordUnderCursor);
     const QString text = cursor.selectedText();
 
-    while (scope && scope->asBlock())
-        scope = scope->enclosingScope();
-    if (scope) {
-        QList<const CPlusPlus::Name *> fullName;
-        if (scope->asFunction()) {
-            fullName = CPlusPlus::LookupContext::fullyQualifiedName(scope);
-        } else if (scope->asNamespace()) {
-            for (int count = scope->memberCount(), i = 0; i < count; ++i) {
-                CPlusPlus::Symbol *member = scope->memberAt(i);
-                if (member->line() != line)
-                    continue;
-                fullName = CPlusPlus::LookupContext::fullyQualifiedName(member);
-                if (!fullName.isEmpty()) {
-                    const QString funcName = CPlusPlus::Overview().prettyName(fullName.last());
-                    if (funcName == text)
-                        break;
-                    else
-                        fullName.clear();
-                }
-            }
-        }
-        if (!fullName.isEmpty()) {
-            const QString funcName = CPlusPlus::Overview().prettyName(fullName);
-            const TestFrameworks active = activeTestFrameworks();
-            for (auto framework : active) {
-                const QStringList testName = framework->testNameForSymbolName(funcName);
-                if (testName.isEmpty())
-                    continue;
-                TestTreeItem *it = framework->rootNode()->findTestByNameAndFile(testName, filePath);
-                if (it) {
-                    const QList<ITestConfiguration *> testsToRun
-                            = testItemsToTestConfigurations({ it }, mode);
-                    if (!testsToRun.isEmpty()) {
-                        m_testRunner.runTests(mode, testsToRun);
-                        return;
-                    }
+    // Which test the cursor is on: the function it is written inside of, or
+    // failing that the function the name under it stands for -- a test
+    // written at namespace scope is named rather than entered. Both are the
+    // code model's to say, and it says them in places.
+    QString funcName = CppEditor::functionAround(snapshot, filePath, line,
+                                                 currentEditor->currentColumn())
+                           .qualifiedName;
+    if (funcName.isEmpty())
+        funcName = CppEditor::functionNamedAt(snapshot, filePath, wholeCursor);
+    if (funcName.startsWith("::"))
+        funcName = funcName.mid(2);
+
+    if (!funcName.isEmpty()) {
+        const TestFrameworks active = activeTestFrameworks();
+        for (auto framework : active) {
+            const QStringList testName = framework->testNameForSymbolName(funcName);
+            if (testName.isEmpty())
+                continue;
+            TestTreeItem *it = framework->rootNode()->findTestByNameAndFile(testName, filePath);
+            if (it) {
+                const QList<ITestConfiguration *> testsToRun
+                        = testItemsToTestConfigurations({ it }, mode);
+                if (!testsToRun.isEmpty()) {
+                    m_testRunner.runTests(mode, testsToRun);
+                    return;
                 }
             }
         }
@@ -385,12 +372,12 @@ void AutotestPluginPrivate::onRunUnderCursorTriggered(TestRunMode mode)
     });
 
     if (filteredItems.isEmpty() && testsItems.size() > 1) {
-        CPlusPlus::Scope *scope = doc->scopeAt(line, currentEditor->currentColumn());
-        if (scope->asClass()) {
-            const QList<const CPlusPlus::Name *> fullName
-                    = CPlusPlus::LookupContext::fullyQualifiedName(scope);
-            const QString className = CPlusPlus::Overview().prettyName(fullName);
-
+        // Two tests of one name: which class the cursor is in decides.
+        QString className = CppEditor::classAround(snapshot, filePath, line,
+                                                   currentEditor->currentColumn());
+        if (className.startsWith("::"))
+            className = className.mid(2);
+        if (!className.isEmpty()) {
             filteredItems = Utils::filtered(testsItems,
                                             [&text, &className](ITestTreeItem *it){
                 return it->name() == text

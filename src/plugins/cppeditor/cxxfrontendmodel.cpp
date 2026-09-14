@@ -1771,6 +1771,17 @@ std::optional<CxxFrontendEnclosingFunction> cxxFrontendFunctionAround(
     return function;
 }
 
+std::optional<QString> cxxFrontendClassAround(const FilePath &filePath, int line, int column)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return std::nullopt;
+    const CxxFrontendDocument * const document = model->document(filePath.toFSPathString());
+    if (!document)
+        return std::nullopt;
+    return document->classAround(line, column);
+}
+
 namespace {
 
 // The function declared at a place in a document already in hand, which is
