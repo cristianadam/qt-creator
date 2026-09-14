@@ -362,7 +362,13 @@ bool mayWrite(const Snapshot &builtinSnapshot, const FilePath &filePath, const Q
     const Document::Ptr document = builtinSnapshot.document(filePath);
     if (!document || !document->control())
         return false;
-    const QByteArray identifier = name.mid(name.lastIndexOf("::") + 2).toUtf8();
+    // What is looked for is the last part of the name: a file writes "f"
+    // where it defines "C::f". A name with nothing in front of it is that
+    // part already -- and taking two characters off the end of "::" without
+    // finding one is how this rejected every such name.
+    const int afterTheScopes = name.lastIndexOf("::");
+    const QByteArray identifier = (afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2))
+                                      .toUtf8();
     return document->control()->findIdentifier(identifier.constData(), identifier.size());
 }
 

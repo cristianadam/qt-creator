@@ -359,6 +359,27 @@ void CxxFrontendModelTest::testFollowsADeclarationToItsDefinitionElsewhere()
     QCOMPARE(link.target.line, 3);
 }
 
+// The same, for a name with nothing in front of it. Which files are worth
+// reading is decided by the last part of the name, and a name that has only
+// one part is that part -- it had been cut short by two characters, so no
+// file was ever worth reading and every such search came up empty.
+void CxxFrontendModelTest::testFollowsAFreeFunctionToItsDefinitionElsewhere()
+{
+    const Parsed parsed({{"h.h", "void loose(int a);\n"},
+                         {"other.cpp", "#include \"h.h\"\n\nvoid loose(int a) {}\n"},
+                         {"main.cpp", "#include \"h.h\"\n\nvoid g() { loose(1); }\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    // On "loose" of "loose(1)", which resolves to the declaration in the
+    // header.
+    const Link link = cxxFrontendFollowSymbol(CppEditor::Tests::TestCase::globalSnapshot(),
+                                              parsed.mainFilePath(), 3, 13, 0, 0);
+    QVERIFY(link.hasValidTarget());
+    QCOMPARE(link.targetFilePath, parsed.path("other.cpp"));
+    QCOMPARE(link.target.line, 3);
+}
+
 // Every class a file declares, by the name written out in full. What a
 // model diagram asks when a file is dragged into it, and the one question
 // that plugin puts to the code model.
