@@ -59,6 +59,34 @@ struct CPPEDITOR_EXPORT WrittenFunction
     int column = 0;
 };
 
+// Something a file declares, as a reader listing what is in a file needs it:
+// how it reads, what stands for it, where it is written, and what it is
+// written inside.
+struct CPPEDITOR_EXPORT WrittenDeclaration
+{
+    QString name;              // its own name, with nothing in front of it,
+                               // and empty for a scope written without one
+    // What would be written after the name, which is what tells two things
+    // of one name apart: a function's parameter list, anything else's type,
+    // and for a scope its own name over again -- a scope stands under the
+    // name and has nothing to add to it.
+    QString type;
+    int iconType = -1;         // Utils::CodeModelIcon::Type
+
+    Utils::FilePath filePath;
+    int line = 0;              // counted from one, the column too
+    int column = 0;
+
+    // What this is declared inside, as an index into the list it came from,
+    // or -1 for the file itself. The list has a scope before its members, so
+    // this always points backwards.
+    int parent = -1;
+
+    // A namespace, which a reader is shown for what is written in it rather
+    // than for itself.
+    bool isNamespace = false;
+};
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:
@@ -87,6 +115,17 @@ public:
     // it declares them. A class named without its body is not one of them:
     // there is nothing declared there to say anything about.
     QList<WrittenClass> classesDeclaredIn(const Utils::FilePath &filePath) const;
+
+    // Everything \a filePath declares, in the order it declares them and
+    // with a scope always before what is written inside it.
+    //
+    // What the file only names is not among them: a class named without a
+    // body, something declared extern, a using declaration or directive, a
+    // name a macro's body wrote, and a definition written under a qualified
+    // name -- which declares nothing that was not declared where the name
+    // was given. Neither is what a function writes inside itself, which is
+    // nobody's business but that function's.
+    QList<WrittenDeclaration> declarationsIn(const Utils::FilePath &filePath) const;
 
     // What the locator needs of the function whose own name stands at \a line
     // and \a column of \a filePath. Nothing where no function is declared

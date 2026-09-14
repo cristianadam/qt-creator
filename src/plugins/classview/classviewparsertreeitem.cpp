@@ -5,9 +5,6 @@
 
 #include "classviewconstants.h"
 
-#include <cplusplus/Icons.h>
-#include <cplusplus/Overview.h>
-
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
@@ -18,8 +15,6 @@
 #include <QStandardItem>
 
 namespace ClassView::Internal {
-
-static CPlusPlus::Overview g_overview;
 
 ///////////////////////////////// ParserTreeItemPrivate //////////////////////////////////
 
@@ -33,7 +28,6 @@ class ParserTreeItemPrivate
 {
 public:
     void mergeWith(const ParserTreeItem::ConstPtr &target);
-    void mergeSymbol(const CPlusPlus::Symbol *symbol);
     ParserTreeItem::ConstPtr cloneTree() const;
 
     QHash<SymbolInformation, ParserTreeItem::ConstPtr> m_symbolInformations;
@@ -63,69 +57,6 @@ void ParserTreeItemPrivate::mergeWith(const ParserTreeItem::ConstPtr &target)
             m_symbolInformations.insert(inf, clone);
         }
     }
-}
-
-void ParserTreeItemPrivate::mergeSymbol(const CPlusPlus::Symbol *symbol)
-{
-    if (!symbol)
-        return;
-
-    // easy solution - lets add any scoped symbol and
-    // any symbol which does not contain :: in the name
-
-    //! \todo collect statistics and reorder to optimize
-    if (symbol->asForwardClassDeclaration()
-        || symbol->isExtern()
-        || symbol->isFriend()
-        || symbol->isGenerated()
-        || symbol->asUsingNamespaceDirective()
-        || symbol->asUsingDeclaration()
-        )
-        return;
-
-    const CPlusPlus::Name *symbolName = symbol->name();
-    if (symbolName && symbolName->asQualifiedNameId())
-        return;
-
-    QString name = g_overview.prettyName(symbolName).trimmed();
-    QString type = g_overview.prettyType(symbol->type()).trimmed();
-    int iconType = CPlusPlus::Icons::iconTypeForSymbol(symbol);
-
-    SymbolInformation information(name, type, iconType);
-
-    // If next line will be removed, 5% speed up for the initial parsing.
-    // But there might be a problem for some files ???
-    // Better to improve qHash timing
-    ParserTreeItem::ConstPtr childItem = m_symbolInformations.value(information);
-
-    if (!childItem)
-        childItem = ParserTreeItem::ConstPtr(new ParserTreeItem());
-
-    // locations have 1-based column in Symbol, use the same here.
-    SymbolLocation location(symbol->filePath(),
-                            symbol->line(), symbol->column());
-
-    childItem->d->m_symbolLocations.insert(location);
-
-    // prevent showing a content of the functions
-    if (!symbol->asFunction()) {
-        if (const CPlusPlus::Scope *scope = symbol->asScope()) {
-            CPlusPlus::Scope::iterator cur = scope->memberBegin();
-            CPlusPlus::Scope::iterator last = scope->memberEnd();
-            while (cur != last) {
-                const CPlusPlus::Symbol *curSymbol = *cur;
-                ++cur;
-                if (!curSymbol)
-                    continue;
-
-                childItem->d->mergeSymbol(curSymbol);
-            }
-        }
-    }
-
-    // if item is empty and has not to be added
-    if (!symbol->asNamespace() || childItem->childCount())
-        m_symbolInformations.insert(information, childItem);
 }
 
 /*!
@@ -208,15 +139,61 @@ int ParserTreeItem::childCount() const
     return d->m_symbolInformations.count();
 }
 
-ParserTreeItem::ConstPtr ParserTreeItem::parseDocument(const CPlusPlus::Document::Ptr &doc)
+ParserTreeItem::ConstPtr ParserTreeItem::fromDeclarations(
+    const QList<CppEditor::WrittenDeclaration> &declarations)
 {
-    ConstPtr item(new ParserTreeItem());
+    ConstPtr root(new ParserTreeItem());
 
-    const unsigned total = doc->globalSymbolCount();
-    for (unsigned i = 0; i < total; ++i)
-        item->d->mergeSymbol(doc->globalSymbolAt(i));
+    // The row each declaration got, so that what is written inside it is
+    // added under that row. A scope comes before its members, so a parent's
+    // row is always there by the time its members are read.
+    QList<ConstPtr> rowOf(declarations.size());
 
-    return item;
+    // The namespaces among them, since one that turns out to hold nothing a
+    // reader is shown is taken out again once everything is in.
+    QList<int> namespaces;
+
+    const auto rowFor = [&](const CppEditor::WrittenDeclaration &declaration) {
+        return declaration.parent < 0 ? root : rowOf.at(declaration.parent);
+    };
+    const auto informationOf = [](const CppEditor::WrittenDeclaration &declaration) {
+        return SymbolInformation(declaration.name, declaration.type, declaration.iconType);
+    };
+
+    for (int i = 0; i < declarations.size(); ++i) {
+        const CppEditor::WrittenDeclaration &declaration = declarations.at(i);
+        const ConstPtr parent = rowFor(declaration);
+        if (!parent)
+            continue;
+
+        const SymbolInformation information = informationOf(declaration);
+
+        // Two declarations of one thing are one row: what tells one row from
+        // another is what is written in it, and both places are kept.
+        ConstPtr row = parent->d->m_symbolInformations.value(information);
+        if (!row) {
+            row = ConstPtr(new ParserTreeItem());
+            parent->d->m_symbolInformations.insert(information, row);
+            if (declaration.isNamespace)
+                namespaces.append(i);
+        }
+
+        row->d->m_symbolLocations.insert(SymbolLocation(declaration.filePath, declaration.line,
+                                                        declaration.column));
+        rowOf[i] = row;
+    }
+
+    // Innermost first, since taking one out can leave the one around it
+    // empty too.
+    for (auto it = namespaces.crbegin(); it != namespaces.crend(); ++it) {
+        const CppEditor::WrittenDeclaration &declaration = declarations.at(*it);
+        const ConstPtr parent = rowFor(declaration);
+        const SymbolInformation information = informationOf(declaration);
+        if (const ConstPtr row = parent->child(information); row && row->childCount() == 0)
+            parent->d->m_symbolInformations.remove(information);
+    }
+
+    return root;
 }
 
 ParserTreeItem::ConstPtr ParserTreeItem::mergeTrees(const Utils::FilePath &projectFilePath,

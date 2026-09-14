@@ -7,6 +7,10 @@
 
 #include "classviewparsertreeitem.h"
 
+#include <cppeditor/cppworkingcopy.h>
+
+#include <cplusplus/CppDocument.h>
+
 namespace ClassView::Internal {
 
 class ParserPrivate;
@@ -21,13 +25,19 @@ public:
 
     void requestCurrentState();
     void removeFiles(const Utils::FilePaths &fileList);
-    void resetData(const QHash<Utils::FilePath, QPair<QString, Utils::FilePaths>> &projects);
+    void resetData(const QHash<Utils::FilePath, QPair<QString, Utils::FilePaths>> &projects,
+                   const CppEditor::WorkingCopy &workingCopy);
     void addProject(const Utils::FilePath &projectPath, const QString &projectName,
-                    const Utils::FilePaths &filesInProject);
+                    const Utils::FilePaths &filesInProject,
+                    const CppEditor::WorkingCopy &workingCopy);
     void removeProject(const Utils::FilePath &projectPath);
     void setFlatMode(bool flat);
 
-    void updateDocuments(const QSet<Utils::FilePath> &documentPaths);
+    // \a workingCopy is what is being typed rather than what is on disk. It
+    // can only be taken where the editor documents live, which is the thread
+    // the manager is on, so it comes along with the request.
+    void updateDocuments(const QSet<Utils::FilePath> &documentPaths,
+                         const CppEditor::WorkingCopy &workingCopy);
 
 signals:
     void treeRegenerated(const ParserTreeItem::ConstPtr &root);

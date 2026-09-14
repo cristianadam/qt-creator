@@ -104,8 +104,11 @@ void ManagerPrivate::resetParser()
         projectData.insert(project->projectFilePath(),
                            {project->displayName(), project->files(Project::SourceFiles)});
     }
-    QMetaObject::invokeMethod(m_parser, [this, projectData]() {
-        m_parser->resetData(projectData);
+    // Taken here rather than in the parser: what is being typed lives in the
+    // editor documents, which are this thread's.
+    const CppEditor::WorkingCopy workingCopy = CppEditor::CppModelManager::workingCopy();
+    QMetaObject::invokeMethod(m_parser, [this, projectData, workingCopy]() {
+        m_parser->resetData(projectData, workingCopy);
     }, Qt::QueuedConnection);
 }
 
@@ -216,8 +219,10 @@ void Manager::initialize()
         const FilePath projectPath = project->projectFilePath();
         const QString projectName = project->displayName();
         const FilePaths projectFiles = project->files(Project::SourceFiles);
-        QMetaObject::invokeMethod(d->m_parser, [this, projectPath, projectName, projectFiles]() {
-            d->m_parser->addProject(projectPath, projectName, projectFiles);
+        const CppEditor::WorkingCopy workingCopy = CppEditor::CppModelManager::workingCopy();
+        QMetaObject::invokeMethod(d->m_parser,
+                                  [this, projectPath, projectName, projectFiles, workingCopy]() {
+            d->m_parser->addProject(projectPath, projectName, projectFiles, workingCopy);
         }, Qt::QueuedConnection);
     });
     connect(sessionManager, &ProjectManager::projectRemoved,
@@ -292,8 +297,9 @@ void Manager::initialize()
         d->cancelScheduledUpdate();
         if (!state() || d->disableCodeParser) // enabling any of them will trigger the total update
             return;
-        QMetaObject::invokeMethod(d->m_parser, [this, docsToBeUpdated]() {
-            d->m_parser->updateDocuments(docsToBeUpdated);
+        const CppEditor::WorkingCopy workingCopy = CppEditor::CppModelManager::workingCopy();
+        QMetaObject::invokeMethod(d->m_parser, [this, docsToBeUpdated, workingCopy]() {
+            d->m_parser->updateDocuments(docsToBeUpdated, workingCopy);
         }, Qt::QueuedConnection);
     });
 

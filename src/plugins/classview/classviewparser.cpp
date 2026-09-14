@@ -3,6 +3,7 @@
 
 #include "classviewparser.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 
 #include <QElapsedTimer>
@@ -53,6 +54,12 @@ public:
     QHash<FilePath, DocumentCache> m_documentCache;
     // Project file path to its cached data
     QHash<FilePath, ProjectCache> m_projectCache;
+
+    // What a question about a file is asked with: the snapshot the documents
+    // came from, which says which file each include resolved to, and the
+    // text of whatever is being edited.
+    CPlusPlus::Snapshot m_snapshot;
+    CppEditor::WorkingCopy m_workingCopy;
 
     //! Flat mode
     bool flatMode = false;
@@ -203,10 +210,10 @@ ParserTreeItem::ConstPtr Parser::getCachedOrParseProjectTree(const FilePath &pro
 }
 
 /*!
-    Parses the document \a doc if it is in the project files and adds a tree to
-    the internal storage. Updates the internal cached tree for this document.
+    Asks what the file \a doc was parsed from declares and makes a tree of it.
+    Updates the internal cached tree for this document.
 
-    \sa parseDocument
+    \sa fromDeclarations
 */
 
 ParserTreeItem::ConstPtr Parser::getParseDocumentTree(const CPlusPlus::Document::Ptr &doc)
@@ -216,17 +223,19 @@ ParserTreeItem::ConstPtr Parser::getParseDocumentTree(const CPlusPlus::Document:
 
     const FilePath fileName = doc->filePath();
 
-    ParserTreeItem::ConstPtr itemPtr = ParserTreeItem::parseDocument(doc);
+    const CppEditor::CodeModelQueries queries(d->m_snapshot, d->m_workingCopy);
+    ParserTreeItem::ConstPtr itemPtr = ParserTreeItem::fromDeclarations(
+        queries.declarationsIn(fileName));
 
     d->m_documentCache.insert(fileName, { doc->revision(), itemPtr, doc } );
     return itemPtr;
 }
 
 /*!
-    Gets the document \a doc from the cache or parses it if it is in the project
-    files and adds a tree to the internal storage.
+    Gets the tree for the document \a doc from the cache, or makes one if what
+    is cached is older than this reading of the file.
 
-    \sa parseDocument
+    \sa getParseDocumentTree
 */
 
 ParserTreeItem::ConstPtr Parser::getCachedOrParseDocumentTree(const CPlusPlus::Document::Ptr &doc)
@@ -247,14 +256,17 @@ ParserTreeItem::ConstPtr Parser::getCachedOrParseDocumentTree(const CPlusPlus::D
     the internal storage.
 */
 
-void Parser::updateDocuments(const QSet<FilePath> &documentPaths)
+void Parser::updateDocuments(const QSet<FilePath> &documentPaths,
+                             const CppEditor::WorkingCopy &workingCopy)
 {
+    d->m_workingCopy = workingCopy;
     updateDocumentsFromSnapshot(documentPaths, CppEditor::CppModelManager::snapshot());
 }
 
 void Parser::updateDocumentsFromSnapshot(const QSet<FilePath> &documentPaths,
                                  const CPlusPlus::Snapshot &snapshot)
 {
+    d->m_snapshot = snapshot;
     for (const FilePath &documentPath : documentPaths) {
         CPlusPlus::Document::Ptr doc = snapshot.document(documentPath);
         if (doc.isNull())
@@ -286,12 +298,15 @@ void Parser::removeFiles(const FilePaths &fileList)
 /*!
     Fully resets the internal state of the code parser to \a snapshot.
 */
-void Parser::resetData(const QHash<FilePath, QPair<QString, FilePaths>> &projects)
+void Parser::resetData(const QHash<FilePath, QPair<QString, FilePaths>> &projects,
+                       const CppEditor::WorkingCopy &workingCopy)
 {
     d->m_projectCache.clear();
     d->m_documentCache.clear();
+    d->m_workingCopy = workingCopy;
 
     const CPlusPlus::Snapshot &snapshot = CppEditor::CppModelManager::snapshot();
+    d->m_snapshot = snapshot;
     for (auto it = projects.cbegin(); it != projects.cend(); ++it) {
         const auto projectData = it.value();
         QSet<FilePath> commonFiles;
@@ -309,8 +324,11 @@ void Parser::resetData(const QHash<FilePath, QPair<QString, FilePaths>> &project
 }
 
 void Parser::addProject(const FilePath &projectPath, const QString &projectName,
-                        const FilePaths &filesInProject)
+                        const FilePaths &filesInProject,
+                        const CppEditor::WorkingCopy &workingCopy)
 {
+    d->m_workingCopy = workingCopy;
+
     const CPlusPlus::Snapshot &snapshot = CppEditor::CppModelManager::snapshot();
     QSet<FilePath> commonFiles;
     for (const auto &fileInProject : filesInProject) {

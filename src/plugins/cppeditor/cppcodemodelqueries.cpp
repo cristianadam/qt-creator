@@ -10,6 +10,7 @@
 #endif
 
 #include <cplusplus/CppDocument.h>
+#include <cplusplus/Icons.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Symbols.h>
@@ -183,6 +184,47 @@ void collectClasses(const Scope *scope, const FilePath &filePath, QList<WrittenC
     }
 }
 
+// Everything \a scope declares, each entry saying what it is written
+// inside. The rules are what "declares" means: a name the file only
+// mentions is not one, and what a function writes inside itself is not
+// either.
+void collectDeclarations(const Scope *scope, const FilePath &filePath, int parent,
+                         QList<WrittenDeclaration> *into)
+{
+    const Overview overview;
+    for (int i = 0, count = scope->memberCount(); i < count; ++i) {
+        Symbol * const member = scope->memberAt(i);
+        if (!member)
+            continue;
+
+        if (member->asForwardClassDeclaration() || member->isExtern() || member->isFriend()
+            || member->isGenerated() || member->asUsingNamespaceDirective()
+            || member->asUsingDeclaration()) {
+            continue;
+        }
+
+        // Written under a qualified name, which is a definition of something
+        // declared where that name was given.
+        if (member->name() && member->name()->asQualifiedNameId())
+            continue;
+
+        const int index = into->size();
+        into->append({overview.prettyName(member->name()).trimmed(),
+                      overview.prettyType(member->type()).trimmed(),
+                      CPlusPlus::Icons::iconTypeForSymbol(member),
+                      // The symbol's own file rather than the document's: a
+                      // declaration stands where it was written.
+                      member->filePath(),
+                      member->line(),
+                      member->column(),
+                      parent,
+                      member->asNamespace() != nullptr});
+
+        if (const Scope * const inner = member->asScope(); inner && !member->asFunction())
+            collectDeclarations(inner, filePath, index, into);
+    }
+}
+
 } // namespace
 
 class CodeModelQueries::Private
@@ -304,6 +346,17 @@ QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath
     QList<WrittenClass> classes;
     collectClasses(doc->globalNamespace(), filePath, &classes);
     return classes;
+}
+
+QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &filePath) const
+{
+    const Document::Ptr doc = d->snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    QList<WrittenDeclaration> declarations;
+    collectDeclarations(doc->globalNamespace(), filePath, -1, &declarations);
+    return declarations;
 }
 
 DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoringChanges &changes,

@@ -4,6 +4,8 @@
 #include "classviewparsertreeitem.h"
 #include "classviewutils.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
+
 #include <cplusplus/CppDocument.h>
 
 #include <utils/filepath.h>
@@ -104,8 +106,19 @@ QStringList treeOf(const QByteArray &source)
     document->setUtf8Source("#line 1 \"<test>\"\n" + source);
     document->check();
 
+    Snapshot snapshot;
+    snapshot.insert(document);
+
+    // The source as it stands, which is what a file being edited would be
+    // read from -- and the only place this one can be read from, there being
+    // no such file on disk.
+    CppEditor::WorkingCopy workingCopy;
+    workingCopy.insert(filePath, source);
+
+    const CppEditor::CodeModelQueries queries(snapshot, workingCopy);
+
     QStringList rows;
-    describe(ParserTreeItem::parseDocument(document), 0, &rows);
+    describe(ParserTreeItem::fromDeclarations(queries.declarationsIn(filePath)), 0, &rows);
     return rows;
 }
 

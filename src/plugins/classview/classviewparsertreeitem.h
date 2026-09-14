@@ -6,7 +6,11 @@
 #include "classviewsymbolinformation.h"
 #include "classviewsymbollocation.h"
 
-#include <cplusplus/CppDocument.h>
+#include <cppeditor/cppcodemodelqueries.h>
+
+#include <utils/filepath.h>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 template <typename K, typename T>
@@ -29,7 +33,10 @@ public:
     ParserTreeItem(const QHash<SymbolInformation, ConstPtr> &children);
     ~ParserTreeItem();
 
-    static ConstPtr parseDocument(const CPlusPlus::Document::Ptr &doc);
+    // The tree of what one file declares, as the pane draws it: a row per
+    // thing, things of one name and type being one row that takes a reader
+    // to either place.
+    static ConstPtr fromDeclarations(const QList<CppEditor::WrittenDeclaration> &declarations);
     static ConstPtr mergeTrees(const Utils::FilePath &projectFilePath, const QList<ConstPtr> &docTrees);
 
     Utils::FilePath projectFilePath() const;
