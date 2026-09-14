@@ -548,6 +548,20 @@ public:
         void macroUsed(const cxx::MacroUse &use) override
         {
             note(fromStd(use.macro->name), lineOf(*use.macro));
+
+            // And what a function-like one was handed, for a reader of what
+            // a macro says rather than of what it expands to. Which file
+            // each use is in is settled afterwards: the main one is not
+            // known while its text is still being read.
+            if (!use.macro->isFunctionLike || use.arguments.empty())
+                return;
+            Invocation invocation;
+            invocation.name = fromStd(use.macro->name);
+            invocation.fileId = int(use.range.fileId);
+            for (const cxx::PreprocessorRange &argument : use.arguments)
+                invocation.arguments.append({int(argument.fileId), int(argument.offset),
+                                             int(argument.length)});
+            m_invocations.append(invocation);
         }
 
         void undefinedMacroUsed(std::string_view name, cxx::PreprocessorRange) override
@@ -587,8 +601,27 @@ public:
             MacroCollector &m_collector;
         };
 
+        // Where an argument of a use stands, in bytes of the file it is in:
+        // the text is sliced out of the source once the run is over.
+        struct Where
+        {
+            int fileId = 0;
+            int offset = 0;
+            int length = 0;
+        };
+
+        // A use of a function-like macro, and where each of the arguments it
+        // was handed stands.
+        struct Invocation
+        {
+            QString name;
+            int fileId = 0;
+            QList<Where> arguments;
+        };
+
         const QStringList &inForce() const { return m_inForce; }
         const QHash<QString, QString> &consulted() const { return m_consulted; }
+        const QList<Invocation> &invocations() const { return m_invocations; }
 
     private:
         static QString lineOf(const cxx::MacroInfo &macro)
@@ -676,6 +709,7 @@ public:
         QHash<QString, QString> m_consulted;
         QSet<QString> m_ownDefines;
         QString m_includeGuard;
+        QList<Invocation> m_invocations;
     };
 
     class Diagnostics : public cxx::DiagnosticsClient
@@ -2271,6 +2305,39 @@ static QString betweenTheQuotes(const QString &spelling)
             said += ch;
     }
     return said;
+}
+
+QList<CxxFrontendDocument::MacroUse> CxxFrontendDocument::macroUses() const
+{
+    QList<MacroUse> uses;
+    cxx::Preprocessor * const preprocessor = d->unit.preprocessor();
+    if (!preprocessor)
+        return uses;
+
+    for (const auto &invocation : d->macroCollector.invocations()) {
+        // Told apart by file name rather than by the main file's id: a use is
+        // reported while the file is being read, and which one is the main
+        // file is settled once that is done.
+        if (fromStd(preprocessor->sourceFileName(std::uint32_t(invocation.fileId)))
+            != d->fileName) {
+            continue;
+        }
+
+        MacroUse use;
+        use.name = invocation.name;
+        for (const auto &argument : invocation.arguments) {
+            const std::string &source = preprocessor->source(std::uint32_t(argument.fileId));
+            if (argument.offset < 0 || argument.length < 0
+                || std::size_t(argument.offset + argument.length) > source.size()) {
+                continue;
+            }
+            use.arguments.append(fromStd(source.substr(std::size_t(argument.offset),
+                                                       std::size_t(argument.length)))
+                                     .trimmed());
+        }
+        uses.append(use);
+    }
+    return uses;
 }
 
 QList<CxxFrontendDocument::LiteralCall> CxxFrontendDocument::callsWithALiteralTo(

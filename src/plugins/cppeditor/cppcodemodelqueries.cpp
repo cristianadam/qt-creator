@@ -719,6 +719,52 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     return declarations;
 }
 
+QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
+    const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<CxxFrontendDocument::MacroUse>> uses
+        = d->model.macroUsesIn(filePath)) {
+        QList<WrittenMacroUse> written;
+        for (const CxxFrontendDocument::MacroUse &use : *uses)
+            written.append({use.name, use.arguments});
+        return written;
+    }
+#endif
+
+    const Document::Ptr doc = d->snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    // The text each argument stands in, which the document does not keep:
+    // what it records is where they are.
+    QByteArray contents;
+    if (const auto source = d->workingCopy.source(filePath))
+        contents = *source;
+    else if (const Result<QByteArray> read = filePath.fileContents())
+        contents = *read;
+    else
+        return {};
+
+    QList<WrittenMacroUse> uses;
+    for (const Document::MacroUse &use : doc->macroUses()) {
+        if (!use.isFunctionLike() || use.arguments().isEmpty())
+            continue;
+        WrittenMacroUse written;
+        written.name = QString::fromUtf8(use.macro().name());
+        for (const Document::Block &argument : use.arguments()) {
+            if (int(argument.bytesEnd()) > contents.size())
+                continue;
+            written.arguments.append(
+                QString::fromUtf8(contents.mid(int(argument.bytesBegin()),
+                                               int(argument.bytesEnd() - argument.bytesBegin())))
+                    .trimmed());
+        }
+        uses.append(written);
+    }
+    return uses;
+}
+
 QList<CodeModelQueries::WrittenLiteralCall> CodeModelQueries::callsWithALiteral(
     const FilePath &filePath, const QStringList &functionNames) const
 {

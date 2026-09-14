@@ -200,6 +200,20 @@ public:
     ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
                                                 const QString &className) const;
 
+    // A use of a function-like macro, and what it was handed as written. A
+    // macro whose definition nobody here has still says what it was given,
+    // which is how QTEST_MAIN(tst_Simple) names the class a test runs.
+    struct WrittenMacroUse
+    {
+        QString name;
+        QStringList arguments; // as written, trimmed
+    };
+
+    // The function-like macro uses \a filePath makes, in the order they are
+    // written. A use with no arguments is not among them: there is nothing
+    // to read off one.
+    QList<WrittenMacroUse> macroUsesIn(const Utils::FilePath &filePath) const;
+
     // A call written with a string literal in front of it, and the function
     // it stands in: what the tags a Qt test's data function writes are made
     // of, QTest::newRow("a tag") being one.

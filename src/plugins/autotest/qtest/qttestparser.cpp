@@ -89,19 +89,18 @@ TestCases QtTestParser::testCases(const FilePath &filePath) const
     if (document.isNull())
         return {};
 
-    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
-        if (!macro.isFunctionLike())
-            continue;
-        const QByteArray name = macro.macro().name();
-        if (QTestUtils::isQTestMacro(name) && !macro.arguments().isEmpty()) {
-            const CPlusPlus::Document::Block arg = macro.arguments().at(0);
-            const QString name = QLatin1String(fileContent.mid(int(arg.bytesBegin()),
-                                                               int(arg.bytesEnd() - arg.bytesBegin())));
-            return { {name, false} };
-        }
-    }
-    // check if one has used a self-defined macro or QTest::qExec() directly
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+
+    // A QTEST_MAIN-family macro says which class the test runs, and what it
+    // says is the text it was handed: the macro's own definition is Qt's,
+    // and expanding it says nothing about the class.
+    for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
+         : queries.macroUsesIn(filePath)) {
+        if (QTestUtils::isQTestMacro(use.name.toUtf8()) && !use.arguments.isEmpty())
+            return { {use.arguments.first(), false} };
+    }
+
+    // check if one has used a self-defined macro or QTest::qExec() directly
     const QStringList handedOver = queries.classesPassedTo(filePath, "QTest::qExec");
     if (!handedOver.isEmpty()) {
         const bool several = handedOver.size() > 1;

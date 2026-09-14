@@ -31,6 +31,7 @@ private slots:
     void testAClassPrivateSlotsAndBases();
     void testTheClassesAFileHandsToARunner();
     void testTheCallsWithALiteral();
+    void testTheMacroUsesOfAFile();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

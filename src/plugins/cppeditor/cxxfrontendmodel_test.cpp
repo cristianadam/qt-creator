@@ -691,6 +691,34 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
                      "format %1 in tst_Thing_data at 11:5 (more follows)"));
 }
 
+// The function-like macro uses a file makes and what each was handed, which
+// is how a test says which class it runs when the macro that says so is
+// Qt's own.
+void CxxFrontendModelTest::testTheMacroUsesOfAFile()
+{
+    const Parsed parsed({{"main.cpp",
+                          "#define RUN(klass) int main() { return 0; }\n"
+                          "#define PLAIN 1\n"
+                          "#define TWO(a, b) a + b\n"
+                          "int value = PLAIN;\n"
+                          "int sum = TWO( 1 , 2 );\n"
+                          "RUN(tst_Thing)\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    QStringList said;
+    for (const CodeModelQueries::WrittenMacroUse &use
+         : code.macroUsesIn(parsed.mainFilePath())) {
+        said << use.name + "(" + use.arguments.join(", ") + ")";
+    }
+
+    // What was written, each argument trimmed -- and nothing for the one
+    // used without arguments, which has nothing to read.
+    QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

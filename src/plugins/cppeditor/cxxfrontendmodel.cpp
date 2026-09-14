@@ -1498,6 +1498,15 @@ std::optional<QList<CxxFrontendDocument::MemberFunction>> CxxFrontendReading::me
     return document->memberFunctionsAt(line, column, writtenIn);
 }
 
+std::optional<QList<CxxFrontendDocument::MacroUse>> CxxFrontendReading::macroUsesIn(
+    const FilePath &filePath) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    return document->macroUses();
+}
+
 std::optional<QList<CxxFrontendDocument::LiteralCall>> CxxFrontendReading::callsWithALiteralIn(
     const FilePath &filePath, const QStringList &functionNames) const
 {

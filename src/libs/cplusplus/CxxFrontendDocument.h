@@ -664,6 +664,21 @@ public:
     // What a reader pointing anywhere at a class body means by "this class".
     QString classAround(int line, int column) const;
 
+    // A use of a function-like macro this file makes, and what it was handed
+    // as written. QTEST_MAIN(tst_Simple) is one: a macro whose definition
+    // nobody here may have, whose argument says which class a test runs --
+    // so what is wanted is the text, not what it expands to.
+    struct MacroUse
+    {
+        QString name;
+        QStringList arguments; // as written, trimmed
+    };
+
+    // In the order they are written, and only this file's own: a header's
+    // uses are the header's. A macro used without arguments is not among
+    // them -- there is nothing to read off one.
+    QList<MacroUse> macroUses() const;
+
     // A call this file makes whose first argument is a string literal, and
     // the function it is written inside. What a reader of the tags a test's
     // data function writes needs: QTest::newRow("a tag") is a call like

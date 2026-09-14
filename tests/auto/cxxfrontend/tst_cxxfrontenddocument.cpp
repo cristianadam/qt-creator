@@ -199,6 +199,7 @@ private slots:
     void whereTheClassOfAGivenNameIsWritten();
     void theClassesAFileHandsToARunner();
     void theCallsWithALiteralInside();
+    void theFunctionLikeMacroUsesOfAFile();
     void aUsingDeclarationThatNamesItsOwnOverloadSet();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
@@ -1352,6 +1353,29 @@ void tst_cxxfrontenddocument::theCallsWithALiteralInside()
              QString("first in tst_Thing_data at 9:5\n"
                      "unqualified in tst_Thing_data at 10:5\n"
                      "format %1 in tst_Thing_data at 11:5 (more follows)"));
+}
+
+// The function-like macro uses a file makes and what each was handed, which
+// is what a reader of a macro nobody has the definition of needs:
+// QTEST_MAIN(tst_Thing) says which class a test runs whether or not the
+// macro can be expanded here.
+void tst_cxxfrontenddocument::theFunctionLikeMacroUsesOfAFile()
+{
+    const CxxFrontendDocument document("#define RUN(klass) int main() { return 0; }\n"  // 1
+                                       "#define PLAIN 1\n"                              // 2
+                                       "#define TWO(a, b) a + b\n"                      // 3
+                                       "int value = PLAIN;\n"                           // 4
+                                       "int sum = TWO( 1 , 2 );\n"                      // 5
+                                       "RUN(tst_Thing)\n",                              // 6
+                                       "<stdin>");
+
+    QStringList said;
+    for (const CxxFrontendDocument::MacroUse &use : document.macroUses())
+        said << use.name + "(" + use.arguments.join(", ") + ")";
+
+    // What was written, whitespace trimmed off each argument -- and nothing
+    // for the macro used without any, which has nothing to read.
+    QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
 }
 
 // Two overload sets that name each other, which is what the C library

@@ -554,6 +554,11 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbolsIn(
         const Utils::FilePath &filePath) const;
 
+    // The function-like macro uses \a filePath makes, and what each was
+    // handed as written.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::MacroUse>> macroUsesIn(
+        const Utils::FilePath &filePath) const;
+
     // Every call \a filePath makes to any of \a functionNames whose first
     // argument is a string literal.
     std::optional<QList<CPlusPlus::CxxFrontendDocument::LiteralCall>> callsWithALiteralIn(
