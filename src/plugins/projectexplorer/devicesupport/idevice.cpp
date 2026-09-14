@@ -210,6 +210,7 @@ public:
     QString displayType;
     Id type;
     IDevice::Origin origin = IDevice::AutoDetected;
+    bool persistent = true;
     Id id;
     IDevice::MachineType machineType = IDevice::Hardware;
     SynchronizedValue<OsType> osType = OsTypeOther;
@@ -937,6 +938,31 @@ bool IDevice::isAutoDetected() const
 bool IDevice::isFromSdk() const
 {
     return d->origin == AddedBySdk;
+}
+
+/*!
+    Returns \c false if the device is not written to the device settings, and
+    is therefore gone when Qt Creator is next started.
+
+    \sa setPersistent()
+*/
+bool IDevice::isPersistent() const
+{
+    return d->persistent;
+}
+
+/*!
+    Keeps the device out of the device settings if \a persistent is \c false.
+
+    That is for a device which exists only for as long as something else does,
+    a container that is up or a process that runs, and which whatever made it
+    makes again. Saving one would restore a device that is not there.
+
+    \sa isPersistent()
+*/
+void IDevice::setPersistent(bool persistent)
+{
+    d->persistent = persistent;
 }
 
 /*!
