@@ -198,6 +198,7 @@ private slots:
     void theClassAPlaceIsWrittenIn();
     void whereTheClassOfAGivenNameIsWritten();
     void theClassesAFileHandsToARunner();
+    void theCallsWithALiteralInside();
     void aUsingDeclarationThatNamesItsOwnOverloadSet();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
@@ -1310,6 +1311,47 @@ void tst_cxxfrontenddocument::theClassesAFileHandsToARunner()
     // handed a value rather than an object.
     QCOMPARE(other.classesPassedTo("QTest::qExecSomething").join(", "), QString());
     QCOMPARE(other.classesPassedTo("byValue").join(", "), QString());
+}
+
+// The calls a file makes with a literal in front, and the function each is
+// written inside. What the tags of a test's data function are made of.
+void tst_cxxfrontenddocument::theCallsWithALiteralInside()
+{
+    const CxxFrontendDocument document(
+        "namespace QTest {\n"                                  // 1
+        "void newRow(const char *);\n"                          // 2
+        "void addRow(const char *, int);\n"                     // 3
+        "}\n"                                                   // 4
+        "using namespace QTest;\n"                              // 5
+        "void elsewhere(const char *);\n"                        // 6
+        "void tst_Thing_data()\n"                               // 7
+        "{\n"                                                    // 8
+        "    QTest::newRow(\"first\");\n"                       // 9
+        "    newRow(\"unqualified\");\n"                        // 10
+        "    addRow(\"format %1\", 2);\n"                       // 11
+        "    elsewhere(\"not a tag\");\n"                       // 12
+        "    newRow(nothing());\n"                                // 13
+        "}\n",                                                   // 14
+        "<stdin>");
+
+    QStringList said;
+    for (const CxxFrontendDocument::LiteralCall &call
+         : document.callsWithALiteralTo({"QTest::newRow", "QTest::addRow"})) {
+        // Put together rather than formatted: a tag can hold a "%1" of its
+        // own, and QString::arg() would fill that in.
+        said << call.literal + " in " + call.insideFunction + " at "
+                    + QString::number(call.line) + ":" + QString::number(call.column)
+                    + (call.hasMoreArguments ? " (more follows)" : "");
+    }
+
+    // The qualified call and the unqualified one alike -- what it resolves
+    // to is what counts, so the using directive needs no watching -- with
+    // what each literal says rather than how it is quoted. Not the call to
+    // something else, and not one handed anything but a literal.
+    QCOMPARE(said.join("\n"),
+             QString("first in tst_Thing_data at 9:5\n"
+                     "unqualified in tst_Thing_data at 10:5\n"
+                     "format %1 in tst_Thing_data at 11:5 (more follows)"));
 }
 
 // Two overload sets that name each other, which is what the C library

@@ -30,6 +30,7 @@ private slots:
     void testTheFunctionANameStandsFor();
     void testAClassPrivateSlotsAndBases();
     void testTheClassesAFileHandsToARunner();
+    void testTheCallsWithALiteral();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

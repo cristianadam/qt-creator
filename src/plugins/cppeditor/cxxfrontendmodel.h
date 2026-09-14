@@ -554,6 +554,11 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbolsIn(
         const Utils::FilePath &filePath) const;
 
+    // Every call \a filePath makes to any of \a functionNames whose first
+    // argument is a string literal.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::LiteralCall>> callsWithALiteralIn(
+        const Utils::FilePath &filePath, const QStringList &functionNames) const;
+
     // The classes \a filePath hands to calls of the function called
     // \a functionName, each written out in full.
     std::optional<QStringList> classesPassedToIn(const Utils::FilePath &filePath,

@@ -3,7 +3,6 @@
 
 #include "qttestparser.h"
 
-#include "qttestvisitors.h"
 
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
@@ -159,13 +158,31 @@ static QSet<FilePath> filesWithDataFunctionDefinitions(
 QHash<QString, QtTestCodeLocationList> QtTestParser::checkForDataTags(
         const FilePath &fileName) const
 {
-    const QByteArray fileContent = getFileContent(fileName);
-    CPlusPlus::Document::Ptr document = m_cppSnapshot.preprocessedDocument(fileContent, fileName);
-    document->check();
-    CPlusPlus::AST *ast = document->translationUnit()->ast();
-    TestDataFunctionVisitor visitor(document);
-    visitor.accept(ast);
-    return visitor.dataTags();
+    static const QString dataSuffix("_data");
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+
+    QHash<QString, QtTestCodeLocationList> dataTags;
+    for (const CppEditor::CodeModelQueries::WrittenLiteralCall &call
+         : queries.callsWithALiteral(fileName, {"QTest::newRow", "QTest::addRow"})) {
+        // Only what a data function writes, and the tags belong to the test
+        // function it goes with rather than to itself.
+        if (!call.insideFunction.endsWith(dataSuffix))
+            continue;
+
+        // A tag put together out of a format string is not a tag anybody
+        // can be sent to: what it will say is not written down anywhere.
+        if (call.literal.contains('%') && call.hasMoreArguments)
+            continue;
+
+        QtTestCodeLocationAndType locationAndType;
+        locationAndType.m_name = call.literal;
+        locationAndType.m_line = call.line;
+        locationAndType.m_column = call.column - 1; // the tree counts from zero
+        locationAndType.m_type = TestTreeItem::TestDataTag;
+        dataTags[call.insideFunction.left(call.insideFunction.size() - dataSuffix.size())]
+            .append(locationAndType);
+    }
+    return dataTags;
 }
 
 /*!

@@ -2247,6 +2247,93 @@ QString CxxFrontendDocument::scopeAt(int line, int column) const
     return d->scopeNameAt(line, column);
 }
 
+// What a string literal says, without the quotes around it and without the
+// prefix in front of them, and with the pieces of an adjacent run joined --
+// the preprocessor has already made those one literal, whose spelling is
+// therefore the whole run. An escape is kept as it was written, which is
+// what the built-in front end's Token::spell() hands back too.
+static QString betweenTheQuotes(const QString &spelling)
+{
+    QString said;
+    bool inside = false;
+    for (int i = 0; i < spelling.size(); ++i) {
+        const QChar ch = spelling.at(i);
+        if (inside && ch == '\\' && i + 1 < spelling.size()) {
+            said += ch;
+            said += spelling.at(++i);
+            continue;
+        }
+        if (ch == '"') {
+            inside = !inside;
+            continue;
+        }
+        if (inside)
+            said += ch;
+    }
+    return said;
+}
+
+QList<CxxFrontendDocument::LiteralCall> CxxFrontendDocument::callsWithALiteralTo(
+    const QStringList &qualifiedNames) const
+{
+    QList<LiteralCall> calls;
+    if (qualifiedNames.isEmpty() || !d->unit.ast())
+        return calls;
+
+    const auto withoutTheLeadingScope = [](const QString &name) {
+        return name.startsWith("::") ? name.mid(2) : name;
+    };
+    QStringList wanted;
+    for (const QString &name : qualifiedNames)
+        wanted.append(withoutTheLeadingScope(name));
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const call = dynamic_cast<cxx::CallExpressionAST *>(*slot);
+        if (!call || !call->baseExpression || !call->expressionList
+            || !call->expressionList->value) {
+            continue;
+        }
+
+        // What it resolves to rather than what stands in the text, so that a
+        // using directive makes no difference to whether this is the call.
+        cxx::Symbol *callee = nullptr;
+        if (auto * const id = dynamic_cast<cxx::IdExpressionAST *>(call->baseExpression))
+            callee = id->symbol;
+        else if (auto * const member
+                 = dynamic_cast<cxx::MemberExpressionAST *>(call->baseExpression))
+            callee = member->symbol;
+        if (!callee || !wanted.contains(withoutTheLeadingScope(qualifiedNameOf(callee))))
+            continue;
+
+        // A literal written right there, past the conversion the call asked
+        // for: anything else is a value this cannot read.
+        cxx::ExpressionAST *argument = call->expressionList->value;
+        while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(argument))
+            argument = cast->expression;
+        auto * const text = dynamic_cast<cxx::StringLiteralExpressionAST *>(argument);
+        if (!text || !text->literal)
+            continue;
+
+        const cxx::SourceLocation at = call->baseExpression->firstSourceLocation();
+        if (!at)
+            continue;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
+
+        LiteralCall written;
+        if (cxx::FunctionSymbol * const function = d->functionAround(at))
+            written.insideFunction = withoutTheLeadingScope(qualifiedNameOf(function));
+        written.literal = betweenTheQuotes(fromStd(text->literal->value()));
+        written.line = int(position.line);
+        written.column = int(position.column);
+        written.hasMoreArguments = call->expressionList->next != nullptr;
+        calls.append(written);
+    }
+    return calls;
+}
+
 QStringList CxxFrontendDocument::classesPassedTo(const QString &qualifiedName) const
 {
     QStringList classes;

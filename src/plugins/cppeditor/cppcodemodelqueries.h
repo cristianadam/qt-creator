@@ -200,6 +200,27 @@ public:
     ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
                                                 const QString &className) const;
 
+    // A call written with a string literal in front of it, and the function
+    // it stands in: what the tags a Qt test's data function writes are made
+    // of, QTest::newRow("a tag") being one.
+    struct WrittenLiteralCall
+    {
+        QString insideFunction;  // written out in full
+        QString literal;         // as written, the quotes included
+        int line = 0;            // where the called name stands, from one
+        int column = 0;
+        bool hasMoreArguments = false;
+    };
+
+    // Every call \a filePath makes to any of the functions called
+    // \a functionNames -- written out in full -- whose first argument is a
+    // string literal, in the order they are written.
+    //
+    // How a call is written does not matter: what it resolves to is what is
+    // compared, so a call made reachable by a using directive is among them.
+    QList<WrittenLiteralCall> callsWithALiteral(const Utils::FilePath &filePath,
+                                                const QStringList &functionNames) const;
+
     // The classes \a filePath hands to calls of the function called
     // \a functionName -- written out in full -- each by the name of what the
     // call's first argument points at, in the order the calls are written.

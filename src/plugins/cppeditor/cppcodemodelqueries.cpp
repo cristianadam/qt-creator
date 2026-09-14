@@ -249,6 +249,112 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 #endif
 
 
+// The calls a file makes to one of several functions with a string literal
+// in front of them, and the function each is written inside. A call written
+// without its scopes counts where a using directive made it reachable, which
+// is what the depth bookkeeping here is for: a directive is in force from
+// where it is written to the end of the scope that holds it.
+class CallsWithALiteral : protected ASTVisitor
+{
+public:
+    CallsWithALiteral(const Document::Ptr &document, const QStringList &functionNames)
+        : ASTVisitor(document->translationUnit())
+        , m_document(document)
+    {
+        for (const QString &name : functionNames) {
+            m_qualified.append(name);
+            m_unqualified.append(name.mid(name.lastIndexOf("::") + 2));
+        }
+        accept(document->translationUnit()->ast());
+    }
+
+    QList<CodeModelQueries::WrittenLiteralCall> calls() const { return m_calls; }
+
+protected:
+    bool preVisit(AST *) override
+    {
+        ++m_depth;
+        return true;
+    }
+
+    void postVisit(AST *ast) override
+    {
+        --m_depth;
+        m_reachableUnqualified &= m_depth >= m_usingDirectiveDepth;
+        if (ast->asFunctionDefinition())
+            m_insideFunction.clear();
+    }
+
+    bool visit(UsingDirectiveAST *ast) override
+    {
+        // Which namespace it names does not matter: the functions asked
+        // about are named by their scopes, and a directive for another
+        // namespace cannot make one of them reachable unqualified.
+        if (ast->name) {
+            m_reachableUnqualified = true;
+            m_usingDirectiveDepth = m_depth - 1;
+        }
+        return true;
+    }
+
+    bool visit(FunctionDefinitionAST *ast) override
+    {
+        m_insideFunction = ast->symbol
+                               ? Overview().prettyName(
+                                     LookupContext::fullyQualifiedName(ast->symbol))
+                               : QString();
+        return true;
+    }
+
+    bool visit(CallAST *ast) override
+    {
+        if (!ast->base_expression || !ast->expression_list || !ast->expression_list->value)
+            return true;
+        IdExpressionAST * const id = ast->base_expression->asIdExpression();
+        NameAST * const called = id ? id->name : nullptr;
+        if (!called || !called->name)
+            return true;
+
+        const QString name = Overview().prettyName(called->name);
+        const bool isOne = called->asQualifiedName()
+                               ? m_qualified.contains(name)
+                               : m_reachableUnqualified && m_unqualified.contains(name);
+        if (!isOne)
+            return true;
+
+        const StringLiteralAST * const text = ast->expression_list->value->asStringLiteral();
+        if (!text)
+            return true;
+
+        // The whole run, since adjacent literals are one string -- which is
+        // what the other front end's preprocessor has already joined.
+        QString literal;
+        for (const StringLiteralAST *piece = text; piece; piece = piece->next) {
+            const Token token = m_document->translationUnit()->tokenAt(piece->literal_token);
+            if (!token.isStringLiteral())
+                return true;
+            literal += QString::fromUtf8(token.spell());
+        }
+
+        int line = 0;
+        int column = 0;
+        m_document->translationUnit()->getTokenPosition(called->firstToken(), &line, &column);
+        m_calls.append({m_insideFunction, literal, line, column,
+                        ast->expression_list->next != nullptr});
+        return true;
+    }
+
+private:
+    Document::Ptr m_document;
+    QStringList m_qualified;
+    QStringList m_unqualified;
+    QString m_insideFunction;
+    QList<CodeModelQueries::WrittenLiteralCall> m_calls;
+    int m_depth = 0;
+    int m_usingDirectiveDepth = 0;
+    bool m_reachableUnqualified = false;
+};
+
 // The classes a file hands to calls of one function, by the name of what
 // each call's first argument points at. The type is looked up where the call
 // stands, which is what says which class a name written there means.
@@ -611,6 +717,27 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     QList<WrittenDeclaration> declarations;
     collectDeclarations(doc->globalNamespace(), filePath, -1, &declarations);
     return declarations;
+}
+
+QList<CodeModelQueries::WrittenLiteralCall> CodeModelQueries::callsWithALiteral(
+    const FilePath &filePath, const QStringList &functionNames) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<CxxFrontendDocument::LiteralCall>> calls
+        = d->model.callsWithALiteralIn(filePath, functionNames)) {
+        QList<WrittenLiteralCall> written;
+        for (const CxxFrontendDocument::LiteralCall &call : *calls) {
+            written.append({call.insideFunction, call.literal, call.line, call.column,
+                            call.hasMoreArguments});
+        }
+        return written;
+    }
+#endif
+
+    const Document::Ptr doc = d->reparse(filePath);
+    if (!doc || !doc->translationUnit() || !doc->translationUnit()->ast())
+        return {};
+    return CallsWithALiteral(doc, functionNames).calls();
 }
 
 QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,

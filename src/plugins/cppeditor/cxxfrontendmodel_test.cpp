@@ -651,6 +651,46 @@ void CxxFrontendModelTest::testTheClassesAFileHandsToARunner()
              QString());
 }
 
+// The calls a file makes with a literal in front of them, which is what the
+// tags of a Qt test's data function are made of.
+void CxxFrontendModelTest::testTheCallsWithALiteral()
+{
+    const Parsed parsed({{"main.cpp",
+                          "namespace QTest {\n"
+                          "void newRow(const char *);\n"
+                          "void addRow(const char *, int);\n"
+                          "}\n"
+                          "using namespace QTest;\n"
+                          "void elsewhere(const char *);\n"
+                          "void tst_Thing_data()\n"
+                          "{\n"
+                          "    QTest::newRow(\"first\");\n"
+                          "    newRow(\"unqualified\");\n"
+                          "    addRow(\"format %1\", 2);\n"
+                          "    elsewhere(\"not a tag\");\n"
+                          "}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    QStringList said;
+    for (const CodeModelQueries::WrittenLiteralCall &call
+         : code.callsWithALiteral(parsed.mainFilePath(),
+                                  {"QTest::newRow", "QTest::addRow"})) {
+        // Put together rather than formatted: a tag can hold a "%1" of its
+        // own, and QString::arg() would fill that in.
+        said << call.literal + " in " + call.insideFunction + " at "
+                    + QString::number(call.line) + ":" + QString::number(call.column)
+                    + (call.hasMoreArguments ? " (more follows)" : "");
+    }
+
+    QCOMPARE(said.join("\n"),
+             QString("first in tst_Thing_data at 9:5\n"
+                     "unqualified in tst_Thing_data at 10:5\n"
+                     "format %1 in tst_Thing_data at 11:5 (more follows)"));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()
