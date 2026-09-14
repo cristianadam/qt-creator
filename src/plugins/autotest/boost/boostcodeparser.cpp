@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "boostcodeparser.h"
+#include "boosttestconstants.h"
 
 #include <cppeditor/cppcodemodelqueries.h>
-
-#include <QTextCursor>
-#include "boosttestconstants.h"
 
 #include <cplusplus/Overview.h>
 #include <cplusplus/Token.h>
 #include <utils/qtcassert.h>
+
+#include <QTextCursor>
 
 namespace Autotest::Internal {
 
@@ -22,7 +22,6 @@ BoostCodeParser::BoostCodeParser(const QByteArray &source, const LanguageFeature
     , m_features(features)
     , m_doc(doc)
     , m_snapshot(snapshot)
-    , m_text(QString::fromUtf8(source))
 {
     m_typeOfExpression.init(m_doc, m_snapshot);
 }
@@ -261,38 +260,78 @@ void BoostCodeParser::handleDecorators()
     static const QString boostDecorator = "boost::unit_test::decorator::";
 
     const QString decoratorName = decoratorNamedAt();
-    if (!decoratorName.startsWith(boostDecorator))
+    if (decoratorName.isEmpty())
         return;
 
-    const QString which = decoratorName.mid(boostDecorator.size());
+    // A decorator this does not read is still a decorator: skip it and go on
+    // to the next one, since what follows it may well be one that is read.
+    if (decoratorName.startsWith(boostDecorator)) {
+        const QString which = decoratorName.mid(boostDecorator.size());
 
-    if (which == "disabled") {
-        m_currentState.setFlag(BoostTestTreeItem::Disabled);
-    } else if (which == "enabled") {
-        m_currentState.setFlag(BoostTestTreeItem::Disabled, false);
-        m_currentState.setFlag(BoostTestTreeItem::ExplicitlyEnabled);
-    } else if (which == "enable_if") {
-        // figure out the passed template value
-        QByteArray templateType = decorator.mid(decorator.indexOf('<') + 1);
-        templateType.chop(templateType.size() - templateType.indexOf('>'));
-
-        if (templateType == "true") {
+        if (which == "disabled") {
+            m_currentState.setFlag(BoostTestTreeItem::Disabled);
+        } else if (which == "enabled") {
             m_currentState.setFlag(BoostTestTreeItem::Disabled, false);
             m_currentState.setFlag(BoostTestTreeItem::ExplicitlyEnabled);
-        } else if (templateType == "false") {
-            m_currentState.setFlag(BoostTestTreeItem::Disabled);
-        } else {
-            // FIXME we have a const(expr) bool? currently not easily achievable
+        } else if (which == "enable_if") {
+            // figure out the passed template value
+            QByteArray templateType = decorator.mid(decorator.indexOf('<') + 1);
+            templateType.chop(templateType.size() - templateType.indexOf('>'));
+
+            if (templateType == "true") {
+                m_currentState.setFlag(BoostTestTreeItem::Disabled, false);
+                m_currentState.setFlag(BoostTestTreeItem::ExplicitlyEnabled);
+            } else if (templateType == "false") {
+                m_currentState.setFlag(BoostTestTreeItem::Disabled);
+            } else {
+                // FIXME we have a const(expr) bool? currently not easily achievable
+            }
+        } else if (which == "fixture") {
+            m_currentState.setFlag(BoostTestTreeItem::Fixture);
         }
-    } else if (which == "fixture") {
-        m_currentState.setFlag(BoostTestTreeItem::Fixture);
+        // TODO.. depends_on, label, precondition, timeout,...
     }
-    // TODO.. depends_on, label, precondition, timeout,...
 
-    skipCommentsUntil(T_LPAREN);
-    skipCommentsUntil(T_RPAREN);
+    if (skipToNextDecorator())
+        handleDecorators(); // check for more decorators
+}
 
-    handleDecorators(); // check for more decorators
+// Past the decorator standing at the current token to the star that begins
+// the next one, if another one is written.
+//
+// A decorator is an expression -- a call, a template, an object named on its
+// own -- and what ends one is the star in front of the next or the closing
+// paren of the macro's own argument list. Brackets are counted, so a star or
+// a paren written inside a decorator's arguments is not mistaken for either.
+// Which is what skipping to the call's own parens could not do: it took a
+// decorator with an argument of its own -- *label("WO"), the shape boost's
+// own documentation writes -- for the end of the list.
+bool BoostCodeParser::skipToNextDecorator()
+{
+    int depth = 0;
+    for (int i = m_currentIndex + 1, end = m_tokens.size(); i < end; ++i) {
+        switch (m_tokens.at(i).kind()) {
+        case T_LPAREN:
+            ++depth;
+            break;
+        case T_RPAREN:
+            if (depth == 0) // the macro's own, so nothing is written after it
+                return false;
+            --depth;
+            break;
+        case T_STAR:
+            if (depth == 0) {
+                // Leave the star itself to be found: what reads the next
+                // decorator begins by looking for one.
+                m_currentIndex = i - 1;
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return false;
 }
 
 bool BoostCodeParser::skipCommentsUntil(const Kind nextExpectedKind)
@@ -397,16 +436,31 @@ QString BoostCodeParser::decoratorNamedAt()
     // The name the decorator is, which is the last one before its template
     // arguments or its call -- "enable_if" of "utf::enable_if<false>", not
     // the "false", and not a type named inside the brackets either.
+    //
+    // A decorator written without either, which is what a decorator that is
+    // an object rather than a call looks like, ends where the one after it
+    // begins or where the macro's arguments do -- so stop there as well,
+    // rather than walking off into the rest of the file for a name that has
+    // nothing to do with this.
     int nameIndex = -1;
     for (int i = m_currentIndex, end = m_tokens.size(); i < end; ++i) {
         const Kind kind = m_tokens.at(i).kind();
-        if (kind == T_LPAREN || kind == T_LESS)
+        if (kind == T_LPAREN || kind == T_LESS
+                || kind == T_STAR || kind == T_COMMA
+                || kind == T_RPAREN || kind == T_SEMICOLON) {
             break;
+        }
         if (kind == T_IDENTIFIER)
             nameIndex = i;
     }
     if (nameIndex < 0)
         return {};
+
+    // Built here rather than in the constructor: most files the Boost parser
+    // reads write no decorator at all, and this is the only thing that wants
+    // the source as text.
+    if (m_text.isEmpty())
+        m_text.setPlainText(QString::fromUtf8(m_source));
 
     QTextCursor cursor(&m_text);
     cursor.setPosition(m_tokens.at(nameIndex).utf16charsBegin());

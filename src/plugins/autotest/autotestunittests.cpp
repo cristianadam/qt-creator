@@ -304,7 +304,7 @@ void AutotestUnitTests::testCodeParserBoostTest()
     expectedSuitesAndTests.insert(pathConstructor("Master Test Suite", "tests/fix/fix"), 2); // fixtures
     expectedSuitesAndTests.insert(pathConstructor("Master Test Suite", "tests/params/params"), 3); // functions
     expectedSuitesAndTests.insert(pathConstructor("Suite1", "tests/deco/deco"), 4);
-    expectedSuitesAndTests.insert(pathConstructor("SuiteOuter", "tests/deco/deco"), 5); // 2 sub suites + 3 tests
+    expectedSuitesAndTests.insert(pathConstructor("SuiteOuter", "tests/deco/deco"), 6); // 2 sub suites + 4 tests
 
     QMap<QString, int> foundNamesAndSets = m_model->boostTestSuitesAndTests();
     QCOMPARE(expectedSuitesAndTests.size(), foundNamesAndSets.size());
@@ -330,9 +330,17 @@ void AutotestUnitTests::testCodeParserBoostTest()
     QCOMPARE(states.value("Master Test Suite/freeTestFunction2"),
              int(Boost::Parameterized));
 
+    // A decorator that is not read -- label, here -- must not stop the ones
+    // written after it from being read. Test3 carries one of each.
+    QVERIFY(states.contains("SuiteOuter/Test3"));
+    QCOMPARE(states.value("SuiteOuter/Test3"), int(Boost::Disabled));
+
     // A suite being disabled does not disable its tests one by one, and what
-    // carries no decorator is enabled.
+    // carries no decorator is enabled. Enabled is 0, so these say nothing
+    // unless the item is there to have a state at all.
+    QVERIFY(states.contains("SuiteOuter/SuiteInner2/Test1"));
     QCOMPARE(states.value("SuiteOuter/SuiteInner2/Test1"), int(Boost::Enabled));
+    QVERIFY(states.contains("SuiteOuter/SuiteInner1"));
     QCOMPARE(states.value("SuiteOuter/SuiteInner1"), int(Boost::Enabled));
 
     // check also that no Qt related tests have been found

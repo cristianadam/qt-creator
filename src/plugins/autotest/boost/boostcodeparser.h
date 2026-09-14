@@ -8,11 +8,10 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/SimpleLexer.h>
-
-#include <QTextDocument>
 #include <cplusplus/TypeOfExpression.h>
 
 #include <QByteArray>
+#include <QTextDocument>
 
 namespace Autotest::Internal {
 
@@ -37,6 +36,7 @@ private:
 
     bool skipCommentsUntil(CPlusPlus::Kind nextExpectedKind); // moves currentIndex if succeeds
     QByteArray contentUntil(CPlusPlus::Kind stopKind);        // does not move currentIndex
+    bool skipToNextDecorator();                               // moves currentIndex if succeeds
 
     bool isBoostBindCall(const QByteArray &function);
     bool aliasedOrRealNamespace(const QByteArray &symbolName, const QString &origNamespace,
@@ -48,7 +48,7 @@ private:
     const CPlusPlus::LanguageFeatures &m_features;
     const CPlusPlus::Document::Ptr &m_doc;
     const CPlusPlus::Snapshot m_snapshot;
-    QTextDocument m_text; // what a place is a cursor into
+    QTextDocument m_text; // what a place is a cursor into, filled on first ask
     CPlusPlus::TypeOfExpression m_typeOfExpression;
     CPlusPlus::Tokens m_tokens;
     int m_currentIndex = 0;
