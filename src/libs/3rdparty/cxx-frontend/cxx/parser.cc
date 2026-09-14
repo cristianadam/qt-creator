@@ -11063,6 +11063,22 @@ auto Parser::parse_type_parameter_key(SourceLocation& classKeyLoc) -> bool {
 
 auto Parser::parse_type_constraint(TypeConstraintAST*& yyast,
                                    bool parsingPlaceholderTypeSpec) -> bool {
+  // A type constraint is an optional nested name specifier followed by a
+  // concept's name, so it begins with an identifier, with "::", or with the
+  // decltype a nested name specifier may start with. A quarter of the calls
+  // here stand on a token that can begin none of them, and installing a
+  // lookahead and parsing a nested name specifier to find that out is work
+  // for nothing: in a translation unit of library headers that is 120,679
+  // speculative parses of the 482,149 this function is asked to make.
+  switch (LA().kind()) {
+    case TokenKind::T_IDENTIFIER:
+    case TokenKind::T_COLON_COLON:
+    case TokenKind::T_DECLTYPE:
+      break;
+    default:
+      return false;
+  }
+
   NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
   SourceLocation identifierLoc;
   const Identifier* identifier = nullptr;
