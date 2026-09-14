@@ -283,12 +283,21 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
     // question is not enough, and answering it by guessing is worse than
     // saying nothing, because a wrong answer sends someone to the wrong line
     // and looks right doing it.
+    //
+    // Which is not to say nobody answers them. This holds files and what
+    // they include; a *project* is something else, and whoever has one can
+    // search it -- cxxFrontendCounterpart() reads the built-in snapshot's
+    // files in the order SymbolFinder puts them, nearest first, rejecting
+    // each whose own parse never saw the name. What is refused here is
+    // refused by a snapshot, not by the migration.
     return {
         // Going the other way from a declaration in a header: which source
         // file defines it is a question about the project, and a document
         // holds one file and what it includes. counterpartAt() answers the
         // direction that is reachable -- from a definition to the
-        // declaration it was written for -- and declines this one.
+        // declaration it was written for -- and declines this one; the
+        // search over the project's files is what answers it, and it lives
+        // where the project is known.
         "the definition of a declaration outside the translation unit",
         // And which of several definitions of one name is the one, where
         // they differ in their parameter types rather than in how many

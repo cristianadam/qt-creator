@@ -6402,6 +6402,12 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // one of them, which is what the include hierarchy is built from and
         // how anything can be said about an include that is not used; this
         // reports the headers and not the lines.
+        //
+        // Not a gap that can be closed from here: the engine hands over an
+        // include to be resolved with an opaque pointer for its place, and
+        // its delegate reports a pragma and a skipped region but no
+        // include. A callback beside pragmaDirective() is what it would
+        // take, upstream.
         "the line each include is on",
         // Which specialization of a template an object is, where the
         // specialization is written with a type the file does not declare.
