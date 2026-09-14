@@ -791,6 +791,15 @@ public:
     // Which file a file id names, and nothing for the id that means no file.
     [[nodiscard]] QString nameOfFile(std::uint32_t fileId) const;
 
+    // The text between two tokens as the file writes it, the spacing
+    // included, or nothing where either of them stands in no file.
+    [[nodiscard]] QString writtenBetween(cxx::SourceLocation first,
+                                         cxx::SourceLocation last) const;
+
+    // The exception specification \a function was declared with, as it was
+    // written, and nothing where it was declared with none.
+    [[nodiscard]] QString exceptionSpecificationOf(cxx::FunctionSymbol *function) const;
+
     // The bases named by whichever class specifier the predicate accepts.
     [[nodiscard]] QStringList basesOfClass(
         const std::function<bool(cxx::ClassSpecifierAST *)> &wanted) const;
@@ -1665,6 +1674,47 @@ QString CxxFrontendDocument::Private::nameOfFile(std::uint32_t fileId) const
     if (fileId == 0)
         return {};
     return fromStd(unit.preprocessor()->sourceFileName(fileId));
+}
+
+QString CxxFrontendDocument::Private::exceptionSpecificationOf(
+    cxx::FunctionSymbol *function) const
+{
+    // As the declaration writes it. The type says only whether the function
+    // throws, so "noexcept(sizeof(T) > 4)" read off the type would come
+    // back as "noexcept" -- and a definition that says something its
+    // declaration does not is a definition that does not compile.
+    cxx::DeclaratorAST * const declarator = function ? declaratorOf(function) : nullptr;
+    if (!declarator)
+        return {};
+    for (auto *chunk : cxx::ListView{declarator->declaratorChunkList}) {
+        auto * const parameters = dynamic_cast<cxx::FunctionDeclaratorChunkAST *>(chunk);
+        if (!parameters || !parameters->exceptionSpecifier)
+            continue;
+        // The last location of a node is one past its last token.
+        return writtenBetween(parameters->exceptionSpecifier->firstSourceLocation(),
+                              cxx::SourceLocation(
+                                  parameters->exceptionSpecifier->lastSourceLocation().index()
+                                  - 1));
+    }
+    return {};
+}
+
+QString CxxFrontendDocument::Private::writtenBetween(cxx::SourceLocation first,
+                                                     cxx::SourceLocation last) const
+{
+    if (!first || !last)
+        return {};
+    const cxx::Token &opens = unit.tokenAt(first);
+    const cxx::Token &closes = unit.tokenAt(last);
+    if (opens.fileId() == 0 || opens.fileId() != closes.fileId())
+        return {};
+
+    const std::string &source = unit.preprocessor()->source(opens.fileId());
+    const std::size_t from = opens.offset();
+    const std::size_t to = std::size_t(closes.offset()) + closes.length();
+    if (to > source.size() || from >= to)
+        return {};
+    return fromStd(source.substr(from, to - from));
 }
 
 QString CxxFrontendDocument::Private::fileOf(cxx::SourceLocation location) const
@@ -3656,6 +3706,11 @@ public:
     const cxx::FunctionType *type = nullptr;
     QStringList parameterNames;
 
+    // As the declaration writes it -- "noexcept", "noexcept(false)",
+    // "throw()" -- since the type says only whether the function throws and
+    // what has to be written back is what stood there.
+    QString exceptionSpecification;
+
     // Where the answer is going, in the two scopes the halves of a
     // declaration are read in: a return type stands outside the function, a
     // parameter inside it.
@@ -3737,7 +3792,13 @@ bool CxxFrontendDocument::Signature::isVolatile() const
 
 QString CxxFrontendDocument::Signature::exceptionSpecification() const
 {
-    return isValid() && d->type->isNoexcept() ? QStringLiteral("noexcept") : QString();
+    if (!isValid())
+        return {};
+
+    // What the declaration wrote, where it wrote anything. A function the
+    // front end made noexcept without anybody saying so -- a defaulted one,
+    // a destructor -- has nothing written and says nothing here.
+    return d->exceptionSpecification;
 }
 
 QString CxxFrontendDocument::Signature::writeReturnType(const QString &name) const
@@ -3814,6 +3875,7 @@ CxxFrontendDocument::Signature CxxFrontendDocument::signatureAt(
     signature.d->function = function;
     signature.d->type = type;
     signature.d->parameterNames = d->parameterNamesOf(function);
+    signature.d->exceptionSpecification = d->exceptionSpecificationOf(function);
     signature.d->insideTheOtherSide = inside;
     signature.d->aroundTheOtherSide = around;
 
@@ -6362,12 +6424,18 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // read off the type -- what a switch over it switches over, for one
         // -- cannot be answered.
         "a name a variable of the same name shadows",
-        // Which way a function's exception specification was written. The
-        // front end records whether it throws and nothing else, so a
-        // throw() and a noexcept(expr) both come back as noexcept -- which
-        // is enough to tell a function that throws from one that does not,
-        // and not enough to write the specification back as it stood.
-        "how an exception specification was written",
+        // The exception specification in a declaration head this writes
+        // out. declarationOfFunctionAt() writes one off the *type*, which
+        // records only whether the function throws: a "noexcept(false)"
+        // comes back as nothing -- the same thing in meaning, not in text
+        // -- and one with an expression in it would come back as "noexcept",
+        // which is not the same thing at all.
+        //
+        // Reading what stood there is done, off the tree:
+        // Signature::exceptionSpecification() hands it back as written,
+        // which is what the decl/def link needs to tell one side from the
+        // other.
+        "the exception specification in a declaration head written out",
     };
 }
 

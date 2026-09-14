@@ -1641,6 +1641,33 @@ void tst_cxxfrontenddocument::unsupportedQueries()
     QVERIFY(!unsupported.contains("Snapshot"));
     QVERIFY(unsupported.contains("the line each include is on"));
 
+    // The entry about an exception specification, and both halves of what
+    // it is about. Read off the tree, what stood there comes back as
+    // written -- which is what tells one side of a declaration from the
+    // other.
+    QVERIFY(unsupported.contains("the exception specification in a declaration head "
+                                 "written out"));
+    const CxxFrontendDocument withAnExpression(
+        "struct C { void f(int a) const noexcept(false); };\n"
+        "void use() {}\n",
+        "<stdin>");
+    QCOMPARE(withAnExpression.signatureAt({"<stdin>", 1, 17}, {"<stdin>", 2, 6})
+                 .exceptionSpecification(),
+             QString("noexcept(false)"));
+
+    // Written out as a head, it is the type that is printed: a plain
+    // specification is written and "noexcept(false)" -- a function that may
+    // throw, which is what writing nothing says too -- comes back as
+    // nothing.
+    QCOMPARE(withAnExpression.declarationOfFunctionAt({"<stdin>", 1, 17}, {"<stdin>", 2, 6},
+                                                      "f"),
+             QString("void f(int a) const"));
+    const CxxFrontendDocument plain("struct C { void f(int a) const noexcept; };\n"
+                                    "void use() {}\n",
+                                    "<stdin>");
+    QCOMPARE(plain.declarationOfFunctionAt({"<stdin>", 1, 17}, {"<stdin>", 2, 6}, "f"),
+             QString("void f(int a) const noexcept"));
+
     // The entry, and both halves of the answer it is about. A partial
     // specialization written with a type the file declares is the one
     // instantiated...

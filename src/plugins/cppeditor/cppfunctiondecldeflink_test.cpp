@@ -310,6 +310,23 @@ void DeclDefLinkTest::testSyncsTheOtherSide_data()
         << "const" << ""
         << QByteArray("void C::f(int a) noexcept {}");
 
+    // A specification with something in the parentheses says more than
+    // whether the function throws, and what is written back has to be what
+    // stood there: a definition that says something else does not compile.
+    QTest::newRow("a cv qualifier changed beside a noexcept with an expression")
+        << QByteArray("void f@(int a) const noexcept(false);")
+        << QByteArray("void C::f(int a) const noexcept(false) {}")
+        << "const" << "volatile"
+        << QByteArray("void C::f(int a) volatile noexcept(false) {}");
+
+    // And the expression itself changing is a change: what the two sides
+    // say about throwing is no longer the same thing.
+    QTest::newRow("a changed noexcept expression")
+        << QByteArray("void f@(int a) const noexcept(false);")
+        << QByteArray("void C::f(int a) const noexcept(false) {}")
+        << "false" << "true"
+        << QByteArray("void C::f(int a) const noexcept(true) {}");
+
     QTest::newRow("an added exception specification")
         << QByteArray("auto f@(int a) const -> void;")
         << QByteArray("auto C::f(int a) const -> void {}")
