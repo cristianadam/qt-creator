@@ -6,7 +6,6 @@
 #include "catchcodeparser.h"
 #include "catchtreeitem.h"
 
-#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
 
@@ -76,17 +75,18 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
     return false;
 }
 
-// What declares a Catch test is a macro, so the question is whether the file
-// used one of them with something in the brackets. The query hands over the
-// function-like uses that were written with arguments and no others, which is
-// the "at least one argument" this asked for itself.
-static bool hasCatchNames(const CppEditor::CodeModelQueries &queries,
-                          const FilePath &filePath)
+static bool hasCatchNames(const CPlusPlus::Document::Ptr &document)
 {
-    for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
-         : queries.macroUsesIn(filePath)) {
-        if (isCatchMacro(use.name))
+    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
+        if (!macro.isFunctionLike())
+            continue;
+
+        if (isCatchMacro(QLatin1String(macro.macro().name()))) {
+            const QList<CPlusPlus::Document::Block> args = macro.arguments();
+            if (args.size() < 1)
+                continue;
             return true;
+        }
     }
     return false;
 }
@@ -101,8 +101,7 @@ bool CatchTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     const QString &filePath = doc->filePath().toUserOutput();
     const QByteArray &fileContent = getFileContent(fileName);
 
-    if (!hasCatchNames(CppEditor::CodeModelQueries(m_cppSnapshot, m_workingCopy),
-                       fileName)) {
+    if (!hasCatchNames(doc)) {
         static const QRegularExpression regex("\\b(CATCH_)?"
                                               "(SCENARIO(_METHOD)?|(TEMPLATE_(PRODUCT_)?)?TEST_CASE(_METHOD)?|"
                                               "TEMPLATE_TEST_CASE(_METHOD)?_SIG|"
