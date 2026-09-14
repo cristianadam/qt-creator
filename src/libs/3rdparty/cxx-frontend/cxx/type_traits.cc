@@ -561,6 +561,21 @@ struct AddCvQualifiers {
 };
 
 struct RemoveExtent {
+  const TypeTraits& traits;
+
+  // An array's qualifiers belong to the elements, so what is left when the
+  // extent is taken off a qualified array is the qualified element type.
+  //
+  // This has to look through a qualified type because IsArray does: such a
+  // type answers that it is an array, and if the extent could not then be
+  // taken off it, it would come back unchanged and remove_all_extents()
+  // would ask the same question for ever.
+  auto operator()(const QualType* type) const -> const Type* {
+    auto element = visit(*this, type->elementType());
+    if (element == type->elementType()) return type;
+    return traits.add_cv(element, type->cvQualifiers());
+  }
+
   auto operator()(const BoundedArrayType* type) const -> const Type* {
     return type->elementType();
   }
@@ -1384,7 +1399,7 @@ auto TypeTraits::decltype_of(ExpressionAST* expr) const -> const Type* {
 
 auto TypeTraits::remove_extent(const Type* type) const -> const Type* {
   if (!type) return type;
-  return visit(RemoveExtent{}, type);
+  return visit(RemoveExtent{*this}, type);
 }
 
 auto TypeTraits::get_element_type(const Type* type) const -> const Type* {
@@ -1811,7 +1826,12 @@ auto TypeTraits::requireCompleteClass(ClassSymbol* classSymbol) -> bool {
 
 auto TypeTraits::remove_all_extents(const Type* type) const -> const Type* {
   while (is_array(type)) {
-    type = remove_extent(type);
+    auto element = remove_extent(type);
+    // A type that says it is an array but has no extent to give up would be
+    // asked about for ever. Nothing answers that way now, and a parse that
+    // never ends is too poor a way to find out that something does.
+    if (element == type) break;
+    type = element;
   }
   return type;
 }
