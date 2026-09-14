@@ -5,6 +5,7 @@
 
 #include "qttestvisitors.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
 #include <cplusplus/TypeOfExpression.h>
@@ -136,46 +137,6 @@ TestCases QtTestParser::testCases(const FilePath &filePath) const
     return result;
 }
 
-static CPlusPlus::Document::Ptr declaringDocument(CPlusPlus::Document::Ptr doc,
-                                                  const CPlusPlus::Snapshot &snapshot,
-                                                  const QString &testCaseName,
-                                                  const FilePaths &alternativeFiles = {},
-                                                  int *line = nullptr,
-                                                  int *column = nullptr)
-{
-    CPlusPlus::Document::Ptr declaringDoc;
-    CPlusPlus::TypeOfExpression typeOfExpr;
-    typeOfExpr.init(doc, snapshot);
-
-    QList<CPlusPlus::LookupItem> lookupItems = typeOfExpr(testCaseName.toUtf8(),
-                                                          doc->globalNamespace());
-    // fallback for inherited functions
-    if (lookupItems.isEmpty() && !alternativeFiles.isEmpty()) {
-        for (const FilePath &alternativeFile : alternativeFiles) {
-            if (CPlusPlus::Document::Ptr document = snapshot.document(alternativeFile)) {
-                CPlusPlus::TypeOfExpression typeOfExpr; // we need a new one with no bindings
-                typeOfExpr.init(document, snapshot);
-                lookupItems = typeOfExpr(testCaseName.toUtf8(), document->globalNamespace());
-                if (!lookupItems.isEmpty())
-                    break;
-            }
-        }
-    }
-
-    for (const CPlusPlus::LookupItem &item : std::as_const(lookupItems)) {
-        if (CPlusPlus::Symbol *symbol = item.declaration()) {
-            if (CPlusPlus::Class *toeClass = symbol->asClass()) {
-                declaringDoc = snapshot.document(toeClass->filePath());
-                if (line)
-                    *line = toeClass->line();
-                if (column)
-                    *column = toeClass->column() - 1;
-            }
-        }
-    }
-    return declaringDoc;
-}
-
 static QSet<FilePath> filesWithDataFunctionDefinitions(
             const QMap<QString, QtTestCodeLocationAndType> &testFunctions)
 {
@@ -245,24 +206,67 @@ static void mergeTestFunctions(QMap<QString, QtTestCodeLocationAndType> &testFun
     }
 }
 
-static void fetchAndMergeBaseTestFunctions(const QSet<QString> &baseClasses,
-                                           QMap<QString, QtTestCodeLocationAndType> &testFunctions,
-                                           const CPlusPlus::Document::Ptr &doc,
-                                           const CPlusPlus::Snapshot &snapshot)
+// What the test tree keeps of each private slot the class declares: where
+// it is and which of the three kinds of test function it is, which is what
+// its name says.
+static QMap<QString, QtTestCodeLocationAndType> testFunctionsOf(
+        const CppEditor::CodeModelQueries &queries,
+        const QString &className,
+        const QList<CppEditor::WrittenFunction> &privateSlots,
+        bool inherited)
 {
-    QStringList bases = Utils::toList(baseClasses);
+    static const QStringList specialFunctions{"initTestCase", "cleanupTestCase",
+                                              "init", "cleanup"};
+    QMap<QString, QtTestCodeLocationAndType> functions;
+    for (const CppEditor::WrittenFunction &slot : privateSlots) {
+        QtTestCodeLocationAndType locationAndType;
+        locationAndType.m_filePath = slot.filePath;
+        locationAndType.m_line = slot.line;
+        locationAndType.m_column = slot.column - 1; // the tree counts them from zero
+
+        if (slot.name.endsWith("_data")) {
+            // Costly, but the data tags are written where the function is
+            // defined rather than where it is declared, and that is the
+            // entry a reader of the tags needs.
+            const Link definition = queries.definitionOfFunctionAt(slot.filePath, slot.line,
+                                                                   slot.column);
+            if (definition.hasValidTarget()) {
+                locationAndType.m_filePath = definition.targetFilePath;
+                locationAndType.m_line = definition.target.line;
+                locationAndType.m_column = definition.target.column;
+            }
+            locationAndType.m_type = TestTreeItem::TestDataFunction;
+        } else if (specialFunctions.contains(slot.name)) {
+            locationAndType.m_type = TestTreeItem::TestSpecialFunction;
+        } else {
+            locationAndType.m_type = TestTreeItem::TestFunction;
+        }
+
+        locationAndType.m_inherited = inherited;
+        locationAndType.m_name = className + "::" + slot.name;
+        functions.insert(locationAndType.m_name, locationAndType);
+    }
+    return functions;
+}
+
+static void fetchAndMergeBaseTestFunctions(const CppEditor::CodeModelQueries &queries,
+                                           const QStringList &baseClasses,
+                                           QMap<QString, QtTestCodeLocationAndType> &testFunctions,
+                                           const FilePath &filePath)
+{
+    QStringList bases = baseClasses;
+    QSet<QString> seen;
     while (!bases.empty()) {
         const QString base = bases.takeFirst();
-        TestVisitor baseVisitor(base, snapshot);
-        baseVisitor.setInheritedMode(true);
-        CPlusPlus::Document::Ptr declaringDoc = declaringDocument(doc, snapshot, base);
-        if (declaringDoc.isNull())
+        if (base == "QObject" || !Utils::insert(seen, base))
             continue;
-        baseVisitor.accept(declaringDoc->globalNamespace());
-        if (!baseVisitor.resultValid())
+        const CppEditor::CodeModelQueries::ClassWithPrivateSlots found
+                = queries.classWithPrivateSlots(filePath, base);
+        if (!found.klass.isValid())
             continue;
-        bases.append(Utils::toList(baseVisitor.baseClasses()));
-        mergeTestFunctions(testFunctions, baseVisitor.privateSlots());
+        bases.append(found.baseClasses);
+        mergeTestFunctions(testFunctions,
+                           testFunctionsOf(queries, base, found.privateSlots, true));
     }
 }
 
@@ -283,9 +287,8 @@ static QtTestCodeLocationList tagLocationsFor(const QtTestParseResult *func,
     return QtTestCodeLocationList();
 }
 
-static bool isQObject(const CPlusPlus::Document::Ptr &declaringDoc)
+static bool isQObject(const FilePath &file)
 {
-    const FilePath file = declaringDoc->filePath();
     return (HostOsInfo::isMacHost() && file.endsWith("QtCore.framework/Headers/qobject.h"))
             || file.endsWith("QtCore/qobject.h")  || file.endsWith("kernel/qobject.h");
 }
@@ -336,33 +339,48 @@ std::optional<bool> QtTestParser::fillTestCaseData(
         const QString &testCaseName, const CPlusPlus::Document::Ptr &doc,
         TestCaseData &data) const
 {
-    const FilePaths &alternativeFiles = m_alternativeFiles.values(doc->filePath());
-    CPlusPlus::Document::Ptr declaringDoc = declaringDocument(doc, m_cppSnapshot, testCaseName,
-                                                              alternativeFiles,
-                                                              &(data.line), &(data.column));
-    if (declaringDoc.isNull())
+    // One reading for the class and every base of it: reading a file is what
+    // this costs, and a hierarchy means asking about the same files again.
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+
+    // The file that names the class, or one of the files it was found named
+    // in before -- a test class is declared in a header and named from a
+    // source file, and either may be the one being parsed.
+    FilePath namedIn = doc->filePath();
+    CppEditor::CodeModelQueries::ClassWithPrivateSlots found
+            = queries.classWithPrivateSlots(namedIn, testCaseName);
+    if (!found.klass.isValid()) {
+        const FilePaths &alternativeFiles = m_alternativeFiles.values(doc->filePath());
+        for (const FilePath &alternativeFile : alternativeFiles) {
+            found = queries.classWithPrivateSlots(alternativeFile, testCaseName);
+            if (found.klass.isValid()) {
+                namedIn = alternativeFile;
+                break;
+            }
+        }
+    }
+    if (!found.klass.isValid())
         return false;
 
-    TestVisitor visitor(testCaseName, m_cppSnapshot);
-    visitor.accept(declaringDoc->globalNamespace());
-    if (!visitor.resultValid())
-        return false;
+    data.line = found.klass.line;
+    data.column = found.klass.column - 1; // the tree counts them from zero
 
-    data.testFunctions = visitor.privateSlots();
+    data.testFunctions = testFunctionsOf(queries, testCaseName, found.privateSlots, false);
     // gather appropriate information of base classes as well and merge into already found
     // functions - but only as far as QtTest can handle this appropriate
-    fetchAndMergeBaseTestFunctions(
-                visitor.baseClasses(), data.testFunctions, declaringDoc, m_cppSnapshot);
+    fetchAndMergeBaseTestFunctions(queries, found.baseClasses, data.testFunctions, namedIn);
 
     // handle tests that are not runnable without more information (plugin unit test of QC)
-    if (data.testFunctions.isEmpty() && testCaseName == "QObject" && isQObject(declaringDoc))
+    if (data.testFunctions.isEmpty() && testCaseName == "QObject"
+        && isQObject(found.klass.filePath)) {
         return true; // we did not handle it, but we do not expect any test defined there either
+    }
 
     const QSet<FilePath> &files = filesWithDataFunctionDefinitions(data.testFunctions);
     for (const FilePath &file : files)
         Utils::addToHash(&(data.dataTags), checkForDataTags(file));
 
-    data.fileName = declaringDoc->filePath();
+    data.fileName = found.klass.filePath;
     data.valid = true;
     return std::optional<bool>();
 }

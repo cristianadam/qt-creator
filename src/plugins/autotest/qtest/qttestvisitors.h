@@ -10,35 +10,11 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Overview.h>
 #include <cplusplus/Scope.h>
-#include <cplusplus/SymbolVisitor.h>
-#include <cppeditor/symbolfinder.h>
 
 #include <QMap>
 #include <QSet>
 
 namespace Autotest::Internal {
-
-class TestVisitor : public CPlusPlus::SymbolVisitor
-{
-public:
-    explicit TestVisitor(const QString &fullQualifiedClassName, const CPlusPlus::Snapshot &snapshot);
-
-    void setInheritedMode(bool inherited) { m_inherited = inherited; }
-    QMap<QString, QtTestCodeLocationAndType> privateSlots() const { return m_privSlots; }
-    QSet<QString> baseClasses() const { return m_baseClasses; }
-    bool resultValid() const { return m_valid; }
-
-    bool visit(CPlusPlus::Class *symbol) override;
-
-private:
-    CppEditor::SymbolFinder m_symbolFinder;
-    QString m_className;
-    CPlusPlus::Snapshot m_snapshot;
-    QMap<QString, QtTestCodeLocationAndType> m_privSlots;
-    bool m_valid = false;
-    bool m_inherited = false;
-    QSet<QString> m_baseClasses;
-};
 
 class TestAstVisitor : public CPlusPlus::ASTVisitor
 {
