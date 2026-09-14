@@ -84,18 +84,52 @@ static bool qtTestLibDefined(const FilePath &fileName)
     return false;
 }
 
-// Whether the match stands on a #define line. A macro written to stand in
-// for one of these ("#define APP_TEST_MAIN(C) QTEST_MAIN(C)") names no class
-// -- its parameter is not one -- and the preprocessed source this used to be
-// searched in had no #define lines left in it to match.
-static bool onADefineLine(const QString &text, int start)
+// Whether the match stands inside a #define. A macro written to stand in for
+// one of these ("#define APP_TEST_MAIN(C) QTEST_MAIN(C)") names no class of
+// its own -- its parameter is not one -- so what is written there is not an
+// answer. Where such a macro is *used* is, and wrapperMacrosIn() below is how
+// that is followed.
+//
+// A definition may be continued over as many lines as it likes, and what says
+// it is a definition stands on the first of them, so the backslashes are
+// followed back.
+static bool insideADefine(const QString &text, int start)
 {
     if (start == 0)
         return false;
-    const int newline = text.lastIndexOf(u'\n', start - 1);
-    const int lineStart = newline == -1 ? 0 : newline + 1;
+
+    int lineStart = text.lastIndexOf(u'\n', start - 1) + 1;
+    while (lineStart >= 2 && text.at(lineStart - 2) == u'\\') {
+        if (lineStart < 3) {
+            lineStart = 0;
+            break;
+        }
+        lineStart = text.lastIndexOf(u'\n', lineStart - 3) + 1;
+    }
+
     const QStringView inFront = QStringView(text).mid(lineStart, start - lineStart).trimmed();
     return inFront.startsWith(u'#') && inFront.sliced(1).trimmed().startsWith(u"define");
+}
+
+// The macros a file defines in terms of one of these. Reading the text as
+// written rather than preprocessed lost these: a file that writes
+// "#define TST_MAIN(Class) QTEST_MAIN(Class)" and then uses it had the use
+// expanded in the preprocessed source, so the class was found there. The
+// definition is read here and the use is read off the code model, which knows
+// the uses of a macro properly.
+QStringList wrapperMacrosIn(const QString &text)
+{
+    static const QRegularExpression define(
+        "^[ \\t]*#[ \\t]*define[ \\t]+(\\w+)[ \\t]*\\("
+        "(?:[^\\n]|\\\\\\n)*?"
+        "\\bQTEST_(?:APPLESS_|GUILESS_)?MAIN\\b",
+        QRegularExpression::MultilineOption);
+
+    QStringList names;
+    QRegularExpressionMatchIterator it = define.globalMatch(text);
+    while (it.hasNext())
+        names << it.next().captured(1);
+    return names;
 }
 
 // The last word on which class a file's test runs, for a file whose
@@ -137,16 +171,24 @@ TestCases mainsWrittenIn(const QString &text)
         if (commentedOut) // don't treat commented out macros as active
             continue;
 
-        if (onADefineLine(text, start))
+        if (insideADefine(text, start))
             continue;
 
-        result.append({match.captured(3), false});
+        const QString className = match.captured(3);
+        if (!Utils::anyOf(result, [&className](const TestCase &already) {
+                return already.name == className;
+            })) {
+            result.append({className, false});
+        }
     }
 
-    // Where a file names more than one -- which reading what was written
-    // rather than one configuration of it makes possible -- none of them is
-    // the only test its executable runs. The qExec() reading above says the
-    // same of what it finds.
+    // One name is one test however many times it is written: a file that
+    // names the same class in two branches of an #ifdef -- which reading the
+    // text as written rather than one configuration of it makes possible --
+    // runs one test, and saying otherwise takes the checkbox off it and makes
+    // it unrunnable. Where the names really do differ, none of them is the
+    // only test the executable runs, which is what the qExec() reading above
+    // says of what it finds.
     if (result.size() > 1) {
         for (TestCase &testCase : result)
             testCase.multipleTestCases = true;
@@ -181,7 +223,21 @@ TestCases QtTestParser::testCases(const FilePath &filePath) const
 
     // Read only here: where a macro use or a qExec() call said which class
     // runs, the text never has to be looked at.
-    return mainsWrittenIn(QString::fromUtf8(getFileContent(filePath)));
+    const QString text = QString::fromUtf8(getFileContent(filePath));
+
+    // A macro the file wrote to stand for one of Qt's: the definition says
+    // which macro that is, and the code model says where it was used and what
+    // it was handed. Preprocessing used to do both at once.
+    const QStringList wrappers = wrapperMacrosIn(text);
+    if (!wrappers.isEmpty()) {
+        for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
+             : queries.macroUsesIn(filePath)) {
+            if (wrappers.contains(use.name) && !use.arguments.isEmpty())
+                return { {use.arguments.first(), false} };
+        }
+    }
+
+    return mainsWrittenIn(text);
 }
 
 static QSet<FilePath> filesWithDataFunctionDefinitions(

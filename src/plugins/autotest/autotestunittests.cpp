@@ -338,6 +338,8 @@ class QtTestParserTest final : public QObject
 private slots:
     void testMainsWrittenIn();
     void testMainsWrittenIn_data();
+    void testWrapperMacros();
+    void testWrapperMacros_data();
 };
 
 void QtTestParserTest::testMainsWrittenIn_data()
@@ -401,9 +403,10 @@ void QtTestParserTest::testMainsWrittenIn_data()
         << "int main() { return 0; }\n"
         << QStringList{};
 
-    // A macro standing in for one of these names no class: "C" is its
-    // parameter. The preprocessed source had no #define lines left to match,
-    // so reading the text as written is what makes this reachable at all.
+    // What stands inside a definition names no class: "C" is the macro's
+    // parameter. Which class the *use* of such a macro names is a question
+    // for testWrapperMacros() below -- this reading answers only about what
+    // Qt's own macros say.
     QTest::newRow("a macro written to stand in for one")
         << "#define APP_TEST_MAIN(C) QTEST_MAIN(C)\n"
            "APP_TEST_MAIN(tst_Real)\n"
@@ -413,10 +416,68 @@ void QtTestParserTest::testMainsWrittenIn_data()
         << "#  define APP_TEST_MAIN(C) QTEST_MAIN(C)\n"
         << QStringList{};
 
+    // A definition continued with a backslash is still a definition: what
+    // stands on the second line is the macro's parameter, not a class.
+    QTest::newRow("a define continued over lines")
+        << "#define APP_TEST_MAIN(C) \\\n"
+           "    QTEST_MAIN(C)\n"
+        << QStringList{};
+
+    // One class named twice is one test. Reading the text as written finds
+    // both branches of an #ifdef, and calling that two tests takes the
+    // checkbox off the real one and makes it unrunnable.
+    QTest::newRow("the same class named in two branches")
+        << "#ifdef Q_OS_WIN\n"
+           "QTEST_GUILESS_MAIN(tst_Foo)\n"
+           "#else\n"
+           "QTEST_MAIN(tst_Foo)\n"
+           "#endif\n"
+        << QStringList{"tst_Foo"};
+
     // The name has to be one word, which is what the pattern asks for.
     QTest::newRow("a qualified name is not matched")
         << "QTEST_MAIN(ns::tst_Scoped)\n"
         << QStringList{};
+}
+
+void QtTestParserTest::testWrapperMacros_data()
+{
+    QTest::addColumn<QString>("source");
+    QTest::addColumn<QStringList>("expected");
+
+    QTest::newRow("none")
+        << "QTEST_MAIN(tst_Simple)\n"
+        << QStringList{};
+
+    QTest::newRow("a macro standing for one of Qt's")
+        << "#define APP_TEST_MAIN(C) QTEST_MAIN(C)\n"
+           "APP_TEST_MAIN(tst_Real)\n"
+        << QStringList{"APP_TEST_MAIN"};
+
+    QTest::newRow("continued over lines")
+        << "#define APP_TEST_MAIN(C) \\\n"
+           "    QTEST_MAIN(C)\n"
+        << QStringList{"APP_TEST_MAIN"};
+
+    QTest::newRow("the appless one, and space after the hash")
+        << "#  define WRAP(C) QTEST_APPLESS_MAIN(C)\n"
+        << QStringList{"WRAP"};
+
+    // A macro that stands for something else is not one of these.
+    QTest::newRow("a macro standing for something else")
+        << "#define HELPER(C) doSomething(C)\n"
+        << QStringList{};
+}
+
+// Which macros a file wrote to stand for one of Qt's. Its uses name a class
+// the way the macro it stands for would, and the preprocessed source this
+// reading replaced had them expanded, so losing them lost the test.
+void QtTestParserTest::testWrapperMacros()
+{
+    QFETCH(QString, source);
+    QFETCH(QStringList, expected);
+
+    QCOMPARE(wrapperMacrosIn(source), expected);
 }
 
 void QtTestParserTest::testMainsWrittenIn()
