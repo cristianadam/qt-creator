@@ -126,6 +126,18 @@ CPPEDITOR_EXPORT QString functionNamedAt(const CPlusPlus::Snapshot &snapshot,
                                          const Utils::FilePath &filePath,
                                          const QTextCursor &cursor);
 
+// The same, for a name of anything: what the name at \a cursor resolves to,
+// written out in full, whatever kind of thing it names -- or empty where this
+// front end resolved nothing there.
+//
+// What a reader needs who is asking *which* thing a name means rather than
+// what it is: whether the "disabled" in a Boost decorator is
+// boost::unit_test::disabled, however the file reached that name -- through a
+// using declaration, a namespace alias, or written out.
+CPPEDITOR_EXPORT QString nameResolvedAt(const CPlusPlus::Snapshot &snapshot,
+                                        const Utils::FilePath &filePath,
+                                        const QTextCursor &cursor);
+
 // The class \a line and \a column of \a filePath are written in, written out
 // in full, or empty where what is written around them is no class -- a place
 // in a member's *body* is in the function rather than in the class.

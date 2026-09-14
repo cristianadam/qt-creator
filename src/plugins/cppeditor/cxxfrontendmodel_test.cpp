@@ -587,6 +587,52 @@ void CxxFrontendModelTest::testTheFunctionANameStandsFor()
              QString("N::C::f, N::C::f, N::use, , "));
 }
 
+// Which thing a name means, written out in full, whatever kind of thing it
+// is -- and however the file reached the name. What tells a Boost test
+// decorator from a function of the same name somewhere else, and the shapes
+// here are the ones Boost's own test sources write.
+void CxxFrontendModelTest::testWhichThingANameMeans()
+{
+    const QByteArray source = "namespace lib {\n"                              // 1
+                              "namespace inner {\n"                            // 2
+                              "void disabled();\n"                             // 3
+                              "class label {};\n"                              // 4
+                              "int counter;\n"                                 // 5
+                              "}\n"                                            // 6
+                              "}\n"                                            // 7
+                              "using lib::inner::label;\n"                     // 8
+                              "namespace alias = lib::inner;\n"                // 9
+                              "#define DECORATE(x) x\n"                        // 10
+                              "void use()\n"                                   // 11
+                              "{\n"                                            // 12
+                              "    lib::inner::disabled();\n"                  // 13
+                              "    label marker;\n"                            // 14
+                              "    alias::counter = 1;\n"                      // 15
+                              "    DECORATE(lib::inner::disabled)();\n"        // 16
+                              "}\n";                                           // 17
+    const Parsed parsed({{"main.cpp", source}}, "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    QTextDocument text(QString::fromUtf8(source));
+    const auto meansAt = [&](int line, int column) {
+        QTextCursor cursor(&text);
+        cursor.setPosition(Utils::Text::positionInText(&text, line, column));
+        return nameResolvedAt(CppEditor::Tests::TestCase::globalSnapshot(),
+                              parsed.mainFilePath(), cursor);
+    };
+
+    // Written out; a class reached through a using declaration, which
+    // functionNamedAt() would refuse because it is no function; a variable
+    // reached through a namespace alias; and a name handed to a macro, which
+    // is how a Boost decorator is written. Asked in one comparison so that a
+    // sabotage says which of them moved.
+    QCOMPARE(QStringList({meansAt(13, 18), meansAt(14, 5), meansAt(15, 12),
+                          meansAt(16, 26)})
+                 .join(", "),
+             QString("lib::inner::disabled, lib::inner::label, "
+                     "lib::inner::counter, lib::inner::disabled"));
+}
+
 // What a Qt test class says about itself: the slots it declares privately,
 // which is how a test writes its test functions, and what it derives from.
 // Asked with the class's *name*, which is all the text of QTest::qExec()

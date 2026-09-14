@@ -472,8 +472,18 @@ const Class *builtinClassNamed(const Snapshot &snapshot, const FilePath &filePat
 
 } // namespace
 
-QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
-                        const QTextCursor &cursor)
+// What the name at \a cursor resolves to, and whether that is a function --
+// the two questions functionNamedAt() and nameResolvedAt() are each half of.
+namespace {
+struct ResolvedName
+{
+    QString qualifiedName;
+    bool isFunction = false;
+};
+}  // namespace
+
+static ResolvedName resolveNameAt(const Snapshot &snapshot, const FilePath &filePath,
+                                  const QTextCursor &cursor)
 {
     // At the end of the name, which is where an expression read backwards
     // from a cursor has to start.
@@ -492,9 +502,10 @@ QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<CxxFrontendDocument::Declaration> declaration
         = Internal::cxxFrontendDeclarationAt(filePath, line, column)) {
-        if (!declaration->isValid() || declaration->kind != CxxFrontendDocument::Kind::Function)
+        if (!declaration->isValid())
             return {};
-        return declaration->name;
+        return {declaration->name,
+                declaration->kind == CxxFrontendDocument::Kind::Function};
     }
 #endif
 
@@ -515,9 +526,23 @@ QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
     // The first candidate, as this has always taken: which overload the name
     // means is not settled by the name alone.
     Symbol * const symbol = items.first().declaration();
-    if (!symbol || (!symbol->asFunction() && !symbol->type()->asFunctionType()))
+    if (!symbol)
         return {};
-    return Overview().prettyName(LookupContext::fullyQualifiedName(symbol));
+    return {Overview().prettyName(LookupContext::fullyQualifiedName(symbol)),
+            symbol->asFunction() != nullptr || symbol->type()->asFunctionType() != nullptr};
+}
+
+QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
+                        const QTextCursor &cursor)
+{
+    const ResolvedName resolved = resolveNameAt(snapshot, filePath, cursor);
+    return resolved.isFunction ? resolved.qualifiedName : QString();
+}
+
+QString nameResolvedAt(const Snapshot &snapshot, const FilePath &filePath,
+                       const QTextCursor &cursor)
+{
+    return resolveNameAt(snapshot, filePath, cursor).qualifiedName;
 }
 
 QString classAround(const Snapshot &snapshot, const FilePath &filePath, int line, int column)
