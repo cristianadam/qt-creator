@@ -11094,6 +11094,13 @@ auto Parser::parse_type_constraint(TypeConstraintAST*& yyast,
 
     identifier = unit_->identifier(identifierLoc);
 
+    // A constraint names a concept, and a concept is declared before it is
+    // named, so a name that has declared none cannot be one. Of the 360,438
+    // times a translation unit of library headers reaches here with an
+    // identifier in hand, 6,533 find any symbol at all -- the rest walked
+    // the scopes to say so.
+    if (!unit_->isConceptName(identifier)) return false;
+
     Symbol* symbol = nullptr;
     if (nestedNameSpecifier && nestedNameSpecifier->symbol) {
       symbol = qualifiedLookup(

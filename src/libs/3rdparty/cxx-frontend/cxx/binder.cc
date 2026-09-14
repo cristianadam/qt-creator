@@ -1098,6 +1098,7 @@ void Binder::bind(ConceptDefinitionAST* ast) {
   auto symbol =
       control()->newConceptSymbol(declaringScope(), ast->identifierLoc);
   symbol->setName(ast->identifier);
+  unit_->noteConceptName(ast->identifier);
   if (templateParameters) {
     symbol->setTemplateParameters(templateParameters);
   }

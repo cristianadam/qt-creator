@@ -117,6 +117,19 @@ class TranslationUnit {
 
   void noteTypeDependencyCycleBroken() { ++typeDependencyCyclesBroken_; }
 
+  // The names concepts have been declared under in this unit. A type
+  // constraint names a concept, and a concept has to be declared before it
+  // can be named, so a name that never declared one cannot be a constraint --
+  // which saves looking it up. Every concept there is passes through
+  // Binder::bind(ConceptDefinitionAST*), so that is where they are recorded.
+  void noteConceptName(const Identifier* identifier) {
+    if (identifier) conceptNames_.insert(identifier);
+  }
+
+  [[nodiscard]] auto isConceptName(const Identifier* identifier) const -> bool {
+    return conceptNames_.contains(identifier);
+  }
+
   void addPendingBodyCompletion(FunctionSymbol* function);
   [[nodiscard]] auto takePendingBodyCompletions()
       -> std::vector<FunctionSymbol*>;
@@ -276,6 +289,7 @@ class TranslationUnit {
   std::vector<FunctionSymbol*> pendingBodyCompletions_;
   std::unordered_map<Symbol*, ConstraintSatisfactionCache>
       constraintSatisfactionCaches_;
+  std::unordered_set<const Identifier*> conceptNames_;
   std::unordered_map<const Type*, bool> typeDependencies_;
   std::uint64_t typeDependencyCyclesBroken_ = 0;
   int templateInstantiationDepth_ = 0;
