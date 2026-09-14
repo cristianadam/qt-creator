@@ -64,20 +64,6 @@ auto TranslationUnit::diagnosticsClient() const -> DiagnosticsClient* {
   return diagnosticsClient_;
 }
 
-auto TranslationUnit::changeDiagnosticsClient(
-    DiagnosticsClient* diagnosticsClient) -> DiagnosticsClient* {
-  std::swap(diagnosticsClient_, diagnosticsClient);
-
-  if (diagnosticsClient_) {
-    diagnosticsClient_->setPreprocessor(preprocessor_.get());
-    if (!diagnosticsClient_->isSfinae()) {
-      reportingDiagnosticsClient_ = diagnosticsClient_;
-    }
-  }
-
-  return diagnosticsClient;
-}
-
 void TranslationUnit::setSource(std::string source, std::string fileName) {
   beginPreprocessing(std::move(source), std::move(fileName));
   DefaultPreprocessorState state{*preprocessor_};

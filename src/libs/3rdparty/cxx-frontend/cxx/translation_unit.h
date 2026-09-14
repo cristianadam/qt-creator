@@ -56,8 +56,23 @@ class TranslationUnit {
 
   [[nodiscard]] auto diagnosticsClient() const -> DiagnosticsClient*;
 
+  // Inline because every speculative parse swaps a recording client in and
+  // out again, which makes this one of the most called functions there is: a
+  // translation unit of library headers reaches it millions of times, and out
+  // of line it was three percent of the parse on its own.
   [[nodiscard]] auto changeDiagnosticsClient(
-      DiagnosticsClient* diagnosticsClient) -> DiagnosticsClient*;
+      DiagnosticsClient* diagnosticsClient) -> DiagnosticsClient* {
+    std::swap(diagnosticsClient_, diagnosticsClient);
+
+    if (diagnosticsClient_) {
+      diagnosticsClient_->setPreprocessor(preprocessor_.get());
+      if (!diagnosticsClient_->isSfinae()) {
+        reportingDiagnosticsClient_ = diagnosticsClient_;
+      }
+    }
+
+    return diagnosticsClient;
+  }
 
   [[nodiscard]] auto ast() const -> UnitAST* { return ast_; }
 

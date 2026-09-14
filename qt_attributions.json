@@ -377,7 +377,7 @@
         "QtUsage": "Successor to the fallback C++ model; not yet used at runtime.",
         "Path": "@SOURCE_DIR@/src/libs/3rdparty/cxx-frontend",
         "Homepage": "https://github.com/robertoraggi/cplusplus",
-        "Version": "7d29d9d53be65020a023efd53ea17dc266ada16b",
+        "Version": "ccfe3948e7b51dc65463fefb4e5965925692376c",
         "Description": "Compiler front end for C++26 and C23",
         "License": "MIT License",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/cxx-frontend/LICENSE",
