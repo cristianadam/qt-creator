@@ -6417,13 +6417,6 @@ QStringList CxxFrontendDocument::unsupportedQueries()
         // punctuation, and the Qt keywords, which are macros before the
         // parser sees them. A label is a name and is answered.
         "where the angle brackets and the halves of a ternary are",
-        // What a name means where a variable of the same name shadows the
-        // type it is of: "enum E E;" and then "E" as an expression, which
-        // C++ says is the variable. The parser resolves that name to
-        // nothing and leaves the expression without a type, so anything
-        // read off the type -- what a switch over it switches over, for one
-        // -- cannot be answered.
-        "a name a variable of the same name shadows",
         // The exception specification in a declaration head this writes
         // out. declarationOfFunctionAt() writes one off the *type*, which
         // records only whether the function throws: a "noexcept(false)"

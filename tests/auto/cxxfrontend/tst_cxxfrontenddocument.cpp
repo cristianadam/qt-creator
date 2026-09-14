@@ -199,6 +199,7 @@ private slots:
     void whereTheClassOfAGivenNameIsWritten();
     void theClassesAFileHandsToARunner();
     void theCallsWithALiteralInside();
+    void aSwitchOverAVariableThatShadowsItsType();
     void theFunctionLikeMacroUsesOfAFile();
     void aUsingDeclarationThatNamesItsOwnOverloadSet();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
@@ -1378,6 +1379,28 @@ void tst_cxxfrontenddocument::theFunctionLikeMacroUsesOfAFile()
     // What was written, whitespace trimmed off each argument -- and nothing
     // for the macro used without any, which has nothing to read.
     QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
+}
+
+// A switch over a variable whose name is its type's: "enum E E;" and then
+// "switch (E)", where C++ says the variable wins. The front end used to
+// resolve that name to nothing and leave the condition untyped, so nothing
+// could be said about what the switch switches over.
+void tst_cxxfrontenddocument::aSwitchOverAVariableThatShadowsItsType()
+{
+    const CxxFrontendDocument document("enum E { A, B };\n"      // 1
+                                       "void f()\n"              // 2
+                                       "{\n"                      // 3
+                                       "    enum E E;\n"         // 4
+                                       "    switch (E) {\n"      // 5
+                                       "    case A: break;\n"    // 6
+                                       "    }\n"                  // 7
+                                       "}\n",                     // 8
+                                       "<stdin>");
+    QVERIFY(document.diagnostics().isEmpty());
+
+    const CxxFrontendDocument::Switch found = document.switchAt(5, 5);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.missingValues, QStringList("B"));
 }
 
 // Two overload sets that name each other, which is what the C library
