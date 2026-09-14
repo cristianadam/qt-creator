@@ -12,6 +12,11 @@
 
 namespace Autotest::Internal {
 
+// Which classes the QTEST_MAIN-family macros written in a text name, the ones
+// in a comment left out. Reachable for the test: it is a question about text
+// and needs no project.
+TestCases mainsWrittenIn(const QString &text);
+
 class QtTestParseResult : public TestParseResult
 {
 public:

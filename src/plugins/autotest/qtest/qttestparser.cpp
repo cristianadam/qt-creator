@@ -7,6 +7,9 @@
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
+
+#include <cplusplus/SimpleLexer.h>
+
 #include <utils/algorithm.h>
 
 #include <QPromise>
@@ -81,11 +84,53 @@ static bool qtTestLibDefined(const FilePath &fileName)
     return false;
 }
 
+// The last word on which class a file's test runs, for a file whose
+// QTEST_MAIN was never defined -- the macro is Qt's, and a file read without
+// it has nothing but the text left to say so.
+//
+// What is searched is the file's own text, so a macro written in a branch
+// this configuration does not build is found too: it still says which class
+// the file names, which is the question being asked. (The preprocessed
+// source was searched before, and left such a file out of the tree.)
+TestCases mainsWrittenIn(const QString &text)
+{
+    // \w rather than [[:alnum:]], which leaves out the underscore: the name a
+    // Qt test is conventionally written under has one (tst_Simple), so this
+    // never matched the usual spelling at all.
+    static const QRegularExpression regex("\\b(QTEST_(APPLESS_|GUILESS_)?MAIN)"
+                                          "\\s*\\(\\s*(\\w+)\\s*\\)");
+
+    // Where the comments stand, since a macro written inside one runs
+    // nothing. Whichever scanner is installed answers.
+    CPlusPlus::SimpleLexer lexer;
+    lexer.setSkipComments(false);
+    QList<std::pair<int, int>> comments;
+    for (const CPlusPlus::Token &token : lexer(text)) {
+        if (token.isComment())
+            comments.append({token.utf16charsBegin(), token.utf16charsEnd()});
+    }
+
+    TestCases result;
+    QRegularExpressionMatchIterator it = regex.globalMatch(text);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        const int start = match.capturedStart(1);
+        const int end = match.capturedEnd(1);
+
+        const bool commentedOut = anyOf(comments, [start, end](const std::pair<int, int> &comment) {
+            return comment.first <= start && comment.second > end;
+        });
+        if (commentedOut) // don't treat commented out macros as active
+            continue;
+
+        result.append({match.captured(3), false});
+    }
+    return result;
+}
+
 TestCases QtTestParser::testCases(const FilePath &filePath) const
 {
-    const QByteArray &fileContent = getFileContent(filePath);
-    CPlusPlus::Document::Ptr document = CppEditor::CppModelManager::document(filePath);
-    if (document.isNull())
+    if (CppEditor::CppModelManager::document(filePath).isNull())
         return {};
 
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
@@ -108,34 +153,9 @@ TestCases QtTestParser::testCases(const FilePath &filePath) const
         });
     }
 
-    document = m_cppSnapshot.preprocessedDocument(fileContent, filePath);
-    document->check();
-
-    TestCases result;
-    static const QRegularExpression regex("\\b(QTEST_(APPLESS_|GUILESS_)?MAIN)"
-                                          "\\s*\\(\\s*([[:alnum:]]+)\\s*\\)");
-    QRegularExpressionMatchIterator it = regex.globalMatch(QString::fromUtf8(document->utf8Source()));
-    while (it.hasNext()) {
-        const QRegularExpressionMatch match = it.next();
-        const int start = match.capturedStart(1);
-        const int end = match.capturedEnd(1);
-
-        if (const auto *translationUnit = document->translationUnit()) {
-            bool commentedOut = false;
-            const int count = translationUnit->commentCount();
-            for (int curr = 0; curr < count; ++curr) {
-                CPlusPlus::Token token = translationUnit->commentAt(curr);
-                if (token.utf16charsBegin() <= start && token.utf16charsEnd() > end) {
-                    commentedOut = true;
-                    break;
-                }
-            }
-            if (commentedOut) // don't treat commented out macros as active
-                continue;
-        }
-        result.append({match.captured(3), false});
-    }
-    return result;
+    // Read only here: where a macro use or a qExec() call said which class
+    // runs, the text never has to be looked at.
+    return mainsWrittenIn(QString::fromUtf8(getFileContent(filePath)));
 }
 
 static QSet<FilePath> filesWithDataFunctionDefinitions(

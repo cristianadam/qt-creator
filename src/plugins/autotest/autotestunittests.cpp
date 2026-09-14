@@ -7,6 +7,7 @@
 #include "testtreemodel.h"
 
 #include "qtest/qttestframework.h"
+#include "qtest/qttestparser.h"
 
 #include <cppeditor/cpptoolstestcase.h>
 #include <cppeditor/projectinfo.h>
@@ -17,6 +18,7 @@
 
 #include <qtsupport/qtkitaspect.h>
 
+#include <utils/algorithm.h>
 #include <utils/environment.h>
 
 #include <QFileInfo>
@@ -50,6 +52,8 @@ private slots:
     void testCodeParserGTest_data();
     void testCodeParserBoostTest();
     void testCodeParserBoostTest_data();
+    void testMainsWrittenIn();
+    void testMainsWrittenIn_data();
 
 private:
     TestTreeModel *m_model = nullptr;
@@ -324,6 +328,82 @@ void AutotestUnitTests::testCodeParserBoostTest_data()
         << m_tmpDir->filePath() / "simple_boost/simple_boost.pro" << QString(".pro");
     QTest::newRow("simpleBoostTestQbs")
         << m_tmpDir->filePath() / "simple_boost/simple_boost.qbs" << QString(".qbs");
+}
+
+void AutotestUnitTests::testMainsWrittenIn_data()
+{
+    QTest::addColumn<QString>("source");
+    QTest::addColumn<QStringList>("expected");
+
+    // The underscore is the point of this row: the pattern used to ask for
+    // alphanumerics only, so the name a Qt test is conventionally written
+    // under went unmatched and the file was left out of the tree.
+    QTest::newRow("the macro and what it is handed")
+        << "QTEST_MAIN(tst_Simple)\n"
+        << QStringList{"tst_Simple"};
+
+    QTest::newRow("a name with no underscore in it")
+        << "QTEST_MAIN(MyTest)\n"
+        << QStringList{"MyTest"};
+
+    QTest::newRow("the appless and guiless ones too")
+        << "QTEST_APPLESS_MAIN(tst_One)\n"
+           "QTEST_GUILESS_MAIN(tst_Two)\n"
+        << QStringList{"tst_One", "tst_Two"};
+
+    QTest::newRow("space around what it is handed")
+        << "QTEST_MAIN (  tst_Spaced  )\n"
+        << QStringList{"tst_Spaced"};
+
+    // A macro nobody runs, and the reason the comments have to be read at all.
+    QTest::newRow("one commented out with a line comment")
+        << "// QTEST_MAIN(tst_Disabled)\n"
+           "QTEST_MAIN(tst_Real)\n"
+        << QStringList{"tst_Real"};
+
+    QTest::newRow("one commented out with a block comment")
+        << "/* QTEST_MAIN(tst_Disabled) */\n"
+           "QTEST_MAIN(tst_Real)\n"
+        << QStringList{"tst_Real"};
+
+    QTest::newRow("one inside a block comment of several lines")
+        << "/*\n"
+           " * QTEST_MAIN(tst_Disabled)\n"
+           " */\n"
+        << QStringList{};
+
+    // What reading the file's own text changed: this used to be searched for
+    // in the preprocessed source, where a branch that is not built is gone,
+    // so the class went unnamed and the file was left out of the tree.
+    QTest::newRow("one in a branch that is not built")
+        << "#if 0\n"
+           "QTEST_MAIN(tst_NotBuilt)\n"
+           "#endif\n"
+        << QStringList{"tst_NotBuilt"};
+
+    QTest::newRow("one in an ifdef nobody defined")
+        << "#ifdef NEVER_DEFINED\n"
+           "QTEST_MAIN(tst_Conditional)\n"
+           "#endif\n"
+        << QStringList{"tst_Conditional"};
+
+    QTest::newRow("no macro at all")
+        << "int main() { return 0; }\n"
+        << QStringList{};
+
+    // The name has to be one word, which is what the pattern asks for.
+    QTest::newRow("a qualified name is not matched")
+        << "QTEST_MAIN(ns::tst_Scoped)\n"
+        << QStringList{};
+}
+
+void AutotestUnitTests::testMainsWrittenIn()
+{
+    QFETCH(QString, source);
+    QFETCH(QStringList, expected);
+
+    const TestCases cases = mainsWrittenIn(source);
+    QCOMPARE(Utils::transform(cases, &TestCase::name), expected);
 }
 
 QObject *createAutotestUnitTests()
