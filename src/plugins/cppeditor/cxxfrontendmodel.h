@@ -559,9 +559,9 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::MacroUse>> macroUsesIn(
         const Utils::FilePath &filePath) const;
 
-    // Every call \a filePath makes to any of \a functionNames whose first
-    // argument is a string literal.
-    std::optional<QList<CPlusPlus::CxxFrontendDocument::LiteralCall>> callsWithALiteralIn(
+    // Every call \a filePath makes to any of \a functionNames, with what
+    // each argument says where it is a string literal.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::WrittenCall>> callsIn(
         const Utils::FilePath &filePath, const QStringList &functionNames) const;
 
     // The classes \a filePath hands to calls of the function called

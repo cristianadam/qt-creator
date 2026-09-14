@@ -673,6 +673,11 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
                           "{\n"
                           "    using namespace QTest;\n"
                           "    newRow(\"inside a function\");\n"
+                          "}\n"
+                          "int quick_test_main(int, char **, const char *);\n"
+                          "int main(int argc, char **argv)\n"
+                          "{\n"
+                          "    return quick_test_main(argc, argv, \"TheQmlTests\");\n"
                           "}\n"}},
                         "main.cpp");
     QVERIFY(parsed.isValid());
@@ -680,14 +685,13 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
     const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
                                 CppModelManager::workingCopy());
     QStringList said;
-    for (const CodeModelQueries::WrittenLiteralCall &call
-         : code.callsWithALiteral(parsed.mainFilePath(),
-                                  {"QTest::newRow", "QTest::addRow"})) {
+    for (const CodeModelQueries::WrittenCall &call
+         : code.callsTo(parsed.mainFilePath(), {"QTest::newRow", "QTest::addRow"})) {
         // Put together rather than formatted: a tag can hold a "%1" of its
         // own, and QString::arg() would fill that in.
-        said << call.literal + " in " + call.insideFunction + " at "
+        said << call.arguments.value(0) + " in " + call.insideFunction + " at "
                     + QString::number(call.line) + ":" + QString::number(call.column)
-                    + (call.hasMoreArguments ? " (more follows)" : "");
+                    + (call.arguments.size() > 1 ? " (more follows)" : "");
     }
 
     // The last one is a directive written inside the function, which is in
@@ -697,6 +701,15 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
                      "unqualified in tst_Thing_data at 10:5\n"
                      "format %1 in tst_Thing_data at 11:5 (more follows)\n"
                      "inside a function in tst_Other_data at 17:5"));
+
+    // An argument that is not the first: a runner is handed argc and argv
+    // and then the name, and what is wanted is the third thing. The two
+    // arguments in front of it say nothing, being no literals.
+    const QList<CodeModelQueries::WrittenCall> runners
+        = code.callsTo(parsed.mainFilePath(), {"quick_test_main"});
+    QCOMPARE(runners.size(), 1);
+    QCOMPARE(runners.first().arguments, QStringList({"", "", "TheQmlTests"}));
+    QCOMPARE(runners.first().insideFunction, QString("main"));
 }
 
 // The function-like macro uses a file makes and what each was handed, which

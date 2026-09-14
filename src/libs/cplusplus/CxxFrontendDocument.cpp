@@ -2431,10 +2431,10 @@ QList<CxxFrontendDocument::MacroUse> CxxFrontendDocument::macroUses() const
     return uses;
 }
 
-QList<CxxFrontendDocument::LiteralCall> CxxFrontendDocument::callsWithALiteralTo(
+QList<CxxFrontendDocument::WrittenCall> CxxFrontendDocument::callsTo(
     const QStringList &qualifiedNames) const
 {
-    QList<LiteralCall> calls;
+    QList<WrittenCall> calls;
     if (qualifiedNames.isEmpty() || !d->unit.ast())
         return calls;
 
@@ -2450,10 +2450,8 @@ QList<CxxFrontendDocument::LiteralCall> CxxFrontendDocument::callsWithALiteralTo
         if (!slot || !*slot)
             continue;
         auto * const call = dynamic_cast<cxx::CallExpressionAST *>(*slot);
-        if (!call || !call->baseExpression || !call->expressionList
-            || !call->expressionList->value) {
+        if (!call || !call->baseExpression)
             continue;
-        }
 
         // What it resolves to rather than what stands in the text, so that a
         // using directive makes no difference to whether this is the call.
@@ -2466,27 +2464,29 @@ QList<CxxFrontendDocument::LiteralCall> CxxFrontendDocument::callsWithALiteralTo
         if (!callee || !wanted.contains(withoutTheLeadingScope(qualifiedNameOf(callee))))
             continue;
 
-        // A literal written right there, past the conversion the call asked
-        // for: anything else is a value this cannot read.
-        cxx::ExpressionAST *argument = call->expressionList->value;
-        while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(argument))
-            argument = cast->expression;
-        auto * const text = dynamic_cast<cxx::StringLiteralExpressionAST *>(argument);
-        if (!text || !text->literal)
-            continue;
-
         const cxx::SourceLocation at = call->baseExpression->firstSourceLocation();
         if (!at)
             continue;
         const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
 
-        LiteralCall written;
+        WrittenCall written;
         if (cxx::FunctionSymbol * const function = d->functionAround(at))
             written.insideFunction = withoutTheLeadingScope(qualifiedNameOf(function));
-        written.literal = betweenTheQuotes(fromStd(text->literal->value()));
         written.line = int(position.line);
         written.column = int(position.column);
-        written.hasMoreArguments = call->expressionList->next != nullptr;
+
+        // Each argument as it was written, past the conversion the call
+        // asked for -- a literal handed to a "const char *" is converted on
+        // the way in, and what is wanted is what stands in the text.
+        for (auto *value : cxx::ListView{call->expressionList}) {
+            cxx::ExpressionAST *argument = value;
+            while (auto * const cast = dynamic_cast<cxx::ImplicitCastExpressionAST *>(argument))
+                argument = cast->expression;
+            auto * const text = dynamic_cast<cxx::StringLiteralExpressionAST *>(argument);
+            written.arguments.append(text && text->literal
+                                         ? betweenTheQuotes(fromStd(text->literal->value()))
+                                         : QString());
+        }
         calls.append(written);
     }
     return calls;

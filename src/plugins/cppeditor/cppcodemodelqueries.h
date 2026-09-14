@@ -214,29 +214,31 @@ public:
     // to read off one.
     QList<WrittenMacroUse> macroUsesIn(const Utils::FilePath &filePath) const;
 
-    // A call written with a string literal in front of it, and the function
-    // it stands in: what the tags a Qt test's data function writes are made
-    // of, QTest::newRow("a tag") being one.
-    struct WrittenLiteralCall
+    // A call to a function asked about, and the function it stands in: what
+    // the tags a Qt test's data function writes are made of, and what a
+    // runner call says the test is named.
+    struct WrittenCall
     {
         QString insideFunction;  // written out in full
-        // What the literal says: the characters between the quotes, the
-        // pieces of an adjacent run joined and every escape as it was
-        // written -- which is what a tag is.
-        QString literal;
+
+        // One entry per argument, in order: what it says where it is a
+        // string literal -- the text between the quotes -- and nothing
+        // where it is anything else, so that a caller wanting the third
+        // can count to it.
+        QStringList arguments;
+
         int line = 0;            // where the called name stands, from one
         int column = 0;
-        bool hasMoreArguments = false;
     };
 
     // Every call \a filePath makes to any of the functions called
-    // \a functionNames -- written out in full -- whose first argument is a
-    // string literal, in the order they are written.
+    // \a functionNames -- written out in full -- in the order they are
+    // written.
     //
     // How a call is written does not matter: what it resolves to is what is
     // compared, so a call made reachable by a using directive is among them.
-    QList<WrittenLiteralCall> callsWithALiteral(const Utils::FilePath &filePath,
-                                                const QStringList &functionNames) const;
+    QList<WrittenCall> callsTo(const Utils::FilePath &filePath,
+                               const QStringList &functionNames) const;
 
     // The classes \a filePath hands to calls of the function called
     // \a functionName -- written out in full -- each by the name of what the

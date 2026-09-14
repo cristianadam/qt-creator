@@ -5,6 +5,8 @@
 
 #include "quicktesttreeitem.h"
 #include "quicktestvisitors.h"
+
+#include <cppeditor/cppcodemodelqueries.h>
 #include "quicktest_utils.h"
 #include "../testcodeparser.h"
 #include "../testtreemodel.h"
@@ -122,32 +124,25 @@ static QString quickTestSrcDir(const FilePath &fileName)
 
 QString QuickTestParser::quickTestName(const CPlusPlus::Document::Ptr &doc) const
 {
-    const QList<CPlusPlus::Document::MacroUse> macros = doc->macroUses();
     const FilePath filePath = doc->filePath();
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
 
-    for (const CPlusPlus::Document::MacroUse &macro : macros) {
-        if (!macro.isFunctionLike() || macro.arguments().isEmpty())
-            continue;
-        const QByteArray name = macro.macro().name();
-        if (QuickTestUtils::isQuickTestMacro(name)) {
-            CPlusPlus::Document::Block arg = macro.arguments().at(0);
-            return QLatin1String(getFileContent(filePath)
-                                 .mid(int(arg.bytesBegin()), int(arg.bytesEnd() - arg.bytesBegin())));
-        }
+    // A QUICK_TEST_MAIN-family macro says what the tests are named, and
+    // what it says is the text it was handed.
+    for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
+         : queries.macroUsesIn(filePath)) {
+        if (QuickTestUtils::isQuickTestMacro(use.name.toUtf8()) && !use.arguments.isEmpty())
+            return use.arguments.first();
     }
 
-
-    const QByteArray fileContent = getFileContent(filePath);
-    // check for using quick_test_main() directly
-    CPlusPlus::Document::Ptr document = m_cppSnapshot.preprocessedDocument(fileContent, filePath);
-    if (document.isNull())
-        return {};
-    document->check();
-    CPlusPlus::AST *ast = document->translationUnit()->ast();
-    QuickTestAstVisitor astVisitor(document);
-    astVisitor.accept(ast);
-    if (!astVisitor.testBaseName().isEmpty())
-        return astVisitor.testBaseName();
+    // Or quick_test_main() is called directly, and then the name is the
+    // third thing it is handed -- after argc and argv.
+    for (const CppEditor::CodeModelQueries::WrittenCall &call
+         : queries.callsTo(filePath, {"quick_test_main", "quick_test_main_with_setup"})) {
+        const QString name = call.arguments.value(2);
+        if (!name.isEmpty())
+            return name;
+    }
 
     // check for precompiled headers
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
@@ -164,7 +159,8 @@ QString QuickTestParser::quickTestName(const CPlusPlus::Document::Ptr &doc) cons
 
     if (pchIncludes) {
         static const QRegularExpression regex("\\bQUICK_TEST_(MAIN|OPENGL_MAIN|MAIN_WITH_SETUP)");
-        const QRegularExpressionMatch match = regex.match(QString::fromUtf8(fileContent));
+        const QRegularExpressionMatch match = regex.match(
+            QString::fromUtf8(getFileContent(filePath)));
         if (match.hasMatch())
             return match.captured(); // we do not care for the name, just return something non-empty
     }

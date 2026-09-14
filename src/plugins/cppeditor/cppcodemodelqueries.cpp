@@ -249,15 +249,16 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 #endif
 
 
-// The calls a file makes to one of several functions with a string literal
-// in front of them, and the function each is written inside. A call written
+// The calls a file makes to one of several functions, with what each
+// argument says where it is a literal, and the function each is written
+// inside. A call written
 // without its scopes counts where a using directive made it reachable, which
 // is what the depth bookkeeping here is for: a directive is in force from
 // where it is written to the end of the scope that holds it.
-class CallsWithALiteral : protected ASTVisitor
+class CallsTo : protected ASTVisitor
 {
 public:
-    CallsWithALiteral(const Document::Ptr &document, const QStringList &functionNames)
+    CallsTo(const Document::Ptr &document, const QStringList &functionNames)
         : ASTVisitor(document->translationUnit())
         , m_document(document)
     {
@@ -267,12 +268,18 @@ public:
             // one part: lastIndexOf answers -1 where there is no "::", and
             // taking two off that cuts the first character away.
             const int afterTheScopes = name.lastIndexOf("::");
-            m_unqualified.append(afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2));
+            if (afterTheScopes < 0) {
+                // Asked for without scopes, so a call written without them
+                // is the call: there is nothing for a directive to lend.
+                m_plain.append(name);
+            } else {
+                m_lentByADirective.append(name.mid(afterTheScopes + 2));
+            }
         }
         accept(document->translationUnit()->ast());
     }
 
-    QList<CodeModelQueries::WrittenLiteralCall> calls() const { return m_calls; }
+    QList<CodeModelQueries::WrittenCall> calls() const { return m_calls; }
 
 protected:
     bool preVisit(AST *ast) override
@@ -326,7 +333,7 @@ protected:
 
     bool visit(CallAST *ast) override
     {
-        if (!ast->base_expression || !ast->expression_list || !ast->expression_list->value)
+        if (!ast->base_expression)
             return true;
         IdExpressionAST * const id = ast->base_expression->asIdExpression();
         NameAST * const called = id ? id->name : nullptr;
@@ -336,38 +343,45 @@ protected:
         const QString name = Overview().prettyName(called->name);
         const bool isOne = called->asQualifiedName()
                                ? m_qualified.contains(name)
-                               : m_reachableUnqualified && m_unqualified.contains(name);
+                               : m_plain.contains(name)
+                                     || (m_reachableUnqualified
+                                         && m_lentByADirective.contains(name));
         if (!isOne)
             return true;
 
-        const StringLiteralAST * const text = ast->expression_list->value->asStringLiteral();
-        if (!text)
-            return true;
-
-        // The whole run, since adjacent literals are one string -- which is
-        // what the other front end's preprocessor has already joined.
-        QString literal;
-        for (const StringLiteralAST *piece = text; piece; piece = piece->next) {
-            const Token token = m_document->translationUnit()->tokenAt(piece->literal_token);
-            if (!token.isStringLiteral())
-                return true;
-            literal += QString::fromUtf8(token.spell());
+        // Each argument as it stands: what a literal says, and nothing for
+        // anything else. The whole run of a literal, since adjacent ones
+        // are one string.
+        QStringList arguments;
+        for (const ExpressionListAST *at = ast->expression_list; at; at = at->next) {
+            const StringLiteralAST * const text = at->value ? at->value->asStringLiteral()
+                                                            : nullptr;
+            QString literal;
+            for (const StringLiteralAST *piece = text; piece; piece = piece->next) {
+                const Token token = m_document->translationUnit()->tokenAt(piece->literal_token);
+                if (!token.isStringLiteral()) {
+                    literal.clear();
+                    break;
+                }
+                literal += QString::fromUtf8(token.spell());
+            }
+            arguments.append(literal);
         }
 
         int line = 0;
         int column = 0;
         m_document->translationUnit()->getTokenPosition(called->firstToken(), &line, &column);
-        m_calls.append({m_insideFunction, literal, line, column,
-                        ast->expression_list->next != nullptr});
+        m_calls.append({m_insideFunction, arguments, line, column});
         return true;
     }
 
 private:
     Document::Ptr m_document;
-    QStringList m_qualified;
-    QStringList m_unqualified;
+    QStringList m_qualified;        // asked for with scopes in front
+    QStringList m_plain;            // asked for without any
+    QStringList m_lentByADirective; // the last part of a qualified one
     QString m_insideFunction;
-    QList<CodeModelQueries::WrittenLiteralCall> m_calls;
+    QList<CodeModelQueries::WrittenCall> m_calls;
     QList<int> m_scopeDepths;
     int m_depth = 0;
     int m_usingDirectiveDepth = 0;
@@ -809,17 +823,15 @@ QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
     return uses;
 }
 
-QList<CodeModelQueries::WrittenLiteralCall> CodeModelQueries::callsWithALiteral(
+QList<CodeModelQueries::WrittenCall> CodeModelQueries::callsTo(
     const FilePath &filePath, const QStringList &functionNames) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
-    if (const std::optional<QList<CxxFrontendDocument::LiteralCall>> calls
-        = d->model->callsWithALiteralIn(filePath, functionNames)) {
-        QList<WrittenLiteralCall> written;
-        for (const CxxFrontendDocument::LiteralCall &call : *calls) {
-            written.append({call.insideFunction, call.literal, call.line, call.column,
-                            call.hasMoreArguments});
-        }
+    if (const std::optional<QList<CxxFrontendDocument::WrittenCall>> calls
+        = d->model->callsIn(filePath, functionNames)) {
+        QList<WrittenCall> written;
+        for (const CxxFrontendDocument::WrittenCall &call : *calls)
+            written.append({call.insideFunction, call.arguments, call.line, call.column});
         return written;
     }
 #endif
@@ -827,7 +839,7 @@ QList<CodeModelQueries::WrittenLiteralCall> CodeModelQueries::callsWithALiteral(
     const Document::Ptr doc = d->reparse(filePath);
     if (!doc || !doc->translationUnit() || !doc->translationUnit()->ast())
         return {};
-    return CallsWithALiteral(doc, functionNames).calls();
+    return CallsTo(doc, functionNames).calls();
 }
 
 QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,

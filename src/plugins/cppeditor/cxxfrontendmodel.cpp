@@ -1507,13 +1507,13 @@ std::optional<QList<CxxFrontendDocument::MacroUse>> CxxFrontendReading::macroUse
     return document->macroUses();
 }
 
-std::optional<QList<CxxFrontendDocument::LiteralCall>> CxxFrontendReading::callsWithALiteralIn(
+std::optional<QList<CxxFrontendDocument::WrittenCall>> CxxFrontendReading::callsIn(
     const FilePath &filePath, const QStringList &functionNames) const
 {
     const CxxFrontendDocument * const document = d->document(filePath);
     if (!document)
         return std::nullopt;
-    return document->callsWithALiteralTo(functionNames);
+    return document->callsTo(functionNames);
 }
 
 std::optional<QStringList> CxxFrontendReading::classesPassedToIn(

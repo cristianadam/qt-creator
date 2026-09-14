@@ -5,8 +5,6 @@
 
 #include "../testtreeitem.h"
 
-#include <cplusplus/ASTVisitor.h>
-#include <cplusplus/CppDocument.h>
 #include <qmljs/parser/qmljsastvisitor_p.h>
 #include <qmljs/qmljsdocument.h>
 
@@ -50,19 +48,6 @@ private:
     QStack<bool> m_objectIsTestStack;
     bool m_expectTestCaseName = false;
     bool m_checkForDerivedTest = false;
-};
-
-class QuickTestAstVisitor : public CPlusPlus::ASTVisitor
-{
-public:
-    QuickTestAstVisitor(CPlusPlus::Document::Ptr doc);
-
-    bool visit(CPlusPlus::CallAST *ast) override;
-
-    QString testBaseName() const { return m_testBaseName; }
-private:
-    QString m_testBaseName;
-    CPlusPlus::Document::Ptr m_currentDoc;
 };
 
 } // namespace Autotest::Internal

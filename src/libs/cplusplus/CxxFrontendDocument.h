@@ -680,37 +680,35 @@ public:
     // them -- there is nothing to read off one.
     QList<MacroUse> macroUses() const;
 
-    // A call this file makes whose first argument is a string literal, and
-    // the function it is written inside. What a reader of the tags a test's
-    // data function writes needs: QTest::newRow("a tag") is a call like
-    // that, and which test function it belongs to is the one it stands in.
-    struct LiteralCall
+    // A call this file makes to a function asked about, and the function it
+    // is written inside. What a reader of a call's written arguments needs:
+    // QTest::newRow("a tag") says which tag, quick_test_main(argc, argv,
+    // "Name") says which name.
+    struct WrittenCall
     {
         // Written out in full, the function the call is written inside.
         QString insideFunction;
 
-        // What the literal says: the characters between the quotes, without
+        // One entry per argument, in order. Where an argument is a string
+        // literal, what it says: the characters between the quotes, without
         // the prefix in front of them, with the pieces of an adjacent run
-        // joined and every escape as it was written. Which is what a tag is
-        // -- the text somebody wrote down, and what a runner is given.
-        QString literal;
+        // joined and every escape as it was written -- which is the text
+        // somebody wrote down. Empty where the argument is anything else, so
+        // that a caller wanting the third can count to it.
+        QStringList arguments;
 
         // Where the called name stands, one-based.
         int line = 0;
         int column = 0;
-
-        // Whether anything follows the literal, which is how a caller tells
-        // a tag written out from one that is computed.
-        bool hasMoreArguments = false;
     };
 
-    // Every such call to any of the functions called \a qualifiedNames, in
-    // the order they are written.
+    // Every call to any of the functions called \a qualifiedNames, in the
+    // order they are written.
     //
     // How the call was written does not matter: what it resolves to is what
     // is compared, so an unqualified call made reachable by a using
     // directive is found without anybody tracking the directive.
-    QList<LiteralCall> callsWithALiteralTo(const QStringList &qualifiedNames) const;
+    QList<WrittenCall> callsTo(const QStringList &qualifiedNames) const;
 
     // The classes this file hands to calls of the function called
     // \a qualifiedName: the type of each call's first argument with the

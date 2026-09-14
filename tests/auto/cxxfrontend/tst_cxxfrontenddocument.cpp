@@ -1338,13 +1338,17 @@ void tst_cxxfrontenddocument::theCallsWithALiteralInside()
         "<stdin>");
 
     QStringList said;
-    for (const CxxFrontendDocument::LiteralCall &call
-         : document.callsWithALiteralTo({"QTest::newRow", "QTest::addRow"})) {
+    for (const CxxFrontendDocument::WrittenCall &call
+         : document.callsTo({"QTest::newRow", "QTest::addRow"})) {
+        // A call handed something other than a literal says nothing about
+        // it, and a tag is what the first argument says.
+        if (call.arguments.value(0).isEmpty())
+            continue;
         // Put together rather than formatted: a tag can hold a "%1" of its
         // own, and QString::arg() would fill that in.
-        said << call.literal + " in " + call.insideFunction + " at "
+        said << call.arguments.value(0) + " in " + call.insideFunction + " at "
                     + QString::number(call.line) + ":" + QString::number(call.column)
-                    + (call.hasMoreArguments ? " (more follows)" : "");
+                    + (call.arguments.size() > 1 ? " (more follows)" : "");
     }
 
     // The qualified call and the unqualified one alike -- what it resolves
