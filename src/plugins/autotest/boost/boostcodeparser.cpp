@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "boostcodeparser.h"
+
+#include <cppeditor/cppcodemodelqueries.h>
+
+#include <QTextCursor>
 #include "boosttestconstants.h"
 
 #include <cplusplus/Overview.h>
@@ -18,7 +22,7 @@ BoostCodeParser::BoostCodeParser(const QByteArray &source, const LanguageFeature
     , m_features(features)
     , m_doc(doc)
     , m_snapshot(snapshot)
-    , m_lookupContext(m_doc, m_snapshot)
+    , m_text(QString::fromUtf8(source))
 {
     m_typeOfExpression.init(m_doc, m_snapshot);
 }
@@ -252,21 +256,22 @@ void BoostCodeParser::handleDecorators()
     if (decorator.isEmpty())
         return;
 
-    bool aliasedOrReal;
-    QString symbolName;
-    QByteArray simplifiedName;
+    // Where Boost declares them, which is what a resolved name says however
+    // the file spelled it.
+    static const QString boostDecorator = "boost::unit_test::decorator::";
 
-    if (!evalCurrentDecorator(decorator, &symbolName, &simplifiedName, &aliasedOrReal))
+    const QString decoratorName = decoratorNamedAt();
+    if (!decoratorName.startsWith(boostDecorator))
         return;
 
-    if (symbolName == "decorator::disabled" || (aliasedOrReal && simplifiedName == "::disabled")) {
+    const QString which = decoratorName.mid(boostDecorator.size());
+
+    if (which == "disabled") {
         m_currentState.setFlag(BoostTestTreeItem::Disabled);
-    } else if (symbolName == "decorator::enabled"
-               || (aliasedOrReal && simplifiedName == "::enabled")) {
+    } else if (which == "enabled") {
         m_currentState.setFlag(BoostTestTreeItem::Disabled, false);
         m_currentState.setFlag(BoostTestTreeItem::ExplicitlyEnabled);
-    } else if (symbolName == "decorator::enable_if"
-               || (aliasedOrReal && simplifiedName.startsWith("::enable_if<"))) {
+    } else if (which == "enable_if") {
         // figure out the passed template value
         QByteArray templateType = decorator.mid(decorator.indexOf('<') + 1);
         templateType.chop(templateType.size() - templateType.indexOf('>'));
@@ -279,8 +284,7 @@ void BoostCodeParser::handleDecorators()
         } else {
             // FIXME we have a const(expr) bool? currently not easily achievable
         }
-    } else if (symbolName == "decorator::fixture"
-               || (aliasedOrReal && simplifiedName.startsWith("::fixture"))){
+    } else if (which == "fixture") {
         m_currentState.setFlag(BoostTestTreeItem::Fixture);
     }
     // TODO.. depends_on, label, precondition, timeout,...
@@ -381,23 +385,32 @@ bool BoostCodeParser::aliasedOrRealNamespace(const QByteArray &symbolName,
     return true;
 }
 
-bool BoostCodeParser::evalCurrentDecorator(const QByteArray &decorator, QString *symbolName,
-                                           QByteArray *simplifiedName, bool *aliasedOrReal)
+// Which decorator stands at the current token, written out in full.
+//
+// The name is resolved where it is written, so how the file reached it is the
+// front end's business and not this parser's: written out, through a
+// namespace alias ("utf::disabled"), or brought in by a using declaration,
+// the answer is the one name. Which is what the alias walking this replaced
+// was for.
+QString BoostCodeParser::decoratorNamedAt()
 {
-    const QList<LookupItem> lookupItems = m_typeOfExpression(decorator, m_doc->globalNamespace());
-    if (lookupItems.isEmpty())
-        return false;
+    // The name the decorator is, which is the last one before its template
+    // arguments or its call -- "enable_if" of "utf::enable_if<false>", not
+    // the "false", and not a type named inside the brackets either.
+    int nameIndex = -1;
+    for (int i = m_currentIndex, end = m_tokens.size(); i < end; ++i) {
+        const Kind kind = m_tokens.at(i).kind();
+        if (kind == T_LPAREN || kind == T_LESS)
+            break;
+        if (kind == T_IDENTIFIER)
+            nameIndex = i;
+    }
+    if (nameIndex < 0)
+        return {};
 
-    Overview overview;
-    Symbol *symbol = lookupItems.first().declaration();
-    if (!symbol->name())
-        return false;
-
-    *symbolName = overview.prettyName(symbol->name());
-    *aliasedOrReal = false;
-    if (decorator.contains("::"))
-        return aliasedOrRealNamespace(decorator, "boost::unit_test", simplifiedName, aliasedOrReal);
-    return true;
+    QTextCursor cursor(&m_text);
+    cursor.setPosition(m_tokens.at(nameIndex).utf16charsBegin());
+    return CppEditor::nameResolvedAt(m_snapshot, m_doc->filePath(), cursor);
 }
 
 } // namespace Autotest::Internal

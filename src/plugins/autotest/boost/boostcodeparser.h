@@ -8,6 +8,8 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/SimpleLexer.h>
+
+#include <QTextDocument>
 #include <cplusplus/TypeOfExpression.h>
 
 #include <QByteArray>
@@ -39,14 +41,14 @@ private:
     bool isBoostBindCall(const QByteArray &function);
     bool aliasedOrRealNamespace(const QByteArray &symbolName, const QString &origNamespace,
                                 QByteArray *simplifiedName, bool *aliasedOrReal);
-    bool evalCurrentDecorator(const QByteArray &decorator, QString *symbolName,
-                              QByteArray *simplifiedName, bool *aliasedOrReal);
+    // Which decorator stands at the current token, written out in full.
+    QString decoratorNamedAt();
 
     const QByteArray &m_source;
     const CPlusPlus::LanguageFeatures &m_features;
     const CPlusPlus::Document::Ptr &m_doc;
     const CPlusPlus::Snapshot m_snapshot;
-    CPlusPlus::LookupContext m_lookupContext;
+    QTextDocument m_text; // what a place is a cursor into
     CPlusPlus::TypeOfExpression m_typeOfExpression;
     CPlusPlus::Tokens m_tokens;
     int m_currentIndex = 0;
