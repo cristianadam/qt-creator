@@ -263,7 +263,11 @@ public:
     {
         for (const QString &name : functionNames) {
             m_qualified.append(name);
-            m_unqualified.append(name.mid(name.lastIndexOf("::") + 2));
+            // The last part of it, and the whole of a name that has only
+            // one part: lastIndexOf answers -1 where there is no "::", and
+            // taking two off that cuts the first character away.
+            const int afterTheScopes = name.lastIndexOf("::");
+            m_unqualified.append(afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2));
         }
         accept(document->translationUnit()->ast());
     }
@@ -412,7 +416,9 @@ protected:
         typeOfExpression.init(m_document, m_snapshot);
         const QList<LookupItem> items = typeOfExpression(ast->expression_list->value,
                                                          m_document, m_scope);
-        if (items.isEmpty())
+        // A lookup item with no type at all is no answer: its type operator
+        // hands back what it holds without looking.
+        if (items.isEmpty() || !items.first().type().type())
             return true;
         if (const PointerType * const pointer = items.first().type()->asPointerType())
             m_classes.append(Overview().prettyType(pointer->elementType()));
@@ -666,9 +672,13 @@ QList<WrittenFunction> CodeModelQueries::memberFunctionsOf(const WrittenClass &k
 QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // An empty list is an answer: a file that declares nothing of its own
+    // declares nothing. Handing the question back would answer it off the
+    // built-in front end, whose global namespace holds what the headers
+    // declare as well -- so a file with nothing in it would be shown
+    // everything its headers have.
     if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
-        = d->model->symbolsIn(filePath);
-        symbols && !symbols->isEmpty()) {
+        = d->model->symbolsIn(filePath)) {
         QList<WrittenClass> classes;
         for (const CxxFrontendDocument::Symbol &symbol : *symbols) {
             // A class named without its body declares nothing to say
@@ -696,9 +706,13 @@ QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath
 QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &filePath) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // An empty list is an answer: a file that declares nothing of its own
+    // declares nothing. Handing the question back would answer it off the
+    // built-in front end, whose global namespace holds what the headers
+    // declare as well -- so a file with nothing in it would be shown
+    // everything its headers have.
     if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
-        = d->model->symbolsIn(filePath);
-        symbols && !symbols->isEmpty()) {
+        = d->model->symbolsIn(filePath)) {
         QList<WrittenDeclaration> declarations;
 
         // Which entry each symbol became, since what is left out takes what
