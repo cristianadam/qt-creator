@@ -597,10 +597,20 @@ void FollowSymbolUnderCursor::findLink(
 
     bool recognizedQtMethod = false;
 
+    // The cursor stands somewhere in a SIGNAL() or SLOT(): on the keyword,
+    // on the method named inside, or on either parenthesis. What is named
+    // there is a Qt method, found by the text around it further down --
+    // the parser sees a string, the macro having stringified it.
+    bool insideAQtMethodMacro = false;
+
     for (int i = 0; i < tokens.size(); ++i) {
         const Token &tk = tokens.at(i);
 
         if (column >= tk.utf16charsBegin() && column < tk.utf16charsEnd()) {
+            for (int back = 0; back <= 3 && i - back >= 0; ++back) {
+                if (tokens.at(i - back).is(T_SIGNAL) || tokens.at(i - back).is(T_SLOT))
+                    insideAQtMethodMacro = true;
+            }
             int closingParenthesisPos = tokens.size();
             if (i >= 2 && tokens.at(i).is(T_IDENTIFIER) && tokens.at(i - 1).is(T_LPAREN)
                 && (tokens.at(i - 2).is(T_SIGNAL) || tokens.at(i - 2).is(T_SLOT))) {
@@ -675,7 +685,7 @@ void FollowSymbolUnderCursor::findLink(
             return processLinkCallback(link);
     }
 
-    if (!recognizedQtMethod) {
+    if (!insideAQtMethodMacro) {
         const QTextBlock block = tc.block();
         int pos = cursor.positionInBlock();
         QChar ch = document->characterAt(cursor.position());
@@ -738,22 +748,15 @@ void FollowSymbolUnderCursor::findLink(
     // part being migrated. It declines what it cannot answer for, and then
     // the built-in lookup answers as it always did.
     //
-    // Not for a call, though, and not because the arguments cannot be
-    // weighed -- they can. A name with a "(" after it is where three other
-    // things happen: following a virtual call offers every override rather
-    // than one place, a name inside SIGNAL() or SLOT() is a Qt method found
-    // by the text around it, and a call whose overloads a using declaration
-    // lent from a base is resolved against the class's own only
-    // (CxxFrontendDocument::unsupportedQueries()). Answering here would take
-    // all three away: the follow-symbol suite goes from green to 28 failures.
+    // A call among them: the arguments are weighed, by type and by how many
+    // there are. What a name with a "(" after it must not take away is the
+    // three other things that happen there -- every override of a virtual
+    // call rather than one place, a Qt method inside SIGNAL() or SLOT(),
+    // and a call whose overloads a base class may have lent. The model
+    // declines the first and the third itself; the second is the text's to
+    // recognise, and is recognised here.
 #ifdef QTC_WITH_CXX_FRONTEND
-    const auto namesACall = [&] {
-        int pos = endOfToken;
-        while (document->characterAt(pos).isSpace())
-            ++pos;
-        return document->characterAt(pos) == '(';
-    };
-    if (!namesACall()) {
+    if (!insideAQtMethodMacro) {
         const Link fromCxxFrontend
             = Internal::cxxFrontendFollowSymbol(data.filePath(), line, column, beginOfToken,
                                                 endOfToken);

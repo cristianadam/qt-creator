@@ -683,6 +683,15 @@ public:
         // tell from here that it must answer this one itself.
         bool throughUsingDeclaration = false;
 
+        // A base of the class this function belongs to declares one of the
+        // same name. Then which of them a call means may not be settled
+        // here: a using declaration lending the base's overloads is
+        // recorded nowhere, so the call is weighed against what the class
+        // itself wrote and the base's are never in the running. Name hiding
+        // makes the same answer right and the two cannot be told apart, so
+        // a caller that would send somebody here is told to think again.
+        bool siblingsInABaseClass = false;
+
         // Where the thing was first declared, which is what tells one
         // entity from another. A function declared in a header and defined
         // in a source file is one thing written in two places, and this is

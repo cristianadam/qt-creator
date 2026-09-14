@@ -474,6 +474,21 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     if (found.throughUsingDeclaration)
         return {};
 
+    // One of several of that name, a base class declaring one too: which of
+    // them is meant may not be settled here, so this would be a place
+    // chosen rather than found.
+    if (found.siblingsInABaseClass)
+        return {};
+
+    // A virtual function: following a call to one offers every override
+    // rather than one place, which is the built-in path's to do. Asked of
+    // the declaration this resolved to, virtuality being a fact about a
+    // declaration and not about the place that calls it.
+    const QString declaredIn = found.filePath == document->fileName() ? QString()
+                                                                      : found.filePath;
+    if (document->virtualityAt(found.line, found.column, declaredIn).isVirtual)
+        return {};
+
     // And a link counts from zero again, the way Symbol::toLink() does it.
     Link link(FilePath::fromUserInput(found.filePath), found.line, found.column - 1);
     link.linkTextStart = linkTextStart;

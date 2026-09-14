@@ -1100,6 +1100,11 @@ void FollowSymbolTest::testFollowSymbol_data()
 
     // 3.3.10 Name hiding, from text
     // www.stroustrup.com/bs_faq2.html#overloadderived
+    QTest::newRow("a plain call") << _(
+        "void $f() {}\n"
+        "void g() { @f(); }\n"
+    );
+
     QTest::newRow("baseClassFunctionIntroducedByUsingDeclaration") << _(
         "struct B {\n"
         "    int $f(int) {}\n"

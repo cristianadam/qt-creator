@@ -789,6 +789,7 @@ public:
     // Whether a using declaration in this file names \a symbol, or brought in
     // the function \a symbol is.
     [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
+    [[nodiscard]] bool hasSiblingsInABaseClass(cxx::Symbol *symbol) const;
 
     // The name of the class specifier that has a body for \a symbol, if this
     // document holds one.
@@ -1305,6 +1306,52 @@ std::size_t CxxFrontendDocument::Private::parameterCountOf(cxx::FunctionSymbol *
 {
     auto * const type = cxx::type_cast<cxx::FunctionType>(function->type());
     return type ? type->parameterTypes().size() : 0;
+}
+
+// Whether a base class declares a function of this one's name too.
+//
+// Then which of them a call means may not be settled here. A using
+// declaration lending the base's overloads to this class is recorded
+// nowhere -- the set holds only what the class itself wrote -- so a call is
+// weighed against that one alone and the base's are never in the running.
+// Name hiding makes the same answer right, and the two cannot be told
+// apart from here, so both are declined.
+bool CxxFrontendDocument::Private::hasSiblingsInABaseClass(cxx::Symbol *symbol) const
+{
+    if (!symbol || !symbol->name() || !dynamic_cast<cxx::FunctionSymbol *>(symbol))
+        return false;
+
+    // Functions stand in an overload set of their own, so the class is a
+    // step or two out rather than the parent.
+    cxx::ClassSymbol *owner = nullptr;
+    for (cxx::Symbol *s = symbol->parent(); s && !owner; s = s->parent())
+        owner = dynamic_cast<cxx::ClassSymbol *>(s);
+    if (!owner)
+        return false;
+
+    QSet<const cxx::ClassSymbol *> seen;
+    const std::function<bool(cxx::ClassSymbol *)> declaredInABaseOf
+        = [&](cxx::ClassSymbol *cls) {
+        for (const auto &base : cls->baseClasses()) {
+            auto * const baseClass = base ? dynamic_cast<cxx::ClassSymbol *>(base->symbol())
+                                          : nullptr;
+            if (!baseClass || seen.contains(baseClass))
+                continue;
+            seen.insert(baseClass);
+            for (cxx::Symbol *member : baseClass->members()) {
+                if (member->name() != symbol->name())
+                    continue;
+                if (dynamic_cast<cxx::OverloadSetSymbol *>(member)
+                    || dynamic_cast<cxx::FunctionSymbol *>(member)) {
+                    return true;
+                }
+            }
+            if (declaredInABaseOf(baseClass))
+                return true;
+        }
+        return false;
+    };
+    return declaredInABaseOf(owner);
 }
 
 bool CxxFrontendDocument::Private::isThroughUsingDeclaration(cxx::Symbol *symbol) const
@@ -3669,6 +3716,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
+    declaration.siblingsInABaseClass = d->hasSiblingsInABaseClass(symbol);
     declaration.kind = kindOf(symbol);
     declaration.qtMethod = qtMethodOf(symbol);
     declaration.type = d->describeType(symbol);
@@ -5889,6 +5937,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &
     declaration.filePath = d->fileName;
     declaration.isDefinition = definition.isDefinition;
     declaration.throughUsingDeclaration = d->isThroughUsingDeclaration(symbol);
+    declaration.siblingsInABaseClass = d->hasSiblingsInABaseClass(symbol);
     declaration.kind = kindOf(symbol);
     declaration.qtMethod = qtMethodOf(symbol);
     declaration.type = d->describeType(symbol);

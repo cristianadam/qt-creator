@@ -204,6 +204,7 @@ private slots:
     void theDefinitionIsPreferredToTheDeclaration();
     void aDeclarationWithoutItsDefinitionSaysSo();
     void aNameFromAUsingDeclarationSaysSo();
+    void aNameWithSiblingsInABaseSaysSo();
     void localsOfAFunction();
     void localsOfNestedBlocksAreTheirOwn();
     void localsOfALambdaBelongToItsFunction();
@@ -1367,6 +1368,28 @@ void tst_cxxfrontenddocument::anOverloadedCallIsResolved()
     QVERIFY(CxxFrontendDocument::unsupportedQueries().contains(
         "which overload a call means, where a using declaration brought a "
         "base class's into the set"));
+}
+
+// A base class declaring one of the same name, which is where a call may be
+// weighed against the wrong set: a using declaration lending the base's
+// overloads is recorded nowhere, so what the class itself wrote is all there
+// is to choose from. Whoever would send a reader to the answer is told.
+void tst_cxxfrontenddocument::aNameWithSiblingsInABaseSaysSo()
+{
+    const QByteArray source =
+        "struct B { int f(int) {} };\n"
+        "struct D : B { using B::f; double f(double) {} };\n"
+        "struct Alone { double f(double) {} };\n"
+        "void g(D *pd, Alone *pa) { pd->f(2); pa->f(2); }\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Declaration lent = document.declarationAt(4, 33);
+    QVERIFY(lent.isValid());
+    QVERIFY(lent.siblingsInABaseClass);
+
+    const CxxFrontendDocument::Declaration alone = document.declarationAt(4, 42);
+    QVERIFY(alone.isValid());
+    QVERIFY(!alone.siblingsInABaseClass);
 }
 
 // What follow symbol wants: the place that defines the thing, not the place
