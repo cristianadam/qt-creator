@@ -8,6 +8,10 @@
 
 namespace ClassView::Internal {
 
+#ifdef WITH_TESTS
+QObject *createClassViewTreeTest();
+#endif
+
 ///////////////////////////////// Plugin //////////////////////////////////
 
 /*!
@@ -27,6 +31,10 @@ class ClassViewPlugin final : public ExtensionSystem::IPlugin
     {
         setupClassViewNavigationWidgetFactory();
         setupClassViewManager();
+
+#ifdef WITH_TESTS
+        addTestCreator(createClassViewTreeTest);
+#endif
     }
 };
 

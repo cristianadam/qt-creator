@@ -14,3 +14,8 @@ add_qtc_plugin(ClassView
     classviewtreeitemmodel.cpp classviewtreeitemmodel.h
     classviewutils.cpp classviewutils.h
 )
+
+extend_qtc_plugin(ClassView
+  CONDITION WITH_TESTS
+  SOURCES classviewparsertreeitem_test.cpp
+)

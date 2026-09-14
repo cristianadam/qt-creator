@@ -35,5 +35,9 @@ QtcPlugin {
         "classviewutils.cpp",
         "classviewutils.h",
     ]
+
+    QtcTestFiles {
+        files: [ "classviewparsertreeitem_test.cpp" ]
+    }
 }
 
