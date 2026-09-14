@@ -4,6 +4,7 @@
 #include "codemodelhelpers.h"
 #include "designertr.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 
 #include <projectexplorer/buildsystem.h>
@@ -19,11 +20,6 @@
 using namespace ProjectExplorer;
 using namespace Utils;
 
-using DependencyMap = QMap<QString, QStringList>;
-using DocumentPtr = CPlusPlus::Document::Ptr;
-using SymbolList = QList<CPlusPlus::Symbol *>;
-using DocumentPtrList = QList<DocumentPtr>;
-
 static const char setupUiC[] = "setupUi";
 
 // Find the generated "ui_form.h" header of the form via project.
@@ -37,50 +33,21 @@ static FilePath generatedHeaderOf(const FilePath &uiFileName)
     return {};
 }
 
-namespace {
-// Find function symbols in a document by name.
-class SearchFunction : public CPlusPlus::SymbolVisitor {
-public:
-    typedef QList<CPlusPlus::Function *> FunctionList;
-
-    explicit SearchFunction(const char *name);
-    FunctionList operator()(const DocumentPtr &doc);
-
-    bool visit(CPlusPlus::Function * f) override;
-
-private:
-    const uint m_length;
-    const char *m_name;
-
-    FunctionList m_matches;
-};
-
-SearchFunction::SearchFunction(const char *name) :
-    m_length(uint(qstrlen(name))),
-    m_name(name)
+// How many functions of a name a file declares. What says whether a header
+// uic generated is the one it claims to be: uic writes setupUi as a member of
+// the Ui_ class it generates, and writes it once.
+static int functionsNamed(const CppEditor::CodeModelQueries &code,
+                          const FilePath &filePath, const QString &name)
 {
+    int found = 0;
+    for (const CppEditor::WrittenClass &klass : code.classesDeclaredIn(filePath)) {
+        for (const CppEditor::WrittenFunction &member : code.memberFunctionsOf(klass)) {
+            if (member.name == name)
+                ++found;
+        }
+    }
+    return found;
 }
-
-SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
-{
-    m_matches.clear();
-    const int globalSymbolCount = doc->globalSymbolCount();
-    for (int i = 0; i < globalSymbolCount; ++i)
-        accept(doc->globalSymbolAt(i));
-    return m_matches;
-}
-
-bool SearchFunction::visit(CPlusPlus::Function * f)
-{
-    if (const CPlusPlus::Name *name = f->name())
-        if (const CPlusPlus::Identifier *id = name->identifier())
-            if (static_cast<uint>(id->size()) == m_length)
-                if (!qstrncmp(m_name, id->chars(), m_length))
-                    m_matches.push_back(f);
-    return true;
-}
-
-} // anonymous namespace
 
 namespace Designer::Internal {
 
@@ -100,16 +67,15 @@ bool navigateToSlot(const QString &uiFileName,
         return false;
     }
     const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::snapshot();
-    const DocumentPtr generatedHeaderDoc = snapshot.document(generatedHeaderFile);
-    if (!generatedHeaderDoc) {
+    if (!snapshot.contains(generatedHeaderFile)) {
         *errorMessage = Tr::tr("The generated header \"%1\" could not be found in the code model.\nRebuilding the project might help.").arg(generatedHeaderFile.toUserOutput());
         return false;
     }
 
     // Look for setupUi
-    SearchFunction searchFunc(setupUiC);
-    const SearchFunction::FunctionList funcs = searchFunc(generatedHeaderDoc);
-    if (funcs.size() != 1) {
+    const CppEditor::CodeModelQueries code(snapshot,
+                                           CppEditor::CppModelManager::workingCopy());
+    if (functionsNamed(code, generatedHeaderFile, QLatin1String(setupUiC)) != 1) {
         *errorMessage = QString::fromLatin1(
                             "Internal error: The function \"%1\" could not be found in %2")
                             .arg(QLatin1String(setupUiC), generatedHeaderFile.toUserOutput());

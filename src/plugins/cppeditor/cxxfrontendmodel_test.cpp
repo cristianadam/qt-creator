@@ -407,6 +407,45 @@ void CxxFrontendModelTest::testTheClassesAFileDeclares()
     QCOMPARE(said, QStringList({"N::InNamespace", "Outer", "Outer::Inner"}));
 }
 
+// What Designer asks of a header uic generated, to tell that it is the one
+// the form claims: how many functions of a name the file declares. uic writes
+// setupUi as a member of the Ui_ class and writes it once, and Designer
+// refuses to go to a slot unless it finds exactly one.
+void CxxFrontendModelTest::testTheFunctionsAGeneratedHeaderDeclares()
+{
+    // Shaped as uic writes one: the members in a Ui_ class, and a class in
+    // the Ui namespace deriving from it that declares nothing of its own.
+    const Parsed parsed({{"ui_form.h",
+                          "class QWidget;\n"
+                          "class Ui_Form {\n"
+                          "public:\n"
+                          "    void setupUi(QWidget *Form) {}\n"
+                          "    void retranslateUi(QWidget *Form) {}\n"
+                          "};\n"
+                          "namespace Ui { class Form : public Ui_Form {}; }\n"}},
+                        "ui_form.h");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+
+    auto functionsNamed = [&](const QString &name) {
+        int found = 0;
+        for (const WrittenClass &klass : code.classesDeclaredIn(parsed.mainFilePath())) {
+            for (const WrittenFunction &member : code.memberFunctionsOf(klass)) {
+                if (member.name == name)
+                    ++found;
+            }
+        }
+        return found;
+    };
+
+    QCOMPARE(functionsNamed("setupUi"), 1);
+    QCOMPARE(functionsNamed("retranslateUi"), 1);
+    // The derived class declares neither, inheriting is not declaring.
+    QCOMPARE(functionsNamed("notThere"), 0);
+}
+
 // Where what a declaration stands for is defined, which is where a reader
 // picking a row of the Class View out of a header wants to be taken. Asked
 // with a place anywhere in the declaration rather than with the name's own,
