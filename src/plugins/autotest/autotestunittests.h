@@ -8,5 +8,6 @@
 namespace Autotest::Internal {
 
 QObject *createAutotestUnitTests();
+QObject *createQtTestParserTest();
 
 } // namespace Autotest

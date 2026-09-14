@@ -84,6 +84,20 @@ static bool qtTestLibDefined(const FilePath &fileName)
     return false;
 }
 
+// Whether the match stands on a #define line. A macro written to stand in
+// for one of these ("#define APP_TEST_MAIN(C) QTEST_MAIN(C)") names no class
+// -- its parameter is not one -- and the preprocessed source this used to be
+// searched in had no #define lines left in it to match.
+static bool onADefineLine(const QString &text, int start)
+{
+    if (start == 0)
+        return false;
+    const int newline = text.lastIndexOf(u'\n', start - 1);
+    const int lineStart = newline == -1 ? 0 : newline + 1;
+    const QStringView inFront = QStringView(text).mid(lineStart, start - lineStart).trimmed();
+    return inFront.startsWith(u'#') && inFront.sliced(1).trimmed().startsWith(u"define");
+}
+
 // The last word on which class a file's test runs, for a file whose
 // QTEST_MAIN was never defined -- the macro is Qt's, and a file read without
 // it has nothing but the text left to say so.
@@ -123,7 +137,19 @@ TestCases mainsWrittenIn(const QString &text)
         if (commentedOut) // don't treat commented out macros as active
             continue;
 
+        if (onADefineLine(text, start))
+            continue;
+
         result.append({match.captured(3), false});
+    }
+
+    // Where a file names more than one -- which reading what was written
+    // rather than one configuration of it makes possible -- none of them is
+    // the only test its executable runs. The qExec() reading above says the
+    // same of what it finds.
+    if (result.size() > 1) {
+        for (TestCase &testCase : result)
+            testCase.multipleTestCases = true;
     }
     return result;
 }

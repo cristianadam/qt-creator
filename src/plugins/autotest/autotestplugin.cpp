@@ -553,6 +553,7 @@ public:
         dd = new AutotestPluginPrivate;
 #ifdef WITH_TESTS
         addTestCreator(createAutotestUnitTests);
+        addTestCreator(createQtTestParserTest);
 #endif
     }
 

@@ -52,8 +52,6 @@ private slots:
     void testCodeParserGTest_data();
     void testCodeParserBoostTest();
     void testCodeParserBoostTest_data();
-    void testMainsWrittenIn();
-    void testMainsWrittenIn_data();
 
 private:
     TestTreeModel *m_model = nullptr;
@@ -330,7 +328,19 @@ void AutotestUnitTests::testCodeParserBoostTest_data()
         << m_tmpDir->filePath() / "simple_boost/simple_boost.qbs" << QString(".qbs");
 }
 
-void AutotestUnitTests::testMainsWrittenIn_data()
+// Apart from the suite above, which wants a kit, a Qt and a toolchain before
+// it will run anything: what a text says is none of their business, and a
+// QSKIP in that suite's initTestCase() would take these rows with it.
+class QtTestParserTest final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testMainsWrittenIn();
+    void testMainsWrittenIn_data();
+};
+
+void QtTestParserTest::testMainsWrittenIn_data()
 {
     QTest::addColumn<QString>("source");
     QTest::addColumn<QStringList>("expected");
@@ -391,24 +401,47 @@ void AutotestUnitTests::testMainsWrittenIn_data()
         << "int main() { return 0; }\n"
         << QStringList{};
 
+    // A macro standing in for one of these names no class: "C" is its
+    // parameter. The preprocessed source had no #define lines left to match,
+    // so reading the text as written is what makes this reachable at all.
+    QTest::newRow("a macro written to stand in for one")
+        << "#define APP_TEST_MAIN(C) QTEST_MAIN(C)\n"
+           "APP_TEST_MAIN(tst_Real)\n"
+        << QStringList{};
+
+    QTest::newRow("a define with space after the hash")
+        << "#  define APP_TEST_MAIN(C) QTEST_MAIN(C)\n"
+        << QStringList{};
+
     // The name has to be one word, which is what the pattern asks for.
     QTest::newRow("a qualified name is not matched")
         << "QTEST_MAIN(ns::tst_Scoped)\n"
         << QStringList{};
 }
 
-void AutotestUnitTests::testMainsWrittenIn()
+void QtTestParserTest::testMainsWrittenIn()
 {
     QFETCH(QString, source);
     QFETCH(QStringList, expected);
 
     const TestCases cases = mainsWrittenIn(source);
     QCOMPARE(Utils::transform(cases, &TestCase::name), expected);
+
+    // Where a file names more than one, none of them is the only test its
+    // executable runs, which is what the qExec() reading says too.
+    const bool several = cases.size() > 1;
+    for (const TestCase &testCase : cases)
+        QCOMPARE(testCase.multipleTestCases, several);
 }
 
 QObject *createAutotestUnitTests()
 {
     return new AutotestUnitTests;
+}
+
+QObject *createQtTestParserTest()
+{
+    return new QtTestParserTest;
 }
 
 } // namespace Autotest::Internal
