@@ -140,6 +140,17 @@ public:
     Utils::Link definitionOfFunctionAt(const Utils::FilePath &filePath,
                                        int line, int column) const;
 
+    // Where the project defines whatever is declared at \a line and
+    // \a column of \a filePath, a variable as well as a function, or
+    // nothing where nothing else defines it -- which is the answer for
+    // anything that is not declared in one place and defined in another.
+    //
+    // Unlike the question above this one does not insist that the place be
+    // the name's own: the last thing declared at or before it is the one
+    // asked about, the way a reader's cursor lands.
+    Utils::Link definitionOfWhatIsDeclaredAt(const Utils::FilePath &filePath,
+                                             int line, int column) const;
+
 private:
     class Private;
     const std::unique_ptr<Private> d;

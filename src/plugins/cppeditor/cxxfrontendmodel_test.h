@@ -24,6 +24,7 @@ private slots:
     void testFollowsADeclarationToItsDefinitionElsewhere();
     void testFollowsAFreeFunctionToItsDefinitionElsewhere();
     void testTheClassesAFileDeclares();
+    void testWhereWhatADeclarationStandsForIsDefined();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

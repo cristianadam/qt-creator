@@ -407,6 +407,51 @@ void CxxFrontendModelTest::testTheClassesAFileDeclares()
     QCOMPARE(said, QStringList({"N::InNamespace", "Outer", "Outer::Inner"}));
 }
 
+// Where what a declaration stands for is defined, which is where a reader
+// picking a row of the Class View out of a header wants to be taken. Asked
+// with a place anywhere in the declaration rather than with the name's own,
+// the way a cursor lands.
+void CxxFrontendModelTest::testWhereWhatADeclarationStandsForIsDefined()
+{
+    const Parsed parsed({{"h.h",
+                          "struct C {\n"
+                          "    void f(int a);\n"
+                          "    static int count;\n"
+                          "};\n"
+                          "void loose();\n"},
+                         {"main.cpp",
+                          "#include \"h.h\"\n"
+                          "\n"
+                          "void C::f(int a) {}\n"
+                          "int C::count = 0;\n"
+                          "void loose() {}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    const auto definitionOf = [&](int line, int column) {
+        const Link link = code.definitionOfWhatIsDeclaredAt(parsed.path("h.h"), line, column);
+        return link.hasValidTarget()
+                   ? QString("%1:%2").arg(link.targetFilePath.fileName()).arg(link.target.line)
+                   : QString("nothing");
+    };
+
+    // A member function, a free function, a static member -- and a class,
+    // which is declared and defined in one place, so there is nowhere else
+    // to go. Asked all at once, so that what a sabotage reddens says which
+    // of them the other model answers.
+    //
+    // The static member is a question about the project that model does not
+    // take, so the built-in front end answers that one either way.
+    QCOMPARE(QStringList({definitionOf(2, 10),
+                          definitionOf(5, 6),
+                          definitionOf(3, 16),
+                          definitionOf(1, 8)})
+                 .join(", "),
+             QString("main.cpp:3, main.cpp:5, main.cpp:4, nothing"));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

@@ -6,9 +6,9 @@
 #include "classviewparser.h"
 #include "classviewutils.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppmodelmanager.h>
-#include <cppeditor/symbolfinder.h>
 
 #include <coreplugin/progressmanager/progressmanager.h>
 
@@ -16,8 +16,9 @@
 
 #include <texteditor/texteditor.h>
 
+// Only for the type the model manager's signal carries, which is asked for
+// its path and nothing else.
 #include <cplusplus/CppDocument.h>
-#include <cplusplus/Symbols.h>
 
 #include <utils/link.h>
 #include <utils/shutdownguard.h>
@@ -401,25 +402,17 @@ void Manager::gotoLocations(const QList<QVariant> &list)
     }
     const SymbolLocation &location = *locationIt;
 
-    // The Class View knows only declaration locations. If the symbol at the
-    // location is a function, prefer jumping to its definition (implementation).
-    const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::snapshot();
-    if (const CPlusPlus::Document::Ptr doc = snapshot.document(location.filePath())) {
-        CPlusPlus::Symbol *symbol = doc->lastVisibleSymbolAt(location.line(), location.column());
-        CPlusPlus::Symbol *def = nullptr;
-        if (symbol && symbol->type().type()) {
-            if (symbol->type().type()->asFunctionType()) {
-                def = CppEditor::CppModelManager::symbolFinder()->findMatchingDefinition(
-                        symbol, snapshot, false);
-            } else {
-                def = CppEditor::CppModelManager::symbolFinder()
-                          ->findMatchingVarDefinition(symbol, snapshot);
-            }
-            if (const Utils::Link link = def ? def->toLink() : Link(); link.hasValidTarget()) {
-                EditorManager::openEditorAt(link);
-                return;
-            }
-        }
+    // The Class View knows only declaration locations, so where the thing
+    // declared there is defined somewhere else, that is where a reader wants
+    // to be taken.
+    const CppEditor::CodeModelQueries queries(CppEditor::CppModelManager::snapshot(),
+                                              CppEditor::CppModelManager::workingCopy());
+    if (const Link link = queries.definitionOfWhatIsDeclaredAt(location.filePath(),
+                                                               location.line(),
+                                                               location.column());
+        link.hasValidTarget()) {
+        EditorManager::openEditorAt(link);
+        return;
     }
 
     // line is 1-based, column is 0-based

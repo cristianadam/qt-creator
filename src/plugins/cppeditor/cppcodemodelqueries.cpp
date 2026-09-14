@@ -458,4 +458,34 @@ Link CodeModelQueries::definitionOfFunctionAt(const FilePath &filePath, int line
     return {FilePath::fromUtf8(definition->fileName()), definition->line(), definition->column()};
 }
 
+Link CodeModelQueries::definitionOfWhatIsDeclaredAt(const FilePath &filePath,
+                                                    int line, int column) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The other model answers for a function. A variable declared in one
+    // file and defined in another is a question about the project that it
+    // does not take, so that one is left to the front end that does.
+    if (const std::optional<Link> definition
+        = d->model.definitionOfFunctionIn(filePath, line, column);
+        definition && definition->hasValidTarget()) {
+        return *definition;
+    }
+#endif
+
+    const Document::Ptr doc = d->snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    Symbol * const symbol = doc->lastVisibleSymbolAt(line, column);
+    if (!symbol || !symbol->type().type())
+        return {};
+
+    SymbolFinder symbolFinder;
+    const Symbol * const definition
+        = symbol->type().type()->asFunctionType()
+              ? symbolFinder.findMatchingDefinition(symbol, d->snapshot, false)
+              : symbolFinder.findMatchingVarDefinition(symbol, d->snapshot);
+    return definition ? definition->toLink() : Link();
+}
+
 } // namespace CppEditor
