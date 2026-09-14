@@ -401,6 +401,32 @@ Link linkTo(const CxxFrontendDocument::Counterpart &counterpart)
 
 } // namespace
 
+// Where the project defines \a name, looked for the way SymbolFinder does:
+// the files in the order the built-in snapshot puts them, nearest first,
+// skipping the ones whose parse never saw the name, each read by this model
+// until one of them defines it. Bounded, since the filter passes every file
+// that so much as calls the function and a click must not read the project.
+std::optional<Link> definitionAmongTheProjectsFiles(const Snapshot &builtinSnapshot,
+                                                    const FilePath &startingFrom,
+                                                    const QString &name, int parameterCount)
+{
+    int read = 0;
+    for (const FilePath &candidate : filesToSearch(builtinSnapshot, startingFrom)) {
+        if (candidate == startingFrom)
+            continue;
+        if (!mayWrite(builtinSnapshot, candidate, name))
+            continue;
+        if (++read > maxFilesRead)
+            return std::nullopt;
+
+        if (const std::optional<CxxFrontendDocument::Counterpart> definition
+            = definitionIn(builtinSnapshot, candidate, name, parameterCount)) {
+            return linkTo(*definition);
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
                                            const FilePath &filePath, int line, int column)
 {
@@ -418,27 +444,12 @@ std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
         return std::nullopt;
 
     // A declaration whose definition this translation unit does not hold.
-    int read = 0;
-    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
-        if (candidate == filePath)
-            continue;
-        if (!mayWrite(builtinSnapshot, candidate, counterpart.name))
-            continue;
-        if (++read > maxFilesRead)
-            return std::nullopt;
-
-        if (const std::optional<CxxFrontendDocument::Counterpart> definition
-            = definitionIn(builtinSnapshot, candidate, counterpart.name,
-                           counterpart.parameterCount)) {
-            return linkTo(*definition);
-        }
-    }
-
-    return std::nullopt;
+    return definitionAmongTheProjectsFiles(builtinSnapshot, filePath, counterpart.name,
+                                           counterpart.parameterCount);
 }
 
-Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
-                             int linkTextStart, int linkTextEnd)
+Link cxxFrontendFollowSymbol(const Snapshot &builtinSnapshot, const FilePath &filePath,
+                             int line, int column, int linkTextStart, int linkTextEnd)
 {
     const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
     if (!model)
@@ -458,14 +469,6 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
     // The editor counts columns from zero and the model from one.
     const CxxFrontendDocument::Declaration found = document->declarationAt(line, column + 1);
     if (!found.isValid())
-        return {};
-
-    // Only a declaration, and the definition is somewhere this document does
-    // not reach: a class declared in this file and defined in another, say.
-    // Follow symbol wants the definition and the built-in lookup can find it,
-    // so this leaves the question to it rather than offering the line that
-    // declares nothing.
-    if (!found.isDefinition)
         return {};
 
     // Brought in by a using declaration, which the built-in model answers
@@ -488,6 +491,32 @@ Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
                                                                       : found.filePath;
     if (document->virtualityAt(found.line, found.column, declaredIn).isVirtual)
         return {};
+
+    // Only a declaration, and follow symbol wants the place that defines the
+    // thing. This unit may hold it -- a file being edited beside its header
+    // does -- and where it does not, the project's files are read for it the
+    // way switching between the two sides reads them.
+    if (!found.isDefinition) {
+        const CxxFrontendDocument::Counterpart definition
+            = document->counterpartAt(found.line, found.column, declaredIn);
+        if (definition.isValid()) {
+            Link link = linkTo(definition);
+            link.linkTextStart = linkTextStart;
+            link.linkTextEnd = linkTextEnd;
+            return link;
+        }
+        if (!definition.namesAFunction())
+            return {};
+        const std::optional<Link> elsewhere = definitionAmongTheProjectsFiles(
+            builtinSnapshot, filePath, definition.name, definition.parameterCount);
+        if (!elsewhere) {
+                return {};
+        }
+        Link link = *elsewhere;
+        link.linkTextStart = linkTextStart;
+        link.linkTextEnd = linkTextEnd;
+        return link;
+    }
 
     // And a link counts from zero again, the way Symbol::toLink() does it.
     Link link(FilePath::fromUserInput(found.filePath), found.line, found.column - 1);

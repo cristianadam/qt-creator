@@ -21,6 +21,7 @@ private slots:
     void testFollowsNothingItCannotAnswerFor();
     void testDeclinesAForwardDeclaration();
     void testFindsTheDefinitionInAnotherFile();
+    void testFollowsADeclarationToItsDefinitionElsewhere();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

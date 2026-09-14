@@ -97,7 +97,8 @@ void forgetCxxFrontendModel(const Utils::FilePath &filePath);
 // the using declaration itself.
 // The caller then answers the way it did before, so this can only add
 // answers, never change one.
-Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
+Utils::Link cxxFrontendFollowSymbol(const CPlusPlus::Snapshot &builtinSnapshot,
+                                    const Utils::FilePath &filePath, int line, int column,
                                     int linkTextStart, int linkTextEnd);
 
 // Answers CPlusPlus::commentsForDeclaration() off this model, for as long as

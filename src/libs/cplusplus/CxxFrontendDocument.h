@@ -339,7 +339,11 @@ public:
         bool isValid() const { return line > 0; }
         bool namesAFunction() const { return !name.isEmpty(); }
     };
-    Counterpart counterpartAt(int line, int column) const;
+    //
+    // \a inFile says which of the files this unit read the place is in,
+    // empty being this document's own: the declaration whose definition is
+    // wanted is as often in a header this file reads.
+    Counterpart counterpartAt(int line, int column, const QString &inFile = {}) const;
 
     // A call or a new expression at a position whose value is thrown away,
     // which is what "assign this to a local variable" is offered on.

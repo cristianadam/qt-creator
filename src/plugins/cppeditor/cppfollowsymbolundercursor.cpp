@@ -758,8 +758,8 @@ void FollowSymbolUnderCursor::findLink(
 #ifdef QTC_WITH_CXX_FRONTEND
     if (!insideAQtMethodMacro) {
         const Link fromCxxFrontend
-            = Internal::cxxFrontendFollowSymbol(data.filePath(), line, column, beginOfToken,
-                                                endOfToken);
+            = Internal::cxxFrontendFollowSymbol(snapshot, data.filePath(), line, column,
+                                                beginOfToken, endOfToken);
         if (fromCxxFrontend.hasValidTarget())
             return processLinkCallback(fromCxxFrontend);
     }

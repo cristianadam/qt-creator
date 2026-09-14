@@ -2207,10 +2207,10 @@ QString CxxFrontendDocument::scopeAt(int line, int column) const
     return d->scopeNameAt(line, column);
 }
 
-CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(int line,
-                                                                   int column) const
+CxxFrontendDocument::Counterpart CxxFrontendDocument::counterpartAt(
+    int line, int column, const QString &inFile) const
 {
-    const cxx::SourceLocation location = d->tokenAt(line, column);
+    const cxx::SourceLocation location = d->tokenAt(line, column, inFile);
     if (!location)
         return {};
 
