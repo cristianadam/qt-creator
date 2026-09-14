@@ -12,6 +12,10 @@
 namespace Todo {
 namespace Internal {
 
+// What one line of a comment holds, for a reader with no scanner to hand.
+QList<TodoItem> todoItemsInCommentLine(const KeywordList &keywordList, const QString &comment,
+                                       unsigned lineNumber, const Utils::FilePath &filePath);
+
 // TodoItemsScanner is an abstract class
 
 class TodoItemsScanner : public QObject

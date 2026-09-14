@@ -7,6 +7,8 @@
 #include "todoicons.h"
 
 #include <utils/filepath.h>
+#include <utils/temporarydirectory.h>
+#include <utils/textcodec.h>
 
 #include <QTest>
 
@@ -48,7 +50,48 @@ class CppTodoScannerTest final : public QObject
 private slots:
     void testItemsInText_data();
     void testItemsInText();
+    void testWhereAFilesTextComesFrom();
 };
+
+// Which text a batch reads per file, which is the half of the scanner that
+// touches the disk. Kept out of the rows above, which are about one text.
+void CppTodoScannerTest::testWhereAFilesTextComesFrom()
+{
+    TemporaryDirectory dir("todo-scanner-XXXXXX");
+    QVERIFY(dir.isValid());
+
+    // Written in Latin-1, which is what the default encoding setting is for:
+    // decoded as UTF-8 the o-umlaut would be a replacement character.
+    const FilePath onDisk = dir.filePath("latin1.cpp");
+    const TextEncoding latin1(TextEncoding::Latin1);
+    QVERIFY(onDisk.writeFileContents(latin1.encode(u"// TODO: prüfen\n")));
+
+    // A file being edited, whose text is the editor's rather than the disk's.
+    const FilePath edited = dir.filePath("edited.cpp");
+    QVERIFY(edited.writeFileContents("// TODO: what disk says\n"));
+    CppEditor::WorkingCopy workingCopy;
+    workingCopy.insert(edited, "// TODO: what the editor says\n");
+
+    // And one that is not there at all.
+    const FilePath missing = dir.filePath("gone.cpp");
+
+    const QList<ScannedFile> scanned = scanFiles(
+        testKeywords(), {onDisk, edited, missing}, workingCopy, latin1);
+
+    QCOMPARE(scanned.size(), 3);
+    for (const ScannedFile &file : scanned) {
+        if (file.filePath == onDisk)
+            QCOMPARE(found(file.items), QStringList{"1: TODO: prüfen"});
+        else if (file.filePath == edited)
+            QCOMPARE(found(file.items), QStringList{"1: TODO: what the editor says"});
+        else if (file.filePath == missing)
+            // An answer, not silence: nothing else takes what a file used to
+            // hold out of the pane.
+            QCOMPARE(found(file.items), QStringList{});
+        else
+            QFAIL("a file nobody asked about");
+    }
+}
 
 void CppTodoScannerTest::testItemsInText_data()
 {
@@ -124,6 +167,12 @@ void CppTodoScannerTest::testItemsInText_data()
            "/* TODO: never closed\n"
         << QStringList{"1: TODO: first", "2: TODO: never closed"};
 
+    // The other half of that rule: only a block comment's "*/" comes off. A
+    // line comment can end in one and keeps it.
+    QTest::newRow("a line comment ending in a block comment's close")
+        << "// TODO: superseded, see /* the old one */\n"
+        << QStringList{"1: TODO: superseded, see /* the old one */"};
+
     QTest::newRow("no comments at all")
         << "int main() { return 0; }\n"
         << QStringList{};
@@ -142,10 +191,11 @@ void CppTodoScannerTest::testItemsInText()
     QFETCH(QString, source);
     QFETCH(QStringList, expected);
 
-    CppTodoItemsScanner scanner(testKeywords());
+    // The free function, not a scanner: constructing one connects to the code
+    // model and asks it to update every file of every project.
     const FilePath filePath = FilePath::fromPathPart(u"<test>");
 
-    QCOMPARE(found(scanner.itemsInText(filePath, source)), expected);
+    QCOMPARE(found(todoItemsIn(testKeywords(), filePath, source)), expected);
 }
 
 QObject *createCppTodoScannerTest()

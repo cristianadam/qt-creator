@@ -20,19 +20,26 @@ void TodoItemsScanner::setParams(const KeywordList &keywordList)
 }
 
 
-// Descendants can use this to process comment lines
-void TodoItemsScanner::processCommentLine(const QString &fileName, const QString &comment,
-                                          unsigned lineNumber, QList<TodoItem> &outItemList)
+QList<TodoItem> todoItemsInCommentLine(const KeywordList &keywordList, const QString &comment,
+                                       unsigned lineNumber, const Utils::FilePath &filePath)
 {
-    LineParser parser(m_keywordList);
+    LineParser parser(keywordList);
     QList<TodoItem> newItemList = parser.parse(comment);
 
     for (int i = 0; i < newItemList.count(); ++i) {
         newItemList[i].line = lineNumber;
-        newItemList[i].file = Utils::FilePath::fromString(fileName);
+        newItemList[i].file = filePath;
     }
 
-    outItemList << newItemList;
+    return newItemList;
+}
+
+// Descendants can use this to process comment lines
+void TodoItemsScanner::processCommentLine(const QString &fileName, const QString &comment,
+                                          unsigned lineNumber, QList<TodoItem> &outItemList)
+{
+    outItemList << todoItemsInCommentLine(m_keywordList, comment, lineNumber,
+                                          Utils::FilePath::fromString(fileName));
 }
 
 }
