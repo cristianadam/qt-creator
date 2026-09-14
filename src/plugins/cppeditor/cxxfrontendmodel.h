@@ -554,6 +554,18 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbolsIn(
         const Utils::FilePath &filePath) const;
 
+    // Where the reading of \a filePath writes the class called
+    // \a className -- a header's counts, being read into whoever includes
+    // it, and the place says which file it is in.
+    std::optional<CPlusPlus::CxxFrontendDocument::Place> classNamedIn(
+        const Utils::FilePath &filePath, const QString &className) const;
+
+    // What the class whose name stands at \a line and \a column of
+    // \a filePath derives from, written out in full: the ones it names
+    // itself, without what those derive from in turn.
+    std::optional<QStringList> basesOfTheClassIn(
+        const Utils::FilePath &filePath, int line, int column) const;
+
     // What the locator needs of the function whose own name stands at
     // \a line and \a column of \a filePath.
     std::optional<DeclarationToDefine> declarationToDefineIn(

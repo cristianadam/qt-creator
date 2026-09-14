@@ -523,6 +523,76 @@ void CxxFrontendModelTest::testTheFunctionANameStandsFor()
              QString("N::C::f, N::C::f, N::use, , "));
 }
 
+// What a Qt test class says about itself: the slots it declares privately,
+// which is how a test writes its test functions, and what it derives from.
+// Asked with the class's *name*, which is all the text of QTest::qExec()
+// gives, and about a source file that only includes the header writing it.
+void CxxFrontendModelTest::testAClassPrivateSlotsAndBases()
+{
+    const Parsed parsed({{"base.h",
+                          "class QObject {};\n"
+                          "class tst_Base : public QObject\n"
+                          "{\n"
+                          "private slots:\n"
+                          "    void inherited();\n"
+                          "};\n"},
+                         {"tst.h",
+                          "#include \"base.h\"\n"
+                          "namespace NS {\n"
+                          "class tst_Simple : public tst_Base\n"
+                          "{\n"
+                          "public:\n"
+                          "    void notASlot();\n"
+                          "public slots:\n"
+                          "    void notPrivate();\n"
+                          "private slots:\n"
+                          "    void testOne();\n"
+                          "    void testTwo_data();\n"
+                          "private:\n"
+                          "    void notASlotEither();\n"
+                          "};\n"
+                          "}\n"},
+                         {"main.cpp",
+                          "#include \"tst.h\"\n"
+                          "int main() { NS::tst_Simple t; }\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    const auto said = [&](const QString &className) {
+        const CodeModelQueries::ClassWithPrivateSlots found
+            = code.classWithPrivateSlots(parsed.mainFilePath(), className);
+        if (!found.klass.isValid())
+            return QString("nothing");
+        QStringList slotNames;
+        for (const WrittenFunction &slot : found.privateSlots) {
+            slotNames << QString("%1 at %2:%3").arg(slot.name, slot.filePath.fileName())
+                             .arg(slot.line);
+        }
+        QStringList bases;
+        for (QString base : found.baseClasses)
+            bases << (base.startsWith("::") ? base.mid(2) : base);
+        return QString("%1 at %2:%3 | %4 | bases: %5")
+            .arg(found.klass.qualifiedName, found.klass.filePath.fileName())
+            .arg(found.klass.line)
+            .arg(slotNames.join(", "), bases.join(", "));
+    };
+
+    // Only the private slots, in the order they are declared, each in the
+    // file that writes it -- and the class itself found through a header the
+    // source file includes.
+    QCOMPARE(said("NS::tst_Simple"),
+             QString("NS::tst_Simple at tst.h:3 | testOne at tst.h:10, "
+                     "testTwo_data at tst.h:11 | bases: tst_Base"));
+
+    // And the base, asked for by the name the class above named it with.
+    QCOMPARE(said("tst_Base"),
+             QString("tst_Base at base.h:2 | inherited at base.h:5 | bases: QObject"));
+
+    QCOMPARE(said("NS::tst_Missing"), QString("nothing"));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

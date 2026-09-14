@@ -175,6 +175,31 @@ public:
     // nobody's business but that function's.
     QList<WrittenDeclaration> declarationsIn(const Utils::FilePath &filePath) const;
 
+    // A class read for what a test runner needs of it: where it is written,
+    // the slots it declares privately -- which is how a Qt test writes its
+    // test functions -- and what it derives from.
+    struct ClassWithPrivateSlots
+    {
+        // Where the class itself is written, invalid where the reading of
+        // the file writes no class of that name. A class that is written
+        // but declares no private slots is found, with an empty list.
+        WrittenClass klass;
+
+        // In the order the class declares them, each where its own name
+        // stands -- which is not always in the same file as the class, a
+        // header's class being read into whoever includes it.
+        QList<WrittenFunction> privateSlots;
+
+        // Written out in full, the ones the class names itself. What those
+        // derive from is for whoever asks about them in turn.
+        QStringList baseClasses;
+    };
+
+    // The class called \a className -- written out in full -- as the reading
+    // of \a filePath has it, the headers it reads included.
+    ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
+                                                const QString &className) const;
+
     // What the locator needs of the function whose own name stands at \a line
     // and \a column of \a filePath. Nothing where no function is declared
     // there.

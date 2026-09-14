@@ -1498,6 +1498,34 @@ std::optional<QList<CxxFrontendDocument::MemberFunction>> CxxFrontendReading::me
     return document->memberFunctionsAt(line, column, writtenIn);
 }
 
+std::optional<CxxFrontendDocument::Place> CxxFrontendReading::classNamedIn(
+    const FilePath &filePath, const QString &className) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    return document->classNamed(className);
+}
+
+std::optional<QStringList> CxxFrontendReading::basesOfTheClassIn(
+    const FilePath &filePath, int line, int column) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+
+    // The ones the class names itself. What those derive from comes with the
+    // answer -- a hierarchy is what it is usually asked for -- and the
+    // parent index is what tells the two apart.
+    QStringList bases;
+    for (const CxxFrontendDocument::BaseClass &base
+         : document->basesOfTheClassAt(line, column)) {
+        if (base.parent < 0)
+            bases.append(base.qualifiedName);
+    }
+    return bases;
+}
+
 std::optional<QList<CxxFrontendDocument::Symbol>> CxxFrontendReading::symbolsIn(
     const FilePath &filePath) const
 {

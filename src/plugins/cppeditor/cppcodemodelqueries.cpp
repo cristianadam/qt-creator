@@ -246,6 +246,30 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 }
 #endif
 
+
+// The class \a snapshot has under \a className as the reading of \a filePath
+// sees it: the name is looked up as a type from the file's own scope, so a
+// class a header declares is found where a file that includes it names it.
+const Class *builtinClassNamed(const Snapshot &snapshot, const FilePath &filePath,
+                               const QString &className)
+{
+    const Document::Ptr doc = snapshot.document(filePath);
+    if (!doc || className.isEmpty())
+        return nullptr;
+
+    TypeOfExpression typeOfExpression;
+    typeOfExpression.init(doc, snapshot);
+    const QList<LookupItem> items = typeOfExpression(className.toUtf8(),
+                                                     doc->globalNamespace());
+    for (const LookupItem &item : items) {
+        if (Symbol * const symbol = item.declaration()) {
+            if (Class * const klass = symbol->asClass())
+                return klass;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 QString functionNamedAt(const Snapshot &snapshot, const FilePath &filePath,
@@ -510,6 +534,78 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     QList<WrittenDeclaration> declarations;
     collectDeclarations(doc->globalNamespace(), filePath, -1, &declarations);
     return declarations;
+}
+
+CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
+    const FilePath &filePath, const QString &className) const
+{
+    const int afterTheScopes = className.lastIndexOf("::");
+    const QString ownName = afterTheScopes < 0 ? className : className.mid(afterTheScopes + 2);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<CxxFrontendDocument::Place> place
+        = d->model.classNamedIn(filePath, className);
+        place && place->line > 0) {
+        const FilePath classFile = FilePath::fromUserInput(place->filePath);
+
+        ClassWithPrivateSlots answer;
+        answer.klass = {ownName, className, classFile, place->line, place->column};
+
+        // Read where the class is written rather than where it was named:
+        // what it declares is the same either way, and the file that writes
+        // it is the one a reader is sent to.
+        if (const std::optional<QList<CxxFrontendDocument::MemberFunction>> members
+            = d->model.memberFunctionsIn(classFile, classFile, place->line, place->column)) {
+            for (const CxxFrontendDocument::MemberFunction &member : *members) {
+                if (member.access != CxxFrontendDocument::Access::Private
+                    || member.qtMethod != CxxFrontendDocument::QtMethod::Slot) {
+                    continue;
+                }
+                answer.privateSlots << WrittenFunction{member.unqualifiedName, member.signature,
+                                                       FilePath::fromUserInput(member.filePath),
+                                                       member.line, member.column};
+            }
+        }
+        if (const std::optional<QStringList> bases
+            = d->model.basesOfTheClassIn(classFile, place->line, place->column)) {
+            answer.baseClasses = *bases;
+        }
+        return answer;
+    }
+#endif
+
+    const Class * const klass = builtinClassNamed(d->snapshot, filePath, className);
+    if (!klass)
+        return {};
+
+    const Overview overview;
+    ClassWithPrivateSlots answer;
+    answer.klass = {overview.prettyName(klass->name()),
+                    overview.prettyName(
+                        LookupContext::fullyQualifiedName(const_cast<Class *>(klass))),
+                    FilePath::fromUtf8(klass->fileName()),
+                    klass->line(),
+                    klass->column()};
+
+    for (int i = 0, count = klass->memberCount(); i < count; ++i) {
+        Symbol * const member = klass->memberAt(i);
+        Function * const function = member->type().type()
+                                        ? member->type().type()->asFunctionType()
+                                        : nullptr;
+        if (!function || !function->isSlot() || !member->isPrivate())
+            continue;
+        answer.privateSlots << WrittenFunction{overview.prettyName(function->name()),
+                                               signatureOf(function),
+                                               FilePath::fromUtf8(member->fileName()),
+                                               member->line(),
+                                               member->column()};
+    }
+
+    for (int i = 0, count = klass->baseClassCount(); i < count; ++i) {
+        if (BaseClass * const base = klass->baseClassAt(i))
+            answer.baseClasses << overview.prettyName(LookupContext::fullyQualifiedName(base));
+    }
+    return answer;
 }
 
 DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoringChanges &changes,
