@@ -94,6 +94,9 @@ protected:
     // The launch body is this layer's passthrough configuration; a superset
     // builds its own from what it was started with.
     virtual void postLaunchOrAttach();
+    void runUserStartupCommands();
+    void runUserCommands(const QStringList &commands);
+    void postReplCommand(const QString &command);
     void reportUnsupported(const QString &what);
 
     void sendCustomRequest(const QString &command, const QJsonObject &arguments,

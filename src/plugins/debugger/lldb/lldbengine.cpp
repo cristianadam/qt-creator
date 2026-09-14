@@ -1270,8 +1270,11 @@ static QList<QPair<QString, QString>> lldbImplSourcePathMap(const DebuggerRunPar
 
 static LldbImplStartData lldbImplStartData(const DebuggerRunParameters &rp)
 {
+    ProcessRunData debuggerRunData = rp.debugger();
+    if (!rp.runAsUser().isEmpty())
+        ProjectExplorer::RunControl::provideAskPassEntry(debuggerRunData.environment);
     return {
-        .debuggerRunData = rp.debugger(),
+        .debuggerRunData = debuggerRunData,
         .inferiorStartData = lldbInferiorStartData(rp),
         .dumperScriptsDir = ICore::resourcePath("debugger"),
         .loadInitFile = settings().loadGdbInit(),
@@ -1286,6 +1289,7 @@ static LldbImplStartData lldbImplStartData(const DebuggerRunParameters &rp)
         .deviceSymbolsRoot = rp.deviceSymbolsRoot(),
         .deviceUuid = rp.deviceUuid(),
         .platform = rp.lldbPlatform(),
+        .runAsUser = rp.runAsUser(),
         .startScript = rp.overrideStartScript(),
         .startupCommands = Utils::filtered(
             QString(settings().gdbStartupCommands() + '\n' + rp.additionalStartupCommands())

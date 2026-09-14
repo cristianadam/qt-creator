@@ -31,6 +31,10 @@ public:
     // enters through qMain(), the C runtime's main() being Qt's own.
     QString mainFunctionName = "main";
     bool continueAfterAttach = false;
+    // Whether the debugger breaks before the inferior aborts or logs.
+    bool breakOnAbort = false;
+    bool breakOnWarning = false;
+    bool breakOnFatal = false;
     bool intelDisassembly = false;
     // Whether every command's turnaround goes into the log.
     bool logTimeStamps = false;
@@ -38,6 +42,8 @@ public:
     QString deviceSymbolsRoot;
     QString deviceUuid;
     QString platform;
+    // Whom the debugger itself runs as, empty for the current user.
+    QString runAsUser;
     // A script to run instead of the startup commands.
     Utils::FilePath startScript;
     QStringList startupCommands;

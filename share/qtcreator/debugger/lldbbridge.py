@@ -114,6 +114,7 @@ class Dumper(DumperBase):
         self.objectAvailableBreakpoint = None
         # Internal (not user-visible) breakpoint ids - see handleBreakpointEvent().
         self.internalBreakpointIds = set()
+        self.specialBreakpoints = []
 
         self.report('lldbversion=\"%s\"' % lldb.SBDebugger.GetVersionString())
 
@@ -1020,9 +1021,54 @@ class Dumper(DumperBase):
             self.internalBreakpointIds.add(self.interpreterEventBreakpoint.GetID())
             self.createInterpreterResolverHookBreakpoint()
 
+        self.createSpecialBreakpoints(args)
+
         state = 1 if self.target.IsValid() else 0
         self.reportResult('success="%s",msg="%s",exe="%s"'
                           % (state, toCString(error), toCString(self.executable_)), args)
+
+    # Breakpoints on abort(), qWarning() and qFatal() the user asked for through
+    # the settings rather than the breakpoint view, so they stay ours: the names
+    # depend on the Qt namespace, and nobody is to see them as breakpoints of
+    # their own.
+    def createSpecialBreakpoints(self, args):
+        specs = []
+        if args.get('breakonabort', 0):
+            specs.append('abort')
+        if args.get('breakonwarning', 0) or args.get('breakonfatal', 0):
+            try:
+                ns = self.qtNamespace()
+            except Exception:
+                ns = ''
+            if args.get('breakonwarning', 0):
+                specs.append(ns + 'qWarning')
+                specs.append(ns + 'QMessageLogger::warning')
+            if args.get('breakonfatal', 0):
+                specs.append(ns + 'qFatal')
+                specs.append(ns + 'QMessageLogger::fatal')
+        if not specs:
+            return
+        # Prologue skipping lands behind the raise() inside abort(), so the
+        # breakpoint would only be reached once the signal is already out.
+        skipPrologue = self.settingValue('target.skip-prologue')
+        self.commandOutput('settings set target.skip-prologue false')
+        for spec in specs:
+            bp = self.target.BreakpointCreateByName(spec)
+            if bp.IsValid():
+                self.internalBreakpointIds.add(bp.GetID())
+                self.specialBreakpoints.append(bp)
+        if skipPrologue:
+            self.commandOutput('settings set target.skip-prologue %s' % skipPrologue)
+
+    def commandOutput(self, command):
+        result = lldb.SBCommandReturnObject()
+        self.debugger.GetCommandInterpreter().HandleCommand(command, result)
+        return result.GetOutput() or ''
+
+    def settingValue(self, name):
+        # Printed as 'name (boolean) = true', so the value is behind the '= '.
+        output = self.commandOutput('settings show %s' % name)
+        return output.split('= ')[-1].strip() if '= ' in output else ''
 
     def runEngine(self, args):
         """ Set up SBProcess instance """

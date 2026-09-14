@@ -161,6 +161,13 @@ enum class Backend {
     Qml,
     Cdb,
 };
+
+// The Qml runtime takes longer to come up than a debugger does.
+static std::chrono::seconds startupTimeout(Backend backend)
+{
+    return backend == Backend::Qml ? s_qmlStartupTimeout : s_timeout;
+}
+
 Q_DECLARE_METATYPE(Backend)
 
 struct InferiorTestData
@@ -264,6 +271,9 @@ struct InferiorTestData
     QString workingDirectoryReportPrefix;
     FilePath moduleSymbolsPath;
     QString falseLiteral = "0";
+    // What the spin flag is, for a backend that spells a value according to the
+    // type it is told the target has.
+    QString spinFlagType;
 };
 
 struct BackendData
@@ -596,9 +606,15 @@ static QString startScriptContent(Backend backend, const QString &marker)
         const int half = marker.size() / 2;
         return "!print(\"" + marker.left(half) + "\" + \"" + marker.mid(half) + "\")\n";
     }
+    case Backend::Dap: {
+        // The adapter takes the script's lines as console commands, and a
+        // command is logged next to its answer, so the marker goes in in two
+        // pieces and only the answer carries it whole.
+        const int half = marker.size() / 2;
+        return "print \"" + marker.left(half) + "\" \"" + marker.mid(half) + "\"\n";
+    }
     case Backend::Qml:
     case Backend::Cdb:
-    case Backend::Dap:
         break;
     }
     return {};
@@ -727,6 +743,25 @@ static bool attachResumesInferior(Backend backend)
     return false;
 }
 
+// Whether an interrupt has to be sent from outside the debugger. gdb signals
+// the inferior itself, so a debugger running as somebody else needs a wrapper
+// for it, while lldb stops the inferior from inside the session it started.
+static bool interruptsThroughAWrapper(Backend backend)
+{
+    switch (backend) {
+    case Backend::Gdb:
+    case Backend::Bridge:
+    case Backend::Pdb:
+        return true;
+    case Backend::Lldb:
+    case Backend::Dap:
+    case Backend::Cdb:
+    case Backend::Qml:
+        break;
+    }
+    return false;
+}
+
 // Stands in for a debugger that is there but never opens a session: whatever a
 // backend appends to it, it exits at once instead of taking commands.
 static CommandLine quittingDebuggerCommand()
@@ -798,6 +833,14 @@ static QString detachMarker(Backend backend)
 // What a breakpoint modification carries that the answer to setting it did not:
 // the gdb family counts the hits, while DAP has no hit count at all and what a
 // stock adapter reports is the address it bound the breakpoint to.
+// Whether a backend reports a breakpoint again once it has been hit. The Qml
+// debug service counts no hits and announces no change, so there is nothing to
+// report.
+static bool reportsBreakpointModifications(Backend backend)
+{
+    return backend != Backend::Qml;
+}
+
 static const char *breakpointModifiedField(Backend backend)
 {
     switch (backend) {
@@ -878,9 +921,14 @@ static UserCommandProbe userCommandProbe(Backend backend, UserCommandHook hook)
         if (hook == UserCommandHook::Reset)
             return {"!print(\"QTCFOR\" + \"RESETMARKER\")", marker};
         break;
+    case Backend::Dap:
+        // The adapter logs the command next to its answer, so the marker is
+        // spelled in two pieces and only the answer carries it whole.
+        if (hook == UserCommandHook::AfterConnect)
+            return {"print \"QTCAFTER\" \"CONNECTMARKER\"", marker};
+        break;
     case Backend::Cdb:
     case Backend::Qml:
-    case Backend::Dap:
         break;
     }
     return {};
@@ -1856,7 +1904,9 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
     }
     case Backend::Qml:
         return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
-            .inferiorStartData = AttachToQmlServerData{}}));
+            .inferiorStartData = inferiorRunDataOverride.value_or(
+                ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                               Environment::systemEnvironment()})}));
     case Backend::Cdb:
         return std::make_unique<DebuggerBackend>(std::make_unique<CdbImpl>(CdbImplStartData{
             .debuggerRunData = debuggerRunDataOverride.value_or(
@@ -1935,6 +1985,9 @@ std::unique_ptr<DebuggerBackend> tst_backends::createFullyConfiguredEngine(
                 Environment::systemEnvironment()},
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
             .loadInitFile = true,
+            .breakOnAbort = true,
+            .breakOnWarning = true,
+            .breakOnFatal = true,
             .intelDisassembly = true,
             .startupCommands = {"script print('QTCSTARTUPMARKER')"},
             .sourcePathMap = {{"/qtc-test-from", existingDir.path()}},
@@ -2010,6 +2063,42 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngineRunningAsUser(
             .bridgeStartData = dapHostRecipe(false),
             .runAsUser = user}));
     }
+    if (backend == Backend::Lldb) {
+        return std::make_unique<DebuggerBackend>(std::make_unique<LldbImpl>(LldbImplStartData{
+            .debuggerRunData = ProcessRunData{{m_backendData[backend].path, {}}, {},
+                                              debuggerEnvironment},
+            .inferiorStartData = ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                                                Environment::systemEnvironment()},
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
+            .runAsUser = user}));
+    }
+    if (backend == Backend::Pdb) {
+        return std::make_unique<DebuggerBackend>(std::make_unique<PdbImpl>(PdbImplStartData{
+            .debuggerRunData = ProcessRunData{{m_backendData[backend].path, {}}, {},
+                                              debuggerEnvironment},
+            // pdb hosts the script itself, so the debugger's environment is
+            // the inferior's: there is only one process.
+            .inferiorStartData = ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                                               debuggerEnvironment},
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
+            .runAsUser = user}));
+    }
+    if (backend == Backend::Dap) {
+        DapStartData startData = dapAdapterStartData(
+            ProcessRunData{{m_backendData[backend].path, {}}, {}, debuggerEnvironment},
+            ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                           Environment::systemEnvironment()});
+        startData.runAsUser = user;
+        return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));
+    }
+    if (backend == Backend::Qml) {
+        // The qml session starts the runtime rather than a debugger, so the
+        // process the wrapper is asked for is the runtime itself.
+        return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
+            .inferiorStartData = ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                                                debuggerEnvironment},
+            .runAsUser = user}));
+    }
     if (backend != Backend::Gdb)
         return nullptr;
     return std::make_unique<DebuggerBackend>(std::make_unique<GdbImpl>(GdbImplStartData{
@@ -2053,6 +2142,15 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngineWithStartScript(
                                                 Environment::systemEnvironment()},
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
             .startScript = startScript}));
+    }
+    if (backend == Backend::Dap) {
+        DapStartData startData = dapAdapterStartData(
+            ProcessRunData{{m_backendData[backend].path, {}}, {},
+                           Environment::systemEnvironment()},
+            ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                           Environment::systemEnvironment()});
+        startData.userCommands.startScript = startScript;
+        return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));
     }
     if (backend != Backend::Gdb)
         return nullptr;
@@ -2356,6 +2454,8 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
         startData.attach = true;
         startData.configuration = configuration;
         startData.continueAfterAttach = resumeAfterAttach;
+        startData.userCommands.afterConnect
+            = {userCommandProbe(backend, UserCommandHook::AfterConnect).command};
         return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));
     }
     case Backend::Pdb:
@@ -2385,6 +2485,7 @@ void tst_backends::stopInferiorSpinLoop(Backend backend, DebuggerEngineInterface
     if (!engine->hasCapability(Debugger::ShowMemoryCapability)) {
         WatchItemData item;
         item.isLocal = false;
+        item.type = inferiorTestData(backend).spinFlagType;
         engine->assignValueInDebugger(item, "keepSpinning",
                                       inferiorTestData(backend).falseLiteral);
         return;
@@ -2499,6 +2600,16 @@ void tst_backends::initTestCase()
         qmlInferiorData.deepRecursionBreakpointLine
             = qmlMarkerLine("qmlserver_inferior.qml", "deep recursion line");
         QVERIFY(qmlInferiorData.deepRecursionBreakpointLine > 0);
+        qmlInferiorData.spinBodyLine = qmlMarkerLine("qmlserver_inferior.qml", "spin body line");
+        QVERIFY(qmlInferiorData.spinBodyLine > 0);
+        qmlInferiorData.falseLiteral = "false";
+        qmlInferiorData.spinFlagType = "boolean";
+        qmlInferiorData.throwsAnException = true;
+        qmlInferiorData.applicationOutputMarker = "after bump";
+        qmlInferiorData.environmentReportPrefix = "env=";
+        qmlInferiorData.workingDirectoryReportPrefix = "cwd=";
+        qmlInferiorData.expandableObjectLocal = "localObject";
+        qmlInferiorData.expandableObjectChild = "payload";
         qmlInferiorData.revisitedLine = qmlInferiorData.deepRecursionBreakpointLine;
         qmlInferiorData.recursionDepthVariable = "depth";
         qmlInferiorData.longStringLocal = "longLocal";
@@ -2514,6 +2625,8 @@ void tst_backends::initTestCase()
         qmlInferiorData.answersRedundantContinue = true;
         qmlInferiorData.inspectorOrphanObject = "orphanObject";
         m_backendData[Backend::Qml].inferiorData = qmlInferiorData;
+        // No debugger of its own: the runtime is the process this backend runs.
+        m_backendData[Backend::Qml].path = qmlInferior;
     }
 #endif
 
@@ -4642,9 +4755,12 @@ exec "$@"
     debuggerBackend->execute({ExecutionCommand::Interrupt});
     QTRY_VERIFY2_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::StopOk),
                               "the inferior never stopped", s_timeout);
-    const QString afterInterrupt = QString::fromUtf8(log.fileContents().value_or(QByteArray()));
-    QVERIFY2(afterInterrupt.contains("kill -s SIGINT"),
-             qPrintable("the interrupt did not go through the wrapper: " + afterInterrupt));
+    if (interruptsThroughAWrapper(backend)) {
+        const QString afterInterrupt
+            = QString::fromUtf8(log.fileContents().value_or(QByteArray()));
+        QVERIFY2(afterInterrupt.contains("kill -s SIGINT"),
+                 qPrintable("the interrupt did not go through the wrapper: " + afterInterrupt));
+    }
 
     qputenv("PATH", originalPath);
 }
@@ -5395,10 +5511,11 @@ std::unique_ptr<DebuggerBackend> tst_backends::launchAndStopAtBreakpoint(Backend
 
     engine->start();
 
-    [backendPtr = debuggerBackend.get()] {
+    [backendPtr = debuggerBackend.get(), backend] {
         QTRY_VERIFY_WITH_TIMEOUT(backendPtr->contains(InferiorEvent::SpontaneousStop)
                                  || backendPtr->contains(InferiorEvent::EngineSetupFailed)
-                                 || backendPtr->contains(InferiorEvent::EngineRunFailed), s_timeout);
+                                 || backendPtr->contains(InferiorEvent::EngineRunFailed),
+                                 startupTimeout(backend));
     }();
 
     if (QTest::currentTestFailed() || !debuggerBackend->contains(InferiorEvent::SpontaneousStop))
@@ -5537,6 +5654,14 @@ void tst_backends::stepsContinuesAndInterrupts()
     secondBreakpoint.params.enabled = true;
     debuggerBackend->engine()->changeBreakpoint(secondBreakpoint);
 
+    // The first one goes, so that an inferior which comes past it again names
+    // the stop below unambiguously.
+    BreakpointChangeRequest removeFirst;
+    removeFirst.op = BreakpointOp::Remove;
+    removeFirst.requestId = 3;
+    removeFirst.responseId = debuggerBackend->breakpointResponseId();
+    debuggerBackend->engine()->changeBreakpoint(removeFirst);
+
     debuggerBackend->clearEvents();
     debuggerBackend->execute({ExecutionCommand::Continue});
     QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
@@ -5603,6 +5728,11 @@ void tst_backends::stopsAtFunctionBreakpointInsertedBeforeFirstRun()
 
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
         QSKIP(qPrintable(result.error()));
+
+    if (auto result = checkAcceptsBreakpoint(backend, BreakpointByFunction,
+                                             "A function breakpoint"); !result) {
+        QSKIP(qPrintable(result.error()));
+    }
 
     const InferiorTestData testData = inferiorTestData(backend);
     if (testData.functionMarker.isEmpty())
@@ -7792,14 +7922,19 @@ void tst_backends::interruptsRightAfterARunToALine()
         QSKIP("this backend's running inferior cannot be interrupted on this host");
 
     const InferiorTestData testData = inferiorTestData(backend);
+    if (testData.spinBodyLine == 0)
+        QSKIP("This backend's inferior has nothing that keeps it running.");
+
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
     QVERIFY(debuggerBackend);
 
     // Into the spin loop first, so that the line below is behind the inferior.
     debuggerBackend->clearEvents();
     ExecutionRequest toSpin;
-    toSpin.command = ExecutionCommand::RunToFunction;
-    toSpin.functionName = "spin";
+    toSpin.command = ExecutionCommand::RunToLine;
+    toSpin.context.type = LocationByFile;
+    toSpin.context.fileName = testData.source;
+    toSpin.context.textPosition.line = testData.spinBodyLine;
     debuggerBackend->execute(toSpin);
     QTRY_VERIFY2_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop),
                               "the run into the spin loop never signaled a stop", s_timeout);
@@ -8192,6 +8327,10 @@ void tst_backends::reportsSetupFailureWhenTheDebuggerQuitsAtOnce()
 
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
         QSKIP(qPrintable(result.error()));
+    if (!runsADebuggerProcess(backend)) {
+        QSKIP("This backend's session is a connection rather than a debugger process "
+              "of its own, so there is no process that could fail to start.");
+    }
     const CommandLine quitting = quittingDebuggerCommand();
     if (quitting.isEmpty())
         QSKIP("Nothing on this platform to stand in for a debugger that quits at once.");
@@ -8224,6 +8363,10 @@ void tst_backends::reportsEngineSetupFailure()
 
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
         QSKIP(qPrintable(result.error()));
+    if (!runsADebuggerProcess(backend)) {
+        QSKIP("This backend's session is a connection rather than a debugger process "
+              "of its own, so there is no process that could fail to start.");
+    }
 
     std::unique_ptr<DebuggerBackend> debuggerBackend = createEngine(
         backend, ProcessRunData{{FilePath::fromUserInput("/does/not/exist/debugger"), {}},
@@ -10255,6 +10398,8 @@ void tst_backends::reportsBreakpointModifiedEvents()
 
     engine->start();
     QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
+    if (!reportsBreakpointModifications(backend))
+        QSKIP("This backend reports no modification of a breakpoint it has already answered for.");
     const char *field = breakpointModifiedField(backend);
     const auto reportsHit = [field](const GdbMi &data) {
         return data.childAt(0)[field].data().toULongLong(nullptr, 0) > 0;
@@ -10403,6 +10548,10 @@ void tst_backends::mapsTheReportedSourcePath()
         QSKIP(qPrintable(result.error()));
 
     const InferiorTestData testData = inferiorTestData(backend);
+    if (!testData.source.isFile()) {
+        QSKIP("This backend's inferior carries its sources inside itself, so they cannot be "
+              "moved elsewhere.");
+    }
     // Where the sources sit now, against the place they were built from, which is
     // all the debug information knows about. The space in the name is deliberate:
     // the path reaches the debugger as one argument of a command.

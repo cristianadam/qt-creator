@@ -5,6 +5,8 @@
 
 #include "../debuggerengineinterface.h"
 
+#include <utils/qtcprocess.h>
+
 #include <qmldebug/qmldebugclient.h>
 #include <qmldebug/qmldebugconnection.h>
 #include <qmldebug/qmlenginedebugclient.h>
@@ -25,6 +27,9 @@ class DEBUGGER_EXPORT QmlImplStartData
 {
 public:
     InferiorStartData inferiorStartData;
+    // Whom the runtime this session starts itself runs as, empty for the
+    // current user. There is no debugger process of its own to run instead.
+    QString runAsUser;
 };
 
 class DEBUGGER_EXPORT QmlImpl final : public DebuggerEngineInterface
@@ -42,6 +47,7 @@ private:
 
     void execute(const ExecutionRequest &request) final;
     void changeBreakpoint(const BreakpointChangeRequest &request) final;
+    BreakpointChangeRequest withKnownLocation(const BreakpointChangeRequest &request) const;
     bool isEnabledOnlyChange(const BreakpointChangeRequest &request) const;
     void refresh(const RefreshRequest &request) final;
 
@@ -128,8 +134,13 @@ private:
 
     void sendDisconnect();
     void beginConnection();
+    // Starting the runtime here rather than attaching to one somebody else
+    // started: the port it is told to listen on is the one to connect to.
+    void launchInferior();
 
     QmlImplStartData m_startData;
+    Utils::Process m_inferiorProcess;
+    quint16 m_port = 0;
     QmlDebug::QmlDebugConnection m_connection;
     V8Client *m_v8Client = nullptr;
     QmlDebug::QmlEngineDebugClient *m_engineClient = nullptr;
@@ -147,6 +158,7 @@ private:
     // The locals fetch, kept for RepeatLastCommand.
     std::optional<RefreshRequest> m_lastLocalsRequest;
     bool m_inferiorRunning = false;
+    bool m_inferiorExited = false;
     bool m_interruptRequested = false;
     bool m_shuttingDown = false;
     bool m_disconnected = false;

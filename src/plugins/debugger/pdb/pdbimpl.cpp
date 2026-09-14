@@ -101,13 +101,17 @@ static DebuggerEngineSetupData pdbImplSetupData()
                       | RunToLineCapability
                       | ShowModuleSymbolsCapability
                       | WatchComplexExpressionsCapability;
-    data.extraCapabilities = DebuggerExtraCapability::SourceFiles
+    data.extraCapabilities = DebuggerExtraCapability::RunAsUser
+                           | DebuggerExtraCapability::SourceFiles
                            | DebuggerExtraCapability::StopBeforeRun;
     data.startModes = DebuggerStartModeFlag::Launch;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
     data.acceptsBreakpoint = [](const AcceptsBreakpointQuery &query) {
         if (query.startMode == AttachToCore)
             return false;
+        // "break" takes a function name as well, which carries no file to go by.
+        if (query.type == BreakpointByFunction)
+            return true;
         return query.fileName.endsWith(".py");
     };
     return data;
@@ -210,6 +214,7 @@ void PdbImpl::startPdbProcess()
         m_startData.debuggerRunData.environment));
     if (inferiorRunData.workingDirectory.isDir())
         m_pdbProc.setWorkingDirectory(inferiorRunData.workingDirectory);
+    m_pdbProc.setRunAsUser(m_startData.runAsUser);
     m_pdbProc.start();
 }
 
@@ -663,9 +668,29 @@ void PdbImpl::executeDebuggerCommand(const QString &command, const WatchItemData
     timeCommand(command);
 }
 
+// A debugger running as another user cannot be signalled from here: the signal
+// has to be sent with the same rights the process was started with.
+void PdbImpl::interruptProcessAsUser(qint64 pid)
+{
+    Process interrupter;
+    interrupter.setCommand({"kill", {"-s", "SIGINT", QString::number(pid)}});
+    interrupter.setRunAsUser(m_startData.runAsUser);
+    interrupter.setEnvironment(m_startData.debuggerRunData.environment);
+    interrupter.runBlocking();
+    if (interrupter.result() != ProcessResult::FinishedWithSuccess) {
+        emit message(QString("Interrupting the debugger as %1 failed: %2")
+                         .arg(m_startData.runAsUser, interrupter.cleanedStdErr().trimmed()),
+                     LogError);
+    }
+}
+
 void PdbImpl::requestInterrupt()
 {
     m_interruptRequested = true;
+    if (!m_startData.runAsUser.isEmpty()) {
+        interruptProcessAsUser(m_pdbProc.processId());
+        return;
+    }
     QString error;
     if (!interruptProcess(m_pdbProc.processId(), &error)) {
         m_interruptRequested = false;

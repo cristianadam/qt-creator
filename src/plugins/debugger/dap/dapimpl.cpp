@@ -76,6 +76,8 @@ static DebuggerEngineSetupData dapImplSetupData()
                            | DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::PeripheralRegisters
+                           | DebuggerExtraCapability::RunAsUser
+                           | DebuggerExtraCapability::RunCommandDeferral
                            | DebuggerExtraCapability::SignalReceived
                            | DebuggerExtraCapability::SkipKnownFrames
                            | DebuggerExtraCapability::SourceFiles
@@ -166,9 +168,12 @@ void DapImpl::start()
     const DapAdapterDescriptor &adapter = m_startData.adapter;
     IDataProvider *provider = nullptr;
     switch (adapter.kind) {
-    case DapAdapterDescriptor::Kind::Executable:
-        provider = new ProcessDataProvider(adapter.runData, adapter.command, this);
+    case DapAdapterDescriptor::Kind::Executable: {
+        auto processProvider = new ProcessDataProvider(adapter.runData, adapter.command, this);
+        processProvider->setRunAsUser(m_startData.runAsUser);
+        provider = processProvider;
         break;
+    }
     case DapAdapterDescriptor::Kind::Server:
         provider = new TcpDataProvider(adapter.host, adapter.port, this);
         break;
@@ -281,6 +286,45 @@ void DapImpl::restartWatchdog()
         m_watchdog.stop();
     else
         m_watchdog.start();
+}
+
+// The protocol has no request for a command of the debugger's own, so what the
+// user configured goes in as an expression evaluated in the console: the one
+// place an adapter is expected to take its own commands.
+void DapImpl::runUserCommands(const QStringList &commands)
+{
+    for (const QString &command : commands) {
+        if (!command.trimmed().isEmpty())
+            postReplCommand(command);
+    }
+}
+
+void DapImpl::runUserStartupCommands()
+{
+    const DebuggerUserCommands &commands = m_startData.userCommands;
+    if (!commands.startScript.isEmpty()) {
+        // A script is a file of such commands, and nothing in the protocol
+        // reads a file, so the lines are sent one by one.
+        const Utils::Result<QByteArray> contents = commands.startScript.fileContents();
+        if (!contents) {
+            emit message("The debugger start script is not accessible: "
+                             + commands.startScript.toUserOutput(), LogWarning);
+            return;
+        }
+        runUserCommands(QString::fromUtf8(*contents).split('\n'));
+        return;
+    }
+    runUserCommands(commands.atStartup.split('\n'));
+}
+
+void DapImpl::postReplCommand(const QString &command)
+{
+    QJsonObject arguments{{"expression", command}, {"context", "repl"}};
+    // A command that does not read the inferior's state has no frame to run
+    // in, and the session has none to name before it has stopped anywhere.
+    if (m_currentFrameId > 0)
+        arguments.insert("frameId", m_currentFrameId);
+    postRequest("evaluate", arguments);
 }
 
 void DapImpl::postLaunchOrAttach()
@@ -939,6 +983,7 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
             reportEngineSetup(false);
             return;
         }
+        runUserStartupCommands();
         reportEngineSetup(true);
         return;
     case DapResponseType::ConfigurationDone:
@@ -969,8 +1014,14 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
     case DapResponseType::SetFunctionBreakpoints:
         handleBreakpointsSet(response);
         return;
-    case DapResponseType::Launch:
     case DapResponseType::Attach:
+        // Attaching is the one thing in the protocol that connects to a
+        // session somebody else is holding, so it is what the commands for
+        // after connecting are for.
+        if (success)
+            runUserCommands(m_startData.userCommands.afterConnect);
+        Q_FALLTHROUGH();
+    case DapResponseType::Launch:
         if (!success) {
             // The run is claimed when the request goes out, so a refusal that
             // comes back after that is the session ending rather than a run
@@ -1859,9 +1910,7 @@ void DapImpl::executeDebuggerCommand(const QString &command, const WatchItemData
 {
     Q_UNUSED(inspectorItem)
     QTC_ASSERT(m_client, return);
-    postRequest("evaluate", QJsonObject{{"expression", command},
-                                        {"frameId", m_currentFrameId},
-                                        {"context", "repl"}});
+    postReplCommand(command);
 }
 
 void DapImpl::setRegisterValue(const QString &name, const QString &value)

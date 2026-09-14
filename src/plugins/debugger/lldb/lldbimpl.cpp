@@ -80,7 +80,9 @@ static DebuggerEngineSetupData lldbImplSetupData()
                            | DebuggerExtraCapability::Threads
                            | DebuggerExtraCapability::BreakOnMain
                            | DebuggerExtraCapability::JumpTargetCheck
-                           | DebuggerExtraCapability::PeripheralRegisters;
+                           | DebuggerExtraCapability::PeripheralRegisters
+                           | DebuggerExtraCapability::RunAsUser
+                           | DebuggerExtraCapability::SpecialBreakpoints;
     data.startModes = DebuggerStartModeFlag::Launch
                     | DebuggerStartModeFlag::AttachToProcess
                     | DebuggerStartModeFlag::AttachToTerminalStub
@@ -300,6 +302,7 @@ LldbImpl::LldbImpl(const LldbImplStartData &startData)
     Utils::CommandLine lldbCommand = m_startData.debuggerRunData.command;
     if (!m_startData.loadInitFile)
         lldbCommand.addArg("--no-lldbinit");
+    m_lldbProc.setRunAsUser(m_startData.runAsUser);
     m_lldbProc.setCommand(lldbCommand);
     Environment lldbEnvironment = m_startData.debuggerRunData.environment;
     lldbEnvironment.set("QT_CREATOR_LLDB_PROCESS", "1");
@@ -363,6 +366,9 @@ LldbImpl::LldbImpl(const LldbImplStartData &startData)
         cmd.arg("breakonmain", m_startData.breakOnMain);
         cmd.arg("mainfunction", m_startData.mainFunctionName);
         cmd.arg("useterminal", false);
+        cmd.arg("breakonabort", m_startData.breakOnAbort);
+        cmd.arg("breakonwarning", m_startData.breakOnWarning);
+        cmd.arg("breakonfatal", m_startData.breakOnFatal);
         cmd.arg("nativemixed", m_startData.nativeMixedDebugging);
         cmd.arg("deviceUuid", m_startData.deviceUuid);
         cmd.arg("platform", m_startData.platform);

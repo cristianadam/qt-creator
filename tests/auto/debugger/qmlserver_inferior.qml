@@ -11,9 +11,24 @@ QtObject {
     function compute(value) {
         var longLocal = "0123456789".repeat(200) + "LONGTEXTEND"
         var nested = ({ alpha: 1, beta: "two", inner: ({ deep: 7 }) })
+        var localObject = ({ payload: 7 })
         var doubled = value * 2 // breakpoint line
         globalValue = value
+        reporter.report()
         return doubled // second breakpoint line
+    }
+
+    property bool keepSpinning: true
+    function spin() {
+        var idle = root.globalValue // spin body line
+        if (!root.keepSpinning)
+            Qt.quit()
+    }
+    property Timer spinTimer: Timer {
+        interval: 200
+        running: true
+        repeat: true
+        onTriggered: root.spin()
     }
 
     function recurse(depth) {
@@ -34,6 +49,7 @@ QtObject {
     property Timer throwTimer: Timer {
         interval: 4000
         running: true
+        repeat: true
         onTriggered: root.throwsError()
     }
 
@@ -58,6 +74,7 @@ QtObject {
     property Timer timer: Timer {
         interval: 3000
         running: true
+        repeat: true
         onTriggered: root.compute(root.globalValue + 1)
     }
 }

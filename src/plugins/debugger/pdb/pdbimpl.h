@@ -30,6 +30,9 @@ public:
     bool loadInitFile = false;
     // Where the sources are now, against where the script says they are.
     QList<QPair<QString, QString>> sourcePathMap;
+    // Whom the debugger runs as, empty for the current user. pdb hosts the
+    // script itself, so this is whom the script runs as as well.
+    QString runAsUser;
     // Run at the script's first line, before anything the engine sends. The
     // script's lines take the place of the commands when there is one.
     Utils::FilePath startScript;
@@ -131,6 +134,7 @@ private:
     void runUserStartupCommands();
     void loadExtraDumpers();
     void requestInterrupt();
+    void interruptProcessAsUser(qint64 pid);
     void insertBreakpoint(const BreakpointChangeRequest &request, BreakpointReply kind);
     QString pdbNumberFor(const QString &responseId) const;
     QString responseIdFor(const QString &pdbNumber) const;
