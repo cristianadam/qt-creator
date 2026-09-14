@@ -4,8 +4,11 @@
 #pragma once
 
 #include <QObject>
+#include <QSet>
 
-#include <cplusplus/CppDocument.h>
+#include <utils/filepath.h>
+
+namespace CppEditor { class CodeModelQueries; }
 
 namespace ModelEditor::Internal {
 
@@ -21,9 +24,9 @@ public:
     QSet<QString> findClassDeclarations(const Utils::FilePath &filePath, int line = -1, int column = -1);
 
 private:
-    void appendClassDeclarationsFromDocument(CPlusPlus::Document::Ptr document, int line, int column,
-                                             QSet<QString> *classNames);
-    void appendClassDeclarationsFromSymbol(CPlusPlus::Symbol *symbol, int line, int column, QSet<QString> *classNames);
+    void appendClassDeclarationsFrom(const CppEditor::CodeModelQueries &code,
+                                     const Utils::FilePath &filePath, int line, int column,
+                                     QSet<QString> *classNames);
 };
 
 } // namespace ModelEditor::Internal

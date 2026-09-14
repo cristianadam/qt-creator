@@ -549,6 +549,11 @@ public:
         const Utils::FilePath &filePath, const Utils::FilePath &classFile,
         int line, int column) const;
 
+    // What \a filePath declares, outermost first, each scope's members
+    // after it.
+    std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbolsIn(
+        const Utils::FilePath &filePath) const;
+
     // What the locator needs of the function whose own name stands at
     // \a line and \a column of \a filePath.
     std::optional<DeclarationToDefine> declarationToDefineIn(

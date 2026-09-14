@@ -19,6 +19,7 @@
 #include "cppmodelmanager.h"
 #include "cppoutlinemodel.h"
 #include "cpptoolstestcase.h"
+#include "cppcodemodelqueries.h"
 #include "cxxfrontendmodel.h"
 
 #include <cplusplus/ASTVisitor.h>
@@ -356,6 +357,33 @@ void CxxFrontendModelTest::testFollowsADeclarationToItsDefinitionElsewhere()
     QVERIFY(link.hasValidTarget());
     QCOMPARE(link.targetFilePath, parsed.path("other.cpp"));
     QCOMPARE(link.target.line, 3);
+}
+
+// Every class a file declares, by the name written out in full. What a
+// model diagram asks when a file is dragged into it, and the one question
+// that plugin puts to the code model.
+void CxxFrontendModelTest::testTheClassesAFileDeclares()
+{
+    const Parsed parsed({{"main.cpp",
+                          "class Outer {\n"
+                          "    class Inner {};\n"
+                          "};\n"
+                          "namespace N { struct InNamespace {}; }\n"
+                          "class NamedOnly;\n"
+                          "void notAClass();\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    QStringList said;
+    for (const WrittenClass &klass : code.classesDeclaredIn(parsed.mainFilePath()))
+        said << klass.qualifiedName;
+    said.sort();
+
+    // The forward declaration and the function are not classes this file
+    // declares; the nested one and the one in a namespace are.
+    QCOMPARE(said, QStringList({"N::InNamespace", "Outer", "Outer::Inner"}));
 }
 
 // And the other direction needs no search at all: a file being edited beside

@@ -150,7 +150,10 @@ WrittenClass builtinClassUsingClass(const Snapshot &snapshot, const FilePath &fi
 
     const LookupContext context(doc, snapshot);
     if (const Class * const klass = classUsing(doc->globalNamespace(), context, className))
-        return {Overview().prettyName(klass->name()), filePath, klass->line(), klass->column()};
+        return {Overview().prettyName(klass->name()),
+                Overview().prettyName(
+                    LookupContext::fullyQualifiedName(const_cast<Class *>(klass))),
+                filePath, klass->line(), klass->column()};
     if (maxIncludeDepth <= 0)
         return {};
 
@@ -161,6 +164,23 @@ WrittenClass builtinClassUsingClass(const Snapshot &snapshot, const FilePath &fi
             return found;
     }
     return {};
+}
+
+// Every class \a scope declares, nested ones included, in the order they
+// are written.
+void collectClasses(const Scope *scope, const FilePath &filePath, QList<WrittenClass> *into)
+{
+    const Overview overview;
+    for (int i = 0, count = scope->memberCount(); i < count; ++i) {
+        Symbol * const member = scope->memberAt(i);
+        if (const Class * const klass = member->asClass()) {
+            into->append({overview.prettyName(klass->name()),
+                          overview.prettyName(LookupContext::fullyQualifiedName(member)),
+                          filePath, klass->line(), klass->column()});
+        }
+        if (const Scope * const inner = member->asScope())
+            collectClasses(inner, filePath, into);
+    }
 }
 
 } // namespace
@@ -204,7 +224,8 @@ WrittenClass CodeModelQueries::classUsingClass(const FilePath &filePath, const Q
             for (const CxxFrontendDocument::ClassUsingAClass &klass : *classes) {
                 if (FilePath::fromUserInput(klass.place.filePath) != candidate)
                     continue;
-                return {klass.name, candidate, klass.place.line, klass.place.column};
+                return {klass.name, klass.qualifiedName, candidate, klass.place.line,
+                        klass.place.column};
             }
         }
         // Nothing found is not the same as nothing there: a type nothing
@@ -253,6 +274,36 @@ QList<WrittenFunction> CodeModelQueries::memberFunctionsOf(const WrittenClass &k
                                      member->column()};
     }
     return functions;
+}
+
+QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
+        = d->model.symbolsIn(filePath);
+        symbols && !symbols->isEmpty()) {
+        QList<WrittenClass> classes;
+        for (const CxxFrontendDocument::Symbol &symbol : *symbols) {
+            // A class named without its body declares nothing to say
+            // anything about, and one a macro wrote stands nowhere.
+            if (symbol.kind != CxxFrontendDocument::Kind::Class || symbol.isForwardDeclaration
+                || symbol.isGenerated || symbol.name.isEmpty()) {
+                continue;
+            }
+            QStringList path = symbol.qualified;
+            path << symbol.name;
+            classes.append({symbol.name, path.join("::"), filePath, symbol.line, symbol.column});
+        }
+        return classes;
+    }
+#endif
+
+    const Document::Ptr doc = d->snapshot.document(filePath);
+    if (!doc)
+        return {};
+    QList<WrittenClass> classes;
+    collectClasses(doc->globalNamespace(), filePath, &classes);
+    return classes;
 }
 
 DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoringChanges &changes,

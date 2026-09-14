@@ -1489,6 +1489,15 @@ std::optional<QList<CxxFrontendDocument::MemberFunction>> CxxFrontendReading::me
     return document->memberFunctionsAt(line, column, writtenIn);
 }
 
+std::optional<QList<CxxFrontendDocument::Symbol>> CxxFrontendReading::symbolsIn(
+    const FilePath &filePath) const
+{
+    const CxxFrontendDocument * const document = d->document(filePath);
+    if (!document)
+        return std::nullopt;
+    return document->symbols();
+}
+
 std::optional<DeclarationToDefine> CxxFrontendReading::declarationToDefineIn(
     const FilePath &filePath, int line, int column) const
 {

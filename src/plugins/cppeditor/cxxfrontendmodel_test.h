@@ -22,6 +22,7 @@ private slots:
     void testDeclinesAForwardDeclaration();
     void testFindsTheDefinitionInAnotherFile();
     void testFollowsADeclarationToItsDefinitionElsewhere();
+    void testTheClassesAFileDeclares();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

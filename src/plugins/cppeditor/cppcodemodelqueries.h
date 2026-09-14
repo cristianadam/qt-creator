@@ -34,6 +34,7 @@ namespace CppEditor {
 struct CPPEDITOR_EXPORT WrittenClass
 {
     QString name;              // its own name, with nothing in front of it
+    QString qualifiedName;     // and the same written out in full
     Utils::FilePath filePath;
     int line = 0;              // counted from one
     int column = 0;
@@ -81,6 +82,11 @@ public:
 
     // The member functions \a klass declares, in the order it declares them.
     QList<WrittenFunction> memberFunctionsOf(const WrittenClass &klass) const;
+
+    // Every class \a filePath declares, nested ones included, in the order
+    // it declares them. A class named without its body is not one of them:
+    // there is nothing declared there to say anything about.
+    QList<WrittenClass> classesDeclaredIn(const Utils::FilePath &filePath) const;
 
     // What the locator needs of the function whose own name stands at \a line
     // and \a column of \a filePath. Nothing where no function is declared
