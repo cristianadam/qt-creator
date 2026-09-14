@@ -1707,8 +1707,10 @@ bool CppModelManager::isClangCodeModelActive()
 
 void CppModelManager::emitDocumentUpdated(Document::Ptr doc)
 {
-    if (replaceDocument(doc))
+    if (replaceDocument(doc)) {
         emit m_instance->documentUpdated(doc);
+        emit m_instance->fileUpdated(doc->filePath());
+    }
 }
 
 void CppModelManager::emitGeneratedFileContentsUpdated(

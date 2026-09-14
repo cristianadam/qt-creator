@@ -37,6 +37,7 @@ private slots:
     void testMoveIncludingSources();
     void testRenameIncludesInEditor();
     void testDocumentsAndRevisions();
+    void testFileUpdatedSaysWhichFile();
     void testSettingsChanges();
     void testOptionalIndexing_data();
     void testOptionalIndexing();

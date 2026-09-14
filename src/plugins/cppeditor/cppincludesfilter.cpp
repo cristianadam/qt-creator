@@ -65,7 +65,7 @@ CppIncludesFilter::CppIncludesFilter()
 
     connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::fileListChanged,
             this, invalidate);
-    connect(CppModelManager::instance(), &CppModelManager::documentUpdated,
+    connect(CppModelManager::instance(), &CppModelManager::fileUpdated,
             this, invalidate);
     connect(CppModelManager::instance(), &CppModelManager::aboutToRemoveFiles,
             this, invalidate);

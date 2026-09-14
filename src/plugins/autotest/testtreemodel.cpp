@@ -102,8 +102,8 @@ void TestTreeModel::setupParsingConnections()
     });
 
     CppEditor::CppModelManager *cppMM = CppEditor::CppModelManager::instance();
-    connect(cppMM, &CppEditor::CppModelManager::documentUpdated,
-            m_parser, &TestCodeParser::onCppDocumentUpdated, Qt::QueuedConnection);
+    connect(cppMM, &CppEditor::CppModelManager::fileUpdated,
+            m_parser, &TestCodeParser::onCppFileUpdated, Qt::QueuedConnection);
     connect(cppMM, &CppEditor::CppModelManager::aboutToRemoveFiles,
             this, [this](const FilePaths &filePaths) {
                 markForRemoval(Utils::toSet(filePaths));

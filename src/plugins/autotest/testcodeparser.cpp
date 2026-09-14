@@ -182,9 +182,9 @@ void TestCodeParser::onDocumentUpdated(const FilePath &fileName, bool isQmlFile)
     scanForTests({fileName});
 }
 
-void TestCodeParser::onCppDocumentUpdated(const CPlusPlus::Document::Ptr &document)
+void TestCodeParser::onCppFileUpdated(const FilePath &filePath)
 {
-    onDocumentUpdated(document->filePath());
+    onDocumentUpdated(filePath);
 }
 
 void TestCodeParser::onQmlDocumentUpdated(const QmlJS::Document::Ptr &document)

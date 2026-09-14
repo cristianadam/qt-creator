@@ -16,10 +16,6 @@
 
 #include <texteditor/texteditor.h>
 
-// Only for the type the model manager's signal carries, which is asked for
-// its path and nothing else.
-#include <cplusplus/CppDocument.h>
-
 #include <utils/link.h>
 #include <utils/shutdownguard.h>
 
@@ -275,9 +271,9 @@ void Manager::initialize()
     // connect to the cpp model manager for signals about document updates
     CppEditor::CppModelManager *codeModelManager = CppEditor::CppModelManager::instance();
 
-    // when code manager signals that document is updated - handle it by ourselves
-    connect(codeModelManager, &CppEditor::CppModelManager::documentUpdated,
-            this, [this](CPlusPlus::Document::Ptr doc) {
+    // when code manager signals that a file was read again - handle it by ourselves
+    connect(codeModelManager, &CppEditor::CppModelManager::fileUpdated,
+            this, [this](const FilePath &filePath) {
         // do nothing if Manager is disabled
         if (!state())
             return;
@@ -286,10 +282,10 @@ void Manager::initialize()
         if (d->disableCodeParser)
             return;
 
-        if (doc.data() == nullptr)
+        if (filePath.isEmpty())
             return;
 
-        d->m_awaitingDocuments.insert(doc->filePath());
+        d->m_awaitingDocuments.insert(filePath);
         d->m_timer.start(400); // Accumulate multiple requests into one, restarts the timer
     });
 

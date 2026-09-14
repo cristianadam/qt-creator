@@ -1409,6 +1409,31 @@ void ModelManagerTest::testDocumentsAndRevisions()
     VERIFY_DOCUMENT_REVISION(CppModelManager::document(filePath2), 4U);
 }
 
+/// What fileUpdated() carries is all three of its readers outside this plugin
+/// ask of a reading -- the class view, the test tree and the includes filter
+/// each only want to know which file to look at again.
+void ModelManagerTest::testFileUpdatedSaysWhichFile()
+{
+    TestCase helper;
+
+    const FilePath testDir = testDataDir("testdata_project1");
+    const FilePath filePath1 = testDir / "foo.h";
+    const FilePath filePath2 = testDir / "foo.cpp";
+
+    // The signal is emitted on the thread that parsed the file; the context
+    // object puts the collecting on this one.
+    QSet<FilePath> updated;
+    const QMetaObject::Connection connection = connect(
+        CppModelManager::instance(), &CppModelManager::fileUpdated,
+        this, [&updated](const FilePath &filePath) { updated.insert(filePath); });
+    const QScopeGuard disconnectAtEnd([connection] { QObject::disconnect(connection); });
+
+    QVERIFY(TestCase::parseFiles({filePath1, filePath2}));
+
+    QTRY_VERIFY(updated.contains(filePath1));
+    QTRY_VERIFY(updated.contains(filePath2));
+}
+
 void ModelManagerTest::testSettingsChanges()
 {
     const CppCodeModelSettingsData globalSettingsBackup

@@ -250,6 +250,11 @@ signals:
     void aboutToRemoveFiles(const Utils::FilePaths &files);
 
     void documentUpdated(CPlusPlus::Document::Ptr doc);
+
+    /// Which file was just read again, for whoever only needs to know that.
+    /// Emitted with documentUpdated(), and from the thread that parsed it.
+    void fileUpdated(const Utils::FilePath &filePath);
+
     void sourceFilesRefreshed(const QSet<Utils::FilePath> &files);
 
     void projectPartsUpdated(ProjectExplorer::Project *project);
