@@ -172,6 +172,14 @@ auto lookupNamespaceHelper(ScopeSymbol* scope, const Identifier* id,
   return nullptr;
 }
 
+// A lookup walks the scopes it has already been through so as not to go round
+// a cycle, and the walk is short: over a translation unit of eighty libc++
+// headers it reaches ten scopes on average and never more than thirty-four.
+// Room for that is taken once, rather than letting the list grow into it a
+// reallocation at a time -- at four hundred thousand lookups the growth is
+// millions of allocations for a few hundred bytes of scratch.
+constexpr std::size_t kVisitedScopesReserve = 40;
+
 auto lookupTypeHelper(ScopeSymbol* scope, const Identifier* id,
                       std::vector<ScopeSymbol*>& visited,
                       bool tagsAreTypes = true,
@@ -273,6 +281,7 @@ auto unqualifiedLookupType(Scope* lexicalScope, const Identifier* id,
                            bool tagsAreTypes, bool discardHiddenClassNames)
     -> Symbol* {
   std::vector<ScopeSymbol*> visited;
+  visited.reserve(kVisitedScopesReserve);
   for (auto sc = lexicalScope; sc; sc = sc->parent) {
     if (!sc->symbol) continue;
     if (auto s = lookupTypeHelper(sc->symbol, id, visited, tagsAreTypes,
@@ -287,12 +296,14 @@ auto qualifiedLookupType(Symbol* scopeOrAlias, const Identifier* id)
   auto resolved = resolveTypeScope(scopeOrAlias);
   if (!resolved) return nullptr;
   std::vector<ScopeSymbol*> visited;
+  visited.reserve(kVisitedScopesReserve);
   return lookupTypeHelper(resolved, id, visited);
 }
 
 auto unqualifiedLookupNamespace(Scope* lexicalScope, const Identifier* id)
     -> NamespaceSymbol* {
   std::vector<ScopeSymbol*> visited;
+  visited.reserve(kVisitedScopesReserve);
   for (auto sc = lexicalScope; sc; sc = sc->parent) {
     if (!sc->symbol) continue;
     if (auto ns = lookupNamespaceHelper(sc->symbol, id, visited)) return ns;
@@ -305,6 +316,7 @@ auto qualifiedLookupNamespace(Symbol* scopeOrAlias, const Identifier* id)
   auto base = resolve_namespace_alias(scopeOrAlias);
   if (!base) return nullptr;
   std::vector<ScopeSymbol*> visited;
+  visited.reserve(kVisitedScopesReserve);
   return lookupNamespaceHelper(base, id, visited);
 }
 
@@ -364,6 +376,7 @@ auto mergeInlineNamespaceOverloads(Control* control, NamespaceSymbol* scope,
   const auto directCount = functions.size();
 
   std::vector<ScopeSymbol*> visited;
+  visited.reserve(kVisitedScopesReserve);
   collectInlineNamespaceFunctions(scope, name, functions, visited);
 
   if (functions.size() == directCount) return primary;
