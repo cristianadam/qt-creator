@@ -122,6 +122,7 @@ private slots:
     void aMemberOfAnIndirectBaseInAHeaderResolves();
     void aUsingDeclarationInsideAHeaderIsHonoured();
     void anOverloadIsToldFromItsSiblings();
+    void aMacroThatDeclaresSomethingReadThroughASnapshot();
     void aUsingDirectiveInAHeaderIsHonoured();
     void aNameIsTakenFromTheNamespaceTheFileOpened();
     void aNameInANestedNamespaceInAHeaderResolves();
@@ -633,6 +634,35 @@ void tst_cxxfrontendsnapshot::aUsingDeclarationInsideAHeaderIsHonoured()
 // Which of several declarations a call means, where they are in a header.
 // A header is read into the file that includes it, so the checker weighs
 // the arguments against them exactly as it does for a call in one file.
+// The same as the document test of the name: a macro whose body declares
+// something has no text of its own to point at.
+void tst_cxxfrontendsnapshot::aMacroThatDeclaresSomethingReadThroughASnapshot()
+{
+    CxxFrontendSnapshot snapshot;
+    const CxxFrontendDocument * const document = snapshot.process(
+        "a.cpp",
+        "// Copyright header\n"
+        "\n"
+        "#define GENERATE_FUNC void myFunctionGenerated() {}\n"
+        "\n"
+        "//\n"
+        "// Symbols in a global namespace\n"
+        "//\n"
+        "\n"
+        "GENERATE_FUNC\n"
+        "\n"
+        "int myVariable;\n");
+    QVERIFY(document);
+
+    QStringList described;
+    for (const CxxFrontendDocument::Symbol &symbol : document->symbols()) {
+        described << QString("%1 @%2:%3%4").arg(symbol.name).arg(symbol.line).arg(symbol.column)
+                         .arg(symbol.isGenerated ? " generated" : "");
+    }
+    QCOMPARE(described,
+             QStringList({"myFunctionGenerated @9:1 generated", "myVariable @11:5"}));
+}
+
 void tst_cxxfrontendsnapshot::anOverloadIsToldFromItsSiblings()
 {
     Files files;

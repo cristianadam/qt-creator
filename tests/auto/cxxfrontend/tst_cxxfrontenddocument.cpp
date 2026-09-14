@@ -205,6 +205,7 @@ private slots:
     void aDeclarationWithoutItsDefinitionSaysSo();
     void aNameFromAUsingDeclarationSaysSo();
     void aNameWithSiblingsInABaseSaysSo();
+    void aMacroThatDeclaresSomething();
     void localsOfAFunction();
     void localsOfNestedBlocksAreTheirOwn();
     void localsOfALambdaBelongToItsFunction();
@@ -1390,6 +1391,63 @@ void tst_cxxfrontenddocument::aNameWithSiblingsInABaseSaysSo()
     const CxxFrontendDocument::Declaration alone = document.declarationAt(4, 42);
     QVERIFY(alone.isValid());
     QVERIFY(!alone.siblingsInABaseClass);
+}
+
+// A macro whose body declares something: there is no text of its own to
+// point at, so an outline leaves it out and an index must not offer a place
+// that belongs to the next thing down.
+void tst_cxxfrontenddocument::aMacroThatDeclaresSomething()
+{
+    const QByteArray source =
+        "#define GENERATE void generated() {}\n"
+        "\n"
+        "GENERATE\n"
+        "\n"
+        "int afterwards;\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    QStringList described;
+    for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+        described << QString("%1 @%2:%3%4").arg(symbol.name).arg(symbol.line).arg(symbol.column)
+                         .arg(symbol.isGenerated ? " generated" : "");
+    }
+    QCOMPARE(described, QStringList({"generated @3:1 generated", "afterwards @5:5"}));
+
+    // The shape the locator's own data has: the macro further down, a
+    // comment between it and its use, and something written after it.
+    const QByteArray spaced =
+        "// Copyright header\n"
+        "\n"
+        "#define GENERATE_FUNC void myFunctionGenerated() {}\n"
+        "\n"
+        "//\n"
+        "// Symbols in a global namespace\n"
+        "//\n"
+        "\n"
+        "GENERATE_FUNC\n"
+        "\n"
+        "int myVariable;\n";
+    const CxxFrontendDocument second(QString::fromUtf8(spaced), "<stdin>");
+    QStringList alsoDescribed;
+    for (const CxxFrontendDocument::Symbol &symbol : second.symbols()) {
+        alsoDescribed << QString("%1 @%2:%3%4").arg(symbol.name).arg(symbol.line)
+                             .arg(symbol.column).arg(symbol.isGenerated ? " generated" : "");
+    }
+    QCOMPARE(alsoDescribed,
+             QStringList({"myFunctionGenerated @9:1 generated", "myVariable @11:5"}));
+
+    // And the same with macros in force before the first line, which is how
+    // a project's files are read.
+    CxxFrontendDocument::Config withDefines;
+    withDefines.predefinedMacros = QStringList({"__cplusplus 201703L", "QT_CORE_LIB 1"});
+    const CxxFrontendDocument third(QString::fromUtf8(spaced), "<stdin>", withDefines);
+    QStringList thirdDescribed;
+    for (const CxxFrontendDocument::Symbol &symbol : third.symbols()) {
+        thirdDescribed << QString("%1 @%2:%3%4").arg(symbol.name).arg(symbol.line)
+                              .arg(symbol.column).arg(symbol.isGenerated ? " generated" : "");
+    }
+    QCOMPARE(thirdDescribed,
+             QStringList({"myFunctionGenerated @9:1 generated", "myVariable @11:5"}));
 }
 
 // What follow symbol wants: the place that defines the thing, not the place
