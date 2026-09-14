@@ -25,6 +25,7 @@ private slots:
     void testFollowsAFreeFunctionToItsDefinitionElsewhere();
     void testTheClassesAFileDeclares();
     void testWhereWhatADeclarationStandsForIsDefined();
+    void testWhereAFunctionIsDefined();
     void testTheFunctionAPlaceIsInside();
     void testTheFunctionANameStandsFor();
     void testAClassPrivateSlotsAndBases();

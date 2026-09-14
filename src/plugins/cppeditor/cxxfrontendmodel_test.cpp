@@ -452,6 +452,31 @@ void CxxFrontendModelTest::testWhereWhatADeclarationStandsForIsDefined()
              QString("main.cpp:3, main.cpp:5, main.cpp:4, nothing"));
 }
 
+// Where the project defines the function declared at a place -- asked with
+// the column, since a place is what the answer is used as: a reader is sent
+// there.
+void CxxFrontendModelTest::testWhereAFunctionIsDefined()
+{
+    const Parsed parsed({{"h.h", "struct C {\n    void slotOfSorts();\n};\n"},
+                         {"main.cpp", "#include \"h.h\"\n\nvoid C::slotOfSorts() {}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+
+    // On the declaration's own name, in the header.
+    const Link definition = code.definitionOfFunctionAt(parsed.path("h.h"), 2, 10);
+    QVERIFY(definition.hasValidTarget());
+    QCOMPARE(definition.targetFilePath, parsed.path("main.cpp"));
+
+    // A link counts columns from zero and lines from one, which is what
+    // whoever opens an editor at it expects. "void C::slotOfSorts" puts the
+    // name's own first character at column 8.
+    QCOMPARE(QString("%1:%2").arg(definition.target.line).arg(definition.target.column),
+             QString("3:8"));
+}
+
 // The function a place is inside of and the lines it spans, which is what a
 // debugger tooltip is pinned by: the name it was taken in, and whether the
 // line the program stopped at is still inside that function.

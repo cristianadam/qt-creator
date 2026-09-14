@@ -645,7 +645,9 @@ Link CodeModelQueries::definitionOfFunctionAt(const FilePath &filePath, int line
                                                                             true);
     if (!definition)
         return {};
-    return {FilePath::fromUtf8(definition->fileName()), definition->line(), definition->column()};
+    // Through toLink(), which is what says how a link counts columns: from
+    // zero, where a symbol counts them from one.
+    return definition->toLink();
 }
 
 Link CodeModelQueries::definitionOfWhatIsDeclaredAt(const FilePath &filePath,
