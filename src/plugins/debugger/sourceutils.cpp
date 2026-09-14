@@ -13,8 +13,9 @@
 #include <cplusplus/ExpressionUnderCursor.h>
 #include <cplusplus/Overview.h>
 
-#include <cppeditor/cppprojectfile.h>
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
+#include <cppeditor/cppprojectfile.h>
 
 #include <texteditor/texteditor.h>
 #include <texteditor/textdocument.h>
@@ -215,11 +216,8 @@ QStringList getUninitializedVariables(const Snapshot &snapshot,
 
 QString cppFunctionAt(const FilePath &filePath, int line, int column)
 {
-    const Snapshot snapshot = CppModelManager::snapshot();
-    if (const Document::Ptr document = snapshot.document(filePath))
-        return document->functionAt(line, column);
-
-    return QString();
+    return CppEditor::functionAround(CppModelManager::snapshot(), filePath, line, column)
+        .qualifiedName;
 }
 
 
@@ -253,10 +251,15 @@ QString cppExpressionAt(TextEditorWidget *editorWidget, int pos,
     *column = tc.positionInBlock();
     *line = tc.blockNumber() + 1;
 
-    if (!expr.isEmpty() && document) {
-        QString func = document->functionAt(*line, *column, scopeFromLine, scopeToLine);
+    if (!expr.isEmpty()) {
+        const CppEditor::EnclosingFunction enclosing
+            = CppEditor::functionAround(snapshot, filePath, *line, *column);
         if (function)
-            *function = func;
+            *function = enclosing.qualifiedName;
+        if (scopeFromLine)
+            *scopeFromLine = enclosing.fromLine;
+        if (scopeToLine)
+            *scopeToLine = enclosing.toLine;
     }
 
     return expr;

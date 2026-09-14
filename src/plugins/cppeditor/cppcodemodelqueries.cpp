@@ -241,6 +241,26 @@ QString writtenTypeOf(const CxxFrontendDocument::Symbol &symbol)
 
 } // namespace
 
+EnclosingFunction functionAround(const Snapshot &snapshot, const FilePath &filePath,
+                                 int line, int column)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<Internal::CxxFrontendEnclosingFunction> function
+        = Internal::cxxFrontendFunctionAround(filePath, line, column)) {
+        return {function->qualifiedName, function->fromLine, function->toLine};
+    }
+#endif
+
+    const Document::Ptr doc = snapshot.document(filePath);
+    if (!doc)
+        return {};
+
+    EnclosingFunction function;
+    function.qualifiedName = doc->functionAt(line, column, &function.fromLine,
+                                             &function.toLine);
+    return function;
+}
+
 class CodeModelQueries::Private
 {
 public:

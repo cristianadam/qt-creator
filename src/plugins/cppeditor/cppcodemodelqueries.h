@@ -87,6 +87,28 @@ struct CPPEDITOR_EXPORT WrittenDeclaration
     bool isNamespace = false;
 };
 
+// The function a place is written inside of, and the lines it was written
+// between -- which is what says whether some other line is still inside the
+// same function.
+struct CPPEDITOR_EXPORT EnclosingFunction
+{
+    QString qualifiedName;  // empty where the place is inside no function
+    int fromLine = 0;       // counted from one, and zero where nothing is
+    int toLine = 0;
+
+    bool isValid() const { return !qualifiedName.isEmpty(); }
+};
+
+// Answered off whichever front end has already read \a filePath, with
+// \a snapshot standing for the built-in one's reading of it.
+//
+// Nothing is read here. Whoever asks is showing a tooltip or following a
+// stack frame, and a parse would happen on the thread that has to answer, so
+// a file no front end has read is a place no function is known around.
+CPPEDITOR_EXPORT EnclosingFunction functionAround(const CPlusPlus::Snapshot &snapshot,
+                                                  const Utils::FilePath &filePath,
+                                                  int line, int column);
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:

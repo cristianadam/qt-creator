@@ -681,6 +681,21 @@ std::optional<CPlusPlus::CxxFrontendDocument::MetaMethodCall> cxxFrontendMetaMet
 std::optional<CPlusPlus::CxxFrontendDocument::Switch> cxxFrontendSwitchAt(
     const Utils::FilePath &filePath, int line, int column);
 
+// The function a position is written inside of, and the lines it was written
+// between. Nothing where the model has no such file -- and it is not read
+// here: whoever asks is looking at a tooltip or a stack frame, and reading a
+// file would be a parse on the thread that has to answer.
+//
+// An empty name is an answer: the position is inside no function.
+struct CxxFrontendEnclosingFunction
+{
+    QString qualifiedName;
+    int fromLine = 0; // counted from one
+    int toLine = 0;
+};
+std::optional<CxxFrontendEnclosingFunction> cxxFrontendFunctionAround(
+    const Utils::FilePath &filePath, int line, int column);
+
 // A comment a file writes: where it stands, and which of the four ways it
 // is written -- which is what tells one run of comments from the next.
 struct CxxFrontendComment

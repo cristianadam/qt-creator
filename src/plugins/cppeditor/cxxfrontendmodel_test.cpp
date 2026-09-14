@@ -452,6 +452,44 @@ void CxxFrontendModelTest::testWhereWhatADeclarationStandsForIsDefined()
              QString("main.cpp:3, main.cpp:5, main.cpp:4, nothing"));
 }
 
+// The function a place is inside of and the lines it spans, which is what a
+// debugger tooltip is pinned by: the name it was taken in, and whether the
+// line the program stopped at is still inside that function.
+void CxxFrontendModelTest::testTheFunctionAPlaceIsInside()
+{
+    const Parsed parsed({{"main.cpp",
+                          "void free(int a)\n"       // 1
+                          "{\n"                      // 2
+                          "    int local = a;\n"     // 3
+                          "}\n"                      // 4
+                          "struct C {\n"             // 5
+                          "    void member()\n"      // 6
+                          "    {\n"                  // 7
+                          "        int here = 1;\n"  // 8
+                          "    }\n"                  // 9
+                          "};\n"}},                  // 10
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const auto around = [&](int line, int column) {
+        const EnclosingFunction function
+            = functionAround(CppEditor::Tests::TestCase::globalSnapshot(),
+                             parsed.mainFilePath(), line, column);
+        if (!function.isValid())
+            return QString("nothing");
+        QString name = function.qualifiedName;
+        if (name.startsWith("::"))
+            name = name.mid(2);
+        return QString("%1 %2-%3").arg(name).arg(function.fromLine).arg(function.toLine);
+    };
+
+    // Inside each body, and a line that is inside neither. Asked in one
+    // comparison, so that a sabotage says which of them the other model
+    // answers.
+    QCOMPARE(QStringList({around(3, 9), around(8, 13), around(5, 8)}).join(", "),
+             QString("free 1-4, C::member 6-9, nothing"));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

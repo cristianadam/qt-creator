@@ -33,6 +33,7 @@
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <utils/basetreeview.h>
 #include <utils/checkablemessagebox.h>
@@ -303,27 +304,16 @@ public:
     }
 };
 
-// Stolen from CPlusPlus::Document::functionAt(...)
-static int firstRelevantLine(const Document::Ptr document, int line, int column)
+// The first line worth reading an expression off: the one the function
+// around the position is written on. Whichever front end has read the file
+// says so; this used to be a copy of Document::functionAt() walking the
+// built-in one's symbols.
+static int firstRelevantLine(const FilePath &filePath, int line, int column)
 {
     QTC_ASSERT(line > 0 && column > 0, return 0);
-    CPlusPlus::Symbol *symbol = document->lastVisibleSymbolAt(line, column);
-    if (!symbol)
-        return 0;
-
-    // Find the enclosing function scope (which might be several levels up,
-    // or we might be standing on it)
-    Scope *scope = symbol->asScope();
-    if (!scope)
-        scope = symbol->enclosingScope();
-
-    while (scope && !scope->asFunction() )
-        scope = scope->enclosingScope();
-
-    if (!scope)
-        return 0;
-
-    return scope->line();
+    return CppEditor::functionAround(CppEditor::CppModelManager::snapshot(), filePath, line,
+                                     column)
+        .fromLine;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -546,7 +536,7 @@ public:
         if (!cppDocument) // For non-C++ documents.
             return;
 
-        const int firstLine = firstRelevantLine(cppDocument, loc.textPosition().line, 1);
+        const int firstLine = firstRelevantLine(filePath, loc.textPosition().line, 1);
         if (firstLine < 1)
             return;
 
