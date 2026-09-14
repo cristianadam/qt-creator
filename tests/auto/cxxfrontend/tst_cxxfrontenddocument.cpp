@@ -394,6 +394,21 @@ void tst_cxxfrontenddocument::declarationAt_data()
     QTest::newRow("a name brought in by a using declaration")
         << QByteArray("namespace N { int $v; }\nusing N::v;\nvoid f() { $v = 1; }\n")
         << QString("N::v");
+    // A name handed to a macro is still written where it stands: the tokens
+    // of an argument keep their own offsets, where the tokens a macro's body
+    // wrote have none. Which is what lets a reading that works from places
+    // answer about code inside a macro call -- Boost's test decorators are
+    // written that way, BOOST_AUTO_TEST_SUITE(S, *boost::unit_test::disabled()).
+    QTest::newRow("a name inside a macro's argument")
+        << QByteArray("namespace N { int $v; }\n"
+                      "#define TAKE(x) x\n"
+                      "int y = TAKE(N::$v);\n")
+        << QString("N::v");
+    QTest::newRow("a function's name inside a macro's argument")
+        << QByteArray("namespace N { void $f(); }\n"
+                      "#define DECORATE(x) x\n"
+                      "void (*y)() = DECORATE(N::$f);\n")
+        << QString("N::f");
     QTest::newRow("a name found through a using directive")
         << QByteArray("namespace N { int $v; }\nusing namespace N;\nvoid f() { $v = 1; }\n")
         << QString("N::v");
