@@ -664,6 +664,16 @@ public:
     // What a reader pointing anywhere at a class body means by "this class".
     QString classAround(int line, int column) const;
 
+    // Where this translation unit declares the class called
+    // \a qualifiedName, or nothing where it declares no such class.
+    //
+    // The headers count: one is read into whoever includes it, so a class a
+    // file only includes is found here, in the header that writes it -- and
+    // the place says which file that is. Where the class is named before it
+    // is written out, the place is the one with the body, which is what a
+    // reader sent to the class wants.
+    Place classNamed(const QString &qualifiedName) const;
+
     // Where the name used at a position was declared. What follow symbol
     // needs, and what find usages and completion are built on.
     //

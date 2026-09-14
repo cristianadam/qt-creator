@@ -2247,6 +2247,43 @@ QString CxxFrontendDocument::scopeAt(int line, int column) const
     return d->scopeNameAt(line, column);
 }
 
+CxxFrontendDocument::Place CxxFrontendDocument::classNamed(
+    const QString &qualifiedName) const
+{
+    if (qualifiedName.isEmpty() || !d->unit.ast())
+        return {};
+
+    // Written out in full either way, so that a name given with its scopes
+    // and one given without are compared as the same thing.
+    const auto withoutTheLeadingScope = [](const QString &name) {
+        return name.startsWith("::") ? name.mid(2) : name;
+    };
+    const QString wanted = withoutTheLeadingScope(qualifiedName);
+
+    // The class specifiers, which is what a class written out has and a
+    // class merely named has not: one symbol stands for every declaration of
+    // a class and is recorded where it was first named, so the body is the
+    // tree's to say. A class named and never written out is no answer, which
+    // is what a reader that means to be sent to it wants.
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto * const specifier = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!specifier || !specifier->symbol || !specifier->unqualifiedId)
+            continue;
+        if (withoutTheLeadingScope(qualifiedNameOf(specifier->symbol)) != wanted)
+            continue;
+
+        const cxx::SourceLocation name = specifier->unqualifiedId->firstSourceLocation();
+        if (!name)
+            continue;
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(name);
+        return Place{d->fileOf(name), int(position.line), int(position.column)};
+    }
+    return {};
+}
+
 QString CxxFrontendDocument::classAround(int line, int column) const
 {
     cxx::ScopeSymbol * const scope = d->innermostScopeAt(line, column);

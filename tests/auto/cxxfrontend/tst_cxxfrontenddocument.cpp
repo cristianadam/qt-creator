@@ -25,6 +25,7 @@
 #include <cplusplus/SimpleLexer.h>
 #include <cplusplus/Symbols.h>
 #include <cplusplus/TranslationUnit.h>
+#include <cplusplus/TypeOfExpression.h>
 
 #include <QObject>
 #include <QTest>
@@ -195,6 +196,7 @@ private slots:
     void reportsDiagnostics();
     void theLinesAFunctionWasWrittenBetween();
     void theClassAPlaceIsWrittenIn();
+    void whereTheClassOfAGivenNameIsWritten();
     void saysWhatOnlyPromisesAndWhatOnlyReaches();
     void aMemberOfAClassTemplateDefinedOutsideItIsRead();
     void readsWhatQtWritesOnTopOfCxx();
@@ -1213,6 +1215,66 @@ void tst_cxxfrontenddocument::theClassAPlaceIsWrittenIn()
     QCOMPARE(byTheOther.join(", "), byTheBuiltin.join(", "));
     QCOMPARE(byTheOther.join(", "),
              QString("N::Outer, nothing, N::Outer::Inner, nothing"));
+}
+
+// Where the class of a given name is written, asked of both front ends over
+// one source. What a reader that has only a name -- the class a test runner
+// was pointed at, say -- has to turn it into before it can ask anything
+// else.
+void tst_cxxfrontenddocument::whereTheClassOfAGivenNameIsWritten()
+{
+    const QByteArray source = "class tst_Plain\n"                 // 1
+                              "{\n"                                // 2
+                              "};\n"                               // 3
+                              "namespace NS {\n"                  // 4
+                              "class tst_Nested\n"                // 5
+                              "{\n"                                // 6
+                              "};\n"                               // 7
+                              "}\n"                                // 8
+                              "class tst_Later;\n"                // 9
+                              "class tst_Later\n"                 // 10
+                              "{\n"                                // 11
+                              "};\n";                              // 12
+
+    const Document::Ptr builtin = Document::create(Utils::FilePath::fromPathPart(u"<stdin>"));
+    builtin->setUtf8Source("#line 1 \"<stdin>\"\n" + source);
+    builtin->check();
+    Snapshot snapshot;
+    snapshot.insert(builtin);
+
+    const CxxFrontendDocument other(QString::fromUtf8(source), "<stdin>");
+    QVERIFY(other.diagnostics().isEmpty());
+
+    const QStringList names{"tst_Plain", "NS::tst_Nested", "tst_Later", "tst_Missing"};
+
+    QStringList byTheBuiltin;
+    for (const QString &name : names) {
+        TypeOfExpression typeOfExpression;
+        typeOfExpression.init(builtin, snapshot);
+        QString said = "nothing";
+        const QList<LookupItem> items = typeOfExpression(name.toUtf8(),
+                                                         builtin->globalNamespace());
+        for (const LookupItem &item : items) {
+            if (CPlusPlus::Symbol * const symbol = item.declaration()) {
+                if (Class * const klass = symbol->asClass())
+                    said = QString("%1:%2").arg(klass->line()).arg(klass->column());
+            }
+        }
+        byTheBuiltin << said;
+    }
+
+    QStringList byTheOther;
+    for (const QString &name : names) {
+        const CxxFrontendDocument::Place place = other.classNamed(name);
+        byTheOther << (place.line == 0 ? QString("nothing")
+                                       : QString("%1:%2").arg(place.line).arg(place.column));
+    }
+
+    QCOMPARE(byTheOther.join(", "), byTheBuiltin.join(", "));
+
+    // A class named before it is written out is the one with the body, which
+    // is where a reader is sent.
+    QCOMPARE(byTheOther.join(", "), QString("1:7, 5:7, 10:7, nothing"));
 }
 
 // Two things a list of what a file declares has to say about, since neither

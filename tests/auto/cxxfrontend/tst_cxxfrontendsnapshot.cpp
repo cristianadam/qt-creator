@@ -93,6 +93,7 @@ private slots:
     void noCounterpartWhereNobodyWroteTheOtherSide();
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
+    void theClassOfANameIsFoundInTheHeaderThatWritesIt();
     void aMacroCrossesFromAHeader();
     void aMacroCrossesTwoHeadersDeep();
     void anUndefInAHeaderCrossesToo();
@@ -171,6 +172,36 @@ void tst_cxxfrontendsnapshot::aHeaderIsReadIntoItsIncluder()
     // document for it asks for one, by processing it.
     QCOMPARE(snapshot.files(), QStringList("a.cpp"));
     QVERIFY(!snapshot.document("h.h"));
+}
+
+// A reader that has only a class's name -- which is all a test runner
+// pointed at a class has -- gets back the file that writes it. The header
+// counts, being read into whoever includes it, and that is the whole point:
+// a test class is declared in a header and named from a source file.
+void tst_cxxfrontendsnapshot::theClassOfANameIsFoundInTheHeaderThatWritesIt()
+{
+    Files files;
+    files.add("tst.h", "namespace NS {\n"
+                       "class tst_FromHeader : public QObject\n"
+                       "{\n"
+                       "};\n"
+                       "}\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document
+        = snapshot.process("main.cpp", "class QObject {};\n"
+                                       "#include \"tst.h\"\n"
+                                       "int main() { NS::tst_FromHeader t; }\n");
+    QVERIFY(document);
+
+    const CxxFrontendDocument::Place place = document->classNamed("NS::tst_FromHeader");
+    QCOMPARE(place.filePath, QString("tst.h"));
+    QCOMPARE(place.line, 2);
+    QCOMPARE(place.column, 7);
+
+    // And the file that named it declares no such class of its own.
+    QCOMPARE(document->classNamed("tst_FromHeader").line, 0);
 }
 
 void tst_cxxfrontendsnapshot::aFilesSymbolsAreItsOwn()
