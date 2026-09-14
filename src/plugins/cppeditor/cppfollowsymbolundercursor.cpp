@@ -738,10 +738,14 @@ void FollowSymbolUnderCursor::findLink(
     // part being migrated. It declines what it cannot answer for, and then
     // the built-in lookup answers as it always did.
     //
-    // Not for a call, though: which of several functions a call means takes
-    // the argument types, and the model resolves a member call without
-    // weighing them -- CxxFrontendDocument::unsupportedQueries() -- so for an
-    // overloaded one it would point at a function that is not the one called.
+    // Not for a call, though, and not because the arguments cannot be
+    // weighed -- they can. A name with a "(" after it is where three other
+    // things happen: following a virtual call offers every override rather
+    // than one place, a name inside SIGNAL() or SLOT() is a Qt method found
+    // by the text around it, and a call whose overloads a using declaration
+    // lent from a base is resolved against the class's own only
+    // (CxxFrontendDocument::unsupportedQueries()). Answering here would take
+    // all three away: the follow-symbol suite goes from green to 28 failures.
 #ifdef QTC_WITH_CXX_FRONTEND
     const auto namesACall = [&] {
         int pos = endOfToken;

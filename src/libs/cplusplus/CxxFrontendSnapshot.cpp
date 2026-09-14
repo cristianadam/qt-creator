@@ -284,9 +284,6 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
     // saying nothing, because a wrong answer sends someone to the wrong line
     // and looks right doing it.
     return {
-        // Which of several declarations a call means. Needs the argument
-        // types, which this does not look at.
-        "overload resolution across files",
         // Going the other way from a declaration in a header: which source
         // file defines it is a question about the project, and a document
         // holds one file and what it includes. counterpartAt() answers the

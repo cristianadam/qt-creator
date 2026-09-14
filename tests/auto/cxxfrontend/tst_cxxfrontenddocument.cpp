@@ -200,7 +200,7 @@ private slots:
     void typeOfTheThingDeclaredAt();
     void readsACallAMetaObjectCouldMake();
     void unsupportedQueries();
-    void anOverloadedCallIsNotResolved();
+    void anOverloadedCallIsResolved();
     void theDefinitionIsPreferredToTheDeclaration();
     void aDeclarationWithoutItsDefinitionSaysSo();
     void aNameFromAUsingDeclarationSaysSo();
@@ -397,6 +397,19 @@ void tst_cxxfrontenddocument::declarationAt_data()
         << QByteArray("struct $S {};\nvoid f(struct $S *s);\n") << QString("S");
     QTest::newRow("the second use of the same name")
         << QByteArray("int $g;\nvoid f() { g = 1; $g = 2; }\n") << QString("g");
+
+    // Which of several functions a call means, which takes the argument
+    // types: the checker has weighed them and the parser wrote down what it
+    // settled on.
+    QTest::newRow("an overload chosen by the argument's type")
+        << QByteArray("void g(int);\nvoid $g(double);\nvoid f() { $g(2.5); }\n") << "g";
+    QTest::newRow("the other one")
+        << QByteArray("void $g(int);\nvoid g(double);\nvoid f() { $g(2); }\n") << "g";
+    QTest::newRow("an overload chosen by how many arguments")
+        << QByteArray("void g(int);\nvoid $g(int, int);\nvoid f() { $g(1, 2); }\n") << "g";
+    QTest::newRow("a member call's overload")
+        << QByteArray("struct S { void m(int); void $m(double); };\n"
+                      "void f(S *s) { s->$m(2.5); }\n") << "S::m";
 }
 
 void tst_cxxfrontenddocument::declarationAt()
@@ -1325,7 +1338,9 @@ void tst_cxxfrontenddocument::unsupportedQueries()
 // Written down so that a consumer knows not to ask this about a call -- and
 // as a ratchet: the day the two answers differ, this fails and the limit comes
 // off the list.
-void tst_cxxfrontenddocument::anOverloadedCallIsNotResolved()
+// Weighed against what the class itself declares, and not against what a
+// using declaration lent it -- so one of these two is answered wrongly.
+void tst_cxxfrontenddocument::anOverloadedCallIsResolved()
 {
     const QByteArray source =
         "struct B {\n"
@@ -1345,9 +1360,13 @@ void tst_cxxfrontenddocument::anOverloadedCallIsNotResolved()
     const CxxFrontendDocument::Declaration fromInt = document.declarationAt(10, 9);
     const CxxFrontendDocument::Declaration fromDouble = document.declarationAt(11, 9);
     QVERIFY(fromInt.isValid());
-    QCOMPARE(fromInt.line, fromDouble.line);
+    QVERIFY(fromDouble.isValid());
+    QCOMPARE(fromDouble.line, 7); // D::f(double), which is right
+    QCOMPARE(fromInt.line, 7);    // and so is this one, which is not
 
-    QVERIFY(CxxFrontendDocument::unsupportedQueries().contains("which overload a call means"));
+    QVERIFY(CxxFrontendDocument::unsupportedQueries().contains(
+        "which overload a call means, where a using declaration brought a "
+        "base class's into the set"));
 }
 
 // What follow symbol wants: the place that defines the thing, not the place

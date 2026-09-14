@@ -121,7 +121,7 @@ private slots:
     void aMemberOfAnUnrelatedClassDoesNotResolve();
     void aMemberOfAnIndirectBaseInAHeaderResolves();
     void aUsingDeclarationInsideAHeaderIsHonoured();
-    void anOverloadIsNotToldFromItsSiblings();
+    void anOverloadIsToldFromItsSiblings();
     void aUsingDirectiveInAHeaderIsHonoured();
     void aNameIsTakenFromTheNamespaceTheFileOpened();
     void aNameInANestedNamespaceInAHeaderResolves();
@@ -631,24 +631,21 @@ void tst_cxxfrontendsnapshot::aUsingDeclarationInsideAHeaderIsHonoured()
 }
 
 // Which of several declarations a call means, where they are in a header.
-// The front end resolves the call without weighing what it is called with,
-// so the answer is the first of them whatever the arguments say -- which is
-// why the list says so rather than leaving it to be trusted.
-void tst_cxxfrontendsnapshot::anOverloadIsNotToldFromItsSiblings()
+// A header is read into the file that includes it, so the checker weighs
+// the arguments against them exactly as it does for a call in one file.
+void tst_cxxfrontendsnapshot::anOverloadIsToldFromItsSiblings()
 {
     Files files;
-    files.add("h.h", "void g(int);\nvoid g(char *);\n");
+    files.add("h.h", "void g(int);\nvoid g(double);\n");
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(files.resolver());
-    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { g(\"s\"); }\n");
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { g(2.5); }\n");
 
     const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 12);
     QVERIFY(found.isValid());
     QCOMPARE(found.filePath, QString("h.h"));
-    QCOMPARE(found.line, 1); // the one taking an int, called with a string
-    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
-                .contains("overload resolution across files"));
+    QCOMPARE(found.line, 2); // the one taking a double, called with one
 }
 
 // A using directive written in a header reaches the file that includes it:
@@ -1043,7 +1040,12 @@ void tst_cxxfrontendsnapshot::completionAtAPosition()
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
-    QVERIFY(unsupported.contains("overload resolution across files"));
+
+    // Weighing a call's arguments against the declarations a header holds
+    // is the checker's, the header being read into the file that includes
+    // it: it was on this list until the case that pinned it was written so
+    // that it compiles.
+    QVERIFY(!unsupported.contains("overload resolution across files"));
 
     // What reading a header into its includer settled, so that the list
     // does not keep saying it. A file that declares over again what a header
