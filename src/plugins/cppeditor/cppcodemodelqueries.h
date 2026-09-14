@@ -220,7 +220,10 @@ public:
     struct WrittenLiteralCall
     {
         QString insideFunction;  // written out in full
-        QString literal;         // as written, the quotes included
+        // What the literal says: the characters between the quotes, the
+        // pieces of an adjacent run joined and every escape as it was
+        // written -- which is what a tag is.
+        QString literal;
         int line = 0;            // where the called name stands, from one
         int column = 0;
         bool hasMoreArguments = false;

@@ -668,6 +668,11 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
                           "    newRow(\"unqualified\");\n"
                           "    addRow(\"format %1\", 2);\n"
                           "    elsewhere(\"not a tag\");\n"
+                          "}\n"
+                          "void tst_Other_data()\n"
+                          "{\n"
+                          "    using namespace QTest;\n"
+                          "    newRow(\"inside a function\");\n"
                           "}\n"}},
                         "main.cpp");
     QVERIFY(parsed.isValid());
@@ -685,10 +690,13 @@ void CxxFrontendModelTest::testTheCallsWithALiteral()
                     + (call.hasMoreArguments ? " (more follows)" : "");
     }
 
+    // The last one is a directive written inside the function, which is in
+    // force from there to the end of the block it stands in.
     QCOMPARE(said.join("\n"),
              QString("first in tst_Thing_data at 9:5\n"
                      "unqualified in tst_Thing_data at 10:5\n"
-                     "format %1 in tst_Thing_data at 11:5 (more follows)"));
+                     "format %1 in tst_Thing_data at 11:5 (more follows)\n"
+                     "inside a function in tst_Other_data at 17:5"));
 }
 
 // The function-like macro uses a file makes and what each was handed, which

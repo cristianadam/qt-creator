@@ -94,6 +94,7 @@ private slots:
     void aHeaderIsReadIntoItsIncluder();
     void aFilesSymbolsAreItsOwn();
     void theClassOfANameIsFoundInTheHeaderThatWritesIt();
+    void theMacroUsesOfAHeaderAreNotTheIncludersOwn();
     void aMacroCrossesFromAHeader();
     void aMacroCrossesTwoHeadersDeep();
     void anUndefInAHeaderCrossesToo();
@@ -202,6 +203,29 @@ void tst_cxxfrontendsnapshot::theClassOfANameIsFoundInTheHeaderThatWritesIt()
 
     // And the file that named it declares no such class of its own.
     QCOMPARE(document->classNamed("tst_FromHeader").line, 0);
+}
+
+// A header's macro uses are the header's. Which matters twice over: what a
+// reader asked what *this* file says must not be told what its headers say,
+// and a translation unit makes tens of thousands of such uses across Qt's
+// headers -- keeping them all would be paid for per file.
+void tst_cxxfrontendsnapshot::theMacroUsesOfAHeaderAreNotTheIncludersOwn()
+{
+    Files files;
+    files.add("h.h", "#define FROM_HEADER(x) int x;\n"
+                     "FROM_HEADER(inHeader)\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\n"
+                                    "FROM_HEADER(inSource)\n");
+    QVERIFY(document);
+
+    QStringList said;
+    for (const CxxFrontendDocument::MacroUse &use : document->macroUses())
+        said << use.name + "(" + use.arguments.join(", ") + ")";
+    QCOMPARE(said, QStringList("FROM_HEADER(inSource)"));
 }
 
 void tst_cxxfrontendsnapshot::aFilesSymbolsAreItsOwn()

@@ -271,14 +271,28 @@ public:
     QList<CodeModelQueries::WrittenLiteralCall> calls() const { return m_calls; }
 
 protected:
-    bool preVisit(AST *) override
+    bool preVisit(AST *ast) override
     {
         ++m_depth;
+
+        // Where a using directive's reach ends: at the end of the block or
+        // the namespace it stands in, which is the scope to measure against
+        // rather than whatever node happens to hold the directive -- inside
+        // a function that is one declaration statement, and a directive
+        // written there would stop applying before the next line.
+        if (ast->asCompoundStatement() || ast->asNamespace() || ast->asTranslationUnit()
+            || ast->asLinkageBody()) {
+            m_scopeDepths.append(m_depth);
+        }
         return true;
     }
 
     void postVisit(AST *ast) override
     {
+        if (ast->asCompoundStatement() || ast->asNamespace() || ast->asTranslationUnit()
+            || ast->asLinkageBody()) {
+            m_scopeDepths.removeLast();
+        }
         --m_depth;
         m_reachableUnqualified &= m_depth >= m_usingDirectiveDepth;
         if (ast->asFunctionDefinition())
@@ -290,9 +304,9 @@ protected:
         // Which namespace it names does not matter: the functions asked
         // about are named by their scopes, and a directive for another
         // namespace cannot make one of them reachable unqualified.
-        if (ast->name) {
+        if (ast->name && !m_scopeDepths.isEmpty()) {
             m_reachableUnqualified = true;
-            m_usingDirectiveDepth = m_depth - 1;
+            m_usingDirectiveDepth = m_scopeDepths.last();
         }
         return true;
     }
@@ -350,6 +364,7 @@ private:
     QStringList m_unqualified;
     QString m_insideFunction;
     QList<CodeModelQueries::WrittenLiteralCall> m_calls;
+    QList<int> m_scopeDepths;
     int m_depth = 0;
     int m_usingDirectiveDepth = 0;
     bool m_reachableUnqualified = false;
@@ -530,14 +545,24 @@ public:
     Snapshot snapshot;
     WorkingCopy workingCopy;
 #ifdef QTC_WITH_CXX_FRONTEND
-    Internal::CxxFrontendReading model;
+    // In an optional because a reading needs the snapshot and the working
+    // copy to be built, and those are members here rather than arguments.
+    std::optional<Internal::CxxFrontendReading> model;
 #endif
 
     // Parsed again, tree and all: what the model manager leaves in the
     // snapshot has had its source and syntax tree released, and a walk over
     // the tree is what the built-in front end answers some of this with.
+    //
+    // Kept for as long as this object is, so that asking several questions
+    // about one file costs one parse. A file does not change underneath an
+    // object that lives for one question or two.
     Document::Ptr reparse(const FilePath &filePath) const
     {
+        const auto known = reparsed.constFind(filePath);
+        if (known != reparsed.constEnd())
+            return *known;
+
         QByteArray contents;
         if (const auto source = workingCopy.source(filePath))
             contents = *source;
@@ -549,17 +574,22 @@ public:
         const Document::Ptr doc = snapshot.preprocessedDocument(contents, filePath);
         if (doc)
             doc->check();
+        reparsed.insert(filePath, doc);
         return doc;
     }
+
+    mutable QHash<FilePath, Document::Ptr> reparsed;
 };
 
 CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &workingCopy)
+    : d(new Private)
+{
+    d->snapshot = snapshot;
+    d->workingCopy = workingCopy;
 #ifdef QTC_WITH_CXX_FRONTEND
-    : d(new Private{snapshot, workingCopy, {snapshot, workingCopy}})
-#else
-    : d(new Private{snapshot, workingCopy})
+    d->model.emplace(snapshot, workingCopy);
 #endif
-{}
+}
 
 CodeModelQueries::~CodeModelQueries() = default;
 
@@ -571,7 +601,7 @@ WrittenClass CodeModelQueries::classUsingClass(const FilePath &filePath, const Q
     // file this walks -- which is why the depth is applied to the answers
     // rather than to the reading.
     if (const std::optional<QList<CxxFrontendDocument::ClassUsingAClass>> classes
-        = d->model.classesUsing(filePath, className)) {
+        = d->model->classesUsing(filePath, className)) {
         FilePaths reachable{filePath};
         if (maxIncludeDepth > 0) {
             if (const Document::Ptr doc = d->snapshot.document(filePath))
@@ -599,7 +629,7 @@ QList<WrittenFunction> CodeModelQueries::memberFunctionsOf(const WrittenClass &k
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QList<CxxFrontendDocument::MemberFunction>> members
-        = d->model.memberFunctionsIn(klass.filePath, klass.filePath, klass.line, klass.column);
+        = d->model->memberFunctionsIn(klass.filePath, klass.filePath, klass.line, klass.column);
         members && !members->isEmpty()) {
         QList<WrittenFunction> functions;
         for (const CxxFrontendDocument::MemberFunction &member : *members) {
@@ -637,7 +667,7 @@ QList<WrittenClass> CodeModelQueries::classesDeclaredIn(const FilePath &filePath
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
-        = d->model.symbolsIn(filePath);
+        = d->model->symbolsIn(filePath);
         symbols && !symbols->isEmpty()) {
         QList<WrittenClass> classes;
         for (const CxxFrontendDocument::Symbol &symbol : *symbols) {
@@ -667,7 +697,7 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QList<CxxFrontendDocument::Symbol>> symbols
-        = d->model.symbolsIn(filePath);
+        = d->model->symbolsIn(filePath);
         symbols && !symbols->isEmpty()) {
         QList<WrittenDeclaration> declarations;
 
@@ -724,7 +754,7 @@ QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QList<CxxFrontendDocument::MacroUse>> uses
-        = d->model.macroUsesIn(filePath)) {
+        = d->model->macroUsesIn(filePath)) {
         QList<WrittenMacroUse> written;
         for (const CxxFrontendDocument::MacroUse &use : *uses)
             written.append({use.name, use.arguments});
@@ -770,7 +800,7 @@ QList<CodeModelQueries::WrittenLiteralCall> CodeModelQueries::callsWithALiteral(
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QList<CxxFrontendDocument::LiteralCall>> calls
-        = d->model.callsWithALiteralIn(filePath, functionNames)) {
+        = d->model->callsWithALiteralIn(filePath, functionNames)) {
         QList<WrittenLiteralCall> written;
         for (const CxxFrontendDocument::LiteralCall &call : *calls) {
             written.append({call.insideFunction, call.literal, call.line, call.column,
@@ -791,7 +821,7 @@ QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<QStringList> classes
-        = d->model.classesPassedToIn(filePath, functionName)) {
+        = d->model->classesPassedToIn(filePath, functionName)) {
         return *classes;
     }
 #endif
@@ -810,7 +840,7 @@ CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
 
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<CxxFrontendDocument::Place> place
-        = d->model.classNamedIn(filePath, className);
+        = d->model->classNamedIn(filePath, className);
         place && place->line > 0) {
         const FilePath classFile = FilePath::fromUserInput(place->filePath);
 
@@ -821,7 +851,7 @@ CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
         // what it declares is the same either way, and the file that writes
         // it is the one a reader is sent to.
         if (const std::optional<QList<CxxFrontendDocument::MemberFunction>> members
-            = d->model.memberFunctionsIn(classFile, classFile, place->line, place->column)) {
+            = d->model->memberFunctionsIn(classFile, classFile, place->line, place->column)) {
             for (const CxxFrontendDocument::MemberFunction &member : *members) {
                 if (member.access != CxxFrontendDocument::Access::Private
                     || member.qtMethod != CxxFrontendDocument::QtMethod::Slot) {
@@ -833,7 +863,7 @@ CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
             }
         }
         if (const std::optional<QStringList> bases
-            = d->model.basesOfTheClassIn(classFile, place->line, place->column)) {
+            = d->model->basesOfTheClassIn(classFile, place->line, place->column)) {
             answer.baseClasses = *bases;
         }
         return answer;
@@ -880,7 +910,7 @@ DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoring
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<DeclarationToDefine> declaration
-        = d->model.declarationToDefineIn(filePath, line, column);
+        = d->model->declarationToDefineIn(filePath, line, column);
         declaration && declaration->isValid()) {
         return *declaration;
     }
@@ -896,7 +926,7 @@ Link CodeModelQueries::definitionOfFunctionAt(const FilePath &filePath, int line
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<Link> definition
-        = d->model.definitionOfFunctionIn(filePath, line, column);
+        = d->model->definitionOfFunctionIn(filePath, line, column);
         definition && definition->hasValidTarget()) {
         return *definition;
     }
@@ -924,7 +954,7 @@ Link CodeModelQueries::definitionOfWhatIsDeclaredAt(const FilePath &filePath,
     // file and defined in another is a question about the project that it
     // does not take, so that one is left to the front end that does.
     if (const std::optional<Link> definition
-        = d->model.definitionOfFunctionIn(filePath, line, column);
+        = d->model->definitionOfFunctionIn(filePath, line, column);
         definition && definition->hasValidTarget()) {
         return *definition;
     }

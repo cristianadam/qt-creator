@@ -459,8 +459,12 @@ public:
             // than by the main file's id: a file's comments are read while it
             // is being read, and which file is the main one is settled once
             // that is done.
-            if (QString::fromStdString(preprocessor->sourceFileName(token.fileId()))
-                != m_fileName) {
+            // Zero says the token is in no file, which a comment never is;
+            // asking the front end about it reads past the front of its
+            // list of files, an assert being all that stands in the way.
+            if (token.fileId() == 0
+                || QString::fromStdString(preprocessor->sourceFileName(token.fileId()))
+                       != m_fileName) {
                 return;
             }
 
@@ -517,6 +521,16 @@ public:
             : m_out(out)
         {}
 
+        // Which file's uses are worth keeping, and who to ask about a file
+        // id. Told before the first line is read: the uses of a whole
+        // translation unit are tens of thousands of them, and what anybody
+        // wants is the ones this file makes.
+        void readsFrom(cxx::Preprocessor *preprocessor, const QString &fileName)
+        {
+            m_preprocessor = preprocessor;
+            m_fileName = fileName;
+        }
+
         void macroDefined(const cxx::MacroInfo &macro) override
         {
             const QString name = fromStd(macro.name);
@@ -550,14 +564,17 @@ public:
             note(fromStd(use.macro->name), lineOf(*use.macro));
 
             // And what a function-like one was handed, for a reader of what
-            // a macro says rather than of what it expands to. Which file
-            // each use is in is settled afterwards: the main one is not
-            // known while its text is still being read.
-            if (!use.macro->isFunctionLike || use.arguments.empty())
+            // a macro says rather than of what it expands to -- but only
+            // where this file made the use. Told apart by file name rather
+            // than by the main file's id, which is not settled while the
+            // text is still being read; a use in no file at all is nobody's.
+            if (!use.macro->isFunctionLike || use.arguments.empty() || !m_preprocessor
+                || use.range.fileId == 0
+                || fromStd(m_preprocessor->sourceFileName(use.range.fileId)) != m_fileName) {
                 return;
+            }
             Invocation invocation;
             invocation.name = fromStd(use.macro->name);
-            invocation.fileId = int(use.range.fileId);
             for (const cxx::PreprocessorRange &argument : use.arguments)
                 invocation.arguments.append({int(argument.fileId), int(argument.offset),
                                              int(argument.length)});
@@ -610,12 +627,11 @@ public:
             int length = 0;
         };
 
-        // A use of a function-like macro, and where each of the arguments it
-        // was handed stands.
+        // A use of a function-like macro this file made, and where each of
+        // the arguments it was handed stands.
         struct Invocation
         {
             QString name;
-            int fileId = 0;
             QList<Where> arguments;
         };
 
@@ -710,6 +726,8 @@ public:
         QSet<QString> m_ownDefines;
         QString m_includeGuard;
         QList<Invocation> m_invocations;
+        cxx::Preprocessor *m_preprocessor = nullptr;
+        QString m_fileName;
     };
 
     class Diagnostics : public cxx::DiagnosticsClient
@@ -769,6 +787,9 @@ public:
     // The innermost scope written around a position, whether it has a name
     // of its own or not, or null where nothing is written there.
     [[nodiscard]] cxx::ScopeSymbol *innermostScopeAt(int line, int column) const;
+
+    // Which file a file id names, and nothing for the id that means no file.
+    [[nodiscard]] QString nameOfFile(std::uint32_t fileId) const;
 
     // The bases named by whichever class specifier the predicate accepts.
     [[nodiscard]] QStringList basesOfClass(
@@ -1530,7 +1551,7 @@ cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column,
         const std::uint32_t fileId = unit.tokenAt(location).fileId();
         if (inFile.isEmpty())
             return fileId == std::uint32_t(unit.preprocessor()->mainSourceFileId());
-        return fromStd(unit.preprocessor()->sourceFileName(fileId)) == inFile;
+        return nameOfFile(fileId) == inFile;
     };
 
     cxx::SourceLocation endsHere;
@@ -1633,13 +1654,25 @@ QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const
     return found;
 }
 
+QString CxxFrontendDocument::Private::nameOfFile(std::uint32_t fileId) const
+{
+    // Zero is the front end's way of saying that whatever is being asked
+    // about is in no file at all -- a token a macro's body wrote, or one of
+    // the declarations the front end makes for itself. Asking anyway reads
+    // past the front of its list of files: the only thing stopping that is
+    // an assert, which a release build leaves out. Its own token positions
+    // answer nothing for zero, and so does this.
+    if (fileId == 0)
+        return {};
+    return fromStd(unit.preprocessor()->sourceFileName(fileId));
+}
+
 QString CxxFrontendDocument::Private::fileOf(cxx::SourceLocation location) const
 {
     if (!location)
         return fileName;
-    const std::string name
-        = unit.preprocessor()->sourceFileName(unit.tokenAt(location).fileId());
-    return name.empty() ? fileName : fromStd(name);
+    const QString name = nameOfFile(unit.tokenAt(location).fileId());
+    return name.isEmpty() ? fileName : name;
 }
 
 cxx::TokenKind CxxFrontendDocument::Private::classKeyOf(cxx::Symbol *symbol) const
@@ -2112,6 +2145,7 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
 
     cxx::Preprocessor *preprocessor = unit.preprocessor();
     preprocessor->setCanResolveFiles(false);
+    macroCollector.readsFrom(preprocessor, fileName);
     preprocessor->setPreprocessorDelegate(&macroCollector);
     preprocessor->setCommentHandler(&commentCollector);
 
@@ -2288,6 +2322,18 @@ QString CxxFrontendDocument::scopeAt(int line, int column) const
 // what the built-in front end's Token::spell() hands back too.
 static QString betweenTheQuotes(const QString &spelling)
 {
+    // A raw string says where it begins and ends itself -- R"delim( ... )delim"
+    // -- and what stands between is exactly what it says, quotes and
+    // backslashes included, which the walk below would read as punctuation.
+    // Only a prefix may stand in front of the R.
+    const int raw = spelling.indexOf("R\"");
+    if (raw >= 0 && raw <= 2) {
+        const int opens = spelling.indexOf('(', raw);
+        const int closes = spelling.lastIndexOf(')');
+        if (opens > 0 && closes > opens)
+            return spelling.mid(opens + 1, closes - opens - 1);
+    }
+
     QString said;
     bool inside = false;
     for (int i = 0; i < spelling.size(); ++i) {
@@ -2315,22 +2361,17 @@ QList<CxxFrontendDocument::MacroUse> CxxFrontendDocument::macroUses() const
         return uses;
 
     for (const auto &invocation : d->macroCollector.invocations()) {
-        // Told apart by file name rather than by the main file's id: a use is
-        // reported while the file is being read, and which one is the main
-        // file is settled once that is done.
-        if (fromStd(preprocessor->sourceFileName(std::uint32_t(invocation.fileId)))
-            != d->fileName) {
-            continue;
-        }
-
         MacroUse use;
         use.name = invocation.name;
         for (const auto &argument : invocation.arguments) {
-            const std::string &source = preprocessor->source(std::uint32_t(argument.fileId));
-            if (argument.offset < 0 || argument.length < 0
-                || std::size_t(argument.offset + argument.length) > source.size()) {
+            // Nothing to read where the argument is in no file -- one a
+            // macro's own body wrote -- and asking anyway would read past
+            // the front of the front end's list of files.
+            if (argument.fileId <= 0 || argument.offset < 0 || argument.length < 0)
                 continue;
-            }
+            const std::string &source = preprocessor->source(std::uint32_t(argument.fileId));
+            if (std::size_t(argument.offset + argument.length) > source.size())
+                continue;
             use.arguments.append(fromStd(source.substr(std::size_t(argument.offset),
                                                        std::size_t(argument.length)))
                                      .trimmed());

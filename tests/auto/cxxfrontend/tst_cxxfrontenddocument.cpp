@@ -90,9 +90,9 @@ QStringList builtIn(const QByteArray &source, const QList<Position> &positions)
         const std::function<void(Scope *)> walk = [&](Scope *scope) {
             for (int i = 0, count = scope->memberCount(); i < count; ++i) {
                 CPlusPlus::Symbol *member = scope->memberAt(i);
-                if (member->line() < unsigned(position.line)
-                    || (member->line() == unsigned(position.line)
-                        && member->column() <= unsigned(position.column))) {
+                if (member->line() < position.line
+                    || (member->line() == position.line
+                        && member->column() <= position.column)) {
                     if (!member->asBlock())
                         last = member;
                 }
@@ -1332,7 +1332,8 @@ void tst_cxxfrontenddocument::theCallsWithALiteralInside()
         "    addRow(\"format %1\", 2);\n"                       // 11
         "    elsewhere(\"not a tag\");\n"                       // 12
         "    newRow(nothing());\n"                                // 13
-        "}\n",                                                   // 14
+        "    newRow(R\"(has \"quotes\" in it)\");\n"                // 14
+        "}\n",                                                   // 15
         "<stdin>");
 
     QStringList said;
@@ -1352,7 +1353,8 @@ void tst_cxxfrontenddocument::theCallsWithALiteralInside()
     QCOMPARE(said.join("\n"),
              QString("first in tst_Thing_data at 9:5\n"
                      "unqualified in tst_Thing_data at 10:5\n"
-                     "format %1 in tst_Thing_data at 11:5 (more follows)"));
+                     "format %1 in tst_Thing_data at 11:5 (more follows)\n"
+                     "has \"quotes\" in it in tst_Thing_data at 14:5"));
 }
 
 // The function-like macro uses a file makes and what each was handed, which

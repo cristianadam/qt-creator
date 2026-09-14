@@ -643,10 +643,11 @@ public:
     // and what the editor puts above the text.
     //
     // \a fromLine and \a toLine, where asked for, are the lines the function
-    // was written between -- the first line of what opened its scope and the
-    // line of what closed it, both counted from one. Whoever asks wants to
-    // know whether a line is still inside this function; both are left alone
-    // where nothing is written there to point at.
+    // was written between: the line its own name is on, which is what a
+    // reader means by a function's first line, and the line of what closed
+    // its scope. Both counted from one, and both left alone where nothing
+    // is written there to point at -- what whoever asks wants to know is
+    // whether some other line is still inside this function.
     QString functionAt(int line, int column, int *fromLine = nullptr,
                        int *toLine = nullptr) const;
 
