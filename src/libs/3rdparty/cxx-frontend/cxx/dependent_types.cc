@@ -219,10 +219,31 @@ struct IsDependent {
 
   [[nodiscard]] auto isDependent(const Type* type) -> bool {
     if (!type) return false;
-    if (std::ranges::contains(typesUnderExamination, type)) return false;
+    if (std::ranges::contains(typesUnderExamination, type)) {
+      // A cycle, ended by saying this type is not dependent. That answer is
+      // about where the walk began, not about the type, so nothing worked out
+      // while it was given may be remembered.
+      unit->noteTypeDependencyCycleBroken();
+      return false;
+    }
+
+    if (const auto known = unit->cachedTypeDependency(type)) return *known;
+
+    const auto cyclesBefore = unit->typeDependencyCyclesBroken();
+
     typesUnderExamination.push_back(type);
     const auto dependent = visit(*this, type);
     typesUnderExamination.pop_back();
+
+    // Remembered only where the walk ended no cycle: whether a type is
+    // dependent is settled by the template parameters, enclosing scopes and
+    // template arguments its symbol was declared with, all of which are in
+    // place before anything can name the type. The count is the unit's rather
+    // than this object's, because a walk reaches code that asks again through
+    // the free functions, with an object of its own.
+    if (unit->typeDependencyCyclesBroken() == cyclesBefore)
+      unit->cacheTypeDependency(type, dependent);
+
     return dependent;
   }
 

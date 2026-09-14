@@ -281,6 +281,19 @@ void TranslationUnit::cacheConstraintSatisfaction(
   cache.lastIndex = cache.entries.size() - 1;
 }
 
+auto TranslationUnit::cachedTypeDependency(const Type* type) const
+    -> std::optional<bool> {
+  if (!type) return std::nullopt;
+  auto it = typeDependencies_.find(type);
+  if (it == typeDependencies_.end()) return std::nullopt;
+  return it->second;
+}
+
+void TranslationUnit::cacheTypeDependency(const Type* type, bool dependent) {
+  if (!type) return;
+  typeDependencies_.insert_or_assign(type, dependent);
+}
+
 auto TranslationUnit::takePendingMemberInstantiations()
     -> std::vector<ClassSymbol*> {
   auto pending = std::move(pendingMemberInstantiations_);

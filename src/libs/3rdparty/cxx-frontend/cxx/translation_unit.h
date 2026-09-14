@@ -32,6 +32,7 @@
 #include <cxx/token.h>
 #include <cxx/type_traits.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -78,6 +79,28 @@ class TranslationUnit {
                                    std::vector<ExpressionAST*> constraints,
                                    std::vector<TemplateArgument> arguments,
                                    bool value);
+
+  // Whether a type is dependent is a property of the type -- of the template
+  // parameters, the enclosing scopes and the template arguments the symbol it
+  // names was declared with -- so it is worked out once per unit and
+  // remembered. Only the answer to a walk nothing encloses is: inside one, a
+  // type already under examination answers "not dependent" so that a cycle
+  // ends, and an answer reached under that can depend on where the walk
+  // began.
+  [[nodiscard]] auto cachedTypeDependency(const Type* type) const
+      -> std::optional<bool>;
+
+  void cacheTypeDependency(const Type* type, bool dependent);
+
+  // How many times a walk has answered "not dependent" for a type it was
+  // already examining, which is how a cycle is made to end. An answer worked
+  // out without any of those belongs to the type; one worked out with them
+  // belongs to the walk that produced it, and is not remembered.
+  [[nodiscard]] auto typeDependencyCyclesBroken() const -> std::uint64_t {
+    return typeDependencyCyclesBroken_;
+  }
+
+  void noteTypeDependencyCycleBroken() { ++typeDependencyCyclesBroken_; }
 
   void addPendingBodyCompletion(FunctionSymbol* function);
   [[nodiscard]] auto takePendingBodyCompletions()
@@ -238,6 +261,8 @@ class TranslationUnit {
   std::vector<FunctionSymbol*> pendingBodyCompletions_;
   std::unordered_map<Symbol*, ConstraintSatisfactionCache>
       constraintSatisfactionCaches_;
+  std::unordered_map<const Type*, bool> typeDependencies_;
+  std::uint64_t typeDependencyCyclesBroken_ = 0;
   int templateInstantiationDepth_ = 0;
   bool potentiallyEvaluated_ = true;
 };
