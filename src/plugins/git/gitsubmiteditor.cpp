@@ -252,6 +252,9 @@ void GitSubmitEditor::updateFileModel()
             w->setEnabled(false);
         }
         w->setUpdateInProgress(false);
+        QTimer::singleShot(0, this, [this] {
+            gitClient().continueCommandIfNeeded(m_workingDirectory);
+        });
     };
     const auto onTreeSetup = [](QTaskTree &taskTree) {
         auto progress = new TaskProgress(&taskTree);

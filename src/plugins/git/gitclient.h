@@ -117,6 +117,8 @@ class GITSHARED_EXPORT GitClient : public VcsBase::VcsBaseClientImpl
 public:
     enum CommandInProgress { NoCommand, Revert, CherryPick,
                              Rebase, Merge, RebaseMerge };
+    enum class RebasePauseReason { None, Conflicts, EmptyCommit };
+    enum class ContinueCommandMode { Automatic, ContinueOnly, SkipOnly, SkipIfNoChanges };
     enum GitKLaunchTrial { Bin, ParentOfBin, SystemPath, None };
 
     class StashInfo
@@ -396,7 +398,15 @@ public:
     CommandInProgress checkCommandInProgress(const Utils::FilePath &workingDirectory) const;
     QString commandInProgressDescription(const Utils::FilePath &workingDirectory) const;
 
-    void continueCommandIfNeeded(const Utils::FilePath &workingDirectory, bool allowContinue = true);
+    void continueCommandIfNeeded(const Utils::FilePath &workingDirectory,
+                                 ContinueCommandMode continueMode = ContinueCommandMode::Automatic,
+                                 RebasePauseReason pauseReason = RebasePauseReason::None);
+    static RebasePauseReason rebasePauseReason(const QString &output);
+    bool isRebaseInProgress(const Utils::FilePath &workingDirectory) const;
+    void updateContinueInfoBar(const Utils::FilePath &workingDirectory);
+    void setContinueInfoBarActiveRepository(const Utils::FilePath &repository);
+    void clearContinueInfoBar(const Utils::FilePath &workingDirectory = {});
+    Utils::FilePath continueInfoBarRepository() const;
 
     void launchGitK(const Utils::FilePath &workingDirectory, const QString &fileName);
     void launchGitK(const Utils::FilePath &workingDirectory) { launchGitK(workingDirectory, QString()); }
@@ -494,22 +504,26 @@ private:
     void updateModificationInfos();
     void updateNextModificationInfo();
 
-    enum ContinueCommandMode {
-        ContinueOnly,
-        SkipOnly,
-        SkipIfNoChanges
-    };
-
     void continuePreviousGitCommand(const Utils::FilePath &workingDirectory, const QString &msgBoxTitle,
                                     QString msgBoxText, const QString &buttonName,
-                                    const QString &gitCommand, ContinueCommandMode continueMode);
+                                    const QString &gitCommand, ContinueCommandMode continueMode,
+                                    RebasePauseReason pauseReason = RebasePauseReason::None);
+    RebasePauseReason pauseReasonForRepository(
+        const Utils::FilePath &workingDirectory) const;
+    void showContinueInfoBar(const Utils::FilePath &workingDirectory,
+                           ContinueCommandMode continueMode,
+                           RebasePauseReason pauseReason);
 
     mutable QMap<Utils::FilePath, Utils::FilePath> m_gitExecutableCache;
 
     QString m_gitQtcEditor;
     QMap<Utils::FilePath, StashInfo> m_stashInfo;
     QSet<Utils::FilePath> m_monitoredPaths;
+    QSet<Utils::FilePath> m_rebaseCommandsInProgress;
     QQueue<Utils::FilePath> m_statusUpdateQueue;
+    Utils::FilePath m_continueInfoBarRepository;
+    Utils::FilePath m_continueInfoBarActiveRepository;
+    Utils::FilePath m_continueInfoBarDismissedRepository;
     QTimer m_timer;
     QString m_diffCommit;
     Utils::FilePaths m_updatedSubmodules;

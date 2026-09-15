@@ -1531,6 +1531,7 @@ void GitPluginPrivate::startCommit(CommitType commitType)
     }
     m_commitMessageFileName = saver.filePath();
     openSubmitEditor(m_commitMessageFileName, data);
+    gitClient().continueCommandIfNeeded(m_submitRepository);
 }
 
 void GitPluginPrivate::instantBlameOnce()
@@ -1924,8 +1925,16 @@ void GitPluginPrivate::updateActions(VersionControlBase::ActionState as)
 void GitPluginPrivate::updateContinueAndAbortCommands()
 {
     if (currentState().hasTopLevel()) {
+        const FilePath topLevel = currentState().topLevel();
+        const FilePath infoBarRepository = gitClient().continueInfoBarRepository();
+        const bool switchedRepository = !infoBarRepository.isEmpty()
+                                        && !infoBarRepository.isSameFile(topLevel);
+        if (switchedRepository)
+            gitClient().clearContinueInfoBar();
+        gitClient().setContinueInfoBarActiveRepository(topLevel);
         GitClient::CommandInProgress gitCommandInProgress =
-                gitClient().checkCommandInProgress(currentState().topLevel());
+                gitClient().checkCommandInProgress(topLevel);
+        gitClient().updateContinueInfoBar(topLevel);
 
         m_mergeToolAction->setVisible(gitCommandInProgress != GitClient::NoCommand);
         m_abortMergeAction->setVisible(gitCommandInProgress == GitClient::Merge);
@@ -1942,6 +1951,8 @@ void GitPluginPrivate::updateContinueAndAbortCommands()
         m_fixupCommitAction->setEnabled(gitCommandInProgress == GitClient::NoCommand);
         m_interactiveRebaseAction->setEnabled(gitCommandInProgress == GitClient::NoCommand);
     } else {
+        gitClient().setContinueInfoBarActiveRepository({});
+        gitClient().clearContinueInfoBar();
         m_mergeToolAction->setVisible(false);
         m_abortMergeAction->setVisible(false);
         m_abortCherryPickAction->setVisible(false);
@@ -2463,6 +2474,9 @@ private slots:
     void testInlineDiffConflictedFile();
     void testConflictedFileInTextEditor();
     void testGraphModelRepositorySwitch();
+    void testRebasePauseReason_data();
+    void testRebasePauseReason();
+    void testContinueInfoBar();
     void testSubmitMessageSpellCheck();
     void testDiffDescriptionEditor();
 };
@@ -3180,6 +3194,330 @@ void repeatInstantBlame()
 {
     dd->m_instantBlame.repeat();
 }
+
+#ifdef WITH_TESTS
+
+void GitTest::testRebasePauseReason_data()
+{
+    QTest::addColumn<QString>("output");
+    QTest::addColumn<int>("expectedReason");
+
+    QTest::newRow("conflict") << QString("CONFLICT (content): Merge conflict in file.txt")
+                               << static_cast<int>(GitClient::RebasePauseReason::Conflicts);
+    QTest::newRow("could-not-apply") << QString("error: could not apply abc123... change")
+                                     << static_cast<int>(GitClient::RebasePauseReason::Conflicts);
+    QTest::newRow("empty-cherry-pick")
+        << QString("The previous cherry-pick is now empty, possibly due to conflict resolution.")
+        << static_cast<int>(GitClient::RebasePauseReason::EmptyCommit);
+    QTest::newRow("empty-patch") << QString("Patch is empty.")
+                                  << static_cast<int>(GitClient::RebasePauseReason::EmptyCommit);
+    const QStringList conflictStatuses = {"DD", "AU", "UD", "UA", "DU", "AA", "UU"};
+    for (const QString &status : conflictStatuses)
+        QTest::newRow((status + " conflict").toLatin1())
+            << QString(status + " file.txt")
+            << static_cast<int>(GitClient::RebasePauseReason::Conflicts);
+    QTest::newRow("other-output") << QString("fatal: cannot continue")
+                                   << static_cast<int>(GitClient::RebasePauseReason::None);
+}
+
+void GitTest::testRebasePauseReason()
+{
+    QFETCH(QString, output);
+    QFETCH(int, expectedReason);
+    QCOMPARE(static_cast<int>(GitClient::rebasePauseReason(output)), expectedReason);
+}
+
+void GitTest::testContinueInfoBar()
+{
+    const auto infoBar = Core::ICore::infoBar();
+    const Id infoBarId("Git.ContinueInfoBar");
+    const bool bannersSuppressed = InfoBar::allSuppressed();
+    InfoBar::suppressAll(false);
+    const auto clearInfoBar = qScopeGuard([&] {
+        InfoBar::suppressAll(bannersSuppressed);
+        gitClient().setContinueInfoBarActiveRepository({});
+        gitClient().clearContinueInfoBar();
+    });
+    const auto runGit = [](const FilePath &directory, const QStringList &arguments) {
+        return gitClient().vcsSynchronousExec(directory, arguments).result()
+               == ProcessResult::FinishedWithSuccess;
+    };
+
+    QTemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+    const FilePath repository = FilePath::fromString(temporaryDir.path());
+    gitClient().setContinueInfoBarActiveRepository(repository);
+    QTemporaryDir secondTemporaryDir;
+    QVERIFY(secondTemporaryDir.isValid());
+    const FilePath secondRepository = FilePath::fromString(secondTemporaryDir.path());
+    QVERIFY(runGit(repository, {"init", "."}));
+    QVERIFY(runGit(secondRepository, {"init", "."}));
+    QVERIFY(runGit(repository, {"config", "user.email", "test@test"}));
+    QVERIFY(runGit(repository, {"config", "user.name", "test"}));
+    QVERIFY(runGit(repository, {"config", "commit.gpgsign", "false"}));
+    QVERIFY((repository / "file.txt").writeFileContents("content\n"));
+    QVERIFY((repository / "subdirectory").ensureWritableDir());
+    QVERIFY(runGit(repository, {"add", "file.txt"}));
+    QVERIFY(runGit(repository, {"commit", "-m", "initial"}));
+    QVERIFY((repository / "empty.txt").writeFileContents("empty\n"));
+    QVERIFY(runGit(repository, {"add", "empty.txt"}));
+    QVERIFY(runGit(repository, {"commit", "-m", "second"}));
+
+    const auto verifyInfoBar = [&](const FilePath &workingDirectory,
+                                   const QString &expectedAction,
+                                   const QString &expectedText,
+                                   const QString &expectedDetails,
+                                   GitClient::ContinueCommandMode continueMode
+                                       = GitClient::ContinueCommandMode::Automatic,
+                                   GitClient::RebasePauseReason pauseReason
+                                       = GitClient::RebasePauseReason::None) {
+        gitClient().continueCommandIfNeeded(workingDirectory, continueMode, pauseReason);
+
+        const QList<InfoBarEntry> entries = infoBar->entries();
+        const InfoBarEntry *entry = nullptr;
+        for (const InfoBarEntry &candidate : entries) {
+            if (candidate.id() == infoBarId) {
+                entry = &candidate;
+                break;
+            }
+        }
+        QVERIFY(entry);
+        QVERIFY(entry->text().contains(expectedText));
+        QCOMPARE(gitClient().continueInfoBarRepository(), repository);
+        QVERIFY(entry->text().contains(
+            gitClient().continueInfoBarRepository().toUserOutput()));
+        QCOMPARE(entry->buttons().size(), 2);
+        QVERIFY(entry->buttons().first().callback);
+        QVERIFY(entry->buttons().last().callback);
+        QCOMPARE(entry->buttons().first().text, expectedAction);
+        QCOMPARE(entry->buttons().last().text, Tr::tr("Abort Rebase"));
+
+        if (!expectedDetails.isEmpty()) {
+            QVERIFY(entry->detailsWidgetCreator());
+            const std::unique_ptr<QWidget> details(entry->detailsWidgetCreator()());
+            const auto label = qobject_cast<QLabel *>(details.get());
+            QVERIFY(label);
+            QCOMPARE(label->text(), expectedDetails);
+        } else {
+            QVERIFY(!entry->detailsWidgetCreator());
+        }
+
+        infoBar->removeInfo(infoBarId);
+    };
+
+    const FilePath rebaseMerge = repository / ".git/rebase-merge";
+    QVERIFY(rebaseMerge.ensureWritableDir());
+    QVERIFY((rebaseMerge / "interactive").writeFileContents({}));
+    QVERIFY((rebaseMerge / "done").writeFileContents("  pick abc First commit\r\n"));
+    QVERIFY((rebaseMerge / "git-rebase-todo")
+                .writeFileContents("pick def Next commit\r\n# ignored comment\r\n"));
+    QCOMPARE(gitClient().checkCommandInProgress(repository), GitClient::RebaseMerge);
+    QString rebaseHead;
+    QVERIFY(gitClient().synchronousRevParseCmd(repository, "HEAD~1", &rebaseHead));
+    QVERIFY(runGit(repository, {"update-ref", "REBASE_HEAD", rebaseHead}));
+    QVERIFY((rebaseMerge / "stopped-sha").writeFileContents(rebaseHead.toUtf8()));
+    const QString rebaseDetails = Tr::tr("Rebase step: 1 of 2\n"
+                                         "Current step: pick abc First commit\n"
+                                         "Following steps:\n"
+                                         "pick def Next commit");
+    verifyInfoBar(repository / "subdirectory", Tr::tr("Continue Rebase"),
+                  Tr::tr("Rebase in"), rebaseDetails);
+
+    QVERIFY((rebaseMerge / "git-rebase-todo")
+                .writeFileContents("pick def Next commit\n"
+                                   "pick ghi Third commit\n"
+                                   "pick jkl Fourth commit\n"
+                                   "pick mno Fifth commit\n"
+                                   "pick pqr Sixth commit\n"
+                                   "pick stu Seventh commit\n"
+                                   "pick vwx Eighth commit\n"
+                                   "pick yz0 Ninth commit\n"
+                                   "pick 123 Tenth commit\n"));
+    gitClient().updateContinueInfoBar(repository);
+    const auto truncatedEntries = infoBar->entries();
+    const auto truncatedEntry = std::find_if(
+        truncatedEntries.cbegin(), truncatedEntries.cend(),
+        [infoBarId](const InfoBarEntry &candidate) { return candidate.id() == infoBarId; });
+    QVERIFY(truncatedEntry != truncatedEntries.cend());
+    QVERIFY(truncatedEntry->detailsWidgetCreator());
+    const std::unique_ptr<QWidget> truncatedDetails(
+        truncatedEntry->detailsWidgetCreator()());
+    const auto truncatedLabel = qobject_cast<QLabel *>(truncatedDetails.get());
+    QVERIFY(truncatedLabel);
+    QVERIFY(truncatedLabel->text().contains(Tr::tr("... and %n more", nullptr, 1)));
+    infoBar->removeInfo(infoBarId);
+    QVERIFY((rebaseMerge / "git-rebase-todo")
+                .writeFileContents("pick def Next commit\r\n# ignored comment\r\n"));
+    verifyInfoBar(repository, Tr::tr("Skip Rebase"),
+                  Tr::tr("may already have been applied"), rebaseDetails,
+                  GitClient::ContinueCommandMode::Automatic,
+                  GitClient::RebasePauseReason::EmptyCommit);
+
+    // An edit stop is restored as Continue, while an empty replay is restored as Skip.
+    QVERIFY((rebaseMerge / "amend").writeFileContents({}));
+    gitClient().updateContinueInfoBar(repository);
+    const auto verifyAction = [&](const QString &action, const QString &text) {
+        const auto restoredEntries = infoBar->entries();
+        const auto restoredEntry = std::find_if(
+            restoredEntries.cbegin(), restoredEntries.cend(),
+            [infoBarId](const InfoBarEntry &candidate) { return candidate.id() == infoBarId; });
+        QVERIFY(restoredEntry != restoredEntries.cend());
+        QCOMPARE(restoredEntry->buttons().first().text, action);
+        QVERIFY(restoredEntry->text().contains(text));
+        infoBar->removeInfo(infoBarId);
+    };
+    verifyAction(Tr::tr("Continue Rebase"), Tr::tr("Continue the rebase"));
+    QVERIFY((rebaseMerge / "amend").removeFile());
+    gitClient().updateContinueInfoBar(repository);
+    verifyAction(Tr::tr("Skip Rebase"), Tr::tr("may already have been applied"));
+
+    // Explicitly dismissing the bar keeps it dismissed during reconciliation.
+    gitClient().continueCommandIfNeeded(repository);
+    const auto dismissEntries = infoBar->entries();
+    const auto dismissEntry = std::find_if(
+        dismissEntries.cbegin(), dismissEntries.cend(),
+        [infoBarId](const InfoBarEntry &candidate) { return candidate.id() == infoBarId; });
+    QVERIFY(dismissEntry != dismissEntries.cend());
+    const auto cancelCallback = dismissEntry->cancelButtonCallback();
+    QVERIFY(cancelCallback);
+    infoBar->removeInfo(infoBarId);
+    cancelCallback();
+    gitClient().updateContinueInfoBar(repository);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    gitClient().continueCommandIfNeeded(repository);
+    QVERIFY(infoBar->containsInfo(infoBarId));
+
+    // Delayed callbacks from another repository must neither replace nor clear the active bar.
+    gitClient().setContinueInfoBarActiveRepository(repository);
+    QVERIFY((secondRepository / ".git/rebase-merge").ensureWritableDir());
+    gitClient().continueCommandIfNeeded(repository);
+    gitClient().continueCommandIfNeeded(secondRepository);
+    gitClient().clearContinueInfoBar(secondRepository);
+    QCOMPARE(gitClient().continueInfoBarRepository(), repository);
+    const auto entries = infoBar->entries();
+    const auto entry = std::find_if(entries.cbegin(), entries.cend(),
+                                    [infoBarId](const InfoBarEntry &candidate) {
+                                        return candidate.id() == infoBarId;
+                                    });
+    QVERIFY(entry != entries.cend());
+    QVERIFY(entry->text().contains(repository.toUserOutput()));
+    QVERIFY((secondRepository / ".git/rebase-merge").removeRecursively());
+
+    // Reconcile stored state with the actual entry and with externally completed rebases.
+    infoBar->removeInfo(infoBarId);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    gitClient().updateContinueInfoBar(repository);
+    QVERIFY(infoBar->containsInfo(infoBarId));
+    QVERIFY(rebaseMerge.removeRecursively());
+    gitClient().updateContinueInfoBar(repository);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    QVERIFY(gitClient().continueInfoBarRepository().isEmpty());
+
+    const FilePath rebaseApply = repository / ".git/rebase-apply";
+    QVERIFY(rebaseApply.ensureWritableDir());
+    verifyInfoBar(repository, Tr::tr("Skip Rebase"), Tr::tr("No changes found"), {});
+
+    // git am uses rebase-apply too, but must not get rebase actions.
+    gitClient().clearContinueInfoBar();
+    QVERIFY((rebaseApply / "applying").writeFileContents({}));
+    QVERIFY(!gitClient().isRebaseInProgress(repository));
+    gitClient().continueCommandIfNeeded(repository);
+    gitClient().updateContinueInfoBar(repository);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    QVERIFY(gitClient().continueInfoBarRepository().isEmpty());
+    QVERIFY((rebaseApply / "applying").removeFile());
+
+    verifyInfoBar(repository, Tr::tr("Continue Rebase"),
+                  Tr::tr("Resolve the merge conflicts"), {},
+                  GitClient::ContinueCommandMode::Automatic,
+                  GitClient::RebasePauseReason::Conflicts);
+    verifyInfoBar(repository, Tr::tr("Skip Rebase"),
+                  Tr::tr("may already have been applied"), {},
+                  GitClient::ContinueCommandMode::SkipOnly,
+                  GitClient::RebasePauseReason::EmptyCommit);
+
+    // Exercise conflict detection through git status and complete a real paused
+    // rebase through the Continue action.
+    const QString baseBranch = gitClient()
+                                    .vcsSynchronousExec(repository, {"symbolic-ref", "--short", "HEAD"})
+                                    .cleanedStdOut()
+                                    .trimmed();
+    QVERIFY(!baseBranch.isEmpty());
+    QVERIFY((rebaseApply.removeRecursively()));
+    QVERIFY((repository / "file.txt").writeFileContents("topic\n"));
+    QVERIFY(runGit(repository, {"checkout", "-b", "rebase-topic"}));
+    QVERIFY(runGit(repository, {"add", "file.txt"}));
+    QVERIFY(runGit(repository, {"commit", "-m", "topic change"}));
+    QVERIFY(runGit(repository, {"checkout", baseBranch}));
+    QVERIFY((repository / "file.txt").writeFileContents("base change\n"));
+    QVERIFY(runGit(repository, {"add", "file.txt"}));
+    QVERIFY(runGit(repository, {"commit", "-m", "base change"}));
+    QVERIFY(runGit(repository, {"checkout", "rebase-topic"}));
+    QVERIFY(!runGit(repository, {"rebase", baseBranch}));
+    QCOMPARE(gitClient().checkCommandInProgress(repository), GitClient::RebaseMerge);
+    gitClient().updateContinueInfoBar(repository);
+    const auto conflictEntries = infoBar->entries();
+    const auto conflictEntry = std::find_if(
+        conflictEntries.cbegin(), conflictEntries.cend(),
+        [infoBarId](const InfoBarEntry &candidate) { return candidate.id() == infoBarId; });
+    QVERIFY(conflictEntry != conflictEntries.cend());
+    QCOMPARE(conflictEntry->buttons().first().text, Tr::tr("Continue Rebase"));
+    QVERIFY(conflictEntry->text().contains(Tr::tr("Resolve the merge conflicts")));
+    QVERIFY((repository / "file.txt").writeFileContents("resolved\n"));
+    QVERIFY(runGit(repository, {"add", "file.txt"}));
+    QVERIFY(runGit(repository, {"commit", "--no-edit"}));
+    infoBar->triggerButton(infoBarId, conflictEntry->buttons().first());
+    QTRY_VERIFY(gitClient().checkCommandInProgress(repository) == GitClient::NoCommand);
+    gitClient().updateContinueInfoBar(repository);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+
+    // A real git am conflict uses the same rebase-apply directory, but must not
+    // offer rebase actions.
+    QVERIFY(runGit(secondRepository, {"config", "user.email", "test@test"}));
+    QVERIFY(runGit(secondRepository, {"config", "user.name", "test"}));
+    QVERIFY(runGit(secondRepository, {"config", "commit.gpgsign", "false"}));
+    QVERIFY((secondRepository / "file.txt").writeFileContents("base\n"));
+    QVERIFY(runGit(secondRepository, {"add", "file.txt"}));
+    QVERIFY(runGit(secondRepository, {"commit", "-m", "am base"}));
+    QVERIFY((secondRepository / "file.txt").writeFileContents("topic\n"));
+    QVERIFY(runGit(secondRepository, {"add", "file.txt"}));
+    QVERIFY(runGit(secondRepository, {"commit", "-m", "am topic"}));
+    const FilePath patchFile = FilePath::fromString(secondTemporaryDir.path()) / "am.patch";
+    QVERIFY(runGit(secondRepository, {"format-patch", "-1", "--output", patchFile.path()}));
+    QVERIFY(patchFile.exists());
+    QVERIFY(runGit(secondRepository, {"reset", "--hard", "HEAD~1"}));
+    QVERIFY((secondRepository / "file.txt").writeFileContents("divergent\n"));
+    QVERIFY(runGit(secondRepository, {"add", "file.txt"}));
+    QVERIFY(runGit(secondRepository, {"commit", "-m", "am divergent"}));
+    QVERIFY(!runGit(secondRepository, {"am", patchFile.path()}));
+    QVERIFY((secondRepository / ".git/rebase-apply/applying").exists());
+    QVERIFY(!gitClient().isRebaseInProgress(secondRepository));
+    gitClient().clearContinueInfoBar();
+    gitClient().updateContinueInfoBar(secondRepository);
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    QVERIFY(runGit(secondRepository, {"am", "--abort"}));
+
+    // Aborting clears the guide and must not leave stale rebase guidance behind.
+    QVERIFY(rebaseApply.ensureWritableDir());
+    gitClient().continueCommandIfNeeded(repository,
+                                        GitClient::ContinueCommandMode::SkipOnly,
+                                        GitClient::RebasePauseReason::EmptyCommit);
+    const auto currentEntries = infoBar->entries();
+    const auto currentEntry = std::find_if(currentEntries.cbegin(), currentEntries.cend(),
+                                           [infoBarId](const InfoBarEntry &candidate) {
+                                               return candidate.id() == infoBarId;
+                                           });
+    QVERIFY(currentEntry != currentEntries.cend());
+    infoBar->triggerButton(infoBarId, currentEntry->buttons().last());
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+
+    gitClient().clearContinueInfoBar();
+    gitClient().setContinueInfoBarActiveRepository({});
+    QVERIFY(!infoBar->containsInfo(infoBarId));
+    QVERIFY(gitClient().continueInfoBarRepository().isEmpty());
+}
+
+#endif
 
 } // Git::Internal
 

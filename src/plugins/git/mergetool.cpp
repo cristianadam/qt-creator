@@ -271,7 +271,9 @@ void startMergeTool(const FilePath &workingDirectory, const QStringList &files)
             VcsOutputWindow::appendMessage(workingDirectory, process.exitMessage());
         else
             VcsOutputWindow::appendError(workingDirectory, process.exitMessage());
-        gitClient().continueCommandIfNeeded(workingDirectory, success);
+        gitClient().continueCommandIfNeeded(workingDirectory,
+                                            success ? GitClient::ContinueCommandMode::ContinueOnly
+                                                    : GitClient::ContinueCommandMode::SkipOnly);
         emitRepositoryChanged(workingDirectory);
     };
 

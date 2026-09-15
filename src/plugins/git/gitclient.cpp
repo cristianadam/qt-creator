@@ -38,6 +38,7 @@
 #include <utils/environment.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
+#include <utils/infobar.h>
 #include <utils/mimeutils.h>
 #include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
@@ -62,6 +63,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -93,6 +95,73 @@ using namespace Utils;
 using namespace VcsBase;
 
 namespace Git::Internal {
+
+static const Id continueInfoBarId("Git.ContinueInfoBar");
+
+GitClient::RebasePauseReason GitClient::rebasePauseReason(const QString &output)
+{
+    if (output.contains("previous cherry-pick is now empty", Qt::CaseInsensitive)
+        || output.contains("Patch is empty", Qt::CaseInsensitive)) {
+        return RebasePauseReason::EmptyCommit;
+    }
+    if (output.contains("CONFLICT", Qt::CaseInsensitive)
+        || output.contains("could not apply", Qt::CaseInsensitive)
+        || Utils::contains(output.split('\n'), [](const QString &line) {
+               if (line.size() < 2)
+                   return false;
+               const QString status = line.left(2);
+               return status == "DD" || status == "AU" || status == "UD"
+                      || status == "UA" || status == "DU" || status == "AA"
+                      || status == "UU";
+           })) {
+        return RebasePauseReason::Conflicts;
+    }
+    return RebasePauseReason::None;
+}
+
+static GitClient::RebasePauseReason rebasePauseReasonFromResult(const CommandResult &result)
+{
+    if (result.result() == ProcessResult::FinishedWithSuccess)
+        return GitClient::RebasePauseReason::None;
+
+    return GitClient::rebasePauseReason(result.cleanedStdOut() + '\n' + result.cleanedStdErr());
+}
+
+struct RebaseTodoFiles
+{
+    QStringList done;
+    QStringList todo;
+};
+
+static QStringList readRebaseTodoFile(const FilePath &file)
+{
+    const Result<QByteArray> contents = file.fileContents();
+    if (!contents)
+        return {};
+
+    const QStringList lines = QString::fromUtf8(*contents).split('\n', Qt::SkipEmptyParts);
+    const QStringList trimmedLines = Utils::transform(lines, [](const QString &line) {
+        return line.trimmed();
+    });
+    return Utils::filtered(trimmedLines, [](const QString &line) {
+        return !line.isEmpty() && !line.startsWith('#');
+    });
+}
+
+static RebaseTodoFiles readRebaseTodoFiles(const FilePath &gitDir)
+{
+    FilePath stateDirectory;
+    if (gitDir.pathAppended("rebase-apply").exists())
+        stateDirectory = gitDir.pathAppended("rebase-apply");
+    else if (gitDir.pathAppended("rebase-merge").exists())
+        stateDirectory = gitDir.pathAppended("rebase-merge");
+
+    if (stateDirectory.isEmpty())
+        return {};
+
+    return {readRebaseTodoFile(stateDirectory / "done"),
+            readRebaseTodoFile(stateDirectory / "git-rebase-todo")};
+}
 
 static QString branchesDisplay(const QString &prefix, QStringList *branches, bool *first)
 {
@@ -3148,22 +3217,45 @@ GitClient::CommandInProgress GitClient::checkCommandInProgress(const FilePath &w
     return NoCommand;
 }
 
-void GitClient::continueCommandIfNeeded(const FilePath &workingDirectory, bool allowContinue)
+bool GitClient::isRebaseInProgress(const FilePath &workingDirectory) const
 {
-    if (isCommitEditorOpen())
-        return;
+    const CommandInProgress command = checkCommandInProgress(workingDirectory);
+    if (command == RebaseMerge)
+        return true;
+    if (command != Rebase)
+        return false;
+
+    // git am and the apply backend of git rebase share rebase-apply. The former creates
+    // this marker; its continuation workflow is separate from git rebase.
+    return !findGitDirForRepository(workingDirectory)
+                .pathAppended("rebase-apply/applying")
+                .exists();
+}
+
+void GitClient::continueCommandIfNeeded(const FilePath &workingDirectory,
+                                        ContinueCommandMode continueMode,
+                                        RebasePauseReason pauseReason)
+{
     CommandInProgress command = checkCommandInProgress(workingDirectory);
-    ContinueCommandMode continueMode;
-    if (allowContinue)
-        continueMode = command == RebaseMerge ? ContinueOnly : SkipIfNoChanges;
-    else
-        continueMode = SkipOnly;
+    if (command == Rebase && !isRebaseInProgress(workingDirectory))
+        return;
+    if (isCommitEditorOpen() && command != Rebase && command != RebaseMerge)
+        return;
+    if (continueMode == ContinueCommandMode::Automatic) {
+        if (pauseReason == RebasePauseReason::Conflicts)
+            continueMode = ContinueCommandMode::ContinueOnly;
+        else if (pauseReason == RebasePauseReason::EmptyCommit)
+            continueMode = ContinueCommandMode::SkipOnly;
+        else
+            continueMode = command == RebaseMerge ? ContinueCommandMode::ContinueOnly
+                                                   : ContinueCommandMode::SkipIfNoChanges;
+    }
     switch (command) {
     case Rebase:
     case RebaseMerge:
         continuePreviousGitCommand(workingDirectory, Tr::tr("Continue Rebase"),
                                    Tr::tr("Rebase is in progress. What do you want to do?"),
-                                   Tr::tr("Continue"), "rebase", continueMode);
+                                   Tr::tr("Continue"), "rebase", continueMode, pauseReason);
         break;
     case Merge:
         continuePreviousGitCommand(workingDirectory, Tr::tr("Continue Merge"),
@@ -3185,26 +3277,220 @@ void GitClient::continueCommandIfNeeded(const FilePath &workingDirectory, bool a
     }
 }
 
+void GitClient::showContinueInfoBar(const FilePath &workingDirectory,
+                                  ContinueCommandMode continueMode,
+                                  RebasePauseReason pauseReason)
+{
+    FilePath repository = VcsManager::findTopLevelForDirectory(workingDirectory);
+    if (repository.isEmpty())
+        repository = workingDirectory;
+    if (!m_continueInfoBarActiveRepository.isEmpty()
+        && !m_continueInfoBarActiveRepository.isSameFile(repository)) {
+        return;
+    }
+
+    InfoBar *infoBar = ICore::infoBar();
+    infoBar->removeInfo(continueInfoBarId);
+    m_continueInfoBarRepository = repository;
+    m_continueInfoBarDismissedRepository.clear();
+
+    const RebaseTodoFiles todoFiles
+        = readRebaseTodoFiles(findGitDirForRepository(workingDirectory));
+    const int completedSteps = todoFiles.done.size();
+    const int remainingSteps = todoFiles.todo.size();
+    const int totalSteps = completedSteps + remainingSteps;
+
+    QString text = Tr::tr("Rebase in \"%1\" is paused. ").arg(repository.toUserOutput());
+    switch (pauseReason) {
+    case RebasePauseReason::Conflicts:
+        text += Tr::tr("Resolve the merge conflicts, then continue the rebase.");
+        break;
+    case RebasePauseReason::EmptyCommit:
+        text += Tr::tr("This commit may already have been applied. Skip this rebase step when ready.");
+        break;
+    case RebasePauseReason::None:
+        if (continueMode == ContinueCommandMode::ContinueOnly)
+            text += Tr::tr("Continue the rebase when ready.");
+        else
+            text += Tr::tr("No changes found. Skip this rebase step when ready.");
+        break;
+    }
+
+    InfoBarEntry info(continueInfoBarId, text);
+    info.setTitle(Tr::tr("Rebase Paused"));
+    info.setInfoType(InfoLabelType::Information);
+
+    const QString rebaseArgument
+        = continueMode == ContinueCommandMode::ContinueOnly ? QLatin1String("--continue")
+                                                            : QLatin1String("--skip");
+    const QString actionText
+        = continueMode == ContinueCommandMode::ContinueOnly ? Tr::tr("Continue Rebase")
+                                                            : Tr::tr("Skip Rebase");
+    info.addCustomButton(actionText,
+                         [this, workingDirectory, rebaseArgument] {
+                             rebase(workingDirectory, rebaseArgument);
+                         },
+                         {}, InfoBarEntry::ButtonAction::Hide);
+    info.addCustomButton(Tr::tr("Abort Rebase"),
+                         [this, workingDirectory] {
+                             synchronousAbortCommand(workingDirectory, "rebase");
+                             updateContinueInfoBar(workingDirectory);
+                         },
+                         {}, InfoBarEntry::ButtonAction::Hide);
+    info.setCancelButtonInfo([this, repository] {
+        m_continueInfoBarDismissedRepository = repository;
+    });
+
+    if (totalSteps > 0) {
+        info.setDetailsWidgetCreator([done = todoFiles.done, todo = todoFiles.todo,
+                                      completedSteps, totalSteps] {
+            auto label = new QLabel;
+            QStringList lines;
+            lines.append(Tr::tr("Rebase step: %1 of %2").arg(completedSteps).arg(totalSteps));
+            if (!done.isEmpty())
+                lines.append(Tr::tr("Current step: %1").arg(done.constLast()));
+
+            if (!todo.isEmpty()) {
+                lines.append(Tr::tr("Following steps:"));
+                const int visibleSteps = qMin(todo.size(), 8);
+                lines.append(todo.mid(0, visibleSteps));
+                if (visibleSteps < todo.size())
+                    lines.append(Tr::tr("... and %n more", nullptr, todo.size() - visibleSteps));
+            }
+
+            label->setText(lines.join('\n'));
+            label->setTextFormat(Qt::PlainText);
+            label->setWordWrap(true);
+            label->setContentsMargins(0, 0, 0, 8);
+            return label;
+        });
+    }
+
+    infoBar->addInfo(info);
+}
+
+void GitClient::updateContinueInfoBar(const FilePath &workingDirectory)
+{
+    FilePath repository = VcsManager::findTopLevelForDirectory(workingDirectory);
+    if (repository.isEmpty())
+        repository = workingDirectory;
+
+    if (!isRebaseInProgress(workingDirectory)) {
+        clearContinueInfoBar(repository);
+        return;
+    }
+
+    for (const FilePath &runningRepository : std::as_const(m_rebaseCommandsInProgress)) {
+        if (runningRepository.isSameFile(repository))
+            return;
+    }
+
+    const bool belongsToRepository = !m_continueInfoBarRepository.isEmpty()
+                                     && m_continueInfoBarRepository.isSameFile(repository);
+    const bool wasDismissed = !m_continueInfoBarDismissedRepository.isEmpty()
+                              && m_continueInfoBarDismissedRepository.isSameFile(repository);
+    if (belongsToRepository && wasDismissed)
+        return;
+    if (!belongsToRepository || !ICore::infoBar()->containsInfo(continueInfoBarId))
+        continueCommandIfNeeded(workingDirectory, ContinueCommandMode::Automatic,
+                                pauseReasonForRepository(workingDirectory));
+}
+
+void GitClient::clearContinueInfoBar(const FilePath &workingDirectory)
+{
+    if (!workingDirectory.isEmpty() && !m_continueInfoBarRepository.isEmpty()) {
+        FilePath repository = VcsManager::findTopLevelForDirectory(workingDirectory);
+        if (repository.isEmpty())
+            repository = workingDirectory;
+        if (!m_continueInfoBarRepository.isSameFile(repository))
+            return;
+    }
+
+    ICore::infoBar()->removeInfo(continueInfoBarId);
+    if (!workingDirectory.isEmpty() && !m_continueInfoBarDismissedRepository.isEmpty()) {
+        FilePath repository = VcsManager::findTopLevelForDirectory(workingDirectory);
+        if (repository.isEmpty())
+            repository = workingDirectory;
+        if (m_continueInfoBarDismissedRepository.isSameFile(repository))
+            m_continueInfoBarDismissedRepository.clear();
+    }
+    m_continueInfoBarRepository.clear();
+}
+
+void GitClient::setContinueInfoBarActiveRepository(const FilePath &repository)
+{
+    m_continueInfoBarActiveRepository = repository;
+}
+
+FilePath GitClient::continueInfoBarRepository() const
+{
+    return m_continueInfoBarRepository;
+}
+
+GitClient::RebasePauseReason GitClient::pauseReasonForRepository(
+    const FilePath &workingDirectory) const
+{
+    const FilePath gitDir = findGitDirForRepository(workingDirectory);
+    const FilePath rebaseMerge = gitDir.pathAppended("rebase-merge");
+    if (!rebaseMerge.pathAppended("interactive").exists()
+        || rebaseMerge.pathAppended("amend").exists()) {
+        return RebasePauseReason::None;
+    }
+
+    QString statusOutput;
+    const StatusResult status
+        = gitStatus(workingDirectory, StatusModes(NoUntracked | NoSubmodules), &statusOutput);
+    if (rebasePauseReason(statusOutput) == RebasePauseReason::Conflicts) {
+        return RebasePauseReason::Conflicts;
+    }
+    if (status != StatusResult::Unchanged)
+        return RebasePauseReason::None;
+
+    QString head;
+    QString rebaseHead;
+    if (rebaseMerge.pathAppended("stopped-sha").exists()
+        && synchronousRevParseCmd(workingDirectory, "HEAD", &head)
+        && synchronousRevParseCmd(workingDirectory, "REBASE_HEAD", &rebaseHead)
+        && head != rebaseHead) {
+        return RebasePauseReason::EmptyCommit;
+    }
+    return RebasePauseReason::None;
+}
+
 void GitClient::continuePreviousGitCommand(const FilePath &workingDirectory,
                                            const QString &msgBoxTitle, QString msgBoxText,
                                            const QString &buttonName, const QString &gitCommand,
-                                           ContinueCommandMode continueMode)
+                                           ContinueCommandMode continueMode,
+                                           RebasePauseReason pauseReason)
 {
     bool isRebase = gitCommand == "rebase";
     bool hasChanges = false;
+    if (continueMode == ContinueCommandMode::Automatic)
+        continueMode = ContinueCommandMode::SkipIfNoChanges;
     switch (continueMode) {
-    case ContinueOnly:
+    case ContinueCommandMode::Automatic:
+        QTC_ASSERT(false, return);
+        break;
+    case ContinueCommandMode::ContinueOnly:
         hasChanges = true;
         break;
-    case SkipIfNoChanges:
+    case ContinueCommandMode::SkipIfNoChanges:
         hasChanges = gitStatus(workingDirectory, StatusModes(NoUntracked | NoSubmodules))
             == StatusResult::Changed;
         if (!hasChanges)
             msgBoxText.prepend(Tr::tr("No changes found.") + ' ');
         break;
-    case SkipOnly:
+    case ContinueCommandMode::SkipOnly:
         hasChanges = false;
         break;
+    }
+
+    if (isRebase) {
+        showContinueInfoBar(workingDirectory,
+                          hasChanges ? ContinueCommandMode::ContinueOnly
+                                     : ContinueCommandMode::SkipOnly,
+                          pauseReason);
+        return;
     }
 
     QMessageBox msgBox(QMessageBox::Question, msgBoxTitle, msgBoxText,
@@ -4180,7 +4466,18 @@ bool GitClient::canRebase(const FilePath &workingDirectory) const
 
 void GitClient::rebase(const FilePath &workingDirectory, const QString &argument)
 {
-    vcsExecAbortable(workingDirectory, {"rebase", argument}, true);
+    const auto commandHandler = [this, workingDirectory, argument](const CommandResult &result) {
+        const CommandInProgress command = checkCommandInProgress(workingDirectory);
+        if (command == NoCommand) {
+            clearContinueInfoBar(workingDirectory);
+        } else if (argument == "--continue" || argument == "--skip") {
+            // Keep the non-modal prompt available if the explicit action did not finish
+            // the rebase, for example because conflicts remain or the next edit was reached.
+            continueCommandIfNeeded(workingDirectory, ContinueCommandMode::Automatic,
+                                    rebasePauseReasonFromResult(result));
+        }
+    };
+    vcsExecAbortable(workingDirectory, {"rebase", argument}, true, {}, commandHandler);
 }
 
 void GitClient::cherryPick(const FilePath &workingDirectory, const QString &argument)
@@ -4200,13 +4497,25 @@ void GitClient::vcsExecAbortable(const FilePath &workingDirectory, const QString
                                  const CommandHandler &handler)
 {
     QTC_ASSERT(!arguments.isEmpty(), return);
+    const bool isRebaseCommand = isRebase && arguments.constFirst() == "rebase";
+    FilePath repository;
+    if (isRebaseCommand) {
+        repository = findRepositoryForDirectory(workingDirectory);
+        if (repository.isEmpty())
+            repository = workingDirectory;
+        m_rebaseCommandsInProgress.insert(repository);
+    }
     const QString abortString = abortCommand.isEmpty() ? arguments.at(0) : abortCommand;
     const ProgressParser progressParser = isRebase ? GitProgressParser() : ProgressParser();
     enqueueCommand({workingDirectory, arguments,
-                    RunFlag::ShowStdOut | RunFlag::ShowSuccessMessage | RunFlag::ExpectRepoChanges,
+                    RunFlag::ShowStdOut | RunFlag::ShowSuccessMessage | RunFlag::ExpectRepoChanges
+                        | RunFlag::ForceCLocale,
                     progressParser, {},
-                    [workingDirectory, abortString, handler](const CommandResult &result) {
+                    [this, workingDirectory, repository, isRebaseCommand, abortString, handler](
+                        const CommandResult &result) {
                         handleConflictResponse(result, workingDirectory, abortString);
+                        if (isRebaseCommand)
+                            m_rebaseCommandsInProgress.remove(repository);
                         if (handler)
                             handler(result);
                     }});
@@ -4252,7 +4561,15 @@ void GitClient::interactiveRebase(const FilePath &workingDirectory, const QStrin
     arguments << commit + '^';
     if (fixup)
         m_disableSequenceEditor = true;
-    vcsExecAbortable(workingDirectory, arguments, true);
+    const auto commandHandler = [this, workingDirectory](const CommandResult &result) {
+        const CommandInProgress command = checkCommandInProgress(workingDirectory);
+        if (command == NoCommand)
+            clearContinueInfoBar(workingDirectory);
+        else
+            continueCommandIfNeeded(workingDirectory, ContinueCommandMode::Automatic,
+                                    rebasePauseReasonFromResult(result));
+    };
+    vcsExecAbortable(workingDirectory, arguments, true, {}, commandHandler);
     if (fixup)
         m_disableSequenceEditor = false;
 }
