@@ -175,6 +175,18 @@ CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, 
 // than the include closure need not know a front end at all.
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
+// The files \a snapshot has read that include a header called \a fileName,
+// once each, in no particular order.
+//
+// By the name it is included under rather than by a path, and whether or not
+// the include resolved to anything: a header uic writes is included by name
+// long before a build has written it, and finding who includes it is how the
+// class behind a form is found. A reading is taken here rather than the model
+// manager's, because whoever asks means a particular set of files -- the
+// project a form belongs to, say.
+CPPEDITOR_EXPORT Utils::FilePaths filesIncludingFileNamed(const CPlusPlus::Snapshot &snapshot,
+                                                          const QString &fileName);
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:

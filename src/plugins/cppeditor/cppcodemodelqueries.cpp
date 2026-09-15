@@ -585,6 +585,24 @@ QString classAround(const FilePath &filePath, int line, int column)
     return classAround(CppModelManager::snapshot(), filePath, line, column);
 }
 
+FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileName)
+{
+    FilePaths files;
+    for (const Document::Ptr &doc : snapshot) {
+        const QList<Document::Include> includes = doc->resolvedIncludes()
+                                                  + doc->unresolvedIncludes();
+        for (const Document::Include &include : includes) {
+            // What the file wrote, which is all there is to go on where the
+            // include resolved to nothing.
+            if (FilePath::fromUserInput(include.unresolvedFileName()).fileName() != fileName)
+                continue;
+            files.append(doc->filePath());
+            break; // named once is named
+        }
+    }
+    return files;
+}
+
 FilePaths includesOf(const FilePath &filePath)
 {
     const Document::Ptr doc = CppModelManager::snapshot().document(filePath);

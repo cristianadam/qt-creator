@@ -67,17 +67,17 @@ namespace Designer::Internal {
 
 static Q_LOGGING_CATEGORY(log, "qtc.designer", QtWarningMsg);
 
-static QString msgClassNotFound(const QString &uiClassName, const QList<Document::Ptr> &docList)
+static QString msgClassNotFound(const QString &uiClassName, const FilePaths &files)
 {
-    QString files;
-    for (const Document::Ptr &doc : docList) {
-        files += '\n';
-        files += doc->filePath().toUserOutput();
+    QString fileList;
+    for (const FilePath &file : files) {
+        fileList += '\n';
+        fileList += file.toUserOutput();
     }
     return Designer::Tr::tr(
         "The class containing \"%1\" could not be found in %2.\n"
         "Please verify the #include-directives.")
-        .arg(uiClassName, files);
+        .arg(uiClassName, fileList);
 }
 
 static void reportRenamingError(const QString &oldName, const QString &reason)
@@ -186,28 +186,6 @@ QWidget *QtCreatorIntegration::containerWindow(QWidget * /*widget*/) const
     if (SharedTools::WidgetHost *host = activeWidgetHost())
         return host->integrationContainer();
     return nullptr;
-}
-
-static QList<Document::Ptr> findDocumentsIncluding(const Snapshot &docTable,
-                                                   const QString &fileName, bool checkFileNameOnly)
-{
-    QList<Document::Ptr> docList;
-    for (const Document::Ptr &doc : docTable) { // we go through all documents
-        const QList<Document::Include> includes = doc->resolvedIncludes()
-            + doc->unresolvedIncludes();
-        for (const Document::Include &include : includes) {
-            if (checkFileNameOnly) {
-                const QFileInfo fi(include.unresolvedFileName());
-                if (fi.fileName() == fileName) { // we are only interested in docs which includes fileName only
-                    docList.append(doc);
-                }
-            } else {
-                if (include.resolvedFileName().path() == fileName)
-                    docList.append(doc);
-            }
-        }
-    }
-    return docList;
 }
 
 // Everything "Go To Slot" has to read out of the code, which is all the code
@@ -554,15 +532,16 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
                                           const QStringList &parameterNames,
                                           QString *errorMessage)
 {
-    using DocumentMap = QMap<int, Document::Ptr>;
+    using DocumentMap = QMap<int, FilePath>;
 
     const FilePath currentUiFile = activeEditor()->document()->filePath();
 #if 0
     return Designer::Internal::navigateToSlot(currentUiFile.toString(), objectName,
                                               signalSignature, parameterNames, errorMessage);
 #endif
-    // TODO: we should pass to findDocumentsIncluding an absolute path to generated .h file from ui.
-    // Currently we are guessing the name of ui_<>.h file and pass the file name only to the findDocumentsIncluding().
+    // TODO: we should look for an absolute path to the generated .h file from the ui.
+    // Currently we are guessing the name of the ui_<>.h file and looking for whoever includes
+    // a header of that name.
     // The idea is that the .pro file knows if the .ui files is inside, and the .pro file knows it will
     // be generating the ui_<>.h file for it, and the .pro file knows what the generated file's name and its absolute path will be.
     // So we should somehow get that info from project manager (?)
@@ -595,10 +574,12 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     // take all docs, find the ones that include the ui_xx.h.
     // Sort into a map, putting the ones whose path closely matches the ui-folder path
     // first in case there are project subdirectories that contain identical file names.
-    const QList<Document::Ptr> docList = findDocumentsIncluding(docTable, uicedName, true); // change to false when we know the absolute path to generated ui_<>.h file
+    // The name only: we are guessing what uic will call the header rather
+    // than knowing where it will put it.
+    const FilePaths docList = CppEditor::filesIncludingFileNamed(docTable, uicedName);
     DocumentMap docMap;
-    for (const Document::Ptr &d : docList) {
-        docMap.insert(qAbs(d->filePath().absolutePath().toUrlishString()
+    for (const FilePath &d : docList) {
+        docMap.insert(qAbs(d.absolutePath().toUrlishString()
                            .compare(uiFolder, Qt::CaseInsensitive)), d);
     }
 
@@ -636,8 +617,8 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
         if (Designer::Constants::Internal::debug)
             qDebug() << "Checking docs for " << candidate;
 
-        for (const Document::Ptr &d : std::as_const(docMap)) {
-            formClass = readFormClass(code, docTable, d->filePath(), candidate, functionName);
+        for (const FilePath &d : std::as_const(docMap)) {
+            formClass = readFormClass(code, docTable, d, candidate, functionName);
             if (formClass.isValid())
                 break;
         }

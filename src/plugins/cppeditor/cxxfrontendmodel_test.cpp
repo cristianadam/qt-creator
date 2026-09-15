@@ -656,6 +656,38 @@ void CxxFrontendModelTest::testWhatAFileIncludes()
     QCOMPARE(includesOf(dir / "absent.h"), FilePaths());
 }
 
+// Which files include a header of a given name -- the question Designer asks
+// to find the class behind a form. The header it looks for is one uic writes,
+// so the name is all there is: the include may resolve to nothing at all,
+// and a file that names it twice is still one file.
+void CxxFrontendModelTest::testWhichFilesIncludeAHeaderNamed()
+{
+    const Parsed parsed({{"leaf.h", "class Leaf {};\n"},
+                         {"form.cpp",
+                          "#include \"ui_form.h\"\n"   // nothing has generated this
+                          "#include \"leaf.h\"\n"
+                          "#include \"ui_form.h\"\n"}, // named twice, still one file
+                         {"main.cpp", "#include \"leaf.h\"\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const FilePath dir = parsed.mainFilePath().parentDir();
+    const auto includers = [&](const QString &name) {
+        FilePaths files = filesIncludingFileNamed(
+            CppEditor::Tests::TestCase::globalSnapshot(), name);
+        Utils::sort(files);
+        return files;
+    };
+
+    QCOMPARE(includers("ui_form.h"), FilePaths{dir / "form.cpp"});
+
+    FilePaths bothOfThem{dir / "form.cpp", dir / "main.cpp"};
+    Utils::sort(bothOfThem);
+    QCOMPARE(includers("leaf.h"), bothOfThem);
+
+    QCOMPARE(includers("nobody_includes_this.h"), FilePaths());
+}
+
 // What a Qt test class says about itself: the slots it declares privately,
 // which is how a test writes its test functions, and what it derives from.
 // Asked with the class's *name*, which is all the text of QTest::qExec()
