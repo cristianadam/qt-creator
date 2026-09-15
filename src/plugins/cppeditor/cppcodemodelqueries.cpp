@@ -3,6 +3,7 @@
 
 #include "cppcodemodelqueries.h"
 
+#include "cppmodelmanager.h"
 #include "symbolfinder.h"
 
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -562,6 +563,20 @@ QString classAround(const Snapshot &snapshot, const FilePath &filePath, int line
     if (!scope || !scope->asClass())
         return {};
     return Overview().prettyName(LookupContext::fullyQualifiedName(scope));
+}
+
+FilePaths includesOf(const FilePath &filePath)
+{
+    const Document::Ptr doc = CppModelManager::snapshot().document(filePath);
+    if (!doc)
+        return {};
+
+    const QList<Document::Include> resolved = doc->resolvedIncludes();
+    FilePaths includes;
+    includes.reserve(resolved.size());
+    for (const Document::Include &include : resolved)
+        includes.append(include.resolvedFileName());
+    return includes;
 }
 
 EnclosingFunction functionAround(const Snapshot &snapshot, const FilePath &filePath,

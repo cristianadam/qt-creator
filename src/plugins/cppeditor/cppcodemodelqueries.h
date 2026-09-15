@@ -147,6 +147,17 @@ CPPEDITOR_EXPORT QString nameResolvedAt(const CPlusPlus::Snapshot &snapshot,
 CPPEDITOR_EXPORT QString classAround(const CPlusPlus::Snapshot &snapshot,
                                      const Utils::FilePath &filePath, int line, int column);
 
+// The files \a filePath includes, each as the file it was resolved to, in the
+// order they are written. Empty where nothing has read \a filePath.
+//
+// Unlike the questions above this one takes no snapshot, because there is no
+// front end to choose between: an include is resolved while preprocessing,
+// and the cxx-frontend model is handed the resolutions the built-in reading
+// made rather than making its own. So this is the model manager's own
+// bookkeeping, and it is offered here so that a plugin wanting nothing more
+// than the include closure need not know a front end at all.
+CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:

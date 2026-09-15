@@ -633,6 +633,29 @@ void CxxFrontendModelTest::testWhichThingANameMeans()
                      "lib::inner::counter, lib::inner::disabled"));
 }
 
+// What a file includes, which is the model manager's own bookkeeping rather
+// than either front end's reading -- an include is resolved while
+// preprocessing, and the cxx-frontend model is handed those resolutions. It
+// is asked here so that a plugin wanting nothing but the include closure --
+// the model editor draws its component dependencies from it -- need not know
+// a front end at all.
+void CxxFrontendModelTest::testWhatAFileIncludes()
+{
+    const Parsed parsed({{"leaf.h", "class Leaf {};\n"},
+                         {"middle.h", "#include \"leaf.h\"\n"},
+                         {"main.cpp", "#include \"middle.h\"\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const FilePath dir = parsed.mainFilePath().parentDir();
+    QCOMPARE(includesOf(parsed.mainFilePath()), FilePaths{dir / "middle.h"});
+    QCOMPARE(includesOf(dir / "middle.h"), FilePaths{dir / "leaf.h"});
+    QCOMPARE(includesOf(dir / "leaf.h"), FilePaths());
+
+    // A file nothing has read includes nothing anybody knows about.
+    QCOMPARE(includesOf(dir / "absent.h"), FilePaths());
+}
+
 // What a Qt test class says about itself: the slots it declares privately,
 // which is how a test writes its test functions, and what it derives from.
 // Asked with the class's *name*, which is all the text of QTest::qExec()
