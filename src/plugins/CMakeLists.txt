@@ -105,6 +105,7 @@ add_subdirectory(squish)
 add_subdirectory(valgrind)
 
 # Level 8:
+add_subdirectory(alien)
 add_subdirectory(boot2qt)
 add_subdirectory(harmonyos)
 add_subdirectory(incredibuild)

@@ -1,0 +1,69 @@
+{
+    "name": "alien-treeview-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Tree View Test Extension",
+    "description": "Registers a tree data provider through vscode.window.",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.0.0"
+    },
+    "main": "./extension.js",
+    "activationEvents": [
+        "*"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "alien.tree.always",
+                "title": "Always"
+            },
+            {
+                "command": "alien.tree.gated",
+                "title": "Gated",
+                "icon": "$(gear)"
+            },
+            {
+                "command": "alien.tree.setReady",
+                "title": "Set Ready"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                {
+                    "command": "alien.tree.always",
+                    "when": "view == alienExplorer",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "alien.tree.gated",
+                    "when": "view == alienExplorer && alien.ready",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "alien.tree.setReady",
+                    "when": "view == alienWatched"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "alien.tree.always",
+                    "when": "view == alienExplorer"
+                },
+                {
+                    "command": "alien.tree.gated",
+                    "when": "view == alienExplorer && alien.ready && !alien.busy"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "alien.tree.always",
+                    "when": "false"
+                },
+                {
+                    "command": "alien.tree.gated",
+                    "when": "alien.ready"
+                }
+            ]
+        }
+    }
+}
