@@ -33,8 +33,6 @@
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
-#include <cplusplus/CppDocument.h>
-#include <cplusplus/Overview.h>
 
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorconstants.h>
@@ -320,8 +318,6 @@ void AutotestPluginPrivate::onRunUnderCursorTriggered(TestRunMode mode)
     const int line = currentEditor->currentLine();
     const FilePath filePath = currentEditor->textDocument()->filePath();
 
-    const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::snapshot();
-
     QTextCursor cursor = currentEditor->editorWidget()->textCursor();
     const QTextCursor wholeCursor = cursor;
     cursor.select(QTextCursor::WordUnderCursor);
@@ -331,11 +327,11 @@ void AutotestPluginPrivate::onRunUnderCursorTriggered(TestRunMode mode)
     // failing that the function the name under it stands for -- a test
     // written at namespace scope is named rather than entered. Both are the
     // code model's to say, and it says them in places.
-    QString funcName = CppEditor::functionAround(snapshot, filePath, line,
+    QString funcName = CppEditor::functionAround(filePath, line,
                                                  currentEditor->currentColumn())
                            .qualifiedName;
     if (funcName.isEmpty())
-        funcName = CppEditor::functionNamedAt(snapshot, filePath, wholeCursor);
+        funcName = CppEditor::functionNamedAt(filePath, wholeCursor);
     if (funcName.startsWith("::"))
         funcName = funcName.mid(2);
 
@@ -372,7 +368,7 @@ void AutotestPluginPrivate::onRunUnderCursorTriggered(TestRunMode mode)
 
     if (filteredItems.isEmpty() && testsItems.size() > 1) {
         // Two tests of one name: which class the cursor is in decides.
-        QString className = CppEditor::classAround(snapshot, filePath, line,
+        QString className = CppEditor::classAround(filePath, line,
                                                    currentEditor->currentColumn());
         if (className.startsWith("::"))
             className = className.mid(2);

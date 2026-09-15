@@ -147,6 +147,23 @@ CPPEDITOR_EXPORT QString nameResolvedAt(const CPlusPlus::Snapshot &snapshot,
 CPPEDITOR_EXPORT QString classAround(const CPlusPlus::Snapshot &snapshot,
                                      const Utils::FilePath &filePath, int line, int column);
 
+// The same four questions, asked of the model manager's reading as it stands
+// rather than of one the caller holds.
+//
+// That is what a consumer reacting to the cursor wants: it has no reading of
+// its own, and what it is being asked about is on screen now. A consumer that
+// works through a project on a thread of its own passes its own reading to
+// the overloads above instead, so that every answer it collects is about the
+// same one -- and it is the only kind of consumer that needs to name a front
+// end's snapshot at all.
+CPPEDITOR_EXPORT EnclosingFunction functionAround(const Utils::FilePath &filePath,
+                                                  int line, int column);
+CPPEDITOR_EXPORT QString functionNamedAt(const Utils::FilePath &filePath,
+                                         const QTextCursor &cursor);
+CPPEDITOR_EXPORT QString nameResolvedAt(const Utils::FilePath &filePath,
+                                        const QTextCursor &cursor);
+CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, int column);
+
 // The files \a filePath includes, each as the file it was resolved to, in the
 // order they are written. Empty where nothing has read \a filePath.
 //

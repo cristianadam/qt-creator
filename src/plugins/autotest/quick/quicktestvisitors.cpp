@@ -3,7 +3,6 @@
 
 #include "quicktestvisitors.h"
 
-#include <cplusplus/Overview.h>
 #include <qmljs/qmljsmodelmanagerinterface.h>
 #include <qmljs/parser/qmljsast_p.h>
 #include <qmljs/qmljsbind.h>

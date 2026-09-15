@@ -565,6 +565,26 @@ QString classAround(const Snapshot &snapshot, const FilePath &filePath, int line
     return Overview().prettyName(LookupContext::fullyQualifiedName(scope));
 }
 
+EnclosingFunction functionAround(const FilePath &filePath, int line, int column)
+{
+    return functionAround(CppModelManager::snapshot(), filePath, line, column);
+}
+
+QString functionNamedAt(const FilePath &filePath, const QTextCursor &cursor)
+{
+    return functionNamedAt(CppModelManager::snapshot(), filePath, cursor);
+}
+
+QString nameResolvedAt(const FilePath &filePath, const QTextCursor &cursor)
+{
+    return nameResolvedAt(CppModelManager::snapshot(), filePath, cursor);
+}
+
+QString classAround(const FilePath &filePath, int line, int column)
+{
+    return classAround(CppModelManager::snapshot(), filePath, line, column);
+}
+
 FilePaths includesOf(const FilePath &filePath)
 {
     const Document::Ptr doc = CppModelManager::snapshot().document(filePath);
