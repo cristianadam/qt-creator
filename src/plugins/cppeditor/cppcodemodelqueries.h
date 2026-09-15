@@ -165,14 +165,20 @@ CPPEDITOR_EXPORT QString nameResolvedAt(const Utils::FilePath &filePath,
 CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, int column);
 
 // The files \a filePath includes, each as the file it was resolved to, in the
-// order they are written. Empty where nothing has read \a filePath.
+// order they are written -- a file included twice is there twice, the list
+// being what was written. Empty where nothing has read \a filePath.
 //
-// Unlike the questions above this one takes no snapshot, because there is no
-// front end to choose between: an include is resolved while preprocessing,
-// and the cxx-frontend model is handed the resolutions the built-in reading
-// made rather than making its own. So this is the model manager's own
-// bookkeeping, and it is offered here so that a plugin wanting nothing more
-// than the include closure need not know a front end at all.
+// There is no front end to choose between here: an include is resolved while
+// preprocessing, and the cxx-frontend model is handed the resolutions the
+// built-in reading made rather than making its own. So this is the model
+// manager's own bookkeeping, offered here so that a plugin wanting nothing
+// more than the include closure need not know a front end at all.
+//
+// The overload taking a reading is for walking a closure -- following the
+// includes of the includes -- where every step has to be about the same
+// reading, and it is the one to use off the GUI thread.
+CPPEDITOR_EXPORT Utils::FilePaths includesOf(const CPlusPlus::Snapshot &snapshot,
+                                             const Utils::FilePath &filePath);
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
 // The files \a snapshot has read that include a header called \a fileName,

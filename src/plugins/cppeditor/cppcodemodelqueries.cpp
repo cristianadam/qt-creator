@@ -605,7 +605,12 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
 
 FilePaths includesOf(const FilePath &filePath)
 {
-    const Document::Ptr doc = CppModelManager::snapshot().document(filePath);
+    return includesOf(CppModelManager::snapshot(), filePath);
+}
+
+FilePaths includesOf(const Snapshot &snapshot, const FilePath &filePath)
+{
+    const Document::Ptr doc = snapshot.document(filePath);
     if (!doc)
         return {};
 
