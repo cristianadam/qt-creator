@@ -1791,7 +1791,9 @@ class DapServer():
     def cmd_qtc_executeCommand(self, request):
         # The debugger console. Capture what gdb prints: its stdout is the
         # protocol stream.
-        command = request.get('arguments', {}).get('command', '')
+        args = request.get('arguments', {})
+        command = args.get('command', '')
+        self._selectFrame(args.get('frameid'))
         self.lastStopEvent = None
         self.inferiorExited = False
         self.lastExitCode = None

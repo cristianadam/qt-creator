@@ -1309,6 +1309,8 @@ private slots:
     void testCreateFullBacktraceCapability();
     void activatesFrameAndReadsItsLocals_data() { addBackendRows(); }
     void activatesFrameAndReadsItsLocals();
+    void runsAConsoleCommandInTheActivatedFrame_data() { addBackendRows(); }
+    void runsAConsoleCommandInTheActivatedFrame();
     void limitsTheReportedStackDepth_data() { addBackendRows(); }
     void limitsTheReportedStackDepth();
     void stepsPastTheLinkersJumpToAFunction_data() { addBackendRows(); }
@@ -7195,6 +7197,73 @@ void tst_backends::activatesFrameAndReadsItsLocals()
     engine->refresh(request);
     QTRY_VERIFY_WITH_TIMEOUT(localsById.contains(313), s_timeout);
     QCOMPARE(depthIn(313), 0);
+}
+
+void tst_backends::runsAConsoleCommandInTheActivatedFrame()
+{
+    QFETCH(Backend, backend);
+
+    const InferiorTestData testData = inferiorTestData(backend);
+    if (testData.recursionDepthVariable.isEmpty() || testData.deepRecursionBreakpointLine == 0)
+        QSKIP("inferior has no recursion chain to walk frames of");
+
+    Process helperInferior;
+    std::unique_ptr<DebuggerBackend> debuggerBackend = stopAtBreakpoint(backend, helperInferior);
+    QVERIFY(debuggerBackend);
+    DebuggerEngineInterface *engine = debuggerBackend->engine();
+
+    QHash<quint64, bool> results;
+    connect(engine, &DebuggerEngineInterface::breakpointEvent, this,
+            [&results](quint64 requestId, BreakpointOp, bool ok, const GdbMi &) {
+        results[requestId] = ok;
+    });
+
+    BreakpointChangeRequest deepRequest;
+    deepRequest.op = BreakpointOp::Insert;
+    deepRequest.requestId = 320;
+    deepRequest.params.type = BreakpointByFileAndLine;
+    deepRequest.params.fileName = testData.source;
+    deepRequest.params.textPosition.line = testData.deepRecursionBreakpointLine;
+    deepRequest.params.enabled = true;
+    engine->changeBreakpoint(deepRequest);
+    QTRY_VERIFY_WITH_TIMEOUT(results.contains(320), s_timeout);
+    QVERIFY2(results.value(320), "deep-recursion breakpoint insert failed");
+
+    debuggerBackend->clearEvents();
+    debuggerBackend->execute({ExecutionCommand::Continue});
+    QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
+    QCOMPARE(debuggerBackend->stoppedLine(), testData.deepRecursionBreakpointLine);
+
+    QStringList messages;
+    connect(engine, &DebuggerEngineInterface::message, this,
+            [&messages](const QString &text, int channel, int) {
+        // The command is logged as it goes out, so only what came back can
+        // stand for it having been answered.
+        if (channel != Debugger::LogInput)
+            messages.append(text);
+    });
+
+    // Neither frame's answer contains the other's, so a command that ran in
+    // the frame the session was left in cannot look like a pass.
+    const QString expression = decimalLiteral(backend, "100000") + " - "
+                               + testData.recursionDepthVariable + " * "
+                               + decimalLiteral(backend, "1000");
+    const auto answersInFrame = [&](int frame, const QString &expected) {
+        messages.clear();
+        engine->activateFrame(frame);
+        engine->executeDebuggerCommand(printCommand(backend, expression), {});
+        QTRY_VERIFY2_WITH_TIMEOUT(std::any_of(messages.cbegin(), messages.cend(),
+                                              [&expected](const QString &text) {
+            return text.contains(expected);
+        }), qPrintable(QString("the command did not answer %1 in frame %2, it said: %3")
+                           .arg(expected).arg(frame).arg(messages.join(' ').left(300))),
+           s_timeout);
+    };
+
+    answersInFrame(2, "98000");
+    if (QTest::currentTestFailed())
+        return;
+    answersInFrame(0, "100000");
 }
 
 void tst_backends::refreshesLocalsAndStack()

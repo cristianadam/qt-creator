@@ -1552,7 +1552,8 @@ void BridgeImpl::fetchDisassemblyForTarget(quint64 requestId, quint64 address,
 void BridgeImpl::executeDebuggerCommand(const QString &command, const WatchItemData &)
 {
     QTC_ASSERT(m_client, return);
-    postRequest("qtc/executeCommand", QJsonObject{{"command", command}});
+    postRequest("qtc/executeCommand",
+                QJsonObject{{"command", command}, {"frameid", m_currentFrameId}});
 }
 
 void BridgeImpl::assignValueInDebugger(const WatchItemData &, const QString &expr,

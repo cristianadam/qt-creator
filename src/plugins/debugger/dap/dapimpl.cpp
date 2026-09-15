@@ -333,7 +333,8 @@ void DapImpl::postReplCommand(const QString &command)
     QJsonObject arguments{{"expression", command}, {"context", "repl"}};
     // A command that does not read the inferior's state has no frame to run
     // in, and the session has none to name before it has stopped anywhere.
-    if (m_currentFrameId > 0)
+    // Zero is a valid id: gdb's adapter numbers the innermost frame 0.
+    if (m_currentFrameId >= 0)
         arguments.insert("frameId", m_currentFrameId);
     postRequest("evaluate", arguments);
 }

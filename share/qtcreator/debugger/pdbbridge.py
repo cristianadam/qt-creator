@@ -1250,6 +1250,47 @@ class QtcInternalDumper():
                 self.clear_bpbynumber(i)
                 self.message('Deleted %s' % bp)
 
+    def _selectFrame(self, index):
+        self.curindex = index
+        frame, lineNumber = self.stack[self.curindex]
+        self.curframe = frame
+        # Cached for the same reason as in setup(): f_locals is rebuilt on
+        # every access, which would drop what was assigned through it.
+        self.curframe_locals = frame.f_locals
+        self.message('> %s(%s)%s()' % (self.canonic(frame.f_code.co_filename),
+                                       lineNumber, frame.f_code.co_name))
+
+    def do_up(self, arg):
+        """u(p) [count]
+        Move the current frame count (default one) levels up in the
+        stack trace (to an older frame).
+        """
+        if self.curindex == 0:
+            self.error('Oldest frame')
+            return
+        try:
+            count = __builtins__.int(arg or 1)
+        except ValueError:
+            self.error('Invalid frame count (%s)' % arg)
+            return
+        self._selectFrame(0 if count < 0 else max(0, self.curindex - count))
+
+    def do_down(self, arg):
+        """d(own) [count]
+        Move the current frame count (default one) levels down in the
+        stack trace (to a newer frame).
+        """
+        last = __builtins__.len(self.stack) - 1
+        if self.curindex == last:
+            self.error('Newest frame')
+            return
+        try:
+            count = __builtins__.int(arg or 1)
+        except ValueError:
+            self.error('Invalid frame count (%s)' % arg)
+            return
+        self._selectFrame(last if count < 0 else min(last, self.curindex + count))
+
     def do_until(self, arg):
         """until [lineno]
         Without argument, continue execution until the line with a
@@ -1501,7 +1542,8 @@ class QtcInternalDumper():
 
         # frame.f_locals is rebuilt fresh on every access, so it never
         # sees assignValueInDebugger()'s writes into self.curframe_locals.
-        locals_dict = self.curframe_locals if frameNr == 0 else frame.f_locals
+        selectedNr = __builtins__.len(self.stack) - 1 - self.curindex
+        locals_dict = self.curframe_locals if frameNr == selectedNr else frame.f_locals
 
         self.output += 'data={'
         for var in locals_dict.keys():

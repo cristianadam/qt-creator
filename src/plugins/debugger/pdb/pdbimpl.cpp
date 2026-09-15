@@ -625,6 +625,15 @@ void PdbImpl::selectThread(const QString &)
 
 void PdbImpl::activateFrame(int index)
 {
+    // A console command runs in the frame pdb selected for itself, and there is
+    // no way to name one per command, so pdb's own frame has to be moved along.
+    // It starts out innermost after every stop, which is where m_currentFrame
+    // is put back, so the old value is where pdb stands now.
+    const int delta = index - m_currentFrame;
+    if (delta != 0 && !m_inferiorRunning && m_pdbProc.isRunning()) {
+        postDirectCommand((delta > 0 ? QLatin1String("up ") : QLatin1String("down "))
+                          + QString::number(qAbs(delta)));
+    }
     m_currentFrame = index;
 }
 
