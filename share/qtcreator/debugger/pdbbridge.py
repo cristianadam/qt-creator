@@ -665,7 +665,6 @@ class QtcInternalDumper():
                             line = 'EOF'
                         else:
                             line = line.rstrip('\r\n')
-                print('LINE: %s' % line)
                 stop = self.onecmd(line)
         finally:
             pass
@@ -699,9 +698,7 @@ class QtcInternalDumper():
         commands by the interpreter should stop.
         """
         line = __builtins__.str(line)
-        print('LINE 0: %s' % line)
         cmd, arg, line = self.parseline(line)
-        print('LINE 1: %s' % line)
         if cmd is None:
             return self.default(line)
         self.lastcmd = line
@@ -716,8 +713,6 @@ class QtcInternalDumper():
             return self.default(line)
 
     def runit(self):
-        print('DIR: %s' % dir())
-        print('ARGV: %s' % sys.argv)
         if sys.argv[0] == '-c':
             sys.argv = sys.argv[2:]
         else:
@@ -730,8 +725,6 @@ class QtcInternalDumper():
             sys.argv = [sys.argv[0]] + sys.argv[args_pos + 1:]
         except ValueError:
             pass
-        print('INFERIOR ARGV: %s' % sys.argv)
-        print('MAIN: %s' % mainpyfile)
 
         while True:
             try:

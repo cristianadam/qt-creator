@@ -907,6 +907,8 @@ void PdbImpl::handleOutputLine(const QString &line)
         list.m_type = GdbMi::List;
         list.addChild(bkpt);
         emit breakpointModified(list);
+    } else if (line == "@") {
+        // The marker the bridge frames a reply with, not something the script printed.
     } else {
         emit message(line, AppOutput);
     }

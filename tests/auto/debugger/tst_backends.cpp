@@ -1126,7 +1126,11 @@ public:
         : m_engine(std::move(engine))
     {
         connect(m_engine.get(), &DebuggerEngineInterface::message, this,
-                [](const QString &text, int, int) { qDebug("engine: %s", qPrintable(text)); });
+                [this](const QString &text, int channel, int) {
+            qDebug("engine: %s", qPrintable(text));
+            if (channel == Debugger::AppOutput)
+                m_appOutput.append(text);
+        });
         connect(m_engine.get(), &DebuggerEngineInterface::locationChanged, this,
                 [this](const Utils::FilePath &fileName, int lineNumber) {
             m_stoppedFile = fileName;
@@ -1176,6 +1180,9 @@ public:
 
     QString breakpointResponseId() const { return m_breakpointResponseId; }
 
+    const QStringList &appOutput() const { return m_appOutput; }
+    void clearAppOutput() { m_appOutput.clear(); }
+
     QStringList threadIds(ThreadEvent event) const
     {
         QStringList ids;
@@ -1194,6 +1201,7 @@ private:
     Utils::FilePath m_stoppedFile;
     int m_stoppedLine = 0;
     QString m_breakpointResponseId;
+    QStringList m_appOutput;
 };
 
 static QString wireTail(const QStringList &wire, int lines = 40)
@@ -1311,6 +1319,8 @@ private slots:
     void activatesFrameAndReadsItsLocals();
     void runsAConsoleCommandInTheActivatedFrame_data() { addBackendRows(); }
     void runsAConsoleCommandInTheActivatedFrame();
+    void keepsItsOwnTrafficOutOfTheApplicationOutput_data() { addBackendRows(); }
+    void keepsItsOwnTrafficOutOfTheApplicationOutput();
     void limitsTheReportedStackDepth_data() { addBackendRows(); }
     void limitsTheReportedStackDepth();
     void stepsPastTheLinkersJumpToAFunction_data() { addBackendRows(); }
@@ -7264,6 +7274,47 @@ void tst_backends::runsAConsoleCommandInTheActivatedFrame()
     if (QTest::currentTestFailed())
         return;
     answersInFrame(0, "100000");
+}
+
+void tst_backends::keepsItsOwnTrafficOutOfTheApplicationOutput()
+{
+    QFETCH(Backend, backend);
+
+    Process helperInferior;
+    std::unique_ptr<DebuggerBackend> debuggerBackend = stopAtBreakpoint(backend, helperInferior);
+    QVERIFY(debuggerBackend);
+    DebuggerEngineInterface *engine = debuggerBackend->engine();
+
+    // The inferiors print nothing before the line they are stopped on, so
+    // whatever the launch put there came from the debugger itself.
+    // gdb's DAP adapter is the exception: it reads its own stdout as if it were
+    // the debuggee's and forwards its version banner as such.
+    if (backend != Backend::Dap) {
+        QVERIFY2(debuggerBackend->appOutput().isEmpty(),
+                 qPrintable("the launch reached the application output: "
+                            + debuggerBackend->appOutput().join(' ').left(300)));
+    }
+
+    debuggerBackend->clearAppOutput();
+
+    QHash<int, GdbMi> responses;
+    connect(engine, &DebuggerEngineInterface::refreshDataReceived, this,
+            [&responses](quint64, RefreshKind kind, const GdbMi &data) {
+        responses[int(kind)] = data;
+    });
+
+    RefreshRequest localsRequest;
+    localsRequest.kind = RefreshKind::Locals;
+    localsRequest.requestId = 330;
+    engine->refresh(localsRequest);
+    QTRY_VERIFY_WITH_TIMEOUT(responses.contains(int(RefreshKind::Locals)), s_timeout);
+
+    // The answer proves the request went out and came back, so anything it
+    // produced along the way has been reported by now. The inferior is stopped
+    // and prints nothing there, so its output pane has to stay empty.
+    QVERIFY2(debuggerBackend->appOutput().isEmpty(),
+             qPrintable("the debugger's own traffic reached the application output: "
+                        + debuggerBackend->appOutput().join(' ').left(300)));
 }
 
 void tst_backends::refreshesLocalsAndStack()
