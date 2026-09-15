@@ -384,8 +384,11 @@ void GenericDebuggerEngine::removeBreakpoint(const Breakpoint &bp)
 {
     QTC_ASSERT(bp, return);
     if (bp->responseId().isEmpty()) {
+        // The insertion is still in flight, and what answers it takes the
+        // removal over from there.
         return;
     }
+    notifyBreakpointRemoveProceeding(bp);
     BreakpointChangeRequest request;
     request.op = BreakpointOp::Remove;
     request.requestId = m_nextBreakpointRequestId++;
@@ -399,6 +402,7 @@ void GenericDebuggerEngine::removeBreakpoint(const Breakpoint &bp)
 void GenericDebuggerEngine::updateBreakpoint(const Breakpoint &bp)
 {
     QTC_ASSERT(bp, return);
+    notifyBreakpointChangeProceeding(bp);
     BreakpointChangeRequest request;
     request.op = BreakpointOp::Update;
     request.requestId = m_nextBreakpointRequestId++;
@@ -478,10 +482,15 @@ void GenericDebuggerEngine::handleBreakpointEvent(quint64 requestId, BreakpointO
             notifyBreakpointRemoveFailed(bp);
         break;
     case BreakpointOp::Update:
-        if (ok)
+        if (ok) {
+            // A backend that cannot change a breakpoint puts a new one in its
+            // place, and the model addresses it by number from here on.
+            for (const GdbMi &bkpt : data)
+                applyBkptData(bkpt, bp);
             notifyBreakpointChangeOk(bp);
-        else
+        } else {
             notifyBreakpointChangeFailed(bp);
+        }
         break;
     case BreakpointOp::EnableSub:
         break;

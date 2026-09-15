@@ -7487,12 +7487,15 @@ void tst_backends::updatesEnablesAndRemovesBreakpoint()
              "launchAndStopAtBreakpoint() never captured a breakpoint number");
 
     QHash<quint64, bool> results;
+    QHash<quint64, BreakpointOp> answeredOps;
     // An update can hand the breakpoint back under a new number, and what the
     // model keeps is the one the last answer named.
     QString responseId = debuggerBackend->breakpointResponseId();
     connect(engine, &DebuggerEngineInterface::breakpointEvent, this,
-            [&results, &responseId](quint64 requestId, BreakpointOp, bool ok, const GdbMi &data) {
+            [&results, &answeredOps, &responseId](quint64 requestId, BreakpointOp op, bool ok,
+                                                  const GdbMi &data) {
         results[requestId] = ok;
+        answeredOps[requestId] = op;
         for (const GdbMi &bkpt : data) {
             if (const QString number = bkpt["number"].data(); !number.isEmpty())
                 responseId = number;
@@ -7507,6 +7510,10 @@ void tst_backends::updatesEnablesAndRemovesBreakpoint()
     engine->changeBreakpoint(updateRequest);
     QTRY_VERIFY_WITH_TIMEOUT(results.contains(20), s_timeout);
     QVERIFY(results.value(20));
+    // A backend that can only change a breakpoint by putting a new one in its
+    // place still answers the request that was made, otherwise the model waits
+    // for a change that is never acknowledged.
+    QCOMPARE(answeredOps.value(20), BreakpointOp::Update);
 
     BreakpointChangeRequest enableSubRequest;
     enableSubRequest.op = BreakpointOp::EnableSub;

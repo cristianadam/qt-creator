@@ -364,10 +364,14 @@ void QmlImpl::setScriptBreakpoint(quint64 requestId, const BreakpointChangeReque
     if (params.ignoreCount > 0)
         cmd.arg(IGNORECOUNT, params.ignoreCount);
 
-    runCommand(cmd, [this, requestId, params, request](const QVariantMap &resp) {
+    // A change the service cannot express is carried out by putting a new
+    // breakpoint in place of the old one, and the model waits for an answer to
+    // the request it made, not to the one that replaced it.
+    const BreakpointOp op = request.op;
+    runCommand(cmd, [this, requestId, op, params, request](const QVariantMap &resp) {
         const bool success = resp.value(QLatin1String(SUCCESS)).toBool();
         if (!success) {
-            emit breakpointEvent(requestId, BreakpointOp::Insert, false, {});
+            emit breakpointEvent(requestId, op, false, {});
             return;
         }
         const QVariantMap body = resp.value(QLatin1String(BODY)).toMap();
@@ -391,7 +395,7 @@ void QmlImpl::setScriptBreakpoint(quint64 requestId, const BreakpointChangeReque
         GdbMi data;
         data.m_type = GdbMi::List;
         data.addChild(bkpt);
-        emit breakpointEvent(requestId, BreakpointOp::Insert, true, data);
+        emit breakpointEvent(requestId, op, true, data);
     });
 }
 
