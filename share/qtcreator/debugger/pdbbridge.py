@@ -938,10 +938,8 @@ class QtcInternalDumper():
     def message(msg):
         print(msg)
 
-    @staticmethod
-    def error(msg):
-        # print('***'+ msg)
-        pass
+    def error(self, msg):
+        self.report('commanderror={msg="%s"}' % self.hexencode(msg))
 
     def do_break(self, arg, temporary=0):
         """b(reak) [ ([filename:]lineno | function) [, condition] ]

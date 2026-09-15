@@ -871,6 +871,9 @@ void PdbImpl::handleOutputLine(const QString &line)
         emit refreshDataReceived(m_pendingBacktraceRequestId, RefreshKind::FullBacktrace,
                                  constMi({}, QString::fromUtf8(QByteArray::fromHex(
                                                  item["output"].data().toLatin1()))));
+    } else if (line.startsWith("commanderror={")) {
+        emit message(QString::fromUtf8(QByteArray::fromHex(item["msg"].data().toLatin1())),
+                     LogError);
     } else if (line.startsWith("dumpermodule={")) {
         const QString error = QString::fromUtf8(
             QByteArray::fromHex(item["error"].data().toLatin1()));

@@ -1321,6 +1321,8 @@ private slots:
     void runsAConsoleCommandInTheActivatedFrame();
     void keepsItsOwnTrafficOutOfTheApplicationOutput_data() { addBackendRows(); }
     void keepsItsOwnTrafficOutOfTheApplicationOutput();
+    void reportsAFailedConsoleCommand_data() { addBackendRows(); }
+    void reportsAFailedConsoleCommand();
     void limitsTheReportedStackDepth_data() { addBackendRows(); }
     void limitsTheReportedStackDepth();
     void stepsPastTheLinkersJumpToAFunction_data() { addBackendRows(); }
@@ -7274,6 +7276,36 @@ void tst_backends::runsAConsoleCommandInTheActivatedFrame()
     if (QTest::currentTestFailed())
         return;
     answersInFrame(0, "100000");
+}
+
+void tst_backends::reportsAFailedConsoleCommand()
+{
+    QFETCH(Backend, backend);
+
+    Process helperInferior;
+    std::unique_ptr<DebuggerBackend> debuggerBackend = stopAtBreakpoint(backend, helperInferior);
+    QVERIFY(debuggerBackend);
+    DebuggerEngineInterface *engine = debuggerBackend->engine();
+
+    QStringList messages;
+    connect(engine, &DebuggerEngineInterface::message, this,
+            [&messages](const QString &text, int channel, int) {
+        if (channel != Debugger::LogInput)
+            messages.append(text);
+    });
+
+    // The expression is more than the name alone, so the echo of the command
+    // cannot pass for the report of the failure.
+    const QString symbol = "qtcNoSuchSymbol";
+    const QString command = printCommand(backend, symbol + " + "
+                                                      + decimalLiteral(backend, "1"));
+    engine->executeDebuggerCommand(command, {});
+
+    QTRY_VERIFY2_WITH_TIMEOUT(std::any_of(messages.cbegin(), messages.cend(),
+                                          [&symbol, &command](const QString &text) {
+        return text.contains(symbol) && !text.contains(command);
+    }), qPrintable("the failure was not reported, it said: " + messages.join(' ').left(300)),
+       s_timeout);
 }
 
 void tst_backends::keepsItsOwnTrafficOutOfTheApplicationOutput()
