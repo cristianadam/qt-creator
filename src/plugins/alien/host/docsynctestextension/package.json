@@ -1,0 +1,15 @@
+{
+    "name": "alien-docsync-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Document Sync Test Extension",
+    "description": "Reports documents mirrored through the vscode.workspace API.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ],
+    "contributes": {
+        "languages": [
+            { "id": "plaintext", "extensions": [ ".txt", ".alientxt" ] }
+        ]
+    }
+}
