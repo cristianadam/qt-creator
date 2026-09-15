@@ -2436,6 +2436,9 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
         bool resumeAfterAttach = gdbFlags.testFlag(GdbImplFlag::ContinueAfterAttach);
         if (const auto *attachData = std::get_if<AttachToProcessData>(&inferiorStartData)) {
             configuration["pid"] = qint64(attachData->pid.pid());
+        } else if (const auto *stubData
+                       = std::get_if<AttachToTerminalStubData>(&inferiorStartData)) {
+            configuration["pid"] = qint64(stubData->pid.pid());
         } else if (const auto *serverData
                        = std::get_if<AttachToRemoteServerData>(&inferiorStartData)) {
             configuration["target"] = serverData->channel;
@@ -2453,7 +2456,9 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
         startData.adapterId = "gdb";
         startData.attach = true;
         startData.configuration = configuration;
+        startData.inferiorStartData = inferiorStartData;
         startData.continueAfterAttach = resumeAfterAttach;
+        startData.continueInsteadOfRun = gdbFlags.testFlag(GdbImplFlag::ContinueInsteadOfRun);
         startData.userCommands.afterConnect
             = {userCommandProbe(backend, UserCommandHook::AfterConnect).command};
         return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));

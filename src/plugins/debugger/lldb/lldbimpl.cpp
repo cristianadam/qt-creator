@@ -59,6 +59,7 @@ static DebuggerEngineSetupData lldbImplSetupData()
                             | WatchComplexExpressionsCapability;
     data.attachToCoreCapabilities = coreCaps;
     data.capabilities = coreCaps
+                      | AddWatcherWhileRunningCapability
                       | BreakConditionCapability
                       | BreakIndividualLocationsCapability
                       | BreakOnThrowAndCatchCapability

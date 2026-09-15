@@ -136,6 +136,8 @@ protected:
     bool m_inferiorRunning = false;
     bool m_stopRequested = false;
     bool m_stepRequested = false;
+    // Armed while the stub still has to be told to let go of the inferior.
+    bool m_expectTerminalTrap = false;
     bool m_configured = false;
     bool m_setupReported = false;
     // The engine has to hear that the run began before it hears it ended,
@@ -239,6 +241,9 @@ private:
     quint64 m_localsRequestId = 0;
     // The locals fetch, kept for RepeatLastCommand.
     std::optional<RefreshRequest> m_lastLocalsRequest;
+    // A locals fetch that arrived while the debuggee was running, waiting for
+    // the frame it is to be evaluated in.
+    std::optional<RefreshRequest> m_deferredLocalsRequest;
     QSet<QString> m_expandedINames;
     QMap<QString, Local> m_locals;
     QStringList m_localRoots;

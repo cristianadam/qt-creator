@@ -65,7 +65,8 @@ static DebuggerEngineSetupData dapImplSetupData()
     // Only what the protocol itself defines. Memory and disassembly are
     // optional in DAP, so they are offered here and refused per session if the
     // adapter turns out not to have them.
-    data.capabilities = AddWatcherCapability | BreakConditionCapability
+    data.capabilities = AddWatcherCapability | AddWatcherWhileRunningCapability
+                      | BreakConditionCapability
                       | CreateFullBacktraceCapability | ShowMemoryCapability
                       | DisassemblerCapability | OperateByInstructionCapability
                       | BreakOnThrowAndCatchCapability | TracePointCapability
@@ -73,6 +74,7 @@ static DebuggerEngineSetupData dapImplSetupData()
                       | RunToLineCapability | WatchComplexExpressionsCapability;
     data.extraCapabilities = DebuggerExtraCapability::BreakOnMain
                            | DebuggerExtraCapability::ContinueAfterAttach
+                           | DebuggerExtraCapability::ContinueInsteadOfRun
                            | DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::PeripheralRegisters
@@ -84,8 +86,10 @@ static DebuggerEngineSetupData dapImplSetupData()
                            | DebuggerExtraCapability::SpecialBreakpoints
                            | DebuggerExtraCapability::ThreadEvent
                            | DebuggerExtraCapability::Threads;
-    data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess
-                    | DebuggerStartModeFlag::AttachToRemoteServer;
+    data.startModes = DebuggerStartModeFlag::AttachToProcess
+                    | DebuggerStartModeFlag::AttachToRemoteServer
+                    | DebuggerStartModeFlag::AttachToTerminalStub
+                    | DebuggerStartModeFlag::Launch;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
     data.acceptsBreakpoint = [](const AcceptsBreakpointQuery &query) {
         if (query.startMode == AttachToCore)
@@ -138,6 +142,11 @@ void DapImpl::reportRunning(bool running)
 // that resumed on its own never made one.
 void DapImpl::reportRunRequested()
 {
+    // The adapter's frame ids do not survive a resume, so what was addressable
+    // while the debuggee was stopped is not once it runs again.
+    m_frameIds.clear();
+    m_currentFrameId = -1;
+    m_inferiorRunning = true;
     if (m_runRequestPending || !m_runReported)
         return;
     m_runRequestPending = true;
@@ -151,6 +160,8 @@ void DapImpl::reportRunResult(bool ok)
     if (!m_runRequestPending)
         return;
     m_runRequestPending = false;
+    if (!ok)
+        m_inferiorRunning = false;
     emit inferiorEvent(ok ? InferiorEvent::RunOk : InferiorEvent::RunFailed);
 }
 
@@ -411,7 +422,13 @@ void DapImpl::execute(const ExecutionRequest &request)
             return;
         }
         m_stopRequested = true;
-        m_client->sendPause();
+        // A stub-owned inferior runs in a console of its own, which is the
+        // stub's to interrupt: the adapter has no process of its own to reach
+        // it through.
+        if (std::holds_alternative<AttachToTerminalStubData>(m_startData.inferiorStartData))
+            emit interruptTerminalRequested();
+        else
+            m_client->sendPause();
         return;
     case ExecutionCommand::StepIn:
         m_stepRequested = true;
@@ -847,6 +864,13 @@ void DapImpl::refresh(const RefreshRequest &request)
 
     switch (request.kind) {
     case RefreshKind::Locals:
+        // A watcher added while the debuggee runs has no frame to be evaluated
+        // in yet, so the fetch waits for the next stop instead of coming back
+        // empty.
+        if (m_inferiorRunning) {
+            m_deferredLocalsRequest = request;
+            return;
+        }
         m_lastLocalsRequest = request;
         m_localsRequestId = request.requestId;
         m_expandedINames = request.expandedINames;
@@ -1327,6 +1351,15 @@ void DapImpl::handleStopped(const QJsonObject &event)
     m_inferiorRunning = false;
 
     const QString reason = body.value("reason").toString();
+    // The stub lets go of the inferior with a SIGCONT, which the adapter
+    // reports as a stop of its own: it is on the way to running rather than one
+    // anybody asked for, and nothing else can stop the debuggee before it, as
+    // the SIGCONT is what lets it run at all.
+    if (std::exchange(m_expectTerminalTrap, false)
+            && (reason == "signal" || reason == "exception")) {
+        execute({ExecutionCommand::Continue});
+        return;
+    }
     if (reason == "exception" || reason == "signal") {
         // The protocol names no signals. "text" is where an adapter says what
         // it was, if it says anything at all.
@@ -1398,6 +1431,11 @@ void DapImpl::reportInferiorDone(InferiorResultData result)
         return;
     }
     m_inferiorDoneReported = true;
+    if (m_deferredLocalsRequest) {
+        const quint64 requestId = m_deferredLocalsRequest->requestId;
+        m_deferredLocalsRequest.reset();
+        emit refreshDataReceived(requestId, RefreshKind::Locals, {});
+    }
     emit inferiorDone(result);
 }
 
@@ -1406,13 +1444,28 @@ void DapImpl::reportStop()
     if (std::exchange(m_reportsSetupStop, false)) {
         m_stopRequested = false;
         reportRunStarted(false);
-        if (m_startData.continueAfterAttach)
+        if (std::holds_alternative<AttachToTerminalStubData>(m_startData.inferiorStartData)) {
+            // The stub holds the inferior stopped until it is told to let it
+            // go, which is only safe once the debugger has it running.
+            m_expectTerminalTrap = true;
+            execute({ExecutionCommand::Continue});
+            emit kickoffTerminalProcessRequested();
+            return;
+        }
+        // A target the server was pointed at is handed over stopped, and only
+        // the session knows whether it is meant to run from here.
+        if (m_startData.continueAfterAttach || m_startData.continueInsteadOfRun)
             execute({ExecutionCommand::Continue});
         return;
     }
     emit inferiorEvent(m_stopRequested ? InferiorEvent::StopOk
                                        : InferiorEvent::SpontaneousStop);
     m_stopRequested = false;
+    if (m_deferredLocalsRequest) {
+        const RefreshRequest deferred = *m_deferredLocalsRequest;
+        m_deferredLocalsRequest.reset();
+        refresh(deferred);
+    }
 }
 
 void DapImpl::handleStackTrace(const QJsonObject &response)
