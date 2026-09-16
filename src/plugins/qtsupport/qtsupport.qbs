@@ -99,6 +99,8 @@ QtcPlugin {
         "qttestparser.cpp",
         "qttestparser.h",
         "qtversionfactory.h",
+        "qtversionfromfiles.cpp",
+        "qtversionfromfiles.h",
         "qtversionmanager.cpp",
         "qtversionmanager.h",
         "translationwizardpage.cpp",

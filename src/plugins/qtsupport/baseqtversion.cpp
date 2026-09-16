@@ -11,6 +11,7 @@
 #include "qtsupporttr.h"
 #include "qtsupportutils.h"
 #include "qtversionfactory.h"
+#include "qtversionfromfiles.h"
 #include "qtversionmanager.h"
 
 #include <android/androidconstants.h>
@@ -70,6 +71,7 @@ const char QTVERSIONAUTODETECTED[] = "isAutodetected";
 const char QTVERSIONDETECTIONSOURCE[] = "autodetectionSource";
 const char QTVERSION_OVERRIDE_FEATURES[] = "overrideFeatures";
 const char QTVERSIONQTPATH[] = "QMakePath";
+const char QTVERSIONFROMFILES[] = "DataFromFiles";
 
 const char QTVERSION_ABIS[] = "Abis";
 
@@ -208,6 +210,7 @@ public:
     bool m_mkspecReadUpToDate = false;
     QtVersion::QmakeBuildConfigs m_defaultBuildConfig{QtVersion::DebugBuild | QtVersion::BuildAll};
     bool m_qtIsExecutable = true;
+    bool m_dataFromFiles = false; // m_qtCommand is a prefix, not a qmake or qtpaths
 
     QSet<Id> m_overrideFeatures;
 
@@ -396,7 +399,8 @@ QString QtVersion::defaultUnexpandedDisplayName() const
     } else {
         // Deduce a description from '/foo/qt-folder/[qtbase]/bin/qmake' -> '/foo/qt-folder'.
         // '/usr' indicates System Qt 4.X on Linux.
-        for (const FilePath &dir : PathAndParents(qtFilePath().parentDir())) {
+        const FilePath start = d->m_dataFromFiles ? qtFilePath() : qtFilePath().parentDir();
+        for (const FilePath &dir : PathAndParents(start)) {
             const QString dirName = dir.fileName();
             if (dirName == "usr") { // System-installed Qt.
                 location = Tr::tr("System");
@@ -805,6 +809,7 @@ void QtVersion::fromMap(const Store &map, const FilePath &filePath)
         }
     }
     d->m_qtCommand = filePath.resolvePath(d->m_qtCommand);
+    d->m_dataFromFiles = map.value(QTVERSIONFROMFILES, false).toBool();
     d->updateVersionInfoNow();
 
     Store::const_iterator itQtAbis = map.find(QTVERSION_ABIS);
@@ -840,6 +845,8 @@ Store QtVersion::toMap() const
         result.insert(QTVERSION_OVERRIDE_FEATURES, Id::toStringList(d->m_overrideFeatures));
 
     result.insert(QTVERSIONQTPATH, qtFilePath().toSettings());
+    if (d->m_dataFromFiles)
+        result.insert(QTVERSIONFROMFILES, true);
 
     return result;
 }
@@ -882,8 +889,13 @@ QString QtVersion::invalidReason() const
         return Tr::tr("Qt version has no name");
     if (qtFilePath().isEmpty())
         return Tr::tr("No qtpaths or qmake path set");
-    if (!d->m_qtIsExecutable)
+    if (!d->m_qtIsExecutable) {
+        if (d->m_dataFromFiles) {
+            return Tr::tr("Cannot read the Qt description in %1")
+                .arg(qtFilePath().toUserOutput());
+        }
         return Tr::tr("%1 does not exist or is not executable").arg(qtFilePath().fileName());
+    }
     if (!d->data().installed)
         return Tr::tr("Qt version is not properly installed");
     if (binPath().isEmpty())
@@ -913,6 +925,9 @@ FilePath QtVersion::qtFilePath() const
 
 FilePath QtVersion::qmakeFilePath() const
 {
+    if (d->m_dataFromFiles)
+        return {};
+
     if (d->m_qmakeCommand)
         return *d->m_qmakeCommand;
 
@@ -1428,18 +1443,19 @@ QVersionNumber QtVersion::qtVersion() const
     return QVersionNumber::fromString(qtVersionString());
 }
 
-static Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
+// "hostToolsAvailable" tells whether the host side of the description is expected to be
+// present. A Qt described by its own files can be an installation without the host tools
+// it was built with, e.g. one unpacked on a device, and then only its own libraries can
+// decide whether it is installed.
+static QtVersionData dataFromVersionInfo(const QHash<ProKey, ProString> &versionInfo,
+                                         const FilePath &base,
+                                         bool hostToolsAvailable)
 {
     QtVersionData data;
-
-    QString error;
-    if (!QtVersionPrivate::queryQMakeVariables(m_qmakeCommand, &data.versionInfo, &error)) {
-        return ResultError(Tr::tr("Cannot update Qt version information from %1: %2.")
-                           .arg(m_qmakeCommand.displayName(), error));
-    }
+    data.versionInfo = versionInfo;
 
     auto fileProperty = [&](const QByteArray &name) {
-        return m_qmakeCommand.withNewPath(QtVersionPrivate::qmakeProperty(data.versionInfo, name))
+        return base.withNewPath(QtVersionPrivate::qmakeProperty(data.versionInfo, name))
             .cleanPath();
     };
 
@@ -1473,7 +1489,7 @@ static Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
     };
 
     QList<CheckDir> checkDirs = {
-        {&data.hostBinPath, &data.installed},
+        {hostToolsAvailable ? &data.hostBinPath : &data.libraryPath, &data.installed},
         {&data.docsPath, &data.hasDocumentation},
         {&data.examplesPath, &data.hasExamples},
         {&data.demosPath, &data.hasDemos},
@@ -1494,6 +1510,39 @@ static Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
     data.versionInfoUpToDate = true;
 
     return data;
+}
+
+static Result<QtVersionData> dataForQMake(const FilePath qmakeCommand)
+{
+    QHash<ProKey, ProString> versionInfo;
+    QString error;
+    if (!QtVersionPrivate::queryQMakeVariables(qmakeCommand, &versionInfo, &error)) {
+        return ResultError(Tr::tr("Cannot update Qt version information from %1: %2.")
+                           .arg(qmakeCommand.displayName(), error));
+    }
+
+    return dataFromVersionInfo(versionInfo, qmakeCommand, true);
+}
+
+static Result<QHash<ProKey, ProString>> versionInfoForPrefix(const FilePath &prefix)
+{
+    const Result<QMap<QString, QString>> properties = qtPropertiesFromPrefix(prefix);
+    if (!properties)
+        return ResultError(properties.error());
+
+    QHash<ProKey, ProString> versionInfo;
+    for (auto it = properties->cbegin(), end = properties->cend(); it != end; ++it)
+        versionInfo.insert(ProKey(it.key()), ProString(it.value()));
+    return versionInfo;
+}
+
+static Result<QtVersionData> dataForPrefix(const FilePath prefix)
+{
+    const Result<QHash<ProKey, ProString>> versionInfo = versionInfoForPrefix(prefix);
+    if (!versionInfo)
+        return ResultError(versionInfo.error());
+
+    return dataFromVersionInfo(*versionInfo, prefix, false);
 }
 
 // A qmake query is a blocking process call (dataForQMake), invoked synchronously via
@@ -1572,6 +1621,11 @@ void QtVersionPrivate::updateVersionInfoNow()
     // Do not start a (blocking) qmake query for a device that is not reachable.
     if (!qmakeQueryable(m_qtCommand))
         return;
+
+    if (m_dataFromFiles) {
+        m_dataFuture = Utils::asyncRun([prefix = m_qtCommand] { return dataForPrefix(prefix); });
+        return;
+    }
 
     // extract data from qmake executable
     m_dataFuture = Utils::asyncRun([qmake = m_qtCommand] { return dataForQMake(qmake); });
@@ -2450,18 +2504,18 @@ void QtVersion::resetCache() const
 
 static QList<QtVersionFactory *> g_qtVersionFactories;
 
-QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
-    const FilePath &qmakePath, const DetectionSource &detectionSource, QString *error)
+QtVersion *QtVersionFactory::createQtVersion(const FilePath &qtPath,
+                                             const QHash<ProKey, ProString> &versionInfo,
+                                             bool dataFromFiles,
+                                             const DetectionSource &detectionSource,
+                                             QString *error)
 {
-    QHash<ProKey, ProString> versionInfo;
-    if (!QtVersionPrivate::queryQMakeVariables(qmakePath, &versionInfo, error))
-        return nullptr;
-    FilePath mkspec = QtVersionPrivate::mkspecFromVersionInfo(versionInfo, qmakePath);
+    const FilePath mkspec = QtVersionPrivate::mkspecFromVersionInfo(versionInfo, qtPath);
 
     QMakeVfs vfs;
     QMakeGlobals globals;
     globals.setProperties(versionInfo);
-    setupProparserDevice(globals, qmakePath);
+    setupProparserDevice(globals, qtPath);
     ProMessageHandler msgHandler(false);
     ProFileCacheManager::instance()->incRefCount();
     QMakeParser parser(ProFileCacheManager::instance()->cache(), &vfs, &msgHandler);
@@ -2472,9 +2526,6 @@ QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
             [](const QtVersionFactory *l, const QtVersionFactory *r) {
         return l->m_priority > r->m_priority;
     });
-
-    if (!qmakePath.isExecutableFile())
-        return nullptr;
 
     QtVersionFactory::SetupData setup;
     setup.config = evaluator.values("CONFIG");
@@ -2488,7 +2539,8 @@ QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
             QTC_ASSERT(ver, continue);
             ver->d->m_id = QtVersionManager::getUniqueId();
             QTC_CHECK(ver->d->m_qtCommand.isEmpty()); // Should only be used once.
-            ver->d->m_qtCommand = qmakePath;
+            ver->d->m_qtCommand = qtPath;
+            ver->d->m_dataFromFiles = dataFromFiles;
             ver->d->updateVersionInfoNow();
             ver->d->m_detectionSource = detectionSource;
             ver->updateDefaultDisplayName();
@@ -2497,10 +2549,35 @@ QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
         }
     }
     ProFileCacheManager::instance()->decRefCount();
-    if (error) {
-        *error = Tr::tr("No factory found for qmake: \"%1\"").arg(qmakePath.displayName());
-    }
+    if (error)
+        *error = Tr::tr("No factory found for Qt version: \"%1\"").arg(qtPath.displayName());
     return nullptr;
+}
+
+QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
+    const FilePath &qmakePath, const DetectionSource &detectionSource, QString *error)
+{
+    if (!qmakePath.isExecutableFile())
+        return nullptr;
+
+    QHash<ProKey, ProString> versionInfo;
+    if (!QtVersionPrivate::queryQMakeVariables(qmakePath, &versionInfo, error))
+        return nullptr;
+
+    return createQtVersion(qmakePath, versionInfo, false, detectionSource, error);
+}
+
+QtVersion *QtVersionFactory::createQtVersionFromPrefix(
+    const FilePath &prefix, const DetectionSource &detectionSource, QString *error)
+{
+    const Result<QHash<ProKey, ProString>> versionInfo = versionInfoForPrefix(prefix);
+    if (!versionInfo) {
+        if (error)
+            *error = versionInfo.error();
+        return nullptr;
+    }
+
+    return createQtVersion(prefix, *versionInfo, true, detectionSource, error);
 }
 
 QtVersionFactory::QtVersionFactory()
