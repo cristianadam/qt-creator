@@ -98,6 +98,13 @@ NavigationSubWidget::~NavigationSubWidget() = default;
 
 void NavigationSubWidget::comboBoxIndexChanged(int factoryIndex)
 {
+    // The row of the shown view also moves when a factory before it comes or goes.
+    if (m_navigationWidgetFactory
+        && m_navigationComboBox->itemData(factoryIndex, NavigationWidget::FactoryObjectRole)
+                   .value<INavigationWidgetFactory *>() == m_navigationWidgetFactory) {
+        return;
+    }
+
     saveSettings();
 
     // Remove toolbutton

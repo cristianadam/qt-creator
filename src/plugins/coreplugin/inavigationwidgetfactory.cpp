@@ -6,6 +6,8 @@
 
 #include "inavigationwidgetfactory.h"
 
+#include "navigationwidget.h"
+
 #include <QIcon>
 #include <QKeySequence>
 
@@ -76,6 +78,7 @@ INavigationWidgetFactory::INavigationWidgetFactory()
 INavigationWidgetFactory::~INavigationWidgetFactory()
 {
     g_navigationWidgetFactories.removeOne(this);
+    NavigationWidget::removeFactory(this);
 }
 
 const QList<INavigationWidgetFactory *> INavigationWidgetFactory::allNavigationFactories()

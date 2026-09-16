@@ -12,12 +12,15 @@
 #include "modemanager.h"
 #include "navigationsubwidget.h"
 
+#include <extensionsystem/pluginmanager.h>
+
 #include <utils/fancymainwindow.h>
 #include <utils/utilsicons.h>
 
 #ifdef WITH_TESTS
 #include <utils/temporarydirectory.h>
 
+#include <QPointer>
 #include <QTest>
 #endif
 
@@ -54,6 +57,8 @@ static NavigationWidget *instance(Side side)
 {
     return side == Side::Left ? s_instanceLeft : s_instanceRight;
 }
+
+static bool s_factoriesTaken = false;
 
 NavigationWidgetPlaceHolder *NavigationWidgetPlaceHolder::s_currentLeft = nullptr;
 NavigationWidgetPlaceHolder *NavigationWidgetPlaceHolder::s_currentRight = nullptr;
@@ -271,6 +276,55 @@ void NavigationWidget::setFactories(const QList<INavigationWidgetFactory *> &fac
     }
     d->m_factoryModel->sort(0);
     updateToggleAction();
+    s_factoriesTaken = true;
+}
+
+void NavigationWidget::addFactory(INavigationWidgetFactory *factory)
+{
+    if (!s_factoriesTaken)
+        return;
+    for (const Side side : {Side::Left, Side::Right}) {
+        NavigationWidget *navigationWidget = instance(side);
+        if (navigationWidget && navigationWidget->factoryRow(factory) < 0)
+            navigationWidget->setFactories({factory});
+    }
+}
+
+void NavigationWidget::removeFactory(INavigationWidgetFactory *factory)
+{
+    if (!s_factoriesTaken || ExtensionSystem::PluginManager::isShuttingDown())
+        return;
+    const Id id = factory->id();
+    for (const Side side : {Side::Left, Side::Right}) {
+        NavigationWidget *navigationWidget = instance(side);
+        if (!navigationWidget)
+            continue;
+        NavigationWidgetPrivate *nd = navigationWidget->d;
+        if (QAction *action = nd->m_actionMap.key(id)) {
+            ActionManager::unregisterAction(action, id.withPrefix("QtCreator.Sidebar."));
+            nd->m_actionMap.remove(action);
+            delete action;
+        }
+        nd->m_commandMap.remove(id);
+        const int row = navigationWidget->factoryRow(factory);
+        if (row < 0)
+            continue;
+        // An open view of it falls back to its neighbour.
+        navigationWidget->d->m_factoryModel->removeRow(row);
+        navigationWidget->updateToggleAction();
+    }
+}
+
+int NavigationWidget::factoryRow(INavigationWidgetFactory *factory) const
+{
+    for (int row = 0; row < d->m_factoryModel->rowCount(); ++row) {
+        const QModelIndex index = d->m_factoryModel->index(row, 0);
+        if (d->m_factoryModel->data(index, FactoryObjectRole).value<INavigationWidgetFactory *>()
+            == factory) {
+            return row;
+        }
+    }
+    return -1;
 }
 
 Key NavigationWidget::settingsGroup() const
@@ -784,6 +838,71 @@ private slots:
 QObject *createNavigationSettingsTest()
 {
     return new NavigationSettingsTest;
+}
+
+class TestNavigationWidgetFactory final : public INavigationWidgetFactory
+{
+public:
+    explicit TestNavigationWidgetFactory(Id id)
+    {
+        setId(id);
+        setDisplayName("Late View");
+        setPriority(0);
+        NavigationWidget::addFactory(this);
+    }
+
+    NavigationView createWidget() final { return {new QWidget, {}}; }
+};
+
+class NavigationFactoriesTest final : public QObject
+{
+    Q_OBJECT
+
+private:
+    static int rowOf(Id id)
+    {
+        QAbstractItemModel *model = instance(Side::Left)->factoryModel();
+        for (int row = 0; row < model->rowCount(); ++row) {
+            const QModelIndex index = model->index(row, 0);
+            if (model->data(index, NavigationWidget::FactoryIdRole).value<Id>() == id)
+                return row;
+        }
+        return -1;
+    }
+
+private slots:
+    void testALateFactoryIsOffered()
+    {
+        QVERIFY(instance(Side::Left));
+        QAbstractItemModel *model = instance(Side::Left)->factoryModel();
+        QVERIFY(model->rowCount() > 0);
+        // Its row moves when the late factory comes and goes.
+        const Id shownId = model->index(model->rowCount() - 1, 0)
+                               .data(NavigationWidget::FactoryIdRole).value<Id>();
+        const QPointer<QWidget> shown = NavigationWidget::activateSubWidget(shownId, Side::Left);
+        QVERIFY(shown);
+
+        const Id id("Test.LateNavigationView");
+        const Id actionId = id.withPrefix("QtCreator.Sidebar.");
+        QCOMPARE(rowOf(id), -1);
+        {
+            const TestNavigationWidgetFactory factory(id);
+            const int row = rowOf(id);
+            QCOMPARE(row, 0);
+            QCOMPARE(model->index(row, 0).data().toString(), QString("Late View"));
+            QVERIFY(ActionManager::command(actionId));
+            QVERIFY(shown);
+        }
+        QCOMPARE(rowOf(id), -1);
+        QVERIFY(!ActionManager::command(actionId));
+        QVERIFY(shown);
+        QCOMPARE(NavigationWidget::activateSubWidget(shownId, Side::Left), shown.data());
+    }
+};
+
+QObject *createNavigationFactoriesTest()
+{
+    return new NavigationFactoriesTest;
 }
 
 #endif // WITH_TESTS

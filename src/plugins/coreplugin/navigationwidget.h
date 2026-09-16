@@ -70,6 +70,12 @@ public:
 
     void setFactories(const QList<INavigationWidgetFactory*> &factories);
 
+    // A factory made after the sidebars took the list announces itself here,
+    // once it carries its id and its display name. Removal needs no call, the
+    // INavigationWidgetFactory destructor does it.
+    static void addFactory(INavigationWidgetFactory *factory);
+    static void removeFactory(INavigationWidgetFactory *factory);
+
     Utils::Key settingsGroup() const;
     void saveSettings(Utils::QtcSettings *settings);
     void restoreSettings(Utils::QtcSettings *settings);
@@ -107,6 +113,7 @@ private:
                                                  int factoryIndex,
                                                  bool updateActivationsMap = true);
     int factoryIndex(Utils::Id id);
+    int factoryRow(INavigationWidgetFactory *factory) const;
     Utils::Key settingsKey(const Utils::Key &key) const;
     Utils::Key layoutSettingsPrefix(Utils::Id mode) const;
 
@@ -115,6 +122,7 @@ private:
 
 #ifdef WITH_TESTS
 CORE_EXPORT QObject *createNavigationSettingsTest();
+CORE_EXPORT QObject *createNavigationFactoriesTest();
 #endif
 
 } // namespace Core
