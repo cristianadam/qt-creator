@@ -8,6 +8,7 @@
 #include "selectabletexteditorwidget.h" // TODO: we need DiffSelections here only
 
 #include <QWidget>
+#include <QHash>
 
 namespace Core { class IContext; }
 
@@ -47,6 +48,8 @@ public:
     QMap<int, QPair<int, QString>> m_skippedLines;
     // block number, separator. Set for file, chunk or span line.
     QMap<int, bool> m_separators;
+    // block number, extra-area diff sign.
+    QHash<int, QChar> m_diffSigns;
 
     int m_lineNumberDigits = 1;
 

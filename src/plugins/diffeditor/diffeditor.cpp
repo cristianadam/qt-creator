@@ -41,6 +41,7 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStyle>
+#include <QSignalBlocker>
 #include <QTextBlock>
 #include <QTimer>
 #include <QToolBar>
@@ -347,6 +348,7 @@ private:
     QAction *m_contextSpinBoxAction = nullptr;
     QAction *m_toggleSyncAction = nullptr;
     QAction *m_whitespaceButtonAction = nullptr;
+    QAction *m_signsButtonAction = nullptr;
     QAction *m_patienceButtonAction = nullptr;
     QAction *m_foldAllAction = nullptr;
     QAction *m_toggleDescriptionAction = nullptr;
@@ -441,6 +443,13 @@ DiffEditor::DiffEditor()
     m_whitespaceButtonAction = addAction({}, Tr::tr("Ignore Whitespace"),
                                          Tr::tr("Ctrl+Meta+I"), Tr::tr("Ctrl+Alt+I"));
     m_whitespaceButtonAction->setCheckable(true);
+    m_signsButtonAction = addAction({}, Tr::tr("+/- Signs"), {}, {});
+    m_signsButtonAction->setObjectName("DiffEditorChangeSignsAction"); // autotest
+    m_signsButtonAction->setCheckable(true);
+    m_signsButtonAction->setChecked(TextEditor::displaySettings().markDiffChangeSigns());
+    m_signsButtonAction->setToolTip(Tr::tr("Mark added, removed, and whitespace-only lines with "
+                                           "+, -, and ● signs, so the changes can be told apart "
+                                           "without relying on color."));
     m_patienceButtonAction = addAction({}, Tr::tr("Patience"),
                                        Tr::tr("Ctrl+Meta+P"), Tr::tr("Ctrl+Alt+P"));
     m_patienceButtonAction->setCheckable(true);
@@ -467,6 +476,15 @@ DiffEditor::DiffEditor()
             this, &DiffEditor::foldAllHasChanged);
     connect(m_whitespaceButtonAction, &QAction::toggled,
             this, &DiffEditor::ignoreWhitespaceHasChanged);
+    connect(m_signsButtonAction, &QAction::toggled, this, [](bool on) {
+        TextEditor::displaySettings().markDiffChangeSigns.setValue(on);
+        TextEditor::displaySettings().writeSettings();
+    });
+    connect(&TextEditor::displaySettings(), &DisplaySettings::changed,
+            m_signsButtonAction, [this] {
+        QSignalBlocker blocker(m_signsButtonAction);
+        m_signsButtonAction->setChecked(TextEditor::displaySettings().markDiffChangeSigns());
+    });
     connect(m_patienceButtonAction, &QAction::toggled,
             this, &DiffEditor::patienceHasChanged);
     connect(m_contextSpinBox, &QSpinBox::valueChanged,

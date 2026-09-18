@@ -123,6 +123,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
     int runRightCount = 0; // real editor lines in the run, without the phantom
     InlineDiffDecorator::GhostBlock pendingGhost;
     InlineDiffDecorator::ChangedRange pendingChange;
+    QHash<int, QChar> pendingBaselineSigns;
     bool hasPendingChange = false;
 
     const auto flushRun = [&] {
@@ -133,6 +134,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
             // show, and a hunk for it would offer unactionable buttons
             pendingGhost = {};
             pendingChange = {};
+            pendingBaselineSigns.clear();
             hasPendingChange = false;
             runStartLeftLine = -1;
             runStartRightLine = -1;
@@ -148,6 +150,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
             InlineDiffDecorator::ChangedRange baselineRange;
             baselineRange.startLine = runStartLeftLine;
             baselineRange.endLine = runStartLeftLine + runLeftCount - 1;
+            baselineRange.diffSigns = pendingBaselineSigns;
             for (int i = 0; i < runLeftCount && i < pendingGhost.charHighlights.size(); ++i) {
                 if (!pendingGhost.charHighlights.at(i).isEmpty())
                     baselineRange.charHighlights.insert(runStartLeftLine + i,
@@ -163,6 +166,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
         model.hunks.append(hunk);
         pendingGhost = {};
         pendingChange = {};
+        pendingBaselineSigns.clear();
         hasPendingChange = false;
         runStartLeftLine = -1;
         runStartRightLine = -1;
@@ -190,6 +194,8 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
                 pendingGhost.lines.append(left.text);
                 pendingGhost.charHighlights.append(
                     toCharRanges(left.changedPositions, int(left.text.size())));
+                pendingGhost.diffSigns.append(DiffUtils::changeSign(row, LeftSide));
+                pendingBaselineSigns.insert(leftLine, DiffUtils::changeSign(row, LeftSide));
             }
             ++leftLine;
         }
@@ -201,6 +207,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
                     hasPendingChange = true;
                 }
                 pendingChange.endLine = rightLine;
+                pendingChange.diffSigns.insert(rightLine, DiffUtils::changeSign(row, RightSide));
                 const InlineDiffDecorator::CharRanges ranges
                     = toCharRanges(right.changedPositions, int(right.text.size()));
                 if (!ranges.isEmpty())
@@ -213,37 +220,13 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
     return model;
 }
 
-// Spaces and tabs only, like "git diff -w" and Utils::Differ's own helper.
+// Spaces, tabs, and carriage returns, like DiffUtils' whitespace comparison.
 // QChar::isSpace() would also match the no-break space and the other Unicode
 // separators, hiding an edit that is invisible in the editor - the diff is
 // the only place it shows up.
 static bool isWhitespace(QChar c)
 {
-    return c == ' ' || c == '\t';
-}
-
-// the two lines are the same apart from the whitespace in them
-static bool equalIgnoringWhitespace(const QString &left, const QString &right)
-{
-    int l = 0;
-    int r = 0;
-    while (l < left.size() && r < right.size()) {
-        if (isWhitespace(left.at(l))) {
-            ++l;
-        } else if (isWhitespace(right.at(r))) {
-            ++r;
-        } else if (left.at(l) != right.at(r)) {
-            return false;
-        } else {
-            ++l;
-            ++r;
-        }
-    }
-    while (l < left.size() && isWhitespace(left.at(l)))
-        ++l;
-    while (r < right.size() && isWhitespace(right.at(r)))
-        ++r;
-    return l == left.size() && r == right.size();
+    return c == ' ' || c == '\t' || c == '\r';
 }
 
 // Drops the character level highlights of a still changed line that cover
@@ -289,7 +272,7 @@ static void ignoreWhitespaceChanges(ChunkData &chunk)
             || left.text == right.text) {
             continue;
         }
-        if (equalIgnoringWhitespace(left.text, right.text)) {
+        if (DiffUtils::isWhitespaceOnlyChange(row)) {
             row.equal = true;
             left.changedPositions.clear();
             right.changedPositions.clear();
@@ -1806,9 +1789,9 @@ public:
         m_signsAction->setObjectName("InlineDiffChangeSignsAction"); // autotest
         m_signsAction->setCheckable(true);
         m_signsAction->setChecked(TextEditor::displaySettings().markDiffChangeSigns());
-        m_signsAction->setToolTip(Tr::tr("Mark added and removed lines with \"+\" and \"-\" "
-                                         "signs, so the changes can be told apart without "
-                                         "relying on color."));
+        m_signsAction->setToolTip(Tr::tr("Mark added, removed, and whitespace-only lines with "
+                                         "+, -, and ● signs, so the changes can be told apart "
+                                         "without relying on color."));
         connect(m_signsAction, &QAction::toggled, this, [](bool on) {
             TextEditor::displaySettings().markDiffChangeSigns.setValue(on);
             TextEditor::displaySettings().writeSettings();

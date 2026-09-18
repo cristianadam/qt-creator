@@ -7318,11 +7318,21 @@ void TextEditorWidgetPrivate::paintDiffChangeSigns(QPainter &painter,
     const qreal x = data.extraAreaWidth - data.signWidth + StyleHelper::SpacingTokens::PaddingHXs;
     const qreal width = data.signWidth - StyleHelper::SpacingTokens::PaddingHXs;
     const auto drawSign = [&](QChar sign, qreal top, qreal height) {
+        const QColor defaultColor = data.currentLineNumberFormat.foreground().color();
+        QColor color = defaultColor;
+        if (sign == u'+')
+            color = creatorColor(Theme::Token_Notification_Success_Default);
+        else if (sign == u'-')
+            color = creatorColor(Theme::Token_Notification_Danger_Default);
+        else if (sign == QChar(0x25cf))
+            color = creatorColor(Theme::Token_Notification_Alert_Default);
+        if (color.isValid())
+            painter.setPen(color);
         painter.drawText(QRectF(x, top, width, height),
                          Qt::AlignLeft | Qt::AlignVCenter, QString(sign));
     };
 
-    // '-' next to each removed line shown as a ghost row. Ghost and spacer
+    // Signs next to each removed line shown as a ghost row. Ghost and spacer
     // items sit above the main line (or below it for the last block), so walk
     // the block's layout items in paint order and mark the ghost rows only.
     if (m_diffHasRemovedRows) {
@@ -7334,7 +7344,8 @@ void TextEditorWidgetPrivate::paintDiffChangeSigns(QPainter &painter,
                     if (QTextLayout *ghostLayout = textItem->layout()) {
                         for (int i = 0; i < ghostLayout->lineCount(); ++i) {
                             const QTextLine line = ghostLayout->lineAt(i);
-                            drawSign(u'-', top + line.y(), line.height());
+                            drawSign(inlineDiffGhostSign(ghostLayout, line.textStart()),
+                                     top + line.y(), line.height());
                         }
                     }
                 }

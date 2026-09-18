@@ -56,6 +56,52 @@ int ChunkSelection::selectedRowsCount() const
     return Utils::toSet(selection[LeftSide]).unite(Utils::toSet(selection[RightSide])).size();
 }
 
+// Treat carriage returns as whitespace here because they are the CR in CRLF
+// line endings. They are part of TextLineData while the line separator itself
+// is split away.
+static bool isDiffWhitespace(QChar c)
+{
+    return c == ' ' || c == '\t' || c == '\r';
+}
+
+static bool equalIgnoringHorizontalWhitespace(const QString &left, const QString &right)
+{
+    int leftPos = 0;
+    int rightPos = 0;
+    while (leftPos < left.size() && rightPos < right.size()) {
+        if (isDiffWhitespace(left.at(leftPos))) {
+            ++leftPos;
+        } else if (isDiffWhitespace(right.at(rightPos))) {
+            ++rightPos;
+        } else if (left.at(leftPos++) != right.at(rightPos++)) {
+            return false;
+        }
+    }
+    while (leftPos < left.size() && isDiffWhitespace(left.at(leftPos)))
+        ++leftPos;
+    while (rightPos < right.size() && isDiffWhitespace(right.at(rightPos)))
+        ++rightPos;
+    return leftPos == left.size() && rightPos == right.size();
+}
+
+bool DiffUtils::isWhitespaceOnlyChange(const RowData &row)
+{
+    if (row.equal || row.line[LeftSide].textLineType != TextLineData::TextLine
+        || row.line[RightSide].textLineType != TextLineData::TextLine
+        || row.line[LeftSide].text == row.line[RightSide].text) {
+        return false;
+    }
+    return equalIgnoringHorizontalWhitespace(row.line[LeftSide].text,
+                                             row.line[RightSide].text);
+}
+
+QChar DiffUtils::changeSign(const RowData &row, DiffSide side)
+{
+    if (isWhitespaceOnlyChange(row))
+        return QChar(0x25cf);
+    return side == LeftSide ? QChar('-') : QChar('+');
+}
+
 static QList<TextLineData> assemblyRows(const QList<TextLineData> &lines,
                                         const QMap<int, int> &lineSpans)
 {
