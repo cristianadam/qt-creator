@@ -25,6 +25,7 @@ private slots:
     void testFilterEmptyFlags();
     void testFilterFromFilename();
     void testFilterArguments();
+    void testFrameworkPaths();
     void testSplitFlags();
     void testSplitFlagsWithEscapedQuotes();
     void testFilterCommand();

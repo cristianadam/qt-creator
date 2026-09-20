@@ -166,6 +166,35 @@ void CompilationDatabaseTests::testFilterArguments()
              ? QString("C:\\sysroot\\embedded") : QString("/opt/sysroot/embedded"));
 }
 
+// Where a framework is looked for is a kind of its own, not a system path:
+// <QtCore/qstring.h> is found under QtCore.framework/Headers/qstring.h, so a
+// framework path recorded as a system path answers nothing -- and every
+// include Qt's own headers write that way goes unresolved.
+void CompilationDatabaseTests::testFrameworkPaths()
+{
+    const FilePath frameworks = "/opt/Qt/lib";
+    const FilePath systemFrameworks = "/System/Library/Frameworks";
+
+    CompilationDatabaseUtilsTestData testData;
+    testData.fileName = "main.cpp";
+    testData.workingDir = "/opt/build";
+    testData.flags = QStringList{"clang++",
+                                 "-iframework",
+                                 frameworks.path(),
+                                 QString("-F") + systemFrameworks.path(),
+                                 "-isystem",
+                                 "/opt/Qt/include",
+                                 "-Fomain.obj"};
+
+    testData.getFilteredFlags();
+
+    QCOMPARE(testData.headerPaths,
+             (HeaderPaths{HeaderPath(frameworks, HeaderPathType::Framework),
+                          HeaderPath(systemFrameworks, HeaderPathType::Framework),
+                          HeaderPath(FilePath("/opt/Qt/include"), HeaderPathType::System)}));
+    QVERIFY(testData.flags.isEmpty());
+}
+
 static QString kCmakeCommand
     = "C:\\PROGRA~2\\MICROS~2\\2017\\COMMUN~1\\VC\\Tools\\MSVC\\1415~1.267\\bin\\HostX64\\x64\\cl."
       "exe "

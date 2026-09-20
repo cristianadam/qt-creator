@@ -20,6 +20,19 @@ using namespace Utils;
 
 namespace CompilationDatabaseProjectManager::Internal {
 
+// Which kind of search path the flag that introduced it stands for. The
+// three lists are disjoint, so the flag it came from says which one it is.
+static HeaderPathType headerPathTypeFor(const QString &flag,
+                                        const QStringList &userFlags,
+                                        const QStringList &frameworkFlags)
+{
+    if (userFlags.contains(flag))
+        return HeaderPathType::User;
+    if (frameworkFlags.contains(flag))
+        return HeaderPathType::Framework;
+    return HeaderPathType::System;
+}
+
 static CppEditor::ProjectFile::Kind fileKindFromString(QString flag)
 {
     using namespace CppEditor;
@@ -134,16 +147,29 @@ void filteredFlags(const FilePath &filePath,
             continue;
         }
 
+        // Where clang-cl writes its output, spelled the way it also accepts
+        // with a dash. Taken out before the search paths below, or -Fobar.obj
+        // would read as the framework path -F "obar.obj".
+        if (flag.startsWith("-Fo") || flag.startsWith("-Fd") || flag.startsWith("-Fe"))
+            continue;
+
         const QStringList userIncludeFlags{"-I", "-iquote", "/I"};
         const QStringList systemIncludeFlags{"-isystem", "-idirafter", "-imsvc", "/imsvc"};
-        const QStringList allIncludeFlags = QStringList(userIncludeFlags) << systemIncludeFlags;
+        // Where a framework is looked for. Needed as a kind of its own because
+        // <QtCore/qstring.h> is found under QtCore.framework/Headers/qstring.h
+        // rather than under the path itself -- so a framework path recorded as
+        // a system path resolves nothing, and every include Qt's own headers
+        // write that way goes unresolved.
+        const QStringList frameworkIncludeFlags{"-F", "-iframework"};
+        const QStringList allIncludeFlags = QStringList(userIncludeFlags) << systemIncludeFlags
+                                                                          << frameworkIncludeFlags;
         const QString includeOpt = Utils::findOrDefault(allIncludeFlags, [flag](const QString &opt) {
             return flag.startsWith(opt) && flag != opt;
         });
         if (!includeOpt.isEmpty()) {
             const FilePath path = workingDir.resolvePath(flag.mid(includeOpt.size()));
-            headerPaths.append({path, userIncludeFlags.contains(includeOpt)
-                                ? HeaderPathType::User : HeaderPathType::System});
+            headerPaths.append({path, headerPathTypeFor(includeOpt, userIncludeFlags,
+                                                        frameworkIncludeFlags)});
             continue;
         }
 
@@ -155,12 +181,8 @@ void filteredFlags(const FilePath &filePath,
             continue;
         }
 
-        if (userIncludeFlags.contains(flag)) {
-            includePathType = HeaderPathType::User;
-            continue;
-        }
-        if (systemIncludeFlags.contains(flag)) {
-            includePathType = HeaderPathType::System;
+        if (allIncludeFlags.contains(flag)) {
+            includePathType = headerPathTypeFor(flag, userIncludeFlags, frameworkIncludeFlags);
             continue;
         }
 
