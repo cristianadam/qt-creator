@@ -81,6 +81,10 @@ private:
     // the one the entries are under. Unused where that model is not built in.
     mutable QMutex m_pendingMutex;
     QSet<Utils::FilePath> m_pending;
+    // Files taken out of the index since the batch being read began. A
+    // reading of one of them was already under way when it went, and must
+    // not put it back.
+    QSet<Utils::FilePath> m_removedSinceRead;
     // Of the batch being read, how many have yet to come back.
     int m_beingRead = 0;
     bool m_readScheduled = false;

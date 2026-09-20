@@ -142,6 +142,10 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // Whatever the last batch did not deliver -- it was cancelled, or a
         // file it held was removed -- is not owed any longer.
         m_beingRead = 0;
+        // And what was removed while it ran has been kept out of the index
+        // already; a file removed and then indexed again stands in the batch
+        // below on its own account.
+        m_removedSinceRead.clear();
         if (m_pending.isEmpty())
             return;
         batch = FilePaths(m_pending.cbegin(), m_pending.cend());
@@ -184,6 +188,12 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
         if (m_pending.contains(read.first))
             continue;
 
+        // Taken out of the index since this reading began -- the project was
+        // closed, or the file was. Putting the entries in now would name
+        // things nothing can reach, and nothing would take them out again.
+        if (m_removedSinceRead.contains(read.first))
+            continue;
+
         m_infosByFile.insert(read.first.intern(), read.second);
     }
 }
@@ -201,8 +211,10 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
 
     {
         QMutexLocker locker(&m_pendingMutex);
-        for (const FilePath &file : files)
+        for (const FilePath &file : files) {
             m_pending.remove(file);
+            m_removedSinceRead.insert(file);
+        }
     }
 
     QMutexLocker locker(&m_infosByFileMutex);
