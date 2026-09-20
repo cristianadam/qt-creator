@@ -9,6 +9,8 @@
 #include "projectpart.h"
 #include "cppprojectfile.h"
 
+#include <projectexplorer/projectmacro.h>
+
 #include <cplusplus/Control.h>
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Literals.h>
@@ -1666,7 +1668,19 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
 
 CxxFrontendIndexInputs cxxFrontendIndexInputs(const Snapshot &builtinSnapshot)
 {
-    return {builtinSnapshot, definesIn(configurationFileIn(builtinSnapshot))};
+    // Asked of the model rather than read off the configuration document in
+    // the snapshot. That document is in the snapshot, but the indexer clears
+    // every document's source as soon as it is done with it, and a batch is
+    // put together after it has -- so by the time this runs the document is
+    // there and empty, and what comes back is no macros at all.
+    //
+    // Nothing said so. A file read without __cplusplus or __STDC__ takes the
+    // pre-ANSI branch of the platform's <sys/cdefs.h>, which defines const,
+    // volatile and signed away to nothing, so every file read after it is
+    // parsed with those keywords deleted.
+    QByteArray configuration = CppModelManager::codeModelConfiguration();
+    configuration += ProjectExplorer::Macro::toByteArray(CppModelManager::definedMacros());
+    return {builtinSnapshot, definesIn(configuration)};
 }
 
 QByteArray cxxFrontendProjectKey(const FilePath &filePath)
