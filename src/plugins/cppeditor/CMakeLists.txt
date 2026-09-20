@@ -181,6 +181,7 @@ extend_qtc_plugin(CppEditor
   DEPENDS CxxFrontendBridge cxx-frontend
   DEFINES QTC_WITH_CXX_FRONTEND
   SOURCES
+    cxxfrontendindexcache.cpp cxxfrontendindexcache.h
     cxxfrontendmodel.cpp cxxfrontendmodel.h
 )
 

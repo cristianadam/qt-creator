@@ -25,6 +25,7 @@
 #include <utils/stringtable.h>
 #include <utils/environment.h>
 
+#include <QCryptographicHash>
 #include <QHash>
 #include <QRegularExpression>
 #include <QTextBlock>
@@ -1668,9 +1669,39 @@ CxxFrontendIndexInputs cxxFrontendIndexInputs(const Snapshot &builtinSnapshot)
     return {builtinSnapshot, definesIn(configurationFileIn(builtinSnapshot))};
 }
 
+QByteArray cxxFrontendProjectKey(const FilePath &filePath)
+{
+    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+    if (parts.isEmpty())
+        return {};
 
-std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInputs &inputs,
-                                                      const FilePath &filePath)
+    // Worked out afresh for every file rather than remembered per part. A
+    // part is reference counted and a reconfiguration frees it, so a table
+    // kept under its address would answer for whatever is allocated there
+    // next -- and the answer would be the *old* key, which is the one thing
+    // this exists to notice. Hashing a few kilobytes per file is cheaper
+    // than that risk by a wide margin.
+    const ProjectPart * const part = parts.first().get();
+
+    // The two things about a part that change what reading a file finds:
+    // where an include is looked for, and what is defined before the first
+    // line. Not the part's id, which is a place and a name and stays the
+    // same across exactly the reconfiguration this has to notice.
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    for (const ProjectExplorer::HeaderPath &path : part->headerPaths) {
+        hash.addData(path.path.toFSPathString().toUtf8());
+        hash.addData(QByteArrayView("\0", 1));
+        hash.addData(QByteArray::number(int(path.type)));
+    }
+    for (const ProjectExplorer::Macro &macro : part->projectMacros)
+        hash.addData(macro.toByteArray());
+    for (const ProjectExplorer::Macro &macro : part->toolchainMacros)
+        hash.addData(macro.toByteArray());
+    return hash.result().toHex();
+}
+
+std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendIndexInputs &inputs,
+                                                            const FilePath &filePath)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
@@ -1690,11 +1721,12 @@ std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInpu
     if (!holding.document)
         return std::nullopt;
 
+    CxxFrontendIndexRead read;
+    read.includedFiles = holding.owned->allIncludesFor(filePath.toFSPathString());
+
     const QList<CxxFrontendDocument::Symbol> symbols = holding.document->symbols();
-    const IndexItem::Ptr root
-        = IndexItem::create(Utils::StringTable::insert(filePath.toUrlishString()),
-                            int(symbols.size()));
-    QList<IndexItem::Ptr> entryFor(symbols.size());
+    read.entries.reserve(symbols.size());
+    QList<int> entryFor(symbols.size(), -1);
     for (int i = 0; i < symbols.size(); ++i) {
         const CxxFrontendDocument::Symbol &symbol = symbols.at(i);
         if (symbol.isGenerated || symbol.name.isEmpty())
@@ -1722,31 +1754,59 @@ std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInpu
             continue;
 
         const bool isFunction = symbol.kind == CxxFrontendDocument::Kind::Function;
-        const IndexItem::Ptr entry
-            = IndexItem::create(indexNameOf(symbol.name),
-                                isFunction ? symbol.signature : symbol.valueType,
-                                symbol.qualified.join("::"),
-                                *type,
-                                filePath.toUrlishString(),
-                                symbol.line,
-                                symbol.column - 1, // An entry counts columns from zero.
-                                Utils::CodeModelIcon::iconForType(symbol.icon),
-                                isFunction && symbol.isDefinedHere);
+        CxxFrontendIndexEntry entry;
+        entry.name = indexNameOf(symbol.name);
+        entry.extra = isFunction ? symbol.signature : symbol.valueType;
+        entry.scope = symbol.qualified.join("::");
+        entry.itemType = int(*type);
+        entry.line = symbol.line;
+        entry.column = symbol.column - 1; // An entry counts columns from zero.
+        entry.icon = int(symbol.icon);
+        entry.isFunctionDefinition = isFunction && symbol.isDefinedHere;
 
         // Hung under the nearest thing above it that has an entry of its
         // own. A scope with none -- an unnamed namespace -- is no step in
         // the walk, and what it holds belongs to whatever holds it. The
         // list has a scope before its members, so the parent is already
         // here.
-        IndexItem::Ptr under = root;
         for (int above = symbol.parent; above >= 0; above = symbols.at(above).parent) {
-            if (entryFor.at(above)) {
-                under = entryFor.at(above);
+            if (entryFor.at(above) >= 0) {
+                entry.parent = entryFor.at(above);
                 break;
             }
         }
-        under->addChild(entry);
-        entryFor[i] = entry;
+        entryFor[i] = int(read.entries.size());
+        read.entries.append(entry);
+    }
+    return read;
+}
+
+IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead &read,
+                                        const FilePath &filePath)
+{
+    const QString fileName = filePath.toUrlishString();
+    const IndexItem::Ptr root = IndexItem::create(Utils::StringTable::insert(fileName),
+                                                  int(read.entries.size()));
+    QList<IndexItem::Ptr> itemFor(read.entries.size());
+    for (int i = 0; i < read.entries.size(); ++i) {
+        const CxxFrontendIndexEntry &entry = read.entries.at(i);
+        const IndexItem::Ptr item
+            = IndexItem::create(entry.name,
+                                entry.extra,
+                                entry.scope,
+                                IndexItem::ItemType(entry.itemType),
+                                fileName,
+                                entry.line,
+                                entry.column,
+                                Utils::CodeModelIcon::iconForType(
+                                    Utils::CodeModelIcon::Type(entry.icon)),
+                                entry.isFunctionDefinition);
+        // An entry stands after the one it hangs under, so that one is built.
+        const IndexItem::Ptr under = entry.parent >= 0 && entry.parent < i
+                                         ? itemFor.at(entry.parent)
+                                         : root;
+        under->addChild(item);
+        itemFor[i] = item;
     }
     return root;
 }

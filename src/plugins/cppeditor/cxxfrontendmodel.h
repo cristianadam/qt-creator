@@ -835,9 +835,43 @@ public:
 // The inputs for a batch, read off \a builtinSnapshot.
 CxxFrontendIndexInputs cxxFrontendIndexInputs(const CPlusPlus::Snapshot &builtinSnapshot);
 
-// The entries the project-wide index keeps for a file, as the tree it keeps
-// them in: one root per file with what it declares hung under it, nested so
-// that a walk can stop at an enum without seeing its enumerators.
+// One thing a file declares, as the project-wide index keeps it, written
+// flat: the entry it hangs under is named by its position in the list rather
+// than by a pointer. Flat because this is the form the index's store writes
+// down and reads back.
+class CxxFrontendIndexEntry
+{
+public:
+    QString name;
+    // A function's parameter list, anything else's type: an index writes the
+    // two in different places, so one field carries whichever this is.
+    QString extra;
+    QString scope; // fully qualified, "::"-joined
+    int itemType = 0; // an IndexItem::ItemType
+    int line = 0;
+    int column = 0; // counted from zero, the way an entry counts them
+    int icon = 0; // a Utils::CodeModelIcon::Type
+    bool isFunctionDefinition = false;
+    // Where in this list the entry this one hangs under is, or -1 directly
+    // under the file. Always smaller than this entry's own position, a scope
+    // being declared before what is in it.
+    int parent = -1;
+};
+
+// What reading a file for the index found, and what that reading depended
+// on -- the second being what decides whether it may be used again rather
+// than done afresh.
+class CxxFrontendIndexRead
+{
+public:
+    QList<CxxFrontendIndexEntry> entries;
+    // Every file read into this one, itself excluded. These are what the
+    // entries were read *through*, so a change to any of them can change
+    // them, and the store has to know it.
+    QStringList includedFiles;
+};
+
+// Reads \a filePath and says what it declares.
 //
 // The file is read here. Not out of the store, an index being about every
 // file a project has rather than the few being edited; and not from the
@@ -850,8 +884,25 @@ CxxFrontendIndexInputs cxxFrontendIndexInputs(const CPlusPlus::Snapshot &builtin
 //
 // Nothing where the model is off or cannot read the file, and then the
 // built-in walk makes the entries.
-std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInputs &inputs,
-                                                      const Utils::FilePath &filePath);
+std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendIndexInputs &inputs,
+                                                            const Utils::FilePath &filePath);
+
+// The same entries as the tree an index keeps them in: one root per file with
+// what it declares hung under it, nested so that a walk can stop at an enum
+// without seeing its enumerators.
+//
+// Apart from the reading because entries written down and read back make the
+// same tree, which is the whole point of writing them down.
+IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead &read,
+                                        const Utils::FilePath &filePath);
+
+// What \a filePath's project part contributes to reading it: the header paths
+// an include is resolved against and the macros in force, as a key, since
+// nothing is done with it but compare it against the one a stored reading was
+// made under. Empty where the file belongs to no project part.
+//
+// Read on the thread that owns the project data, not on a worker.
+QByteArray cxxFrontendProjectKey(const Utils::FilePath &filePath);
 
 // What the editor colours in \a filePath: every name it writes, with the
 // kind that decides the colour, in the order they are written. Nothing

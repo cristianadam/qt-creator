@@ -14,9 +14,12 @@
 #include <QSet>
 #include <QThreadPool>
 
+#include <memory>
 #include <utility>
 
 namespace CppEditor {
+
+namespace Internal { class CxxFrontendIndexCache; }
 
 class CPPEDITOR_EXPORT CppLocatorData : public QObject
 {
@@ -50,6 +53,14 @@ public:
     // it: the indexer's own signal comes long before these are done.
     int cxxFrontendFilesOutstanding() const;
 
+    // How many files the index took from its store rather than reading, and
+    // how many it had to read. Zero and zero before anything is indexed, and
+    // where that model is not in use. The store is otherwise invisible, so
+    // this is what says whether a second session is getting the benefit of
+    // the first.
+    int cxxFrontendCacheHits() const;
+    int cxxFrontendCacheMisses() const;
+
 public slots:
     // Called where the document was parsed, which is a worker thread: what a
     // file declares is worked out there rather than handed to the GUI thread
@@ -59,6 +70,16 @@ public slots:
     void onAboutToRemoveFiles(const Utils::FilePaths &files);
 
 private:
+    // One file to read, with what its project part contributes to reading
+    // it -- worked out where the project's data belongs and carried to the
+    // worker, which must not go asking for it.
+    class Request
+    {
+    public:
+        Utils::FilePath filePath;
+        QByteArray projectKey;
+    };
+
     // What one file's entries came back as. The path travels with them
     // because a batch is read out of order and finishes out of order.
     using ReadFile = std::pair<Utils::FilePath, IndexItem::Ptr>;
@@ -90,6 +111,13 @@ private:
     bool m_readScheduled = false;
     QThreadPool m_cxxFrontendPool;
     QFutureWatcher<ReadFile> m_cxxFrontendWatcher;
+
+    // What each file's reading came to last time. Made when the first batch
+    // runs, since where it lives and what it is checked against are only
+    // known then. Held by pointer so that this header, which is included
+    // outside the plugin, does not need the type -- and so that the class
+    // is the same size whether or not the model is built in.
+    std::unique_ptr<Internal::CxxFrontendIndexCache> m_cxxFrontendCache;
 };
 
 } // namespace CppEditor

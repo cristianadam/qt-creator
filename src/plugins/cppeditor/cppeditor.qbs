@@ -24,6 +24,8 @@ QtcPlugin {
         name: "CxxFrontend"
         condition: qtc.enableCxxFrontend
         files: [
+            "cxxfrontendindexcache.cpp",
+            "cxxfrontendindexcache.h",
             "cxxfrontendmodel.cpp",
             "cxxfrontendmodel.h",
         ]

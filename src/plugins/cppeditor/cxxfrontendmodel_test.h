@@ -49,6 +49,12 @@ private slots:
     void testNames();
     void testNamesAcrossFiles();
     void testHighlightingReachesTheEditor();
+    void testTheStoreGivesBackWhatWasPutIn();
+    void testTheStoreForgetsWhenTheFileChanges();
+    void testTheStoreForgetsWhenAnIncludedFileChanges();
+    void testTheStoreForgetsWhenTheProjectChanges();
+    void testTheStoreForgetsWhenTheDefinesChange();
+    void testTheStoreDeclinesAFileItNeverHad();
 };
 
 } // namespace CppEditor::Internal

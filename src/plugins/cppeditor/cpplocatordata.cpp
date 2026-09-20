@@ -4,6 +4,7 @@
 #include "cpplocatordata.h"
 
 #ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
 #endif
 
@@ -158,11 +159,40 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // built-in documents whose source it clears as it goes.
     const CxxFrontendIndexInputs inputs = cxxFrontendIndexInputs(CppModelManager::snapshot());
 
+    // The store is kept across batches so that a header reached by a
+    // thousand files is still read once, and this is where what it
+    // remembers of the files goes stale: anything written since the last
+    // batch has to be seen afresh.
+    if (!m_cxxFrontendCache)
+        m_cxxFrontendCache = std::make_unique<CxxFrontendIndexCache>(inputs.predefinedMacros);
+    m_cxxFrontendCache->forgetContents();
+    CxxFrontendIndexCache * const cache = m_cxxFrontendCache.get();
+
+    // Each file's project key worked out here, not on the pool: it is read
+    // off the project's data, which belongs to this thread.
+    QList<Request> requests;
+    requests.reserve(batch.size());
+    for (const FilePath &filePath : std::as_const(batch))
+        requests.append({filePath, cxxFrontendProjectKey(filePath)});
+
     m_cxxFrontendWatcher.setFuture(
-        QtConcurrent::mapped(&m_cxxFrontendPool, batch, [inputs](const FilePath &filePath) {
-            const std::optional<IndexItem::Ptr> entries
-                = cxxFrontendIndexTreeFor(inputs, filePath);
-            return ReadFile{filePath, entries ? *entries : IndexItem::Ptr()};
+        QtConcurrent::mapped(&m_cxxFrontendPool, requests, [inputs, cache](const Request &request) {
+            // The store first, since taking a reading from it is what makes
+            // a second session cheap; reading the file is the fallback, not
+            // the other way round.
+            if (const std::optional<CxxFrontendIndexRead> stored
+                = cache->take(request.filePath, request.projectKey)) {
+                return ReadFile{request.filePath,
+                                cxxFrontendIndexTreeFrom(*stored, request.filePath)};
+            }
+
+            const std::optional<CxxFrontendIndexRead> read
+                = cxxFrontendReadForIndex(inputs, request.filePath);
+            if (!read)
+                return ReadFile{request.filePath, IndexItem::Ptr()};
+
+            cache->store(request.filePath, request.projectKey, *read);
+            return ReadFile{request.filePath, cxxFrontendIndexTreeFrom(*read, request.filePath)};
         }));
 #endif
 }
@@ -202,6 +232,24 @@ int CppLocatorData::cxxFrontendFilesOutstanding() const
 {
     QMutexLocker locker(&m_pendingMutex);
     return m_pending.size() + m_beingRead;
+}
+
+int CppLocatorData::cxxFrontendCacheHits() const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return m_cxxFrontendCache ? m_cxxFrontendCache->hits() : 0;
+#else
+    return 0;
+#endif
+}
+
+int CppLocatorData::cxxFrontendCacheMisses() const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return m_cxxFrontendCache ? m_cxxFrontendCache->misses() : 0;
+#else
+    return 0;
+#endif
 }
 
 void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)

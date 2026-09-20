@@ -20,6 +20,7 @@
 #include "cppoutlinemodel.h"
 #include "cpptoolstestcase.h"
 #include "cppcodemodelqueries.h"
+#include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
 
 #include <cplusplus/ASTVisitor.h>
@@ -1619,6 +1620,184 @@ void CxxFrontendModelTest::testLocalUses()
     if (const char *reason = knownDivergence(QString::fromUtf8(QTest::currentDataTag())))
         QEXPECT_FAIL("", reason, Abort);
     QCOMPARE(placesOf(other.localsAt(line, column)), placesOf(builtIn.uses));
+}
+
+// The index's store.
+//
+// What these are about is not that a reading survives being written down --
+// that much a round trip shows -- but that one is *not* given back when
+// anything it was read through has changed since. A store that answers with
+// yesterday's reading describes code that is not there, and nothing about it
+// looks wrong from the outside.
+
+namespace {
+
+// Two entries, nested, so that a round trip has something to lose: the
+// second hangs under the first, and the fields are all different from each
+// other's so that a field swapped for its neighbour shows up.
+CxxFrontendIndexRead aReading()
+{
+    CxxFrontendIndexRead read;
+    CxxFrontendIndexEntry cls;
+    cls.name = "Thing";
+    cls.extra = "class Thing";
+    cls.scope = "ns";
+    cls.itemType = int(IndexItem::Class);
+    cls.line = 3;
+    cls.column = 7;
+    cls.icon = int(Utils::CodeModelIcon::Class);
+    cls.isFunctionDefinition = false;
+    cls.parent = -1;
+    read.entries.append(cls);
+
+    CxxFrontendIndexEntry fn;
+    fn.name = "doIt";
+    fn.extra = "(int, bool)";
+    fn.scope = "ns::Thing";
+    fn.itemType = int(IndexItem::Function);
+    fn.line = 5;
+    fn.column = 11;
+    fn.icon = int(Utils::CodeModelIcon::FuncPublic);
+    fn.isFunctionDefinition = true;
+    fn.parent = 0;
+    read.entries.append(fn);
+    return read;
+}
+
+bool sameAs(const CxxFrontendIndexRead &left, const CxxFrontendIndexRead &right)
+{
+    if (left.entries.size() != right.entries.size())
+        return false;
+    for (int i = 0; i < left.entries.size(); ++i) {
+        const CxxFrontendIndexEntry &a = left.entries.at(i);
+        const CxxFrontendIndexEntry &b = right.entries.at(i);
+        if (a.name != b.name || a.extra != b.extra || a.scope != b.scope
+            || a.itemType != b.itemType || a.line != b.line || a.column != b.column
+            || a.icon != b.icon || a.isFunctionDefinition != b.isFunctionDefinition
+            || a.parent != b.parent) {
+            return false;
+        }
+    }
+    return left.includedFiles == right.includedFiles;
+}
+
+// A store of its own in \a dir, so that a row neither reads nor writes the
+// one the running Qt Creator keeps for real projects.
+class StoreFixture
+{
+public:
+    StoreFixture()
+        : source(dir.createFile("thing.cpp", "#include \"thing.h\"\nint x;\n"))
+        , header(dir.createFile("thing.h", "struct Thing {};\n"))
+        , cache(std::make_unique<CxxFrontendIndexCache>(QStringList{"FOO 1"},
+                                                        dir.filePath() / "store"))
+    {
+        read = aReading();
+        read.includedFiles = QStringList{header.toFSPathString()};
+    }
+
+    // Puts the reading in and hands back a store that has not looked at any
+    // file yet, which is what a later session is.
+    void storeAndReopen(const QStringList &macros = {"FOO 1"})
+    {
+        cache->store(source, "projectkey", read);
+        cache = std::make_unique<CxxFrontendIndexCache>(macros, dir.filePath() / "store");
+    }
+
+    TemporaryDir dir;
+    Utils::FilePath source;
+    Utils::FilePath header;
+    CxxFrontendIndexRead read;
+    std::unique_ptr<CxxFrontendIndexCache> cache;
+};
+
+} // namespace
+
+void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen();
+
+    const std::optional<CxxFrontendIndexRead> back = f.cache->take(f.source, "projectkey");
+    QVERIFY(back);
+    QVERIFY(sameAs(*back, f.read));
+    QCOMPARE(f.cache->hits(), 1);
+
+    // And a tree built from it is walked the way the locator walks one, the
+    // nested entry reached by recursing rather than sitting beside its
+    // class. Asked through visitAllChildren because that is the only way a
+    // consumer sees an entry at all.
+    const IndexItem::Ptr root = cxxFrontendIndexTreeFrom(*back, f.source);
+    QVERIFY(root);
+    QStringList walked;
+    root->visitAllChildren([&walked](const IndexItem::Ptr &item) {
+        walked << item->scopedSymbolName();
+        return IndexItem::Recurse;
+    });
+    QCOMPARE(walked, QStringList({"ns::Thing", "ns::Thing::doIt"}));
+
+    // Stopping at the class reaches neither what is in it nor anything
+    // beside it, which is what says the second really does hang under the
+    // first rather than being a second child of the file.
+    QStringList stopped;
+    root->visitAllChildren([&stopped](const IndexItem::Ptr &item) {
+        stopped << item->scopedSymbolName();
+        return IndexItem::Continue;
+    });
+    QCOMPARE(stopped, QStringList({"ns::Thing"}));
+}
+
+void CxxFrontendModelTest::testTheStoreForgetsWhenTheFileChanges()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen();
+
+    QVERIFY(f.source.writeFileContents("#include \"thing.h\"\nint x;\nint y;\n"));
+    QVERIFY(!f.cache->take(f.source, "projectkey"));
+    QCOMPARE(f.cache->misses(), 1);
+}
+
+void CxxFrontendModelTest::testTheStoreForgetsWhenAnIncludedFileChanges()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen();
+
+    // The file itself is untouched. What changed is what it was read
+    // through, and the entries are as much a reading of that.
+    QVERIFY(f.header.writeFileContents("struct Thing { int extra; };\n"));
+    QVERIFY(!f.cache->take(f.source, "projectkey"));
+}
+
+void CxxFrontendModelTest::testTheStoreForgetsWhenTheProjectChanges()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen();
+
+    // Nothing on disk changed. The header paths an include is looked up
+    // along did, which can make the same line read a different file.
+    QVERIFY(!f.cache->take(f.source, "anotherprojectkey"));
+}
+
+void CxxFrontendModelTest::testTheStoreForgetsWhenTheDefinesChange()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen({"FOO 2"});
+
+    QVERIFY(!f.cache->take(f.source, "projectkey"));
+}
+
+void CxxFrontendModelTest::testTheStoreDeclinesAFileItNeverHad()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+    f.storeAndReopen();
+
+    QVERIFY(!f.cache->take(f.dir.filePath() / "never-seen.cpp", "projectkey"));
 }
 
 } // namespace CppEditor::Internal

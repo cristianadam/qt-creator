@@ -1743,10 +1743,13 @@ void ModelManagerTest::testIndexingCost()
     QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 3600000);
     const qint64 indexElapsed = timer.elapsed();
 
-    qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms")
+    qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms "
+                                 "stored=%4 read=%5")
                              .arg(projectInfo->sourceFiles().size())
                              .arg(builtinElapsed)
-                             .arg(indexElapsed);
+                             .arg(indexElapsed)
+                             .arg(locatorData->cxxFrontendCacheHits())
+                             .arg(locatorData->cxxFrontendCacheMisses());
 }
 
 } // CppEditor::Internal
