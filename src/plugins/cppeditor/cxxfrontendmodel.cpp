@@ -1659,6 +1659,10 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
     holding.owned = std::make_shared<CxxFrontendSnapshot>();
     holding.owned->setHeaderResolver(resolverFor(inputs.builtinSnapshot, {}));
     holding.owned->setPredefinedMacros(inputs.predefinedMacros);
+    // What every file in the unit declares, not only this one. A project's
+    // headers are read into its sources anyway; reading them again one by
+    // one is the whole of what indexing costs.
+    holding.owned->setCollectsEveryFileInTheUnit(true);
     holding.document = holding.owned->process(filePath.toFSPathString(),
                                               QString::fromUtf8(*contents));
     return holding;
@@ -1738,9 +1742,18 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendInd
     CxxFrontendIndexRead read;
     read.includedFiles = holding.owned->allIncludesFor(filePath.toFSPathString());
 
+    // The file read is always first, so that a caller that wants only it
+    // need not search, and so that a file declaring nothing still comes
+    // back -- otherwise whatever it declared before would be left standing.
+    read.files.append({filePath, {}});
+    QHash<QString, int> fileAt;
+    fileAt.insert(filePath.toFSPathString(), 0);
+
     const QList<CxxFrontendDocument::Symbol> symbols = holding.document->symbols();
-    read.entries.reserve(symbols.size());
-    QList<int> entryFor(symbols.size(), -1);
+    // Where each symbol's entry went, as the file it landed in and its place
+    // in that file's list, so that a member can find the scope it hangs
+    // under. Scopes are declared before their members, so it is already in.
+    QList<std::pair<int, int>> entryFor(symbols.size(), {-1, -1});
     for (int i = 0; i < symbols.size(); ++i) {
         const CxxFrontendDocument::Symbol &symbol = symbols.at(i);
         if (symbol.isGenerated || symbol.name.isEmpty())
@@ -1767,6 +1780,21 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendInd
         if (!type)
             continue;
 
+        // Which file declares it. A reading covers a whole translation
+        // unit, so most symbols belong to one of the headers.
+        int file = 0;
+        if (!symbol.file.isEmpty() && symbol.file != filePath.toFSPathString()) {
+            const auto known = fileAt.constFind(symbol.file);
+            if (known != fileAt.constEnd()) {
+                file = known.value();
+            } else {
+                file = int(read.files.size());
+                fileAt.insert(symbol.file, file);
+                read.files.append({FilePath::fromUserInput(symbol.file), {}});
+            }
+        }
+        QList<CxxFrontendIndexEntry> &entries = read.files[file].entries;
+
         const bool isFunction = symbol.kind == CxxFrontendDocument::Kind::Function;
         CxxFrontendIndexEntry entry;
         entry.name = indexNameOf(symbol.name);
@@ -1779,31 +1807,36 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendInd
         entry.isFunctionDefinition = isFunction && symbol.isDefinedHere;
 
         // Hung under the nearest thing above it that has an entry of its
-        // own. A scope with none -- an unnamed namespace -- is no step in
-        // the walk, and what it holds belongs to whatever holds it. The
-        // list has a scope before its members, so the parent is already
-        // here.
+        // own *in the same file*. A scope with none -- an unnamed namespace
+        // -- is no step in the walk, and what it holds belongs to whatever
+        // holds it. The list has a scope before its members, so the parent
+        // is already here.
+        //
+        // A scope in another file is no parent either: each file's entries
+        // are a tree of their own, and a member function defined out of
+        // line is under the file that defines it, not under the header that
+        // declared its class. Its scope still says the qualified name, which
+        // is what a reader of the index goes by.
         for (int above = symbol.parent; above >= 0; above = symbols.at(above).parent) {
-            if (entryFor.at(above) >= 0) {
-                entry.parent = entryFor.at(above);
+            if (entryFor.at(above).first == file && entryFor.at(above).second >= 0) {
+                entry.parent = entryFor.at(above).second;
                 break;
             }
         }
-        entryFor[i] = int(read.entries.size());
-        read.entries.append(entry);
+        entryFor[i] = {file, int(entries.size())};
+        entries.append(entry);
     }
     return read;
 }
 
-IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead &read,
-                                        const FilePath &filePath)
+IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead::File &file)
 {
-    const QString fileName = filePath.toUrlishString();
+    const QString fileName = file.filePath.toUrlishString();
     const IndexItem::Ptr root = IndexItem::create(Utils::StringTable::insert(fileName),
-                                                  int(read.entries.size()));
-    QList<IndexItem::Ptr> itemFor(read.entries.size());
-    for (int i = 0; i < read.entries.size(); ++i) {
-        const CxxFrontendIndexEntry &entry = read.entries.at(i);
+                                                  int(file.entries.size()));
+    QList<IndexItem::Ptr> itemFor(file.entries.size());
+    for (int i = 0; i < file.entries.size(); ++i) {
+        const CxxFrontendIndexEntry &entry = file.entries.at(i);
         const IndexItem::Ptr item
             = IndexItem::create(entry.name,
                                 entry.extra,

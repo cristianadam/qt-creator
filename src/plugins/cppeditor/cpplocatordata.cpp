@@ -32,6 +32,11 @@ using namespace Internal;
 // this on a smaller machine.
 static int cxxFrontendReaderCount()
 {
+    // Overridable because what is right depends on the machine's memory as
+    // much as on its cores: a reader holds a whole translation unit while
+    // it works, and a large one is gigabytes.
+    if (const int asked = qEnvironmentVariableIntValue("QTC_CXX_FRONTEND_READERS"); asked > 0)
+        return asked;
     return std::max(1, QThread::idealThreadCount() / 2);
 }
 
@@ -57,10 +62,10 @@ CppLocatorData::CppLocatorData()
     // reads from crowding out the work somebody is waiting on.
     m_cxxFrontendPool.setThreadPriority(QThread::LowPriority);
 
-    connect(&m_cxxFrontendWatcher, &QFutureWatcher<ReadFile>::resultsReadyAt,
+    connect(&m_cxxFrontendWatcher, &QFutureWatcher<ReadResult>::resultsReadyAt,
             this, &CppLocatorData::takeCxxFrontendResults);
-    connect(&m_cxxFrontendWatcher, &QFutureWatcher<ReadFile>::finished,
-            this, &CppLocatorData::readPendingWithCxxFrontend);
+    connect(&m_cxxFrontendWatcher, &QFutureWatcher<ReadResult>::finished,
+            this, &CppLocatorData::readWhatWasNotCovered);
 }
 
 CppLocatorData::~CppLocatorData()
@@ -128,6 +133,16 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
 
     {
         QMutexLocker locker(&m_pendingMutex);
+        // Nothing pending, nothing running, nothing scheduled: the indexer
+        // has been quiet and this is the first file of a fresh run. What
+        // was covered in the last one says nothing about this one -- the
+        // files are being read again because something changed.
+        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty() && m_beingRead == 0
+            && !m_readScheduled) {
+            m_coveredThisRun.clear();
+            m_describedThisRun.clear();
+        }
+        m_indexerDone = false;
         m_pending.insert(document->filePath());
         if (m_readScheduled)
             return;
@@ -162,10 +177,43 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // already; a file removed and then indexed again stands in the batch
         // below on its own account.
         m_removedSinceRead.clear();
-        if (m_pending.isEmpty())
+        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty())
             return;
-        batch = FilePaths(m_pending.cbegin(), m_pending.cend());
+
+        // Only the sources are read. A reading is of a whole translation
+        // unit and says what every file in it declares, so the headers are
+        // covered by whichever source reaches them -- and reading each of
+        // them again on its own is the bulk of what indexing costs.
+        //
+        // The whole of what is pending is taken all the same, so that
+        // anything in m_pending while the batch runs is by definition newly
+        // reported, which is what the check on a result relies on. The
+        // headers wait in m_awaitingCoverage instead.
+        for (const FilePath &filePath : std::as_const(m_pending)) {
+            if (!ProjectFile::isHeader(ProjectFile::classify(filePath))) {
+                batch.append(filePath);
+                continue;
+            }
+            // Already answered for by a source that includes it. The
+            // indexer reports it all the same, and reading it again would
+            // say what has just been said.
+            if (!m_coveredThisRun.contains(filePath))
+                m_awaitingCoverage.insert(filePath);
+        }
         m_pending.clear();
+
+        // No source left to cover them, so whatever is still waiting is
+        // read as a translation unit of its own after all: a header no file
+        // in the project includes, or one whose includers all came from the
+        // store and so read nothing. They wait until here rather than being
+        // taken as they arrive, because the indexer reports a project over
+        // many batches and a header usually arrives before its source.
+        if (batch.isEmpty()) {
+            if (!m_indexerDone)
+                return;
+            batch = FilePaths(m_awaitingCoverage.cbegin(), m_awaitingCoverage.cend());
+            m_awaitingCoverage.clear();
+        }
         m_beingRead = batch.size();
     }
 
@@ -190,24 +238,40 @@ void CppLocatorData::readPendingWithCxxFrontend()
     for (const FilePath &filePath : std::as_const(batch))
         requests.append({filePath, cxxFrontendProjectKey(filePath)});
 
-    m_cxxFrontendWatcher.setFuture(
-        QtConcurrent::mapped(&m_cxxFrontendPool, requests, [inputs, cache](const Request &request) {
+    const auto resultOf = [](const FilePath &filePath, const CxxFrontendIndexRead &read) {
+        ReadResult result;
+        result.covered.reserve(read.includedFiles.size() + 1);
+        result.covered.append(filePath);
+        for (const QString &included : read.includedFiles)
+            result.covered.append(FilePath::fromUserInput(included));
+        result.withEntries.reserve(read.files.size());
+        for (const CxxFrontendIndexRead::File &file : read.files) {
+            if (!file.entries.isEmpty())
+                result.withEntries.append({file.filePath, cxxFrontendIndexTreeFrom(file)});
+        }
+        return result;
+    };
+
+    m_cxxFrontendWatcher.setFuture(QtConcurrent::mapped(
+        &m_cxxFrontendPool, requests, [inputs, cache, resultOf](const Request &request) {
             // The store first, since taking a reading from it is what makes
             // a second session cheap; reading the file is the fallback, not
             // the other way round.
             if (const std::optional<CxxFrontendIndexRead> stored
                 = cache->take(request.filePath, request.projectKey)) {
-                return ReadFile{request.filePath,
-                                cxxFrontendIndexTreeFrom(*stored, request.filePath)};
+                return resultOf(request.filePath, *stored);
             }
 
             const std::optional<CxxFrontendIndexRead> read
                 = cxxFrontendReadForIndex(inputs, request.filePath);
-            if (!read)
-                return ReadFile{request.filePath, IndexItem::Ptr()};
+            if (!read) {
+                ReadResult declined;
+                declined.covered.append(request.filePath);
+                return declined;
+            }
 
             cache->store(request.filePath, request.projectKey, *read);
-            return ReadFile{request.filePath, cxxFrontendIndexTreeFrom(*read, request.filePath)};
+            return resultOf(request.filePath, *read);
         }));
 #endif
 }
@@ -220,33 +284,70 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
     m_beingRead -= end - begin;
     QMutexLocker infos(&m_infosByFileMutex);
     for (int i = begin; i < end; ++i) {
-        const ReadFile &read = m_cxxFrontendWatcher.resultAt(i);
+        const ReadResult &result = m_cxxFrontendWatcher.resultAt(i);
 
-        // Nothing where that model declined the file -- Objective-C, or one
-        // it could not read -- and then the built-in walk's entries, which
-        // are already here, stand.
-        if (!read.second)
-            continue;
+        // Every file the reading covers is answered for, whether or not it
+        // had anything to say. Saying so is what keeps a header from being
+        // read again on its own, which is the whole of what a reading of
+        // the unit saves.
+        for (const FilePath &covered : result.covered) {
+            if (m_removedSinceRead.contains(covered))
+                continue;
+            m_coveredThisRun.insert(covered);
+            m_awaitingCoverage.remove(covered);
+        }
 
-        // Waiting to be read again, so this is the older of the two answers
-        // and the newer one is on its way.
-        if (m_pending.contains(read.first))
-            continue;
+        for (const ReadFile &read : result.withEntries) {
+            // Waiting to be read again, so this is the older of the two
+            // answers and the newer one is on its way.
+            if (m_pending.contains(read.first))
+                continue;
 
-        // Taken out of the index since this reading began -- the project was
-        // closed, or the file was. Putting the entries in now would name
-        // things nothing can reach, and nothing would take them out again.
-        if (m_removedSinceRead.contains(read.first))
-            continue;
+            // Taken out of the index since this reading began -- the
+            // project was closed, or the file was. Putting the entries in
+            // now would name things nothing can reach, and nothing would
+            // take them out again.
+            if (m_removedSinceRead.contains(read.first))
+                continue;
 
-        m_infosByFile.insert(read.first.intern(), read.second);
+            // A header reached by two sources is described twice, once per
+            // reading. The first stands, which is the rule the built-in
+            // model follows too -- it reads a header once, in whichever
+            // translation unit reaches it first -- and it keeps the index
+            // from depending on the order a pool finishes in. The file the
+            // reading was of is always described by it, so it is never the
+            // one turned away here.
+            if (m_describedThisRun.contains(read.first))
+                continue;
+            m_describedThisRun.insert(read.first);
+
+            m_infosByFile.insert(read.first.intern(), read.second);
+        }
     }
+}
+
+void CppLocatorData::readWhatWasNotCovered()
+{
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        // What is still waiting stays waiting while sources keep coming:
+        // the indexer reports a project's files over many batches, and a
+        // header reported before the source that includes it would
+        // otherwise be read on its own a moment before that source covered
+        // it anyway. Only once nothing is left to read are the stragglers
+        // taken on their own account, by the batch below.
+        if (m_pending.isEmpty() && !m_awaitingCoverage.isEmpty())
+            m_readScheduled = false;
+    }
+    readPendingWithCxxFrontend();
 }
 
 int CppLocatorData::cxxFrontendFilesOutstanding() const
 {
     QMutexLocker locker(&m_pendingMutex);
-    return m_pending.size() + m_beingRead;
+    // What is waiting to be covered is still owed: it either comes back
+    // with a source that includes it or is read on its own at the end.
+    return m_pending.size() + m_awaitingCoverage.size() + m_beingRead;
 }
 
 int CppLocatorData::cxxFrontendCacheHits() const
@@ -264,6 +365,17 @@ int CppLocatorData::cxxFrontendCacheMisses() const
     return m_cxxFrontendCache ? m_cxxFrontendCache->misses() : 0;
 #else
     return 0;
+#endif
+}
+
+void CppLocatorData::onSourceFilesRefreshed()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        m_indexerDone = true;
+    }
+    readPendingWithCxxFrontend();
 #endif
 }
 

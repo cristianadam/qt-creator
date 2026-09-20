@@ -18,7 +18,7 @@ namespace CppEditor::Internal {
 
 // Bumped whenever what is written changes shape, so that a store written by
 // an older Qt Creator is passed over rather than misread.
-const quint32 kFormat = 1;
+const quint32 kFormat = 2;
 const quint32 kMagic = 0x43585849; // "CXXI"
 
 // Enough of a digest to tell two files apart and short enough that a
@@ -144,33 +144,46 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
             read.includedFiles.append(path);
     }
 
-    qint32 entryCount = 0;
-    stream >> entryCount;
-    if (entryCount < 0)
+    // A reading is of a whole translation unit, so it says what each file
+    // in it declares; the file read stands first.
+    qint32 describedCount = 0;
+    stream >> describedCount;
+    if (describedCount <= 0)
         return miss();
-    read.entries.reserve(entryCount);
-    for (qint32 i = 0; i < entryCount; ++i) {
-        CxxFrontendIndexEntry entry;
-        qint32 itemType = 0;
-        qint32 line = 0;
-        qint32 column = 0;
-        qint32 icon = 0;
-        qint32 parent = 0;
-        stream >> entry.name >> entry.extra >> entry.scope >> itemType >> line >> column >> icon
-            >> entry.isFunctionDefinition >> parent;
-        if (stream.status() != QDataStream::Ok)
+    read.files.reserve(describedCount);
+    for (qint32 f = 0; f < describedCount; ++f) {
+        CxxFrontendIndexRead::File file;
+        QString path;
+        qint32 entryCount = 0;
+        stream >> path >> entryCount;
+        if (stream.status() != QDataStream::Ok || path.isEmpty() || entryCount < 0)
             return miss();
-        entry.itemType = itemType;
-        entry.line = line;
-        entry.column = column;
-        entry.icon = icon;
-        // An entry hangs under one written before it. A store saying
-        // otherwise was not written by this, and building a tree from it
-        // would hang an entry under itself.
-        if (parent >= i)
-            return miss();
-        entry.parent = parent;
-        read.entries.append(entry);
+        file.filePath = FilePath::fromUserInput(path);
+        file.entries.reserve(entryCount);
+        for (qint32 i = 0; i < entryCount; ++i) {
+            CxxFrontendIndexEntry entry;
+            qint32 itemType = 0;
+            qint32 line = 0;
+            qint32 column = 0;
+            qint32 icon = 0;
+            qint32 parent = 0;
+            stream >> entry.name >> entry.extra >> entry.scope >> itemType >> line >> column
+                >> icon >> entry.isFunctionDefinition >> parent;
+            if (stream.status() != QDataStream::Ok)
+                return miss();
+            entry.itemType = itemType;
+            entry.line = line;
+            entry.column = column;
+            entry.icon = icon;
+            // An entry hangs under one written before it. A store saying
+            // otherwise was not written by this, and building a tree from
+            // it would hang an entry under itself.
+            if (parent >= i)
+                return miss();
+            entry.parent = parent;
+            file.entries.append(entry);
+        }
+        read.files.append(file);
     }
     if (stream.status() != QDataStream::Ok)
         return miss();
@@ -206,11 +219,14 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
         stream << path << digest;
     }
 
-    stream << qint32(read.entries.size());
-    for (const CxxFrontendIndexEntry &entry : read.entries) {
-        stream << entry.name << entry.extra << entry.scope << qint32(entry.itemType)
-               << qint32(entry.line) << qint32(entry.column) << qint32(entry.icon)
-               << entry.isFunctionDefinition << qint32(entry.parent);
+    stream << qint32(read.files.size());
+    for (const CxxFrontendIndexRead::File &file : read.files) {
+        stream << file.filePath.toFSPathString() << qint32(file.entries.size());
+        for (const CxxFrontendIndexEntry &entry : file.entries) {
+            stream << entry.name << entry.extra << entry.scope << qint32(entry.itemType)
+                   << qint32(entry.line) << qint32(entry.column) << qint32(entry.icon)
+                   << entry.isFunctionDefinition << qint32(entry.parent);
+        }
     }
 
     // Written whole or not at all: a half-written shard read back next time

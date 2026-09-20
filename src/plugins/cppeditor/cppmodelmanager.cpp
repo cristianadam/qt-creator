@@ -917,6 +917,13 @@ void CppModelManager::initCppTools()
     connect(m_instance, &CppModelManager::aboutToRemoveFiles,
             &d->m_locatorData, &CppLocatorData::onAboutToRemoveFiles);
 
+    // The indexer reports a header the moment it reads one into a file,
+    // which is before it reports the file itself, so the locator's other
+    // model holds the headers back until there is nothing left to cover
+    // them with. This is how it learns there is not.
+    connect(m_instance, &CppModelManager::sourceFilesRefreshed,
+            &d->m_locatorData, &CppLocatorData::onSourceFilesRefreshed);
+
     // Set up builtin filters
     setLocatorFilter(std::make_unique<CppAllSymbolsFilter>());
     setClassesFilter(std::make_unique<CppClassesFilter>());

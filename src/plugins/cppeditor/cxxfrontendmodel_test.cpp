@@ -1648,7 +1648,6 @@ CxxFrontendIndexRead aReading()
     cls.icon = int(Utils::CodeModelIcon::Class);
     cls.isFunctionDefinition = false;
     cls.parent = -1;
-    read.entries.append(cls);
 
     CxxFrontendIndexEntry fn;
     fn.name = "doIt";
@@ -1660,22 +1659,28 @@ CxxFrontendIndexRead aReading()
     fn.icon = int(Utils::CodeModelIcon::FuncPublic);
     fn.isFunctionDefinition = true;
     fn.parent = 0;
-    read.entries.append(fn);
+    read.files.append({FilePath::fromUserInput("thing.cpp"), {cls, fn}});
     return read;
 }
 
 bool sameAs(const CxxFrontendIndexRead &left, const CxxFrontendIndexRead &right)
 {
-    if (left.entries.size() != right.entries.size())
+    if (left.files.size() != right.files.size())
         return false;
-    for (int i = 0; i < left.entries.size(); ++i) {
-        const CxxFrontendIndexEntry &a = left.entries.at(i);
-        const CxxFrontendIndexEntry &b = right.entries.at(i);
+    for (int f = 0; f < left.files.size(); ++f) {
+        if (left.files.at(f).filePath != right.files.at(f).filePath)
+            return false;
+        if (left.files.at(f).entries.size() != right.files.at(f).entries.size())
+            return false;
+        for (int i = 0; i < left.files.at(f).entries.size(); ++i) {
+            const CxxFrontendIndexEntry &a = left.files.at(f).entries.at(i);
+            const CxxFrontendIndexEntry &b = right.files.at(f).entries.at(i);
         if (a.name != b.name || a.extra != b.extra || a.scope != b.scope
             || a.itemType != b.itemType || a.line != b.line || a.column != b.column
             || a.icon != b.icon || a.isFunctionDefinition != b.isFunctionDefinition
-            || a.parent != b.parent) {
-            return false;
+                || a.parent != b.parent) {
+                return false;
+            }
         }
     }
     return left.includedFiles == right.includedFiles;
@@ -1728,7 +1733,7 @@ void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()
     // nested entry reached by recursing rather than sitting beside its
     // class. Asked through visitAllChildren because that is the only way a
     // consumer sees an entry at all.
-    const IndexItem::Ptr root = cxxFrontendIndexTreeFrom(*back, f.source);
+    const IndexItem::Ptr root = cxxFrontendIndexTreeFrom(back->files.first());
     QVERIFY(root);
     QStringList walked;
     root->visitAllChildren([&walked](const IndexItem::Ptr &item) {

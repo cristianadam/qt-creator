@@ -69,6 +69,10 @@ public slots:
     void onDocumentUpdated(const CPlusPlus::Document::Ptr &document);
     void onAboutToRemoveFiles(const Utils::FilePaths &files);
 
+    // The indexer has finished its pass, so no source is coming that could
+    // cover the headers still waiting: whatever is left is read on its own.
+    void onSourceFilesRefreshed();
+
 private:
     // One file to read, with what its project part contributes to reading
     // it -- worked out where the project's data belongs and carried to the
@@ -84,6 +88,18 @@ private:
     // because a batch is read out of order and finishes out of order.
     using ReadFile = std::pair<Utils::FilePath, IndexItem::Ptr>;
 
+    // One reading's worth. A reading is of a whole translation unit, so it
+    // answers for every file in it -- which is what \a covered lists -- but
+    // only some of them declare anything the index keeps, and only those
+    // carry entries. Naming the rest is what keeps them from being read
+    // again one by one on the chance that they do.
+    class ReadResult
+    {
+    public:
+        Utils::FilePaths covered;
+        QList<ReadFile> withEntries;
+    };
+
     // Reads the files waiting for the cxx front end, as many at a time as
     // the machine has threads for. Runs on this object's own thread; only
     // the reading is on the pool.
@@ -92,6 +108,8 @@ private:
     // whatever has accumulated meanwhile, so the indexer is never waited for
     // and a batch is never replaced half-delivered.
     void readPendingWithCxxFrontend();
+    // Puts back whatever the batch did not cover, and starts the next one.
+    void readWhatWasNotCovered();
     void takeCxxFrontendResults(int begin, int end);
 
     mutable QMutex m_infosByFileMutex;
@@ -106,11 +124,31 @@ private:
     // reading of one of them was already under way when it went, and must
     // not put it back.
     QSet<Utils::FilePath> m_removedSinceRead;
+    // Files of the batch that are nobody's translation unit -- headers --
+    // and are waiting to be covered by the reading of a source that
+    // includes one of them. Whatever is left uncovered when the batch ends
+    // goes back to be read on its own account.
+    QSet<Utils::FilePath> m_awaitingCoverage;
+    // Files already answered for since the indexer began reporting, so
+    // that a header reached by several sources is read once -- and, more
+    // to the point, so that one reported after the source that covered it
+    // is not read again on its own. The indexer reports each file once per
+    // run, so anything already covered in this run is covered; a run of its
+    // own starts the set again.
+    QSet<Utils::FilePath> m_coveredThisRun;
+    // Of those, the ones some reading actually had entries for, so that the
+    // first reading to describe a header is the one that stands.
+    QSet<Utils::FilePath> m_describedThisRun;
+    // Whether the indexer has finished reporting. Until it has, a header
+    // waits to be covered rather than being read as a unit of its own: it
+    // is reported before the source that includes it, that being the order
+    // a translation unit is read in.
+    bool m_indexerDone = false;
     // Of the batch being read, how many have yet to come back.
     int m_beingRead = 0;
     bool m_readScheduled = false;
     QThreadPool m_cxxFrontendPool;
-    QFutureWatcher<ReadFile> m_cxxFrontendWatcher;
+    QFutureWatcher<ReadResult> m_cxxFrontendWatcher;
 
     // What each file's reading came to last time. Made when the first batch
     // runs, since where it lives and what it is checked against are only

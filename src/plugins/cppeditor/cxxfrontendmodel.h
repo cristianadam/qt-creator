@@ -864,7 +864,20 @@ public:
 class CxxFrontendIndexRead
 {
 public:
-    QList<CxxFrontendIndexEntry> entries;
+    // What one file in the reading declares. A reading is of a whole
+    // translation unit, so it says this of every file in it -- the file read
+    // and each header it reached -- and the index need not read those
+    // headers again on their own account.
+    class File
+    {
+    public:
+        Utils::FilePath filePath;
+        QList<CxxFrontendIndexEntry> entries;
+    };
+
+    // The file read is always the first, whatever it declares.
+    QList<File> files;
+
     // Every file read into this one, itself excluded. These are what the
     // entries were read *through*, so a change to any of them can change
     // them, and the store has to know it.
@@ -893,8 +906,7 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendInd
 //
 // Apart from the reading because entries written down and read back make the
 // same tree, which is the whole point of writing them down.
-IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead &read,
-                                        const Utils::FilePath &filePath);
+IndexItem::Ptr cxxFrontendIndexTreeFrom(const CxxFrontendIndexRead::File &file);
 
 // What \a filePath's project part contributes to reading it: the header paths
 // an include is resolved against and the macros in force, as a key, since
