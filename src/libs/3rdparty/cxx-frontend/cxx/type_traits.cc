@@ -35,10 +35,12 @@
 #include <cxx/types.h>
 #include <cxx/views/symbols.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
 namespace cxx {
 namespace {
@@ -965,8 +967,46 @@ auto isUserProvided(FunctionSymbol* fn) -> bool {
   return fn && !fn->isDefaulted() && !fn->isDeleted();
 }
 
+// Stops a walk over a class's bases and members from going round for ever.
+//
+// A class cannot contain itself, so a walk that reaches one it is already
+// inside is looking at input the parser has already refused -- "struct S { S
+// s; }", and the mutual and CRTP spellings of the same thing. The member is
+// recorded all the same, and every trait that walks members would then
+// recurse until the stack ran out. Asking about a class already being asked
+// about contributes nothing and stops there, which is how an overload set
+// breaks the same kind of cycle (OverloadSetSymbol::functions).
+//
+// The answer while a walk is cut short is about where it was asked from
+// rather than about the class, so nothing may remember it. No trait here
+// does.
+class VisitingClass {
+ public:
+  explicit VisitingClass(ClassSymbol* cls) : cls_(cls) {
+    if (std::ranges::contains(visiting_, cls)) return;
+    visiting_.push_back(cls);
+    entered_ = true;
+  }
+
+  ~VisitingClass() {
+    if (entered_) visiting_.pop_back();
+  }
+
+  [[nodiscard]] auto wouldCycle() const -> bool { return !entered_; }
+
+ private:
+  static thread_local std::vector<ClassSymbol*> visiting_;
+  ClassSymbol* cls_ = nullptr;
+  bool entered_ = false;
+};
+
+thread_local std::vector<ClassSymbol*> VisitingClass::visiting_;
+
 auto is_trivially_copyable_class(TypeTraits& traits, ClassSymbol* cls) -> bool {
   if (!cls || !cls->isComplete()) return false;
+
+  VisitingClass visiting{cls};
+  if (visiting.wouldCycle()) return true;
 
   auto dtor = cls->destructor();
   if (dtor && dtor->isDeleted()) return false;
@@ -1000,6 +1040,9 @@ auto is_trivially_copyable_class(TypeTraits& traits, ClassSymbol* cls) -> bool {
 auto is_trivially_destructible_class(TypeTraits& traits, ClassSymbol* cls)
     -> bool {
   if (!cls || !cls->isComplete()) return false;
+
+  VisitingClass visiting{cls};
+  if (visiting.wouldCycle()) return true;
 
   auto dtor = cls->destructor();
   if (dtor && dtor->isDeleted()) return false;
@@ -1046,6 +1089,9 @@ auto constructorFor(ClassSymbol* cls, TrivialConstructorKind kind)
 auto has_trivial_constructor(TypeTraits& traits, ClassSymbol* cls,
                              TrivialConstructorKind kind) -> bool {
   if (!cls || !cls->isComplete()) return false;
+  VisitingClass visiting{cls};
+  if (visiting.wouldCycle()) return true;
+
   auto constructor = constructorFor(cls, kind);
   if (!constructor || constructor->isDeleted()) return false;
   if (isUserProvided(constructor)) return false;
@@ -1087,6 +1133,9 @@ auto assignmentFor(ClassSymbol* cls, TrivialAssignmentKind kind)
 auto has_trivial_assignment(TypeTraits& traits, ClassSymbol* cls,
                             TrivialAssignmentKind kind) -> bool {
   if (!cls || !cls->isComplete()) return false;
+  VisitingClass visiting{cls};
+  if (visiting.wouldCycle()) return true;
+
   auto assignment = assignmentFor(cls, kind);
   if (!assignment || assignment->isDeleted()) return false;
   if (isUserProvided(assignment)) return false;
@@ -2540,6 +2589,9 @@ auto TypeTraits::is_standard_layout(const Type* type) -> bool {
     auto cls = classType->definition();
     requireCompleteClass(cls);
     if (!cls || !cls->isComplete()) return false;
+    VisitingClass visiting{cls};
+    if (visiting.wouldCycle()) return true;
+
     if (cls->hasVirtualFunctions()) return false;
     if (cls->hasVirtualBaseClasses()) return false;
 
@@ -2588,6 +2640,9 @@ auto TypeTraits::is_literal_type(const Type* type) -> bool {
     auto cls = classType->definition();
     requireCompleteClass(cls);
     if (!cls || !cls->isComplete()) return false;
+    VisitingClass visiting{cls};
+    if (visiting.wouldCycle()) return true;
+
     auto destructor = cls->destructor();
     auto hasConstexprDestructor = !destructor;
     if (destructor && destructor->isDefaulted()) hasConstexprDestructor = true;
