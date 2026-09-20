@@ -5,6 +5,7 @@
 
 #include "baseeditordocumentprocessor.h"
 #include "builtineditordocumentparser.h"
+#include "cpplocatordata.h"
 #include "cpptoolstestcase.h"
 #include "editordocumenthandle.h"
 #include "modelmanagertesthelper.h"
@@ -21,10 +22,12 @@
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
 
+#include <utils/environment.h>
 #include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QScopeGuard>
 #include <QTest>
 
@@ -1693,6 +1696,57 @@ void ModelManagerTest::testOptionalIndexing()
         Core::LocatorMatcher::matchers(Core::MatcherType::Functions), "foo");
     QCOMPARE(hasEntry("foo1"), foo1Present);
     QCOMPARE(hasEntry("foo2"), foo2Present);
+}
+
+// What indexing a real project costs, which is the only apples-to-apples way
+// to compare the two models: the same project, the same kit, in the editor
+// that will do it.
+//
+// Skipped unless QTC_INDEX_PROJECT names a project file, so it costs a
+// normal run nothing. Raise QTEST_FUNCTION_TIMEOUT for anything large, or the
+// run is killed as a failure rather than measured.
+void ModelManagerTest::testIndexingCost()
+{
+    const FilePath projectFile = FilePath::fromUserInput(
+        qtcEnvironmentVariable("QTC_INDEX_PROJECT"));
+    if (projectFile.isEmpty())
+        QSKIP("Set QTC_INDEX_PROJECT to a project file to measure indexing");
+
+    Kit * const kit = Utils::findOr(KitManager::kits(), nullptr,
+                                    [](const Kit *k) { return k->isValid(); });
+    if (!kit)
+        QSKIP("The measurement requires a valid kit");
+
+    bool refreshed = false;
+    QObject context;
+    connect(CppModelManager::instance(), &CppModelManager::sourceFilesRefreshed,
+            &context, [&refreshed] { refreshed = true; });
+
+    QElapsedTimer timer;
+    timer.start();
+
+    ProjectOpenerAndCloser projectMgr;
+    const ProjectInfo::ConstPtr projectInfo = projectMgr.open(projectFile, kit);
+    QVERIFY(projectInfo);
+
+    // Not SourceFilesRefreshGuard: it gives up after ten seconds, which is
+    // less than a real project's index takes.
+    QTRY_VERIFY_WITH_TIMEOUT(refreshed, 3600000);
+    const qint64 builtinElapsed = timer.elapsed();
+
+    // The cxx front end's reads outlive that signal -- they are handed to a
+    // pool as the indexer reports each file -- so the index is not complete
+    // when it arrives, and timing to it alone would credit this model with
+    // work it has not finished.
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 3600000);
+    const qint64 indexElapsed = timer.elapsed();
+
+    qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms")
+                             .arg(projectInfo->sourceFiles().size())
+                             .arg(builtinElapsed)
+                             .arg(indexElapsed);
 }
 
 } // CppEditor::Internal

@@ -9,7 +9,12 @@
 
 #include <cplusplus/CppDocument.h>
 
+#include <QFutureWatcher>
 #include <QHash>
+#include <QSet>
+#include <QThreadPool>
+
+#include <utility>
 
 namespace CppEditor {
 
@@ -22,6 +27,8 @@ class CPPEDITOR_EXPORT CppLocatorData : public QObject
     friend class Internal::CppModelManagerPrivate;
 
 public:
+    ~CppLocatorData() override;
+
     void filterAllFiles(IndexItem::Visitor func) const
     {
         QMutexLocker locker(&m_infosByFileMutex);
@@ -34,6 +41,15 @@ public:
 
     QList<IndexItem::Ptr> findSymbols(IndexItem::ItemType type, const QString &symbolName) const;
 
+    // How many files the cxx front end still has to read: waiting and being
+    // read together. Zero once every file the indexer has reported has that
+    // model's entries rather than the built-in reading's, and always zero
+    // where that model is not in use.
+    //
+    // What somebody timing the index waits on, there being no other sign of
+    // it: the indexer's own signal comes long before these are done.
+    int cxxFrontendFilesOutstanding() const;
+
 public slots:
     // Called where the document was parsed, which is a worker thread: what a
     // file declares is worked out there rather than handed to the GUI thread
@@ -43,8 +59,33 @@ public slots:
     void onAboutToRemoveFiles(const Utils::FilePaths &files);
 
 private:
+    // What one file's entries came back as. The path travels with them
+    // because a batch is read out of order and finishes out of order.
+    using ReadFile = std::pair<Utils::FilePath, IndexItem::Ptr>;
+
+    // Reads the files waiting for the cxx front end, as many at a time as
+    // the machine has threads for. Runs on this object's own thread; only
+    // the reading is on the pool.
+    //
+    // Does nothing while a batch is running -- that one's finishing takes
+    // whatever has accumulated meanwhile, so the indexer is never waited for
+    // and a batch is never replaced half-delivered.
+    void readPendingWithCxxFrontend();
+    void takeCxxFrontendResults(int begin, int end);
+
     mutable QMutex m_infosByFileMutex;
     QHash<Utils::FilePath, IndexItem::Ptr> m_infosByFile;
+
+    // The files the cxx front end has yet to read, written from the indexer's
+    // thread and read from this one, so under a lock of their own rather than
+    // the one the entries are under. Unused where that model is not built in.
+    mutable QMutex m_pendingMutex;
+    QSet<Utils::FilePath> m_pending;
+    // Of the batch being read, how many have yet to come back.
+    int m_beingRead = 0;
+    bool m_readScheduled = false;
+    QThreadPool m_cxxFrontendPool;
+    QFutureWatcher<ReadFile> m_cxxFrontendWatcher;
 };
 
 } // namespace CppEditor

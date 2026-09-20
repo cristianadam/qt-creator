@@ -4,6 +4,7 @@
 #include "cpplocatorfilter_test.h"
 
 #include "cppeditorwidget.h"
+#include "cpplocatordata.h"
 #include "cpptoolstestcase.h"
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendmodel.h"
@@ -55,6 +56,16 @@ public:
         QVERIFY(garbageCollectGlobalSnapshot());
 
         QVERIFY(parseFiles({filePath}));
+
+        // The cxx front end reads a file on a pool, so what it declares
+        // reaches the index after the parse rather than during it. Waited
+        // for on the count of reads still owed, not on a duration: without
+        // this the row races that read and compares the built-in walk's
+        // entries against what this model says. Zero at once where the model
+        // is off, nothing having been queued.
+        QTRY_VERIFY_WITH_TIMEOUT(CppModelManager::locatorData()->cxxFrontendFilesOutstanding() == 0,
+                                 30000);
+
         const LocatorFilterEntries entries = LocatorMatcher::runBlocking(matchers, searchText);
         QVERIFY(garbageCollectGlobalSnapshot());
         const ResultDataList results = ResultData::fromFilterEntryList(entries);

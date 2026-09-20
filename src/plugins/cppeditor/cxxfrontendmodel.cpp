@@ -1635,7 +1635,41 @@ std::optional<Link> CxxFrontendReading::definitionOfFunctionIn(
     return Link();
 }
 
-std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const Snapshot &builtinSnapshot,
+namespace {
+
+// The index's own read of a file: from disk, into a translation unit of its
+// own, with what the batch worked out once.
+//
+// Not readWith(): that asks the working copy, which an index has no use for
+// -- it is about every file a project has rather than the few being edited
+// -- and it reads the macros off a built-in document per file, which is both
+// the same answer every time and one this must not ask for here. A worker
+// runs beside the indexer, and the indexer clears a document's source as
+// soon as it is done with it.
+HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePath &filePath)
+{
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents)
+        return {};
+
+    HoldingDocument holding;
+    holding.owned = std::make_shared<CxxFrontendSnapshot>();
+    holding.owned->setHeaderResolver(resolverFor(inputs.builtinSnapshot, {}));
+    holding.owned->setPredefinedMacros(inputs.predefinedMacros);
+    holding.document = holding.owned->process(filePath.toFSPathString(),
+                                              QString::fromUtf8(*contents));
+    return holding;
+}
+
+} // namespace
+
+CxxFrontendIndexInputs cxxFrontendIndexInputs(const Snapshot &builtinSnapshot)
+{
+    return {builtinSnapshot, definesIn(configurationFileIn(builtinSnapshot))};
+}
+
+
+std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInputs &inputs,
                                                       const FilePath &filePath)
 {
     if (!cxxFrontendModelRequested())
@@ -1652,7 +1686,7 @@ std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const Snapshot &builtinSna
     // *preprocessed* text: every macro already expanded, so what one
     // declares would read as written by hand and stand wherever the line
     // markers put it.
-    const HoldingDocument holding = readWith(builtinSnapshot, {}, filePath, {}, {});
+    const HoldingDocument holding = readForIndex(inputs, filePath);
     if (!holding.document)
         return std::nullopt;
 

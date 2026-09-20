@@ -815,6 +815,26 @@ std::optional<QList<CxxFrontendOutlineEntry>> cxxFrontendOutline(const Utils::Fi
 // the declaration.
 std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const Utils::FilePath &filePath);
 
+// What every file of a batch of indexing work is read with. A batch is read
+// on as many threads as the machine has and these are the same for all of
+// them, so they are worked out once, by whoever starts the batch.
+//
+// That is not only to save the work. The macros are read off the built-in
+// document the project's defines were fed in as, and the indexer clears a
+// document's source the moment it has finished with it
+// (CppModelManager::createSourceProcessor) -- so they have to be taken on
+// the thread the indexer reports to, before that happens, rather than by
+// each worker when it gets round to its file.
+class CxxFrontendIndexInputs
+{
+public:
+    CPlusPlus::Snapshot builtinSnapshot;
+    QStringList predefinedMacros;
+};
+
+// The inputs for a batch, read off \a builtinSnapshot.
+CxxFrontendIndexInputs cxxFrontendIndexInputs(const CPlusPlus::Snapshot &builtinSnapshot);
+
 // The entries the project-wide index keeps for a file, as the tree it keeps
 // them in: one root per file with what it declares hung under it, nested so
 // that a walk can stop at an enum without seeing its enumerators.
@@ -824,9 +844,13 @@ std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const Utils::FilePath
 // text the indexer hands over, which is the file already preprocessed.
 // That is what this costs: a parse of each file on top of the indexer's.
 //
+// Safe to call on many threads at once, one file each, which is how an index
+// is built: each call reads its file into a translation unit of its own and
+// shares nothing with the others but \a inputs, which it only reads.
+//
 // Nothing where the model is off or cannot read the file, and then the
 // built-in walk makes the entries.
-std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CPlusPlus::Snapshot &builtinSnapshot,
+std::optional<IndexItem::Ptr> cxxFrontendIndexTreeFor(const CxxFrontendIndexInputs &inputs,
                                                       const Utils::FilePath &filePath);
 
 // What the editor colours in \a filePath: every name it writes, with the
