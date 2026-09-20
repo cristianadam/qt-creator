@@ -78,7 +78,10 @@ QStringList filterFromFileName(const QStringList &flags, const QString &fileName
         }
         if (FilePath::fromUserInput(flag).fileName() == fileName)
             continue;
-        if (flag == "-o" || flag.startsWith("/Fo")) {
+        // /Fo only where a leading slash introduces an option. Elsewhere it
+        // begins an absolute path, and /Foo/bar.cpp would both be dropped and
+        // take the flag after it with it.
+        if (flag == "-o" || (Utils::HostOsInfo::isWindowsHost() && flag.startsWith("/Fo"))) {
             skipNext = true;
             continue;
         }
@@ -99,8 +102,14 @@ void filteredFlags(const FilePath &filePath,
     if (flags.empty())
         return;
 
+    // Whether a leading slash introduces an option at all. Everywhere else it
+    // begins an absolute path, and reading /Users/somebody/x.pch as MSVC's
+    // /U<macro> both loses the path and records a macro made of the rest of
+    // it.
+    const bool slashOptions = Utils::HostOsInfo::isWindowsHost();
+
     // Skip compiler call if present.
-    bool skipNext = Utils::HostOsInfo::isWindowsHost()
+    bool skipNext = slashOptions
                 ? (!flags.front().startsWith('/') && !flags.front().startsWith('-'))
                 : (!flags.front().startsWith('-'));
     std::optional<HeaderPathType> includePathType;
@@ -129,9 +138,10 @@ void filteredFlags(const FilePath &filePath,
             continue;
         }
 
-        if (flag != "-x"
-                && (fileKindIsNext || flag == "/TC" || flag == "/TP"
-                    || flag.startsWith("/Tc") || flag.startsWith("/Tp") || flag.startsWith("-x"))) {
+        const bool clFileKind = slashOptions
+                                && (flag == "/TC" || flag == "/TP"
+                                    || flag.startsWith("/Tc") || flag.startsWith("/Tp"));
+        if (flag != "-x" && (fileKindIsNext || clFileKind || flag.startsWith("-x"))) {
             fileKindIsNext = false;
             fileKind = fileKindFromString(flag);
             continue;
@@ -153,8 +163,12 @@ void filteredFlags(const FilePath &filePath,
         if (flag.startsWith("-Fo") || flag.startsWith("-Fd") || flag.startsWith("-Fe"))
             continue;
 
-        const QStringList userIncludeFlags{"-I", "-iquote", "/I"};
-        const QStringList systemIncludeFlags{"-isystem", "-idirafter", "-imsvc", "/imsvc"};
+        QStringList userIncludeFlags{"-I", "-iquote"};
+        QStringList systemIncludeFlags{"-isystem", "-idirafter", "-imsvc"};
+        if (slashOptions) {
+            userIncludeFlags << "/I";
+            systemIncludeFlags << "/imsvc";
+        }
         // Where a framework is looked for. Needed as a kind of its own because
         // <QtCore/qstring.h> is found under QtCore.framework/Headers/qstring.h
         // rather than under the path itself -- so a framework path recorded as
@@ -173,10 +187,15 @@ void filteredFlags(const FilePath &filePath,
             continue;
         }
 
-        if ((flag.startsWith("-D") || flag.startsWith("-U") || flag.startsWith("/D") || flag.startsWith("/U"))
-                   && flag != "-D" && flag != "-U" && flag != "/D" && flag != "/U") {
-            Macro macro = Macro::fromKeyValue(flag.mid(2));
-            macro.type = (flag.startsWith("-D") || flag.startsWith("/D")) ? MacroType::Define : MacroType::Undefine;
+        const QStringList defineFlags = slashOptions ? QStringList{"-D", "/D"} : QStringList{"-D"};
+        const QStringList undefineFlags = slashOptions ? QStringList{"-U", "/U"} : QStringList{"-U"};
+        const QStringList macroFlags = QStringList(defineFlags) << undefineFlags;
+        const QString macroOpt = Utils::findOrDefault(macroFlags, [flag](const QString &opt) {
+            return flag.startsWith(opt) && flag != opt;
+        });
+        if (!macroOpt.isEmpty()) {
+            Macro macro = Macro::fromKeyValue(flag.mid(macroOpt.size()));
+            macro.type = defineFlags.contains(macroOpt) ? MacroType::Define : MacroType::Undefine;
             macros.append(macro);
             continue;
         }
@@ -186,8 +205,8 @@ void filteredFlags(const FilePath &filePath,
             continue;
         }
 
-        if (flag == "-D" || flag == "-U" || flag == "/D" || flag == "/U") {
-            macroType = (flag == "-D" || flag == "/D") ? MacroType::Define : MacroType::Undefine;
+        if (macroFlags.contains(flag)) {
+            macroType = defineFlags.contains(flag) ? MacroType::Define : MacroType::Undefine;
             continue;
         }
 

@@ -195,6 +195,38 @@ void CompilationDatabaseTests::testFrameworkPaths()
     QVERIFY(testData.flags.isEmpty());
 }
 
+// An absolute path is not an MSVC option, however it begins. /Users/... was
+// read as /U<macro>, which both swallowed the path -- leaving the -Xclang
+// that introduced it with nothing to pass on, so the compiler rejected the
+// line Qt Creator builds to ask it for its macros -- and recorded a macro
+// named after the rest of the path.
+void CompilationDatabaseTests::testPathsAreNotClFlags()
+{
+    if (Utils::HostOsInfo::isWindowsHost())
+        QSKIP("A leading slash does introduce an option there.");
+
+    CompilationDatabaseUtilsTestData testData;
+    testData.fileName = "main.cpp";
+    testData.workingDir = "/opt/build";
+    testData.flags = QStringList{"clang++",
+                                 "-Xclang",
+                                 "-include-pch",
+                                 "-Xclang",
+                                 "/Users/somebody/pch/cmake_pch.hxx.pch",
+                                 "-I",
+                                 "/Developer/include",
+                                 "-DREAL_MACRO=1"};
+
+    testData.getFilteredFlags();
+
+    QCOMPARE(testData.flags,
+             (QStringList{"-Xclang", "-include-pch", "-Xclang",
+                          "/Users/somebody/pch/cmake_pch.hxx.pch"}));
+    QCOMPARE(testData.headerPaths,
+             (HeaderPaths{HeaderPath(FilePath("/Developer/include"), HeaderPathType::User)}));
+    QCOMPARE(testData.macros, (Macros{{"REAL_MACRO", "1"}}));
+}
+
 static QString kCmakeCommand
     = "C:\\PROGRA~2\\MICROS~2\\2017\\COMMUN~1\\VC\\Tools\\MSVC\\1415~1.267\\bin\\HostX64\\x64\\cl."
       "exe "
