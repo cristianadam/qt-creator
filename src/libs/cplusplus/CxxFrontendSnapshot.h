@@ -50,6 +50,12 @@ public:
     // written the way a #define is: "FOO 1", "ADD(a, b) a + b".
     void setPredefinedMacros(const QStringList &macros);
 
+    // Record what every file read into a translation unit declares, each
+    // symbol saying which file that is, rather than only the read file's
+    // own. For the index, which is about a project rather than a file; see
+    // CxxFrontendDocument::Config::everyFileInTheUnit.
+    void setCollectsEveryFileInTheUnit(bool collects);
+
     // Processes \a filePath, reading every header it reaches into it.
     // Returns its document, replacing the one it had.
     const CxxFrontendDocument *process(const QString &filePath, const QString &source);

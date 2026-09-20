@@ -94,6 +94,19 @@ public:
         // says it whether or not Qt is anywhere near it.
         bool qtExtensions = true;
 
+        // Record what every file in the translation unit declares, each
+        // symbol saying which file that is, rather than only what the file
+        // being read declares itself.
+        //
+        // For a reader that is about the project rather than about one file
+        // -- the index. Reading a header as a translation unit of its own
+        // costs what reading it inside its includer costs, and a project has
+        // tens of headers per source: over a slice of this one, reading
+        // every reported file spent 89% of its time on headers it had
+        // already read. Off by default, since every other reader here is
+        // about one file and would have to filter the rest back out.
+        bool everyFileInTheUnit = false;
+
         // Where a header is and what it says.
         struct Include
         {
@@ -149,6 +162,10 @@ public:
         // leads nowhere, and two things of one name in two anonymous scopes
         // have to be told apart.
         QStringList qualified;
+
+        // Which file declares it. Empty unless Config::everyFileInTheUnit
+        // was set, since without it every symbol is the read file's own.
+        QString file;
         int line = 0;
         int column = 0;
 

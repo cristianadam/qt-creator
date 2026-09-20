@@ -18,6 +18,7 @@ public:
 
     HeaderResolver headerResolver;
     QStringList predefinedMacros;
+    bool everyFileInTheUnit = false;
 
     QHash<QString, std::shared_ptr<CxxFrontendDocument>> documents;
     QHash<QString, QStringList> includedFiles;
@@ -37,6 +38,7 @@ void CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString
 
     CxxFrontendDocument::Config config;
     config.predefinedMacros = predefinedMacros;
+    config.everyFileInTheUnit = everyFileInTheUnit;
     if (filePath == completionFile) {
         config.completionLine = completionLine;
         config.completionColumn = completionColumn;
@@ -78,6 +80,11 @@ void CxxFrontendSnapshot::setHeaderResolver(const HeaderResolver &resolver)
 void CxxFrontendSnapshot::setPredefinedMacros(const QStringList &macros)
 {
     d->predefinedMacros = macros;
+}
+
+void CxxFrontendSnapshot::setCollectsEveryFileInTheUnit(bool collects)
+{
+    d->everyFileInTheUnit = collects;
 }
 
 const CxxFrontendDocument *CxxFrontendSnapshot::process(const QString &filePath,

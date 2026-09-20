@@ -227,6 +227,7 @@ private slots:
     void commentsOfAFile();
     void commentKinds_data();
     void commentKinds();
+    void symbolsOfTheWholeUnit();
     void commentsOfAHeaderAreItsOwn();
 
     void signatureOfADeclaration();
@@ -2229,6 +2230,59 @@ void tst_cxxfrontenddocument::commentKinds()
 // A header is read into whoever includes it, and its comments are read with
 // it -- but they are written in the header, so they are the header's own and
 // no answer about this file.
+// What a file declares is its own, and a header's stays the header's --
+// unless the reader asks for the whole translation unit, which the index
+// does so that it need not read every header again as a file of its own.
+void tst_cxxfrontenddocument::symbolsOfTheWholeUnit()
+{
+    const auto resolve = [](const QString &name, bool, const QString &)
+        -> std::optional<CxxFrontendDocument::Config::Include> {
+        if (name == "h.h")
+            return CxxFrontendDocument::Config::Include{"h.h", "class InHeader { int m; };\n"};
+        return std::nullopt;
+    };
+    const QByteArray source = "#include \"h.h\"\nclass InSource {};\n";
+
+    CxxFrontendDocument::Config own;
+    own.onInclude = resolve;
+    const CxxFrontendDocument onlyItsOwn(source, "<stdin>", own);
+    QStringList names;
+    for (const CxxFrontendDocument::Symbol &symbol : onlyItsOwn.symbols())
+        names.append(symbol.name);
+    QCOMPARE(names, QStringList("InSource"));
+    // Nothing says which file, because there is only the one.
+    QCOMPARE(onlyItsOwn.symbols().first().file, QString());
+
+    CxxFrontendDocument::Config whole;
+    whole.onInclude = resolve;
+    whole.everyFileInTheUnit = true;
+    const CxxFrontendDocument everything(source, "<stdin>", whole);
+    QStringList described;
+    for (const CxxFrontendDocument::Symbol &symbol : everything.symbols())
+        described.append(symbol.name + "@" + symbol.file);
+    QVERIFY2(described.contains("InHeader@h.h"), qPrintable(described.join(", ")));
+    QVERIFY2(described.contains("InSource@<stdin>"), qPrintable(described.join(", ")));
+
+    // The header's member is the header's too, and hangs under the class
+    // the header declares rather than under anything of this file's.
+    const QList<CxxFrontendDocument::Symbol> symbols = everything.symbols();
+    int header = -1;
+    for (int i = 0; i < symbols.size(); ++i) {
+        if (symbols.at(i).name == "InHeader")
+            header = i;
+    }
+    QVERIFY(header >= 0);
+    bool sawTheMember = false;
+    for (const CxxFrontendDocument::Symbol &symbol : symbols) {
+        if (symbol.name != "m")
+            continue;
+        sawTheMember = true;
+        QCOMPARE(symbol.file, QString("h.h"));
+        QCOMPARE(symbol.parent, header);
+    }
+    QVERIFY(sawTheMember);
+}
+
 void tst_cxxfrontenddocument::commentsOfAHeaderAreItsOwn()
 {
     CxxFrontendDocument::Config config;

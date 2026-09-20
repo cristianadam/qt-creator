@@ -985,7 +985,10 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
         // part of it -- a member function defined out of line lives inside
         // a class the header declares -- so the walk goes in and records
         // whatever stands here.
-        if (!isFromMainFile(member)) {
+        //
+        // Unless every file is wanted, in which case it is recorded like
+        // any other and says which file it came from.
+        if (!config.everyFileInTheUnit && !isFromMainFile(member)) {
             if (member->name()) {
                 if (cxx::ScopeSymbol *inner = member->asScopeSymbol()) {
                     collect(inner, enclosing + QStringList(fromStd(cxx::to_string(member->name()))),
@@ -1127,10 +1130,15 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     }
 
     cxx::TokenKind classKey = cxx::TokenKind::T_EOF_SYMBOL;
+    QString declaredIn = fileName;
     if (const cxx::SourceLocation location = member->location()) {
         const cxx::SourcePosition position = unit.tokenStartPosition(location);
         symbol.line = int(position.line);
         symbol.column = int(position.column);
+        if (config.everyFileInTheUnit) {
+            declaredIn = fileOf(location);
+            symbol.file = declaredIn;
+        }
 
         // Q_OBJECT declares members nobody wrote, and there is no text to
         // point at for them.
@@ -1151,7 +1159,7 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
         if (!symbol.isDefinedHere) {
             if (cxx::FunctionSymbol * const defined = function->definition()) {
                 symbol.isDefinedHere = defined->location()
-                                       && fileOf(defined->location()) == fileName;
+                                       && fileOf(defined->location()) == declaredIn;
             }
         }
         symbol.isExtern = function->isExtern();
