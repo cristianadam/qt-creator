@@ -506,16 +506,25 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
 // reading one as a shard that says nothing would stop the sweep below.
 static const char kShardSuffix[] = ".idx";
 
-// Everything in \a directory and below it, each with what it costs and when
-// it was last written.
-static QList<std::pair<FilePath, QDateTime>> filesUnder(const FilePath &directory,
-                                                        qint64 *totalSize)
+// One file of the store, with what it costs and when it was last written.
+class StoredFile
 {
-    QList<std::pair<FilePath, QDateTime>> found;
+public:
+    FilePath path;
+    QDateTime written;
+    qint64 size = 0;
+};
+
+// Everything in \a directory and below it. What each costs comes back with
+// it: the pruning has to weigh the shards against the rest, and asking the
+// disk a second time for what it has just been asked is a stat per file of
+// the store.
+static QList<StoredFile> filesUnder(const FilePath &directory)
+{
+    QList<StoredFile> found;
     directory.iterateDirectory(
-        [&found, totalSize](const FilePath &path) {
-            found.append({path, path.lastModified()});
-            *totalSize += path.fileSize();
+        [&found](const FilePath &path) {
+            found.append({path, path.lastModified(), path.fileSize()});
             return IterationPolicy::Continue;
         },
         {{}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories});
@@ -586,7 +595,8 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
 qint64 CxxFrontendIndexCache::sizeOnDisk() const
 {
     qint64 total = 0;
-    filesUnder(m_directory, &total);
+    for (const StoredFile &file : filesUnder(m_directory))
+        total += file.size;
     return total;
 }
 
@@ -595,30 +605,47 @@ void CxxFrontendIndexCache::pruneToBound() const
     const FilePath entries = m_directory.pathAppended("entries");
 
     qint64 total = 0;
-    QList<std::pair<FilePath, QDateTime>> shards;
-    for (const auto &[path, written] : filesUnder(m_directory, &total)) {
-        if (path.fileName().endsWith(QLatin1String(kShardSuffix)))
-            shards.append({path, written});
+    qint64 shardBytes = 0;
+    QList<StoredFile> shards;
+    for (const StoredFile &file : filesUnder(m_directory)) {
+        total += file.size;
+        if (file.path.fileName().endsWith(QLatin1String(kShardSuffix))) {
+            shards.append(file);
+            shardBytes += file.size;
+        }
     }
     if (total <= m_maximumBytes)
         return;
 
     // Oldest first, which for a shard is the reading nobody has wanted
     // for longest: take() touches the one it hands back.
-    std::sort(shards.begin(), shards.end(),
-              [](const auto &left, const auto &right) { return left.second < right.second; });
+    std::sort(shards.begin(), shards.end(), [](const StoredFile &left, const StoredFile &right) {
+        return left.written < right.written;
+    });
 
-    // Only what was there before this session began. A shard written a
-    // moment ago may be one another worker is about to point at, and the
-    // entries beside it are being written as this runs.
-    for (const auto &[path, written] : std::as_const(shards)) {
-        if (total <= m_maximumBytes / 2)
+    // Down to half the bound, counted over the shards alone -- which is all
+    // this loop may remove. The entries beside them go below, and only the
+    // ones nothing points at.
+    //
+    // Weighed against the whole store, the target need not be reachable at
+    // all: where the entries come to more than half the bound, dropping
+    // every shard there is still leaves it above, so every shard is what
+    // this would drop -- the lately used along with the rest, the store
+    // emptied, and the session left with a cache that answers nothing. The
+    // entries are a fifth of a store of this project and the bound is half,
+    // so there is room; a project of many small sources, each declaring a
+    // great deal and including little, is what would close it.
+    //
+    // Only what was there before this session began, besides. A shard
+    // written a moment ago may be one another worker is about to point at,
+    // and the entries beside it are being written as this runs.
+    for (const StoredFile &shard : std::as_const(shards)) {
+        if (shardBytes <= m_maximumBytes / 2)
             break;
-        if (written >= m_startedAt)
+        if (shard.written >= m_startedAt)
             continue;
-        const qint64 size = path.fileSize();
-        if (path.removeFile())
-            total -= size;
+        if (shard.path.removeFile())
+            shardBytes -= shard.size;
     }
 
     // And then whatever nothing points at any longer, which is most of what

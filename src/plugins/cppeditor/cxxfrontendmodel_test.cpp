@@ -1920,6 +1920,62 @@ void CxxFrontendModelTest::testTheStoreKeepsWhatIsStillBeingUsed()
     QVERIFY(!cache.take(written.at(1), "projectkey"));
 }
 
+// The bound is made by dropping shards, and what each file declares is not
+// the pruning's to drop -- the sweep takes those, and only the ones nothing
+// points at. So a target weighed against the whole store need not be
+// reachable by dropping shards at all, and chasing one that is not would
+// drop every shard there: the store emptied, and a cache left answering
+// nothing for the rest of the session.
+void CxxFrontendModelTest::testTheStoreKeepsShardsItCannotCountItsWayPast()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath store = dir.filePath() / "store";
+
+    // Readings of one file each, so a shard is no bigger than the entries
+    // beside it -- and twelve of them put the entries alone above half the
+    // bound, which is what makes the target unreachable.
+    const int count = 12;
+    const qint64 bound = 2048;
+
+    FilePaths written;
+    for (int i = 0; i < count; ++i) {
+        const FilePath source = dir.createFile(QString("u%1.cpp").arg(i).toUtf8(),
+                                               QString("int u%1;\n").arg(i).toUtf8());
+        QVERIFY(!source.isEmpty());
+        written.append(source);
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+        CxxFrontendIndexRead read = aReading();
+        read.files.first().filePath = source;
+        // So that no two of them share their entries and each really costs
+        // what it costs.
+        read.files.first().entries.first().name = QString("Thing%1").arg(i);
+        cache.store(source, "projectkey", read);
+    }
+
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+    int survivors = 0;
+    for (const FilePath &source : std::as_const(written)) {
+        if (cache.take(source, "projectkey"))
+            ++survivors;
+    }
+
+    // Counted rather than asked of one reading in particular: the pruning
+    // happens on a session's first store, so whichever was written last
+    // comes after the last prune and is there either way -- which is no
+    // test of anything.
+    //
+    // Weighed against the shards, half the bound is more than they come to
+    // and none of them need go. Weighed against the whole store it is less
+    // than the entries alone, so every shard the pruning may touch is
+    // dropped, and what is left is the few written after it ran.
+    QVERIFY2(survivors > count / 2,
+             qPrintable(QString("only %1 of %2 readings outlived a bound that the shards "
+                                "cannot be counted past")
+                            .arg(survivors)
+                            .arg(count)));
+}
+
 void CxxFrontendModelTest::testTheStoreStaysWithinItsBound()
 {
     TemporaryDir dir;
