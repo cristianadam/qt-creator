@@ -1852,35 +1852,67 @@ void CxxFrontendModelTest::testTheStoreKeepsWhatIsStillBeingUsed()
     TemporaryDir dir;
     QVERIFY(dir.isValid());
     const FilePath store = dir.filePath() / "store";
-    const qint64 bound = 6 * 1024;
+
+    // What a reading was read through, which in a real store is the bulk of
+    // what a shard costs -- some 80% of it -- and that proportion is what
+    // this row depends on. The prune comes down to half the bound counting
+    // everything in the store, but it may only drop *shards*: where the
+    // entries beside them come to more than that half, no number of shards
+    // reaches it and every last one of them goes, lately used or not. A
+    // reading of one file, whose shard is no bigger than its entries, is
+    // that case -- and then there is no order left for this to be about.
+    QStringList throughThese;
+    for (int i = 0; i < 40; ++i) {
+        const FilePath header = dir.createFile(QString("h%1.h").arg(i).toUtf8(),
+                                               QString("// h%1\n").arg(i).toUtf8());
+        QVERIFY(!header.isEmpty());
+        throughThese.append(header.toFSPathString());
+    }
 
     FilePaths written;
-    const auto storeOne = [&](int i) {
+    const auto storeOne = [&](int i, qint64 bound) {
         const FilePath source = dir.createFile(QString("u%1.cpp").arg(i).toUtf8(),
                                                QString("int u%1;\n").arg(i).toUtf8());
         QVERIFY(!source.isEmpty());
         written.append(source);
         CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
         CxxFrontendIndexRead read = aReading();
+        read.includedFiles = throughThese;
         read.files.first().filePath = source;
+        // Told apart by what it declares, so that no two readings share
+        // their entries and each one really costs what it costs.
         read.files.first().entries.first().name = QString("Thing%1").arg(i);
         cache.store(source, "projectkey", read);
     };
 
+    // Made under a bound nothing here will reach, so that the store is
+    // built whole and the only pruning is the one this row is about.
+    const qint64 roomToSpare = 8 * 1024 * 1024;
     for (int i = 0; i < 18; ++i)
-        storeOne(i);
+        storeOne(i, roomToSpare);
 
     // The oldest reading of the lot, used -- which is the only thing that
     // marks it as worth keeping, a reading that comes back from the store
     // being read and not written.
     {
-        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, roomToSpare);
         QVERIFY(cache.take(written.first(), "projectkey"));
     }
 
-    // And now past the bound, so that the ones nobody has wanted go.
-    for (int i = 18; i < 24; ++i)
-        storeOne(i);
+    // A bound the store is already over, taken from what it actually costs
+    // rather than guessed at: the prune comes down to half of it, which is
+    // about half the shards, so what has to survive is the newer half --
+    // and the reading just used belongs to it however early it was written.
+    qint64 bound = 0;
+    {
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, roomToSpare);
+        bound = cache.sizeOnDisk();
+        QVERIFY(bound > 0);
+    }
+
+    // And now past it, so that the ones nobody has wanted go.
+    for (int i = 18; i < 21; ++i)
+        storeOne(i, bound);
 
     CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
     QVERIFY2(cache.take(written.first(), "projectkey"),

@@ -20,16 +20,25 @@ namespace CppEditor::Internal {
 
 // Bumped whenever what is written changes shape, so that a store written by
 // an older Qt Creator is passed over rather than misread.
-const quint32 kFormat = 4;
+const quint32 kFormat = 5;
 const quint32 kMagic = 0x43585849; // "CXXI"
 
 // What the store may take on disk before the readings written longest ago
 // are dropped.
 //
-// Measured over a 300-file slice of this project: 19.7 MB, which is 65 kB
-// a file, so this is a project of some eight thousand files. Most of it is
-// not what the files declare -- that is 2.3 MB, shared -- but the thousand
-// paths each shard names as what it was read through.
+// Measured over a 300-file slice of this project: 5.7 MB, or 19 kB a file,
+// so this is a project of some twenty-seven thousand of them -- and a third
+// of that where the files are as header-heavy as Qt's own. The same slice
+// cost 8.2 MB before a shard stopped naming every path a second time and
+// writing a length beside every digest.
+//
+// Little of it is what the files declare: that is 1.1 MB, shared between
+// the units that read a header the same way. What the rest is, and this is
+// the thing to know before trying to make it smaller, is digests rather
+// than paths. A shard is nine tenths paths before compression, but a
+// thousand paths sharing their first forty characters come to almost
+// nothing after it, while a digest compresses to itself -- looking, as it
+// does, like noise.
 //
 // A bound at all because nothing else drops anything: a store grows by a
 // shard per file indexed, for every project ever opened, and a cache is a
@@ -45,6 +54,50 @@ const int kDigestLength = 8;
 static QByteArray digestOf(const QByteArray &data)
 {
     return QCryptographicHash::hash(data, QCryptographicHash::Sha1).left(kDigestLength);
+}
+
+// Enough of a digest to name what a file declares, and longer than the one
+// above because the two answer different questions. A content digest is only
+// ever compared with the digest of that same path's bytes, so a collision
+// takes one file's two versions agreeing; this one *names* a description
+// among every description in the store, which is the birthday problem over
+// the lot of them. At twelve bytes a store of a million descriptions has
+// about one chance in 10^17 of handing back the wrong file's.
+const int kEntriesKeyLength = 12;
+
+// A path as a shard holds it: UTF-8, rather than the UTF-16 a QString writes.
+// Nine tenths of a shard is paths, and a path is very nearly ASCII, so this
+// is half of what they cost before compression and a fifth of what is left
+// after it.
+static void writePath(QDataStream &stream, const QString &path)
+{
+    stream << path.toUtf8();
+}
+
+static QString readPath(QDataStream &stream)
+{
+    QByteArray utf8;
+    stream >> utf8;
+    return QString::fromUtf8(utf8);
+}
+
+// A digest as a shard holds it: the bytes themselves, with no length written
+// beside them, every one of them being of the one size. The lengths came to
+// a third again of what the digests cost, and the digests are the part of a
+// shard that no compression shrinks -- being digests, they look like noise.
+// The caller has checked the size, there being nothing sensible to do here
+// with one of the wrong length.
+static void writeDigest(QDataStream &stream, const QByteArray &digest)
+{
+    stream.writeRawData(digest.constData(), int(digest.size()));
+}
+
+static QByteArray readDigest(QDataStream &stream, int length)
+{
+    QByteArray digest(length, Qt::Uninitialized);
+    if (stream.readRawData(digest.data(), length) != length)
+        return {};
+    return digest;
 }
 
 CxxFrontendIndexCache::CxxFrontendIndexCache(const QStringList &macros,
@@ -90,10 +143,9 @@ QByteArray CxxFrontendIndexCache::writeEntries(const QList<CxxFrontendIndexEntry
 
     // The digest is of what a file declares, so two translation units that
     // read a header the same way write one file between them -- which is
-    // the whole of why this is not kept in the shard. A digest of the full
-    // twenty bytes, since a collision here would not lose a reading but
-    // hand back another file's.
-    const QByteArray key = QCryptographicHash::hash(raw, QCryptographicHash::Sha1);
+    // the whole of why this is not kept in the shard.
+    const QByteArray key
+        = QCryptographicHash::hash(raw, QCryptographicHash::Sha1).left(kEntriesKeyLength);
     const FilePath path = entriesFor(key);
 
     // Used by this session, whether it is written below or was already
@@ -269,23 +321,27 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     // the first difference ends it, since one is enough.
     qint32 fileCount = 0;
     stream >> fileCount;
-    if (fileCount < 0)
+    // The file read stands first, so a shard naming none of them is one this
+    // did not write.
+    if (fileCount <= 0)
         return miss();
 
     CxxFrontendIndexRead read;
-    read.includedFiles.reserve(fileCount - 1);
+    // Kept whole, the file itself and all, because what the reading
+    // describes is named by its place in this list.
+    QStringList checked;
+    checked.reserve(fileCount);
     for (qint32 i = 0; i < fileCount; ++i) {
-        QString path;
-        QByteArray digest;
-        stream >> path >> digest;
-        if (stream.status() != QDataStream::Ok)
+        const QString path = readPath(stream);
+        const QByteArray digest = readDigest(stream, kDigestLength);
+        if (stream.status() != QDataStream::Ok || path.isEmpty() || digest.isEmpty())
             return miss();
-        if (digest.isEmpty() || contentsOf(path) != digest)
+        if (contentsOf(path) != digest)
             return miss();
-        // The first is the file itself, which is not one of its own includes.
-        if (i > 0)
-            read.includedFiles.append(path);
+        checked.append(path);
     }
+    // The first is the file itself, which is not one of its own includes.
+    read.includedFiles = checked.mid(1);
 
     // A reading is of a whole translation unit, so it says what each file
     // in it declares; the file read stands first.
@@ -296,9 +352,19 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     read.files.reserve(describedCount);
     for (qint32 f = 0; f < describedCount; ++f) {
         CxxFrontendIndexRead::File file;
+        // Where it stands among the files checked above, or -1 and then the
+        // path, for the one that is no file and so was never checked.
+        qint32 stands = 0;
+        stream >> stands;
         QString path;
-        QByteArray key;
-        stream >> path >> key;
+        if (stands >= 0) {
+            if (stands >= checked.size())
+                return miss();
+            path = checked.at(stands);
+        } else {
+            path = readPath(stream);
+        }
+        const QByteArray key = readDigest(stream, kEntriesKeyLength);
         if (stream.status() != QDataStream::Ok || path.isEmpty() || key.isEmpty())
             return miss();
         // What the file declares is kept apart, under a digest of itself,
@@ -366,27 +432,47 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
     QStringList files{filePath.toFSPathString()};
     files += read.includedFiles;
     stream << qint32(files.size());
+    // Where each of them stands, so that what the reading describes can be
+    // named by its place below rather than written out a second time.
+    QHash<QString, qint32> placeOf;
+    placeOf.reserve(files.size());
+    qint32 place = 0;
     for (const QString &path : std::as_const(files)) {
         const QByteArray digest = contentsOf(path);
         // A file that cannot be read now cannot be checked later, and a
         // shard that can never be used again is worse than none.
-        if (digest.isEmpty())
+        if (digest.size() != kDigestLength)
             return;
-        stream << path << digest;
+        placeOf.insert(path, place++);
+        writePath(stream, path);
+        writeDigest(stream, digest);
     }
 
     // What each file declares goes beside the shard rather than in it, and
     // is named after itself: a header read into a thousand translation
     // units is described the same way by most of them, and the shard keeps
     // the digest rather than the description.
+    //
+    // The file it describes is named by its place in the list above, where
+    // all but one of them stand -- what a reading describes is what was
+    // read into it. Written out only for the one that is no file at all,
+    // <builtins>, which is the whole of why the place may be missing.
     stream << qint32(read.files.size());
     for (const CxxFrontendIndexRead::File &file : read.files) {
         const QByteArray key = writeEntries(file.entries);
         // Nothing written means nothing to point at, and a shard pointing
         // at what is not there is a shard that can never be used.
-        if (key.isEmpty())
+        if (key.size() != kEntriesKeyLength)
             return;
-        stream << file.filePath.toFSPathString() << key;
+        const QString path = file.filePath.toFSPathString();
+        const auto stands = placeOf.constFind(path);
+        if (stands != placeOf.constEnd()) {
+            stream << *stands;
+        } else {
+            stream << qint32(-1);
+            writePath(stream, path);
+        }
+        writeDigest(stream, key);
     }
 
     // Written whole or not at all: a half-written shard read back next time
@@ -445,10 +531,14 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
 
     qint32 fileCount = 0;
     stream >> fileCount;
+    if (fileCount < 0)
+        return std::nullopt;
+    // Read past, not kept: what is wanted here is the keys below, and a
+    // described file is named by its place among these only where it has
+    // one.
     for (qint32 i = 0; i < fileCount; ++i) {
-        QString path;
-        QByteArray digest;
-        stream >> path >> digest;
+        readPath(stream);
+        readDigest(stream, kDigestLength);
         if (stream.status() != QDataStream::Ok)
             return std::nullopt;
     }
@@ -457,12 +547,14 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
     stream >> describedCount;
     QSet<QByteArray> keys;
     for (qint32 i = 0; i < describedCount; ++i) {
-        QString path;
-        QByteArray key;
-        stream >> path >> key;
+        qint32 stands = 0;
+        stream >> stands;
+        if (stands < 0)
+            readPath(stream);
+        const QByteArray key = readDigest(stream, kEntriesKeyLength);
         // Half of what it points at is not an answer to what it points
         // at: read as the whole truth, the rest would be swept away.
-        if (stream.status() != QDataStream::Ok)
+        if (stream.status() != QDataStream::Ok || key.isEmpty())
             return std::nullopt;
         keys.insert(key);
     }
