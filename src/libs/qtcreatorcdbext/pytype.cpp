@@ -239,8 +239,10 @@ static std::string getModuleName(ULONG64 module)
 {
     CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
     ULONG size;
+    countEngineCall("GetModuleNameString");
     symbols->GetModuleNameString(DEBUG_MODNAME_MODULE, DEBUG_ANY_ID, module, NULL, 0, &size);
     std::string name(size - 1, '\0');
+    countEngineCall("GetModuleNameString");
     if (SUCCEEDED(symbols->GetModuleNameString(DEBUG_MODNAME_MODULE, DEBUG_ANY_ID,
                                                module, &name[0], size, NULL))) {
         return name;
@@ -293,11 +295,13 @@ std::string PyType::name(bool withModule) const
     if (m_name.empty() && m_resolved.value_or(false)) {
         auto symbols = ExtensionCommandContext::instance()->symbols();
         ULONG size = 0;
+        countEngineCall("GetTypeName");
         symbols->GetTypeName(m_module, m_typeId, NULL, 0, &size);
         if (size == 0)
             return std::string();
 
         std::string typeName(size - 1, '\0');
+        countEngineCall("GetTypeName");
         if (FAILED(symbols->GetTypeName(m_module, m_typeId, &typeName[0], size, &size)))
             return std::string();
 
@@ -323,6 +327,7 @@ ULONG64 PyType::bitsize() const
 
     ULONG size = 0;
     auto symbols = ExtensionCommandContext::instance()->symbols();
+    countEngineCall("GetTypeSize");
     if (SUCCEEDED(symbols->GetTypeSize(m_module, m_typeId, &size)))
         return size * 8;
     return 0;
@@ -399,10 +404,12 @@ PyFields PyType::fields() const
         return fields;
     for (ULONG fieldIndex = 0;; ++fieldIndex) {
         ULONG size = 0;
+        countEngineCall("GetFieldName");
         symbols->GetFieldName(m_module, m_typeId, fieldIndex, NULL, 0, &size);
         if (size == 0)
             break;
         std::string name(size - 1, '\0');
+        countEngineCall("GetFieldName");
         if (FAILED(symbols->GetFieldName(m_module, m_typeId, fieldIndex, &name[0], size, NULL)))
             break;
 
@@ -418,10 +425,12 @@ std::string PyType::module() const
 
     CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
     ULONG size = 0;
+    countEngineCall("GetModuleNameString");
     symbols->GetModuleNameString(DEBUG_MODNAME_MODULE, DEBUG_ANY_ID, m_module, NULL, 0, &size);
     if (size == 0)
         return {};
     std::string name(size - 1, '\0');
+    countEngineCall("GetModuleNameString");
     if (SUCCEEDED(symbols->GetModuleNameString(DEBUG_MODNAME_MODULE, DEBUG_ANY_ID,
                                                m_module, &name[0], size, NULL))) {
         return name;
@@ -510,9 +519,11 @@ static bool findTypeInModules(const std::string &name, ULONG *typeId, ULONG64 *m
     CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
     ULONG loaded = 0;
     ULONG unloaded = 0;
+    countEngineCall("GetNumberModules");
     if (FAILED(symbols->GetNumberModules(&loaded, &unloaded)) || loaded == 0)
         return false;
     std::vector<DEBUG_MODULE_PARAMETERS> modules(loaded);
+    countEngineCall("GetModuleParameters");
     if (FAILED(symbols->GetModuleParameters(loaded, NULL, 0, modules.data())))
         return false;
     for (const bool deferred : {false, true}) {
@@ -521,6 +532,7 @@ static bool findTypeInModules(const std::string &name, ULONG *typeId, ULONG64 *m
                 continue;
             if ((candidate.SymbolType == DEBUG_SYMTYPE_DEFERRED) != deferred)
                 continue;
+            countEngineCall("GetTypeId");
             if (symbols->GetTypeId(candidate.Base, name.c_str(), typeId) == S_OK) {
                 *module = candidate.Base;
                 return true;
@@ -536,6 +548,7 @@ static bool findTypeInModulesLoadedSince(const std::string &name, size_t firstMo
     CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
     const std::vector<ULONG64> &modules = loadedModules();
     for (size_t i = firstModule; i < modules.size(); ++i) {
+        countEngineCall("GetTypeId");
         if (symbols->GetTypeId(modules[i], name.c_str(), typeId) == S_OK) {
             *module = modules[i];
             return true;
@@ -556,6 +569,7 @@ bool PyType::resolve() const
             if (!*cached.m_resolved && cached.m_modulesAsked < loadedModules().size()) {
                 if (debuggingTypeEnabled())
                     DebugPrint() << "asking the new modules for '" << m_name << "'";
+                EngineTimer timer("TypeSearch");
                 ULONG typeId = 0;
                 ULONG64 module = 0;
                 if (findTypeInModulesLoadedSince(m_name, cached.m_modulesAsked, &typeId, &module)) {
@@ -579,10 +593,13 @@ bool PyType::resolve() const
             CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
             ULONG typeId = 0;
             bool found = false;
+            countEngineCall("GetTypeId");
             if (m_module != 0 && !isIntegralType(m_name) && !isFloatType(m_name))
                 found = symbols->GetTypeId(m_module, m_name.c_str(), &typeId) == S_OK;
             if (!found) {
+                EngineTimer timer("TypeSearch");
                 ULONG64 module = 0;
+                countEngineCall("GetSymbolTypeId");
                 found = symbols->GetSymbolTypeId(m_name.c_str(), &typeId, &module) == S_OK
                         || findTypeInModules(m_name, &typeId, &module);
                 m_module = found ? module : 0;
