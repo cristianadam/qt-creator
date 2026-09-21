@@ -69,6 +69,11 @@ const int kEntriesKeyLength = 12;
 // Nine tenths of a shard is paths, and a path is very nearly ASCII, so this
 // is half of what they cost before compression and a fifth of what is left
 // after it.
+//
+// A name holding an unpaired surrogate -- which Windows permits and nothing
+// much makes -- does not come back the same, and the file it names is then
+// read afresh every session instead of being taken from the store. That is
+// the safe way round for it to fail, and it costs the one file.
 static void writePath(QDataStream &stream, const QString &path)
 {
     stream << path.toUtf8();
@@ -85,11 +90,15 @@ static QString readPath(QDataStream &stream)
 // beside them, every one of them being of the one size. The lengths came to
 // a third again of what the digests cost, and the digests are the part of a
 // shard that no compression shrinks -- being digests, they look like noise.
-// The caller has checked the size, there being nothing sensible to do here
-// with one of the wrong length.
-static void writeDigest(QDataStream &stream, const QByteArray &digest)
+//
+// The length is given rather than taken from the digest, because it is what
+// the reader will read: one of another size would put every field after it
+// out of step, and a shard misread that way says nothing about being wrong
+// -- it would simply never match again.
+static void writeDigest(QDataStream &stream, const QByteArray &digest, int length)
 {
-    stream.writeRawData(digest.constData(), int(digest.size()));
+    QTC_ASSERT(digest.size() == length, return);
+    stream.writeRawData(digest.constData(), length);
 }
 
 static QByteArray readDigest(QDataStream &stream, int length)
@@ -322,8 +331,13 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     qint32 fileCount = 0;
     stream >> fileCount;
     // The file read stands first, so a shard naming none of them is one this
-    // did not write.
-    if (fileCount <= 0)
+    // did not write -- and no more of them than the bytes in hand could
+    // hold. The count comes off the disk, and reserving for a corrupt one
+    // would ask for gigabytes and bring the reader down with a bad_alloc
+    // where it should simply have missed. A checked file costs twelve bytes
+    // at the very least: four for the length of its path and eight of
+    // digest.
+    if (fileCount <= 0 || fileCount > raw.size() / 12)
         return miss();
 
     CxxFrontendIndexRead read;
@@ -347,7 +361,9 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     // in it declares; the file read stands first.
     qint32 describedCount = 0;
     stream >> describedCount;
-    if (describedCount <= 0)
+    // Bounded the same way, a described file costing sixteen bytes at the
+    // very least: four for where it stands and twelve of key.
+    if (describedCount <= 0 || describedCount > raw.size() / 16)
         return miss();
     read.files.reserve(describedCount);
     for (qint32 f = 0; f < describedCount; ++f) {
@@ -445,7 +461,7 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
             return;
         placeOf.insert(path, place++);
         writePath(stream, path);
-        writeDigest(stream, digest);
+        writeDigest(stream, digest, kDigestLength);
     }
 
     // What each file declares goes beside the shard rather than in it, and
@@ -472,7 +488,7 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
             stream << qint32(-1);
             writePath(stream, path);
         }
-        writeDigest(stream, key);
+        writeDigest(stream, key, kEntriesKeyLength);
     }
 
     // Written whole or not at all: a half-written shard read back next time
@@ -531,7 +547,11 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
 
     qint32 fileCount = 0;
     stream >> fileCount;
-    if (fileCount < 0)
+    // Judged exactly as take() judges it. A count it would refuse is a shard
+    // nothing will ever read again, and calling that "wants no entries"
+    // would let the sweep take the entries only it points at -- which is
+    // the very thing the giving up below is there to prevent.
+    if (fileCount <= 0 || fileCount > raw.size() / 12)
         return std::nullopt;
     // Read past, not kept: what is wanted here is the keys below, and a
     // described file is named by its place among these only where it has
@@ -545,6 +565,8 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
 
     qint32 describedCount = 0;
     stream >> describedCount;
+    if (describedCount <= 0 || describedCount > raw.size() / 16)
+        return std::nullopt;
     QSet<QByteArray> keys;
     for (qint32 i = 0; i < describedCount; ++i) {
         qint32 stands = 0;
