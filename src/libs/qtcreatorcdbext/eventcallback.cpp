@@ -237,7 +237,7 @@ STDMETHODIMP EventCallback::LoadModule(
     )
 {
 #ifdef WITH_PYTHON
-    PyType::clearUnresolvedTypes();
+    PyType::moduleLoaded(BaseOffset);
 #endif
     return m_wrapped ? m_wrapped->LoadModule(ImageFileHandle, BaseOffset,
                                              ModuleSize, ModuleName, ImageName,
