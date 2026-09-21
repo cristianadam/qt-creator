@@ -169,6 +169,7 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
             m_describedThisRun.clear();
         }
         m_indexerDone = false;
+        m_objectiveCSwept = false;
 
         // Reported means the built-in model has just read it again, so
         // whatever a reading of some translation unit said of it before may
@@ -186,6 +187,39 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
 #endif
 }
 
+// Marks every Objective-C file the model knows of, and everything each of
+// them includes, as answered for.
+//
+// This front end does not read Objective-C, so nothing will ever cover what
+// one includes -- and what one includes is a thousand of AppKit's headers,
+// which would otherwise be read one at a time, each as a C++ file it is
+// not. The built-in walk has described them and its description stands.
+//
+// Done in one sweep rather than as each file is reported, because a header
+// of an Objective-C file is reported long before the file itself.
+void CppLocatorData::coverWhatObjectiveCBrings()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
+    QSet<FilePath> answeredFor;
+    for (auto it = snapshot.begin(); it != snapshot.end(); ++it) {
+        const FilePath &filePath = it.key();
+        if (!ProjectFile::isObjC(filePath))
+            continue;
+        answeredFor.insert(filePath);
+        answeredFor.unite(snapshot.allIncludesForDocument(filePath));
+    }
+    if (answeredFor.isEmpty())
+        return;
+
+    QMutexLocker locker(&m_pendingMutex);
+    for (const FilePath &filePath : std::as_const(answeredFor)) {
+        m_coveredThisRun.insert(filePath);
+        m_awaitingCoverage.remove(filePath);
+    }
+#endif
+}
+
 void CppLocatorData::readPendingWithCxxFrontend()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -199,7 +233,22 @@ void CppLocatorData::readPendingWithCxxFrontend()
         return;
     }
 
+    {
+        // Before anything is promoted for want of a reading to cover it.
+        bool sweep = false;
+        {
+            QMutexLocker locker(&m_pendingMutex);
+            sweep = m_indexerDone && !m_objectiveCSwept;
+            m_objectiveCSwept = m_objectiveCSwept || sweep;
+        }
+        if (sweep)
+            coverWhatObjectiveCBrings();
+    }
+
     FilePaths batch;
+    // Files the model will not read at all, so that nothing is waiting for
+    // a reading of them that will never come.
+    FilePaths declined;
     {
         QMutexLocker locker(&m_pendingMutex);
         m_readScheduled = false;
@@ -231,6 +280,15 @@ void CppLocatorData::readPendingWithCxxFrontend()
             //
             // Getting this wrong costs time and nothing else: a file no
             // reading covers is read on its own at the end either way.
+            // Objective-C, which this front end does not read. Reading it
+            // would be declined, and what it includes would then be read
+            // one header at a time -- a thousand of AppKit's, parsed as
+            // C++, for an answer worth nothing.
+            if (ProjectFile::isObjC(filePath)) {
+                declined.append(filePath);
+                continue;
+            }
+
             const bool isItsOwnUnit = !ProjectFile::isHeader(ProjectFile::classify(filePath))
                                       && !CppModelManager::projectPart(filePath).isEmpty();
             if (isItsOwnUnit) {
@@ -259,6 +317,28 @@ void CppLocatorData::readPendingWithCxxFrontend()
         }
         m_beingRead = batch.size();
     }
+
+    // Nothing will read what an Objective-C file includes, so it is marked
+    // as answered for here instead. The built-in walk has described those
+    // files already and its description stands; what must not happen is
+    // each of them being read on its own at the end, as a C++ file it is
+    // not. The walk is over the built-in snapshot, which only reads.
+    if (!declined.isEmpty()) {
+        const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
+        QSet<FilePath> answeredFor;
+        for (const FilePath &filePath : std::as_const(declined)) {
+            answeredFor.insert(filePath);
+            answeredFor.unite(snapshot.allIncludesForDocument(filePath));
+        }
+        QMutexLocker locker(&m_pendingMutex);
+        for (const FilePath &filePath : std::as_const(answeredFor)) {
+            m_coveredThisRun.insert(filePath);
+            m_awaitingCoverage.remove(filePath);
+        }
+    }
+
+    if (batch.isEmpty())
+        return;
 
     // Read once for the whole batch, and here rather than on the pool: this
     // is the thread the indexer reports to, and what these are read off is

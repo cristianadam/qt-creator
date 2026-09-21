@@ -110,6 +110,7 @@ private:
     void readPendingWithCxxFrontend();
     // Puts back whatever the batch did not cover, and starts the next one.
     void readWhatWasNotCovered();
+    void coverWhatObjectiveCBrings();
     void takeCxxFrontendResults(int begin, int end);
 
     mutable QMutex m_infosByFileMutex;
@@ -144,6 +145,8 @@ private:
     // is reported before the source that includes it, that being the order
     // a translation unit is read in.
     bool m_indexerDone = false;
+    // Whether the sweep above has been made for this pass.
+    bool m_objectiveCSwept = false;
     // Of the batch being read, how many have yet to come back.
     int m_beingRead = 0;
     bool m_readScheduled = false;
