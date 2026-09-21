@@ -272,6 +272,15 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // reported, which is what the check on a result relies on. The
         // headers wait in m_awaitingCoverage instead.
         for (const FilePath &filePath : std::as_const(m_pending)) {
+            // Objective-C, which this front end does not read. Reading
+            // it would be declined, and what it includes would then be
+            // read one header at a time -- a thousand of AppKit's, parsed
+            // as the C++ they are not, for an answer worth nothing.
+            if (ProjectFile::isObjC(filePath)) {
+                declined.append(filePath);
+                continue;
+            }
+
             // Read as a translation unit only what the project builds as
             // one: a file with no project part of its own is written into
             // another -- moc_foo.cpp lives inside mocs_compilation.cpp,
@@ -280,15 +289,6 @@ void CppLocatorData::readPendingWithCxxFrontend()
             //
             // Getting this wrong costs time and nothing else: a file no
             // reading covers is read on its own at the end either way.
-            // Objective-C, which this front end does not read. Reading it
-            // would be declined, and what it includes would then be read
-            // one header at a time -- a thousand of AppKit's, parsed as
-            // C++, for an answer worth nothing.
-            if (ProjectFile::isObjC(filePath)) {
-                declined.append(filePath);
-                continue;
-            }
-
             const bool isItsOwnUnit = !ProjectFile::isHeader(ProjectFile::classify(filePath))
                                       && !CppModelManager::projectPart(filePath).isEmpty();
             if (isItsOwnUnit) {
@@ -302,27 +302,18 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 m_awaitingCoverage.insert(filePath);
         }
         m_pending.clear();
-
-        // No source left to cover them, so whatever is still waiting is
-        // read as a translation unit of its own after all: a header no file
-        // in the project includes, or one whose includers all came from the
-        // store and so read nothing. They wait until here rather than being
-        // taken as they arrive, because the indexer reports a project over
-        // many batches and a header usually arrives before its source.
-        if (batch.isEmpty()) {
-            if (!m_indexerDone)
-                return;
-            batch = FilePaths(m_awaitingCoverage.cbegin(), m_awaitingCoverage.cend());
-            m_awaitingCoverage.clear();
-        }
-        m_beingRead = batch.size();
     }
 
     // Nothing will read what an Objective-C file includes, so it is marked
     // as answered for here instead. The built-in walk has described those
     // files already and its description stands; what must not happen is
-    // each of them being read on its own at the end, as a C++ file it is
+    // each of them being read on its own at the end, as the C++ they are
     // not. The walk is over the built-in snapshot, which only reads.
+    //
+    // Before the batch is given up on below, not after: a batch of nothing
+    // but Objective-C and headers would otherwise leave here having taken
+    // those files out of the pending set without answering for them, and
+    // nothing would ever cover what they include.
     if (!declined.isEmpty()) {
         const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
         QSet<FilePath> answeredFor;
@@ -337,8 +328,26 @@ void CppLocatorData::readPendingWithCxxFrontend()
         }
     }
 
-    if (batch.isEmpty())
-        return;
+    {
+        QMutexLocker locker(&m_pendingMutex);
+
+        // No source left to cover them, so whatever is still waiting is
+        // read as a translation unit of its own after all: a header no
+        // file in the project includes, or one whose includers all came
+        // from the store and so read nothing. They wait until here rather
+        // than being taken as they arrive, because the indexer reports a
+        // project over many batches and a header usually arrives before
+        // the source that includes it.
+        if (batch.isEmpty()) {
+            if (!m_indexerDone)
+                return;
+            batch = FilePaths(m_awaitingCoverage.cbegin(), m_awaitingCoverage.cend());
+            m_awaitingCoverage.clear();
+            if (batch.isEmpty())
+                return;
+        }
+        m_beingRead = batch.size();
+    }
 
     // Read once for the whole batch, and here rather than on the pool: this
     // is the thread the indexer reports to, and what these are read off is
