@@ -13,6 +13,7 @@
 
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
+#include <texteditor/texteditor.h>
 #include <coreplugin/fileutils.h>
 
 #include <cplusplus/LookupContext.h>
@@ -1742,6 +1743,51 @@ void ModelManagerTest::testIndexingCost()
     QVERIFY(locatorData);
     QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 3600000);
     const qint64 indexElapsed = timer.elapsed();
+
+
+    // What typing costs the index, where QTC_INDEX_TYPING asks for it.
+    //
+    // A real reparse and not a refresh pretending to be one: the text is
+    // changed and the editor's own parser runs, which is what reports the
+    // document and everything read into it. Written because two rounds of
+    // guessing at this cost got it wrong in both directions -- the answer
+    // is that an unsaved edit costs no reading at all, the file on disk
+    // being unchanged and the store answering for it.
+    if (qtcEnvironmentVariableIsSet("QTC_INDEX_TYPING")) {
+        const FilePath open = projectInfo->sourceFiles().values().first();
+        TextEditor::BaseTextEditor *editor = nullptr;
+        QVERIFY(CppEditor::Tests::TestCase::openCppEditor(open, &editor));
+        QVERIFY(CppEditor::Tests::TestCase::waitForProcessedEditorDocument(open));
+        QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 600000);
+
+        // Bound on the document really being read again, not on a pause
+        // in the clock: the editor reparses on an idle timer, so asking
+        // whether its parser is running answers no before it has begun.
+        int parses = 0;
+        connect(CppModelManager::instance(), &CppModelManager::documentUpdated,
+                &context, [&parses, open](const CPlusPlus::Document::Ptr &document) {
+                    if (document->filePath() == open)
+                        ++parses;
+                });
+
+        const int readBefore = locatorData->cxxFrontendCacheMisses();
+        QElapsedTimer typing;
+        typing.start();
+        const int pauses = 5;
+        for (int i = 0; i < pauses; ++i) {
+            const int was = parses;
+            QTextCursor cursor = editor->editorWidget()->textCursor();
+            cursor.movePosition(QTextCursor::End);
+            cursor.insertText(QString("\nint typed%1;\n").arg(i));
+            QTRY_VERIFY_WITH_TIMEOUT(parses > was, 600000);
+            QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 600000);
+        }
+        qInfo().noquote()
+            << QString("Typing: file=%1 pauses=%2 readings=%3 elapsed=%4ms")
+                   .arg(open.fileName()).arg(pauses)
+                   .arg(locatorData->cxxFrontendCacheMisses() - readBefore)
+                   .arg(typing.elapsed());
+    }
 
     qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms "
                                  "stored=%4 read=%5")
