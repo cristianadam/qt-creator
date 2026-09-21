@@ -169,6 +169,13 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
             m_describedThisRun.clear();
         }
         m_indexerDone = false;
+
+        // Reported means the built-in model has just read it again, so
+        // whatever a reading of some translation unit said of it before may
+        // be about the file as it was. It is owed a fresh answer, covered
+        // or not.
+        m_coveredThisRun.remove(document->filePath());
+        m_describedThisRun.remove(document->filePath());
         m_pending.insert(document->filePath());
         if (m_readScheduled)
             return;
@@ -414,6 +421,12 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
         QMutexLocker locker(&m_pendingMutex);
         for (const FilePath &file : files) {
             m_pending.remove(file);
+            m_awaitingCoverage.remove(file);
+            // Gone, so nothing stands for it any longer. Were it to come
+            // back it would have to be read afresh, and saying it is
+            // already answered for would see to it that it never was.
+            m_coveredThisRun.remove(file);
+            m_describedThisRun.remove(file);
             m_removedSinceRead.insert(file);
         }
     }
