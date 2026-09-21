@@ -85,6 +85,8 @@
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
+
+#include <atomic>
 #include <QWriteLocker>
 
 #include <memory>
@@ -198,6 +200,10 @@ public:
 
     // Indexing
     bool m_indexerEnabled;
+    // How many passes over the project's files are running. Written where
+    // they are started and finished, which is this thread, and read from
+    // the one that reports each file it has read.
+    std::atomic<int> m_passesRunning = 0;
 
     QMutex m_fallbackProjectPartMutex;
     ProjectPart::ConstPtr m_fallbackProjectPart;
@@ -1329,7 +1335,22 @@ QFuture<void> CppModelManager::updateSourceFiles(const QSet<FilePath> &sourceFil
     // "ReservedProgressNotification" should be shown if there is more than one source file.
     if (sourceFiles.size() > 1)
         mode = ForcedProgressNotification;
-    return Internal::refreshSourceFiles(filteredFiles, mode);
+    const QFuture<void> pass = Internal::refreshSourceFiles(filteredFiles, mode);
+
+    // Counted while it runs, so that anybody may ask whether files are
+    // being read through. Every pass comes through here; only a project's
+    // own gets a watcher of its own, which is not the same question.
+    ++d->m_passesRunning;
+    auto * const watcher = new QFutureWatcher<void>(m_instance);
+    const auto passFinished = [watcher] {
+        --d->m_passesRunning;
+        watcher->disconnect();
+        watcher->deleteLater();
+    };
+    connect(watcher, &QFutureWatcher<void>::finished, m_instance, passFinished);
+    connect(watcher, &QFutureWatcher<void>::canceled, m_instance, passFinished);
+    watcher->setFuture(pass);
+    return pass;
 }
 
 ProjectInfoList CppModelManager::projectInfos()
@@ -1785,13 +1806,7 @@ void CppModelManager::onActiveProjectChanged(Project *project)
 
 bool CppModelManager::isIndexing()
 {
-    return d->m_lockedProjectData.get([](const CppModelManagerPrivate::SyncedProjectData &ld) {
-        for (const auto &data : ld.m_projectData) {
-            if (data.indexer)
-                return true;
-        }
-        return false;
-    });
+    return d->m_passesRunning > 0;
 }
 
 void CppModelManager::onSourceFilesRefreshed()

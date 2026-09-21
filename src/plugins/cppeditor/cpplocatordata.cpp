@@ -157,6 +157,23 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
     if (!cxxFrontendModelRequested())
         return;
 
+    // Only what a pass reports. Outside one, what reports a file is an
+    // editor having reparsed the document somebody is typing in -- and it
+    // reports every header read into it along with the document, a
+    // thousand files that have not changed.
+    //
+    // Nothing to do for any of them. The file on disk is what this model
+    // describes and the file on disk has not changed: measured, an
+    // unsaved edit costs no reading at all, the store answering for every
+    // file the editor reports. What the reports did do was disturb the
+    // bookkeeping -- the cover of a whole run thrown away, headers left
+    // waiting for a pass that was not running -- for no gain whatever.
+    //
+    // The built-in reading above has just described the document, and the
+    // next pass describes it again.
+    if (!CppModelManager::isIndexing())
+        return;
+
     {
         QMutexLocker locker(&m_pendingMutex);
         // The last pass has ended and files are being reported again, so
@@ -279,7 +296,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // already; a file removed and then indexed again stands in the batch
         // below on its own account.
         m_removedSinceRead.clear();
-        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty() && m_readOnTheirOwn.isEmpty())
+        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty())
             return;
 
         // Only the sources are read. A reading is of a whole translation
@@ -315,13 +332,6 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 batch.append(filePath);
                 continue;
             }
-            // Nothing is going to cover it: an editor has just reparsed it
-            // on its own account, which is all that is coming for it.
-            if (m_readOnTheirOwn.contains(filePath)) {
-                batch.append(filePath);
-                continue;
-            }
-
             // Already answered for by a reading that includes it. The
             // indexer reports it all the same, and reading it again would
             // say what has just been said.
@@ -329,14 +339,6 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 m_awaitingCoverage.insert(filePath);
         }
         m_pending.clear();
-
-        // The same for one that was waiting for cover rather than pending,
-        // which is where an edited header usually sits by now.
-        for (const FilePath &filePath : std::as_const(m_readOnTheirOwn)) {
-            if (!batch.contains(filePath))
-                batch.append(filePath);
-        }
-        m_readOnTheirOwn.clear();
     }
 
     // Nothing will read what an Objective-C file includes, so it is marked
@@ -516,7 +518,7 @@ int CppLocatorData::cxxFrontendFilesOutstanding() const
     QMutexLocker locker(&m_pendingMutex);
     // What is waiting to be covered is still owed: it either comes back
     // with a source that includes it or is read on its own at the end.
-    return m_pending.size() + m_awaitingCoverage.size() + m_readOnTheirOwn.size() + m_beingRead;
+    return m_pending.size() + m_awaitingCoverage.size() + m_beingRead;
 }
 
 int CppLocatorData::cxxFrontendCacheHits() const
@@ -555,31 +557,18 @@ void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files,
     // Each says which it is, rather than this guessing from the shape of
     // the refresh: the indexer reports one file too, where one file is all
     // that changed, and that one may be open in an editor.
-    const bool fromAnEditor = origin == CppModelManager::RefreshOrigin::Editor;
+    // An editor reparsing the document somebody is typing in is not a
+    // pass ending: nothing was reading the files that a header waits to
+    // be covered by, and nothing of that reparse reached this at all --
+    // see onDocumentUpdated. Taking it for a pass ending read every
+    // header of a running pass as a translation unit of its own, at the
+    // first pause in the editor.
+    if (origin == CppModelManager::RefreshOrigin::Editor)
+        return;
+
     {
         QMutexLocker locker(&m_pendingMutex);
-        if (!fromAnEditor) {
-            m_indexerDone = true;
-        } else {
-            // Nothing else will cover it -- no pass is reading the files
-            // that include it -- so it is read on its own account, and now
-            // rather than whenever a pass next ends. It may be waiting for
-            // cover already or still be pending; either way it is owed a
-            // reading of its own, and the dispatch below takes it from
-            // wherever it sits.
-            for (const FilePath &file : files) {
-                m_awaitingCoverage.remove(file);
-                m_readOnTheirOwn.insert(file);
-            }
-
-            // And an editor reports every header read into the document
-            // along with it, which leaves them waiting for the cover of a
-            // pass -- so where there is no pass, they wait for ever. The
-            // built-in reading has just described them and its description
-            // stands; the next pass reads them again.
-            if (!CppModelManager::isIndexing())
-                m_awaitingCoverage.clear();
-        }
+        m_indexerDone = true;
     }
     readPendingWithCxxFrontend();
 #endif
@@ -595,7 +584,6 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
         for (const FilePath &file : files) {
             m_pending.remove(file);
             m_awaitingCoverage.remove(file);
-            m_readOnTheirOwn.remove(file);
             // Gone, so nothing stands for it any longer. Were it to come
             // back it would have to be read afresh, and saying it is
             // already answered for would see to it that it never was.

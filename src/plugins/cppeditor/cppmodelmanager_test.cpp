@@ -1782,6 +1782,12 @@ void ModelManagerTest::testIndexingCost()
             QTRY_VERIFY_WITH_TIMEOUT(parses > was, 600000);
             QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 600000);
         }
+        // Put back what was typed, so that what is left behind is a
+        // document nobody has to be asked about on the way out.
+        for (int i = 0; i < pauses; ++i)
+            editor->editorWidget()->undo();
+        QVERIFY(!editor->document()->isModified());
+
         qInfo().noquote()
             << QString("Typing: file=%1 pauses=%2 readings=%3 elapsed=%4ms")
                    .arg(open.fileName()).arg(pauses)

@@ -111,10 +111,13 @@ public:
 
     static void handleSettingsChange(ProjectExplorer::Project *project);
 
-    // Whether a project's files are being read through right now. What a
-    // reader holding something back needs to know: while this is true,
-    // more files are coming, and when it is false nothing is going to
-    // report a file that nobody has asked about.
+    // Whether files are being read through right now -- a project being
+    // indexed, a checkout being caught up with, anything that went
+    // through updateSourceFiles and has not finished.
+    //
+    // What a reader that holds a file back needs to know, and the one
+    // thing that tells a pass reporting a file from an editor reparsing
+    // the document somebody is typing in.
     static bool isIndexing();
 
     /// \return The project part with the given project file
