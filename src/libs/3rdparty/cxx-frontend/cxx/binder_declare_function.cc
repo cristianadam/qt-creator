@@ -169,6 +169,15 @@ auto Binder::DeclareFunction::declare() -> FunctionSymbol* {
   functionSymbol->setName(name);
   functionSymbol->setType(type);
 
+  // What stands where the signature was written: the parameter list and
+  // whatever follows it -- cv-qualifiers, a ref-qualifier, an exception
+  // specification, a trailing return type. Not the virt-specifiers, which
+  // follow the declarator and are no part of the type.
+  if (functionDeclarator) {
+    functionSymbol->setTypeTokens(functionDeclarator->firstSourceLocation(),
+                                  functionDeclarator->lastSourceLocation());
+  }
+
   functionSymbol->setTrailingRequiresClause(decl.trailingRequiresClause);
 
   functionSymbol->setExplicitObjectParameter(

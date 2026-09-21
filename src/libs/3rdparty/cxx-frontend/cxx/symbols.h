@@ -420,6 +420,28 @@ class Symbol {
   [[nodiscard]] auto location() const -> SourceLocation;
   void setLocation(SourceLocation location);
 
+  // Where the type of this symbol stands in the source, as the run of
+  // tokens it was written as -- for a function the parameter list and
+  // whatever follows it, for an alias what it is an alias of. The end is
+  // one past the last token, the way an AST node's is.
+  //
+  // A type as written and a type as resolved are different things: one
+  // says "qsizetype" where the other says "long long", and one says
+  // "std::false_type" where the other says "integral_constant<bool, 0>".
+  // Both are wanted, by different readers, and only the source has the
+  // first -- so it is kept the way a Q_PROPERTY's value is, as the tokens
+  // themselves. Empty for anything the front end made up rather than read.
+  [[nodiscard]] auto firstTypeToken() const -> SourceLocation {
+    return firstTypeToken_;
+  }
+  [[nodiscard]] auto lastTypeToken() const -> SourceLocation {
+    return lastTypeToken_;
+  }
+  void setTypeTokens(SourceLocation first, SourceLocation last) {
+    firstTypeToken_ = first;
+    lastTypeToken_ = last;
+  }
+
   [[nodiscard]] auto parent() const -> ScopeSymbol*;
   void setParent(ScopeSymbol* parent);
 
@@ -487,6 +509,8 @@ class Symbol {
   Symbol* link_ = nullptr;
   const std::vector<const Identifier*>* abiTags_ = nullptr;
   SourceLocation location_;
+  SourceLocation firstTypeToken_;
+  SourceLocation lastTypeToken_;
   bool isHidden_ = false;
   AccessSpecifier accessSpecifier_ = AccessSpecifier::kPublic;
 };
