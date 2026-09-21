@@ -1031,8 +1031,15 @@ void CxxFrontendDocument::Private::collect(cxx::ScopeSymbol *scope,
         if (auto *cls = dynamic_cast<cxx::ClassSymbol *>(member)) {
             for (const cxx::TemplateSpecialization &specialization : cls->specializations()) {
                 cxx::Symbol * const specialized = specialization.symbol;
-                if (!specialized || !isFromMainFile(specialized))
+                // Where every file is wanted, a specialization a header
+                // declares is the header's, the same as any other member.
+                // Read on its own the header was the main file and this
+                // was recorded; read inside its includer it is not, and
+                // the main-file rule alone dropped it.
+                if (!specialized
+                    || (!config.everyFileInTheUnit && !isFromMainFile(specialized))) {
                     continue;
+                }
                 if (const cxx::SourceLocation location = specialized->location();
                     location && described.contains(location.index())) {
                     continue;
