@@ -952,6 +952,17 @@ public:
     // place it is written.
     [[nodiscard]] QList<CxxFrontendDocument::Local> localsOf(cxx::FunctionSymbol *function) const;
 
+    // The same for several functions at once, in the order they were
+    // asked for.
+    //
+    // One walk of the tree serves all of them, which is the whole point:
+    // finding where a local is used means walking the translation unit,
+    // and a translation unit is the file with every header read into it.
+    // Asking function by function walked that tree once per function --
+    // hundreds of times for an ordinary .cpp file, which is minutes.
+    [[nodiscard]] QList<QList<CxxFrontendDocument::Local>> localsOfEach(
+        const QList<cxx::FunctionSymbol *> &functions) const;
+
     // Whether a using declaration in this file names \a symbol, or brought in
     // the function \a symbol is.
     [[nodiscard]] bool isThroughUsingDeclaration(cxx::Symbol *symbol) const;
@@ -5177,75 +5188,92 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::localsAt(int line, int co
 QList<CxxFrontendDocument::Local> CxxFrontendDocument::Private::localsOf(
     cxx::FunctionSymbol *function) const
 {
-    QList<Local> locals;
-    // Which local each symbol belongs to. A lambda's parameter arrives twice,
-    // as the parameter and as the variable standing for it in the body, and
-    // both are the one name written once -- so they share an entry, found by
-    // where the name was written.
-    QHash<cxx::Symbol *, int> symbolToLocal;
-    QHash<QString, int> localByDeclaration;
+    const QList<QList<Local>> each = localsOfEach({function});
+    return each.isEmpty() ? QList<Local>() : each.first();
+}
 
-    const std::function<void(cxx::ScopeSymbol *)> collect = [&](cxx::ScopeSymbol *scope) {
-        for (cxx::Symbol *member : scope->members()) {
-            if (dynamic_cast<cxx::ParameterSymbol *>(member)
-                || dynamic_cast<cxx::VariableSymbol *>(member)) {
-                if (!member->name() || member->isHidden())
-                    continue;
+QList<QList<CxxFrontendDocument::Local>> CxxFrontendDocument::Private::localsOfEach(
+    const QList<cxx::FunctionSymbol *> &functions) const
+{
+    QList<QList<Local>> answer(functions.size());
 
-                const QString name = fromStd(cxx::to_string(member->name()));
-                // The front end declares some of its own inside every body --
-                // __func__, and a parameter for each of a lambda's. Nobody
-                // wrote them, and a name reserved to the implementation is not
-                // one anybody can point at.
-                if (name.startsWith("__"))
-                    continue;
+    // Which local each symbol belongs to, as the function it is in and its
+    // place in that function's list. A lambda's parameter arrives twice, as
+    // the parameter and as the variable standing for it in the body, and
+    // both are the one name written once -- so they share an entry, found
+    // by where the name was written.
+    QHash<cxx::Symbol *, std::pair<int, int>> symbolToLocal;
+    bool anyAtAll = false;
 
-                const cxx::SourceLocation declaration = member->location();
-                if (!declaration)
-                    continue;
-                const cxx::SourcePosition position = unit.tokenStartPosition(declaration);
-                const Occurrence place{int(position.line), int(position.column),
-                                       int(unit.tokenAt(declaration).length())};
+    for (int at = 0; at < functions.size(); ++at) {
+        QList<Local> &locals = answer[at];
+        QHash<QString, int> localByDeclaration;
 
-                const QString key = QString("%1 %2:%3")
-                                        .arg(name).arg(place.line).arg(place.column);
-                if (const auto known = localByDeclaration.constFind(key);
-                    known != localByDeclaration.cend()) {
-                    symbolToLocal.insert(member, *known);
-                    // Whichever of the two arrived first, a name written
-                    // between the parentheses of a lambda is a parameter.
-                    if (dynamic_cast<cxx::ParameterSymbol *>(member))
-                        locals[*known].isParameter = true;
+        const std::function<void(cxx::ScopeSymbol *)> collect = [&](cxx::ScopeSymbol *scope) {
+            for (cxx::Symbol *member : scope->members()) {
+                if (dynamic_cast<cxx::ParameterSymbol *>(member)
+                    || dynamic_cast<cxx::VariableSymbol *>(member)) {
+                    if (!member->name() || member->isHidden())
+                        continue;
+
+                    const QString name = fromStd(cxx::to_string(member->name()));
+                    // The front end declares some of its own inside every
+                    // body -- __func__, and a parameter for each of a
+                    // lambda's. Nobody wrote them, and a name reserved to the
+                    // implementation is not one anybody can point at.
+                    if (name.startsWith("__"))
+                        continue;
+
+                    const cxx::SourceLocation declaration = member->location();
+                    if (!declaration)
+                        continue;
+                    const cxx::SourcePosition position = unit.tokenStartPosition(declaration);
+                    const Occurrence place{int(position.line), int(position.column),
+                                           int(unit.tokenAt(declaration).length())};
+
+                    const QString key = QString("%1 %2:%3")
+                                            .arg(name).arg(place.line).arg(place.column);
+                    if (const auto known = localByDeclaration.constFind(key);
+                        known != localByDeclaration.cend()) {
+                        symbolToLocal.insert(member, {at, *known});
+                        // Whichever of the two arrived first, a name written
+                        // between the parentheses of a lambda is a parameter.
+                        if (dynamic_cast<cxx::ParameterSymbol *>(member))
+                            locals[*known].isParameter = true;
+                        continue;
+                    }
+
+                    symbolToLocal.insert(member, {at, int(locals.size())});
+                    localByDeclaration.insert(key, int(locals.size()));
+                    locals.append(Local{name, {place},
+                                        dynamic_cast<cxx::ParameterSymbol *>(member) != nullptr,
+                                        classNamedBy(member->type())});
                     continue;
                 }
 
-                symbolToLocal.insert(member, int(locals.size()));
-                localByDeclaration.insert(key, int(locals.size()));
-                locals.append(Local{name, {place},
-                                    dynamic_cast<cxx::ParameterSymbol *>(member) != nullptr,
-                                    classNamedBy(member->type())});
-                continue;
+                // Into a lambda as well: its parameters are written inside
+                // this function and are highlighted along with the function's
+                // own locals, which is what the built-in model does.
+                if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
+                    for (cxx::FunctionSymbol *nested : overloadSet->declaredFunctions())
+                        collect(nested);
+                    continue;
+                }
+                if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
+                    collect(inner);
             }
+        };
+        if (functions.at(at))
+            collect(functions.at(at));
+        anyAtAll = anyAtAll || !locals.isEmpty();
+    }
+    if (!anyAtAll)
+        return answer;
 
-            // Into a lambda as well: its parameters are written inside this
-            // function and are highlighted along with the function's own
-            // locals, which is what the built-in model does.
-            if (auto *overloadSet = dynamic_cast<cxx::OverloadSetSymbol *>(member)) {
-                for (cxx::FunctionSymbol *nested : overloadSet->declaredFunctions())
-                    collect(nested);
-                continue;
-            }
-            if (cxx::ScopeSymbol *inner = member->asScopeSymbol())
-                collect(inner);
-        }
-    };
-    collect(function);
-    if (locals.isEmpty())
-        return {};
-
-    // One walk of the tree rather than a lookup for each place: every name the
-    // parser resolved to one of these locals is a use of it, and the parser
-    // wrote that on the node while reading the file.
+    // One walk of the tree rather than a lookup for each place -- and one
+    // for all the functions rather than one apiece: every name the parser
+    // resolved to one of these locals is a use of it, and the parser wrote
+    // that on the node while reading the file.
     for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot || !*slot)
@@ -5263,16 +5291,16 @@ QList<CxxFrontendDocument::Local> CxxFrontendDocument::Private::localsOf(
         const Occurrence place{int(position.line), int(position.column),
                                int(unit.tokenAt(used).length())};
 
-        QList<Occurrence> &places = locals[*at].places;
-        // The same place can be reached twice, once for the parameter and once
-        // for the variable that stands for it.
+        QList<Occurrence> &places = answer[at->first][at->second].places;
+        // The same place can be reached twice, once for the parameter and
+        // once for the variable that stands for it.
         const auto samePlace = [&place](const Occurrence &other) {
             return other.line == place.line && other.column == place.column;
         };
         if (std::none_of(places.cbegin(), places.cend(), samePlace))
             places.append(place);
     }
-    return locals;
+    return answer;
 }
 
 namespace {
@@ -5552,8 +5580,8 @@ QList<CxxFrontendDocument::Name> CxxFrontendDocument::namesIn() const
     // the function that holds it rather than looked up: every place, its
     // declaration included, which is what the built-in model's LocalSymbols
     // hands the highlighter as well.
-    for (cxx::FunctionSymbol *function : std::as_const(functions)) {
-        for (const Local &local : d->localsOf(function)) {
+    for (const QList<Local> &locals : d->localsOfEach(functions)) {
+        for (const Local &local : locals) {
             for (const Occurrence &place : local.places) {
                 // A symbol the front end invented stands nowhere.
                 if (place.line <= 0)

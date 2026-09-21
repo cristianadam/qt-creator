@@ -229,6 +229,7 @@ private slots:
     void commentKinds();
     void symbolsOfTheWholeUnit();
     void typesAsTheSourceWroteThem();
+    void localsOfSeveralFunctionsStayApart();
     void commentsOfAHeaderAreItsOwn();
 
     void signatureOfADeclaration();
@@ -2033,6 +2034,42 @@ void tst_cxxfrontenddocument::localsOfAFunction()
                           "b @3:9+1 @4:5+1 @4:9+1 @5:12+1"}));
 }
 
+// Every function's locals are found in one walk of the tree, the tree
+// being the whole translation unit and a file having hundreds of
+// functions -- so what has to hold is that one walk still tells them
+// apart, including where two functions write the same names.
+void tst_cxxfrontenddocument::localsOfSeveralFunctionsStayApart()
+{
+    const QByteArray source =
+        "int f(int a)\n"
+        "{\n"
+        "    int b = a;\n"
+        "    return b;\n"
+        "}\n"
+        "int g(int a)\n"
+        "{\n"
+        "    int b = a + a;\n"
+        "    return b + b;\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    // Asked of one function, the other's places are not among them.
+    QCOMPARE(describeLocals(document.localsAt(3, 9)),
+             QStringList({"a @1:11+1 @3:13+1", "b @3:9+1 @4:12+1"}));
+    QCOMPARE(describeLocals(document.localsAt(8, 9)),
+             QStringList({"a @6:11+1 @8:13+1 @8:17+1", "b @8:9+1 @9:12+1 @9:16+1"}));
+
+    // And the highlighter, which asks for all of them at once, is given
+    // every place of both and no place twice.
+    int locals = 0;
+    for (const CxxFrontendDocument::Name &name : document.namesIn()) {
+        if (name.kind == CxxFrontendDocument::NameKind::Local)
+            ++locals;
+    }
+    // Four of f's, six of g's.
+    QCOMPARE(locals, 10);
+}
+
 // A name declared again in an inner block is a different local, and its uses
 // are its own -- which is the whole reason to answer per local rather than per
 // name.
@@ -2227,6 +2264,7 @@ void tst_cxxfrontenddocument::commentKinds()
     QCOMPARE(document.comments().size(), 1);
     QCOMPARE(kindOf(document.comments().first().kind), builtinKindOf(source));
 }
+
 
 // What a type was written as, which is not what it resolves to: a search
 // result shows the first, and so does the built-in model it stands beside.
