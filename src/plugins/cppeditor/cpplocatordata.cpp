@@ -159,17 +159,23 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
 
     {
         QMutexLocker locker(&m_pendingMutex);
-        // Nothing pending, nothing running, nothing scheduled: the indexer
-        // has been quiet and this is the first file of a fresh run. What
-        // was covered in the last one says nothing about this one -- the
-        // files are being read again because something changed.
-        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty() && m_beingRead == 0
-            && !m_readScheduled) {
+        // The last pass has ended and files are being reported again, so
+        // this is the first of a fresh one. What was covered in the last
+        // pass says nothing about this one -- the files are being read
+        // again because something changed.
+        //
+        // Said by the pass having ended rather than by nothing being left
+        // to do, which is not the same thing: a burst of already-covered
+        // headers empties every set for a moment in the middle of a pass,
+        // and taking that for a fresh run threw away the coverage of the
+        // one still running -- every header after it read as a translation
+        // unit of its own, which is the whole of what this saves.
+        if (m_indexerDone) {
             m_coveredThisRun.clear();
             m_describedThisRun.clear();
+            m_objectiveCSwept = false;
         }
         m_indexerDone = false;
-        m_objectiveCSwept = false;
 
         // Reported means the built-in model has just read it again, so
         // whatever a reading of some translation unit said of it before may
