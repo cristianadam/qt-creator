@@ -110,6 +110,10 @@ private:
     mutable QMutex m_mutex;
     mutable QHash<QString, QByteArray> m_contents;
     mutable QSet<QString> m_directoriesMade;
+    // The entries files this session has put to use, written now or found
+    // already there. What the bound may not take: the shard pointing at
+    // one of them may still be on its way to disk.
+    mutable QSet<QByteArray> m_keysUsed;
     mutable bool m_pruned = false;
     mutable int m_hits = 0;
     mutable int m_misses = 0;

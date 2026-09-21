@@ -1842,6 +1842,52 @@ void CxxFrontendModelTest::testTheStoreKeepsOneCopyOfWhatAFileDeclares()
     QVERIFY(sameAs(*back, second));
 }
 
+// A reading that keeps being used is the last thing the bound should
+// take, and taking one is all a session does with it: nothing is written
+// when a reading comes back from the store, so unless using one says so,
+// the store cannot tell the readings that serve from the ones that never
+// answer -- and would drop exactly the wrong ones.
+void CxxFrontendModelTest::testTheStoreKeepsWhatIsStillBeingUsed()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath store = dir.filePath() / "store";
+    const qint64 bound = 6 * 1024;
+
+    FilePaths written;
+    const auto storeOne = [&](int i) {
+        const FilePath source = dir.createFile(QString("u%1.cpp").arg(i).toUtf8(),
+                                               QString("int u%1;\n").arg(i).toUtf8());
+        QVERIFY(!source.isEmpty());
+        written.append(source);
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+        CxxFrontendIndexRead read = aReading();
+        read.files.first().filePath = source;
+        read.files.first().entries.first().name = QString("Thing%1").arg(i);
+        cache.store(source, "projectkey", read);
+    };
+
+    for (int i = 0; i < 18; ++i)
+        storeOne(i);
+
+    // The oldest reading of the lot, used -- which is the only thing that
+    // marks it as worth keeping, a reading that comes back from the store
+    // being read and not written.
+    {
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+        QVERIFY(cache.take(written.first(), "projectkey"));
+    }
+
+    // And now past the bound, so that the ones nobody has wanted go.
+    for (int i = 18; i < 24; ++i)
+        storeOne(i);
+
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+    QVERIFY2(cache.take(written.first(), "projectkey"),
+             "the reading that was used was dropped before ones that were not");
+    QVERIFY(!cache.take(written.at(1), "projectkey"));
+}
+
 void CxxFrontendModelTest::testTheStoreStaysWithinItsBound()
 {
     TemporaryDir dir;

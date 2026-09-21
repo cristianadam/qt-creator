@@ -96,6 +96,15 @@ QByteArray CxxFrontendIndexCache::writeEntries(const QList<CxxFrontendIndexEntry
     const QByteArray key = QCryptographicHash::hash(raw, QCryptographicHash::Sha1);
     const FilePath path = entriesFor(key);
 
+    // Used by this session, whether it is written below or was already
+    // there. The pruning must not take it: the shard that points at it
+    // may not be on disk yet, and then the reading would come back to a
+    // file that is not there.
+    {
+        QMutexLocker locker(&m_mutex);
+        m_keysUsed.insert(key);
+    }
+
     // Already written, by this session or a previous one. The contents
     // cannot differ: they are what the name is made of.
     if (path.exists())
@@ -234,8 +243,20 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     quint32 magic = 0;
     quint32 format = 0;
     stream >> magic >> format;
-    if (magic != kMagic || format != kFormat)
+    if (magic != kMagic || format != kFormat) {
+        // Written by an older Qt Creator, and nothing here will ever read
+        // it again: the reading it holds is about to be made afresh and
+        // written over it. Taken off the disk now rather than left for the
+        // bound to notice, since a format going up otherwise leaves a
+        // project's whole store standing as dead weight.
+        //
+        // A *newer* store is left alone. This is the older Qt Creator in
+        // that case, and throwing away what the newer one will want next
+        // time is no way to behave.
+        if (magic == kMagic && format < kFormat)
+            file.remove();
         return miss();
+    }
 
     QByteArray storedMacrosKey;
     QByteArray storedProjectKey;
@@ -293,6 +314,14 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     }
     if (stream.status() != QDataStream::Ok)
         return miss();
+
+    // Used now, which is what the bound goes by when it has to drop
+    // something. Nothing else says so: a reading that comes back from the
+    // store is read and not written, so without this a shard's age is the
+    // age of the last time it was *missed* -- and a project that is fully
+    // stored, which is the one worth keeping, would look like the stalest
+    // thing there.
+    file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
 
     QMutexLocker locker(&m_mutex);
     ++m_hits;
@@ -381,14 +410,14 @@ static QList<std::pair<FilePath, QDateTime>> filesUnder(const FilePath &director
 // still wanted. Read without checking anything else about it: a shard whose
 // files have changed is still a shard whose entries must not be dropped
 // from under another one.
-static QSet<QByteArray> keysOf(const FilePath &shard)
+static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
 {
     QFile file(shard.toFSPathString());
     if (!file.open(QIODevice::ReadOnly))
-        return {};
+        return std::nullopt;
     const QByteArray raw = qUncompress(file.readAll());
     if (raw.isEmpty())
-        return {};
+        return std::nullopt;
 
     QDataStream stream(raw);
     stream.setVersion(QDataStream::Qt_6_0);
@@ -398,7 +427,7 @@ static QSet<QByteArray> keysOf(const FilePath &shard)
     QByteArray projectKey;
     stream >> magic >> format >> macrosKey >> projectKey;
     if (magic != kMagic || format != kFormat)
-        return {};
+        return std::nullopt;
 
     qint32 fileCount = 0;
     stream >> fileCount;
@@ -407,7 +436,7 @@ static QSet<QByteArray> keysOf(const FilePath &shard)
         QByteArray digest;
         stream >> path >> digest;
         if (stream.status() != QDataStream::Ok)
-            return {};
+            return std::nullopt;
     }
 
     qint32 describedCount = 0;
@@ -417,8 +446,10 @@ static QSet<QByteArray> keysOf(const FilePath &shard)
         QString path;
         QByteArray key;
         stream >> path >> key;
+        // Half of what it points at is not an answer to what it points
+        // at: read as the whole truth, the rest would be swept away.
         if (stream.status() != QDataStream::Ok)
-            return keys;
+            return std::nullopt;
         keys.insert(key);
     }
     return keys;
@@ -444,8 +475,8 @@ void CxxFrontendIndexCache::pruneToBound() const
     if (total <= m_maximumBytes)
         return;
 
-    // Oldest first, which for a shard is the reading nobody has wanted for
-    // longest: a session that uses one rewrites it.
+    // Oldest first, which for a shard is the reading nobody has wanted
+    // for longest: take() touches the one it hands back.
     std::sort(shards.begin(), shards.end(),
               [](const auto &left, const auto &right) { return left.second < right.second; });
 
@@ -465,14 +496,37 @@ void CxxFrontendIndexCache::pruneToBound() const
     // And then whatever nothing points at any longer, which is most of what
     // a dropped shard cost: its entries are shared, so they go only where
     // no other shard kept them.
+    //
+    // A shard this cannot read says nothing about what is wanted -- it was
+    // written by another Qt Creator, whose format is not this one's, and
+    // the store is shared between them. Reading it as "wants nothing"
+    // would sweep away the entries only it points at, and that install
+    // would find its whole store dangling. So one such shard stops the
+    // sweep: the bound has been made by dropping shards already.
     QSet<QByteArray> wanted;
+    bool readThemAll = true;
     m_directory.iterateDirectory(
-        [&wanted, &entries](const FilePath &path) {
-            if (!path.isChildOf(entries))
-                wanted.unite(keysOf(path));
+        [&wanted, &readThemAll, &entries](const FilePath &path) {
+            if (path.isChildOf(entries))
+                return IterationPolicy::Continue;
+            const std::optional<QSet<QByteArray>> keys = keysOf(path);
+            if (!keys) {
+                readThemAll = false;
+                return IterationPolicy::Stop;
+            }
+            wanted.unite(*keys);
             return IterationPolicy::Continue;
         },
         {{}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories});
+    if (!readThemAll)
+        return;
+
+    // And what this session has put to use, whose shard may not be written
+    // yet: the workers are storing while this runs.
+    {
+        QMutexLocker locker(&m_mutex);
+        wanted.unite(m_keysUsed);
+    }
 
     entries.iterateDirectory(
         [&wanted, this](const FilePath &path) {
