@@ -228,6 +228,7 @@ private slots:
     void commentKinds_data();
     void commentKinds();
     void symbolsOfTheWholeUnit();
+    void typesAsTheSourceWroteThem();
     void commentsOfAHeaderAreItsOwn();
 
     void signatureOfADeclaration();
@@ -2225,6 +2226,69 @@ void tst_cxxfrontenddocument::commentKinds()
     const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
     QCOMPARE(document.comments().size(), 1);
     QCOMPARE(kindOf(document.comments().first().kind), builtinKindOf(source));
+}
+
+// What a type was written as, which is not what it resolves to: a search
+// result shows the first, and so does the built-in model it stands beside.
+void tst_cxxfrontenddocument::typesAsTheSourceWroteThem()
+{
+    const QByteArray source = R"(
+template <typename T> struct QList {};
+struct Link {};
+struct QByteArray {};
+using size_type = long long;
+using count_t = size_type;
+using Links = QList<Link>;
+typedef unsigned char byte_t;
+typedef char *name_t;
+struct S {
+    void insert(size_type where, const QByteArray &what, int n = -1);
+    int at([[maybe_unused]] count_t i) const noexcept;
+};
+)";
+
+    const auto describe = [&source](bool asWritten) {
+        CxxFrontendDocument::Config config;
+        config.typesAsWritten = asWritten;
+        const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>", config);
+        QStringList said;
+        for (const CxxFrontendDocument::Symbol &symbol : document.symbols()) {
+            const QString what = symbol.signature.isEmpty() ? symbol.valueType
+                                                            : symbol.signature;
+            if (!what.isEmpty())
+                said.append(symbol.name + ": " + what);
+        }
+        return said;
+    };
+
+    const QStringList written = describe(true);
+    const QStringList resolved = describe(false);
+    const QString saidWritten = written.join(", ");
+    const QString saidResolved = resolved.join(", ");
+
+    // A name the source wrote is the name it wrote, however many aliases
+    // deep what it stands for is.
+    QVERIFY2(written.contains("count_t: size_type"), qPrintable(saidWritten));
+    QVERIFY2(resolved.contains("count_t: long long"), qPrintable(saidResolved));
+
+    QVERIFY2(written.contains("Links: QList<Link>"), qPrintable(saidWritten));
+    // The sign of a type stands in front of its specifier and belongs to
+    // it; a star stands after the specifier, before the name.
+    QVERIFY2(written.contains("byte_t: unsigned char"), qPrintable(saidWritten));
+    QVERIFY2(written.contains("name_t: char *"), qPrintable(saidWritten));
+
+    // A name is no part of a type: the parameters' names are left out, the
+    // way the name a typedef declares is. An attribute says nothing about
+    // a type either; a default argument is kept, both models showing one.
+    QVERIFY2(written.contains("insert: (size_type, const QByteArray &, int = -1)"),
+             qPrintable(saidWritten));
+    QVERIFY2(written.contains("at: (count_t) const noexcept"), qPrintable(saidWritten));
+
+    // And with it off the same declarations are described by what their
+    // types resolve to, which is what every other reader of this model
+    // wants -- and is why this is asked for rather than always done.
+    QVERIFY2(resolved.contains("insert: (long long, const QByteArray&, int)"),
+             qPrintable(saidResolved));
 }
 
 // A header is read into whoever includes it, and its comments are read with

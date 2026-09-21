@@ -50,6 +50,10 @@ public:
     // written the way a #define is: "FOO 1", "ADD(a, b) a + b".
     void setPredefinedMacros(const QStringList &macros);
 
+    // Say what a type was written as rather than what it resolves to;
+    // see CxxFrontendDocument::Config::typesAsWritten. For the index.
+    void setPrintsTypesAsWritten(bool asWritten);
+
     // Record what every file read into a translation unit declares, each
     // symbol saying which file that is, rather than only the read file's
     // own. For the index, which is about a project rather than a file; see

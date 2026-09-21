@@ -151,6 +151,98 @@ QString applyStarBinding(const QString &declaration, const Overview &settings)
     return result;
 }
 
+// Whether a space is written before \a token when what stands before it is
+// \a previous.
+//
+// Not the spacing of the source, which may have written the thing over
+// three lines with a comment in the middle, but the spacing a declaration
+// is read in -- which is the spacing Overview prints, since what this is
+// for is saying the same thing the built-in model says.
+static bool spaceBetween(cxx::TokenKind previous, cxx::TokenKind token)
+{
+    switch (token) {
+    case cxx::TokenKind::T_COMMA:
+    case cxx::TokenKind::T_RPAREN:
+    case cxx::TokenKind::T_LBRACKET:
+    case cxx::TokenKind::T_RBRACKET:
+    case cxx::TokenKind::T_RBRACE:
+    case cxx::TokenKind::T_LESS:
+    case cxx::TokenKind::T_GREATER:
+    case cxx::TokenKind::T_GREATER_GREATER:
+    case cxx::TokenKind::T_SEMICOLON:
+    case cxx::TokenKind::T_COLON_COLON:
+    case cxx::TokenKind::T_DOT_DOT_DOT:
+        return false;
+    case cxx::TokenKind::T_LPAREN:
+        // What follows one of these is an argument to it and not a type of
+        // its own: "noexcept(...)", where a function type in a template
+        // argument is written "void (const FilePath &)".
+        switch (previous) {
+        case cxx::TokenKind::T_NOEXCEPT:
+        case cxx::TokenKind::T_DECLTYPE:
+        case cxx::TokenKind::T_ALIGNAS:
+        case cxx::TokenKind::T_SIZEOF:
+        // The parameters of a function pointer, which follow the
+        // parentheses the star stands in: "void (*)(int)".
+        case cxx::TokenKind::T_RPAREN:
+            return false;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    switch (previous) {
+    case cxx::TokenKind::T_LPAREN:
+    case cxx::TokenKind::T_LBRACKET:
+    case cxx::TokenKind::T_LBRACE:
+    case cxx::TokenKind::T_LESS:
+    case cxx::TokenKind::T_COLON_COLON:
+    case cxx::TokenKind::T_TILDE:
+        return false;
+    // A star or an ampersand binds to the name that follows it -- "char *p",
+    // and so "char *" where the name is left out, which is how Overview
+    // writes one -- and to another of its own kind. Not to anything else:
+    // what follows may be a default argument, "T * = nullptr".
+    case cxx::TokenKind::T_STAR:
+    case cxx::TokenKind::T_AMP:
+    case cxx::TokenKind::T_AMP_AMP:
+        switch (token) {
+        case cxx::TokenKind::T_IDENTIFIER:
+        case cxx::TokenKind::T_STAR:
+        case cxx::TokenKind::T_AMP:
+        case cxx::TokenKind::T_AMP_AMP:
+            return false;
+        default:
+            return true;
+        }
+    default:
+        return true;
+    }
+}
+
+// Whether what follows \a previous begins a value rather than continuing
+// one, which is what says a minus in front of it is its sign and not a
+// subtraction.
+static bool startsAValue(cxx::TokenKind previous)
+{
+    switch (previous) {
+    case cxx::TokenKind::T_EOF_SYMBOL:
+    case cxx::TokenKind::T_EQUAL:
+    case cxx::TokenKind::T_LPAREN:
+    case cxx::TokenKind::T_LBRACKET:
+    case cxx::TokenKind::T_LBRACE:
+    case cxx::TokenKind::T_COMMA:
+    case cxx::TokenKind::T_LESS:
+    case cxx::TokenKind::T_COLON:
+    case cxx::TokenKind::T_QUESTION:
+        return true;
+    default:
+        return false;
+    }
+}
+
 // The class a type names, looked through a pointer or a reference, since
 // completing after -> or . means the thing pointed at.
 cxx::ScopeSymbol *classScopeOf(const cxx::Type *type)
@@ -936,6 +1028,14 @@ public:
     // this translation unit is not always this file.
     [[nodiscard]] QString fileOf(cxx::SourceLocation location) const;
 
+    // What \a symbol's type was written as, or nothing where the source
+    // did not write it -- a declaration the front end made up for itself.
+    //
+    // The names in it are left out, a name being no part of a type: the
+    // parameters' names of a function, and for a typedef the name it
+    // declares, which stands in the middle of "char *Name".
+    [[nodiscard]] QString typeAsWritten(cxx::Symbol *symbol) const;
+
     // What a proposal or an outline shows for \a symbol.
     [[nodiscard]] CxxFrontendDocument::Completion::Candidate describeCandidate(
         cxx::Symbol *symbol) const;
@@ -1134,6 +1234,23 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     } else if (member->type() && !member->asScopeSymbol()) {
         symbol.valueType = applyStarBinding(
             fromStd(cxx::to_string(member->type(), "", options)), config.settings);
+    }
+
+    // Or what the source wrote, where a reader asked for that: "qsizetype"
+    // rather than "long long", "QFlags<Extension>" rather than what the
+    // alias stands for. Only where it was written -- a declaration the
+    // front end synthesized keeps the type it was given.
+    //
+    // A function's return type is not among these: what was recorded is
+    // where the signature stands, the return type being written in front
+    // of the name and not beside it.
+    if (config.typesAsWritten) {
+        if (const QString written = typeAsWritten(member); !written.isEmpty()) {
+            if (cxx::type_cast<cxx::FunctionType>(member->type()))
+                symbol.signature = written;
+            else
+                symbol.valueType = written;
+        }
     }
 
     cxx::TokenKind classKey = cxx::TokenKind::T_EOF_SYMBOL;
@@ -1738,6 +1855,125 @@ QString CxxFrontendDocument::Private::fileOf(cxx::SourceLocation location) const
         return fileName;
     const QString name = nameOfFile(unit.tokenAt(location).fileId());
     return name.isEmpty() ? fileName : name;
+}
+
+QString CxxFrontendDocument::Private::typeAsWritten(cxx::Symbol *symbol) const
+{
+    const cxx::SourceLocation first = symbol->firstTypeToken();
+    const cxx::SourceLocation last = symbol->lastTypeToken();
+    if (!first || !last || last.index() <= first.index())
+        return {};
+
+    // The tokens standing where a name is written rather than a type. A
+    // parameter's name is one; the name a typedef declares is another, and
+    // it stands between the type and what follows it.
+    QSet<unsigned> names;
+    if (auto *function = symbol_cast<cxx::FunctionSymbol>(symbol)) {
+        for (cxx::ParameterSymbol *parameter : function->parameters()) {
+            if (parameter->name() && parameter->location())
+                names.insert(parameter->location().index());
+        }
+    } else if (symbol->location()) {
+        names.insert(symbol->location().index());
+    }
+
+    QString written;
+    cxx::TokenKind previous = cxx::TokenKind::T_EOF_SYMBOL;
+    cxx::TokenKind beforePrevious = cxx::TokenKind::T_EOF_SYMBOL;
+    // How deep in brackets the walk is, and at which depth a default
+    // argument began -- everything from there on is a value.
+    int depth = 0;
+    int valueDepth = -1;
+    for (unsigned at = first.index(); at < last.index(); ++at) {
+        const cxx::SourceLocation location{at};
+
+        // An attribute is written where a type is but says nothing about
+        // it: "[[maybe_unused]] qsizetype" is a qsizetype. Skipped whole,
+        // brackets and all.
+        if (unit.tokenAt(location).kind() == cxx::TokenKind::T_LBRACKET
+            && at + 1 < last.index()
+            && unit.tokenAt(cxx::SourceLocation{at + 1}).kind() == cxx::TokenKind::T_LBRACKET) {
+            unsigned past = at + 2;
+            int depth = 1;
+            while (past < last.index() && depth > 0) {
+                const cxx::TokenKind kind = unit.tokenAt(cxx::SourceLocation{past}).kind();
+                if (kind == cxx::TokenKind::T_LBRACKET)
+                    ++depth;
+                else if (kind == cxx::TokenKind::T_RBRACKET)
+                    --depth;
+                ++past;
+            }
+            // The closing "]]" is two tokens and the walk above counted
+            // the pairs, so one more stands after it.
+            if (past < last.index()
+                && unit.tokenAt(cxx::SourceLocation{past}).kind()
+                       == cxx::TokenKind::T_RBRACKET) {
+                ++past;
+            }
+            at = past - 1;
+            continue;
+        }
+        // A name is skipped only where the token really is that name: a
+        // symbol's location is where it was declared, and a parameter with
+        // no name is recorded as standing where its type begins.
+        if (names.contains(at)) {
+            const cxx::Token &token = unit.tokenAt(location);
+            if (token.kind() == cxx::TokenKind::T_IDENTIFIER)
+                continue;
+        }
+        const cxx::TokenKind kind = unit.tokenAt(location).kind();
+
+        // "typename" says how to read the name that follows rather than
+        // anything about the type, and the built-in model leaves it out of
+        // what it shows as well.
+        if (kind == cxx::TokenKind::T_TYPENAME)
+            continue;
+
+        // A sign written in front of a number is part of it: a default
+        // argument of -1 is written "-1", where a minus between two things
+        // is written with spaces around it.
+        // A default argument is a value and is written the way a value is:
+        // "= T()" and not "= T ()". Inside the parentheses of one, the
+        // rule that separates a function type from its parameters is off.
+        if (kind == cxx::TokenKind::T_EQUAL) {
+            valueDepth = depth;
+        } else if (kind == cxx::TokenKind::T_COMMA && depth == valueDepth) {
+            valueDepth = -1;
+        }
+        const bool inAValue = valueDepth >= 0 && depth >= valueDepth;
+
+        const bool signOfANumber =
+            (previous == cxx::TokenKind::T_MINUS || previous == cxx::TokenKind::T_PLUS
+             || previous == cxx::TokenKind::T_TILDE || previous == cxx::TokenKind::T_EXCLAIM)
+            && startsAValue(beforePrevious);
+
+        const bool callInAValue = inAValue && kind == cxx::TokenKind::T_LPAREN;
+        if (!written.isEmpty() && !signOfANumber && !callInAValue
+            && spaceBetween(previous, kind)) {
+            written += ' ';
+        }
+        written += fromStd(unit.tokenText(location));
+
+        switch (kind) {
+        case cxx::TokenKind::T_LPAREN:
+        case cxx::TokenKind::T_LBRACKET:
+        case cxx::TokenKind::T_LBRACE:
+            ++depth;
+            break;
+        case cxx::TokenKind::T_RPAREN:
+        case cxx::TokenKind::T_RBRACKET:
+        case cxx::TokenKind::T_RBRACE:
+            --depth;
+            if (valueDepth > depth)
+                valueDepth = -1;
+            break;
+        default:
+            break;
+        }
+        beforePrevious = previous;
+        previous = kind;
+    }
+    return written;
 }
 
 cxx::TokenKind CxxFrontendDocument::Private::classKeyOf(cxx::Symbol *symbol) const

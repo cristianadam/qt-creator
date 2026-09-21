@@ -19,6 +19,7 @@ public:
     HeaderResolver headerResolver;
     QStringList predefinedMacros;
     bool everyFileInTheUnit = false;
+    bool typesAsWritten = false;
 
     QHash<QString, std::shared_ptr<CxxFrontendDocument>> documents;
     QHash<QString, QStringList> includedFiles;
@@ -39,6 +40,7 @@ void CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString
     CxxFrontendDocument::Config config;
     config.predefinedMacros = predefinedMacros;
     config.everyFileInTheUnit = everyFileInTheUnit;
+    config.typesAsWritten = typesAsWritten;
     if (filePath == completionFile) {
         config.completionLine = completionLine;
         config.completionColumn = completionColumn;
@@ -85,6 +87,11 @@ void CxxFrontendSnapshot::setPredefinedMacros(const QStringList &macros)
 void CxxFrontendSnapshot::setCollectsEveryFileInTheUnit(bool collects)
 {
     d->everyFileInTheUnit = collects;
+}
+
+void CxxFrontendSnapshot::setPrintsTypesAsWritten(bool asWritten)
+{
+    d->typesAsWritten = asWritten;
 }
 
 const CxxFrontendDocument *CxxFrontendSnapshot::process(const QString &filePath,

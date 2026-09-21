@@ -1674,6 +1674,11 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
     // headers are read into its sources anyway; reading them again one by
     // one is the whole of what indexing costs.
     holding.owned->setCollectsEveryFileInTheUnit(true);
+    // What somebody looking for a name in the locator wants beside it is
+    // what they would read in the file, and it is also what the built-in
+    // index shows for the same declaration -- neither model resolving a
+    // name that the source spelled out.
+    holding.owned->setPrintsTypesAsWritten(true);
     holding.document = holding.owned->process(filePath.toFSPathString(),
                                               QString::fromUtf8(*contents));
     return holding;

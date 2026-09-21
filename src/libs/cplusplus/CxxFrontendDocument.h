@@ -107,6 +107,21 @@ public:
         // about one file and would have to filter the rest back out.
         bool everyFileInTheUnit = false;
 
+        // Say what a type was written as rather than what it resolves to:
+        // "qsizetype" and not "long long", "QFlags<Extension>" and not
+        // what the alias stands for, "std::false_type" and not
+        // "integral_constant<bool, 0>".
+        //
+        // For the index, whose readers are looking for what they typed,
+        // and which is read beside the built-in model's entries -- that
+        // model never resolves a name either, so this is what keeps the
+        // two saying the same thing about the same declaration. A reader
+        // that wants to know what a thing really is leaves it off.
+        //
+        // Only where the source says: a declaration the front end
+        // synthesized is printed from its type as before.
+        bool typesAsWritten = false;
+
         // Where a header is and what it says.
         struct Include
         {
