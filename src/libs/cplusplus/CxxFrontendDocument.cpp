@@ -1944,9 +1944,6 @@ QString CxxFrontendDocument::Private::typeAsWritten(cxx::Symbol *symbol) const
         if (kind == cxx::TokenKind::T_TYPENAME)
             continue;
 
-        // A sign written in front of a number is part of it: a default
-        // argument of -1 is written "-1", where a minus between two things
-        // is written with spaces around it.
         // The name of a parameter of a parameter, which the walk over the
         // function's own parameters above cannot reach: "void (*)(int n)"
         // is a pointer to a function taking an int, and the built-in model
@@ -2005,6 +2002,9 @@ QString CxxFrontendDocument::Private::typeAsWritten(cxx::Symbol *symbol) const
         }
         const bool inAValue = valueDepth >= 0 && depth >= valueDepth;
 
+        // A sign written in front of a number is part of it: a default
+        // argument of -1 is written "-1", where a minus between two things
+        // is written with spaces around it.
         const bool signOfANumber =
             (previous == cxx::TokenKind::T_MINUS || previous == cxx::TokenKind::T_PLUS
              || previous == cxx::TokenKind::T_TILDE || previous == cxx::TokenKind::T_EXCLAIM)
@@ -5202,7 +5202,12 @@ QList<QList<CxxFrontendDocument::Local>> CxxFrontendDocument::Private::localsOfE
     // the parameter and as the variable standing for it in the body, and
     // both are the one name written once -- so they share an entry, found
     // by where the name was written.
-    QHash<cxx::Symbol *, std::pair<int, int>> symbolToLocal;
+    // A multi-hash, because the functions asked about may hold one
+    // another: a local class written inside a function has member
+    // functions of its own, and their locals are the class's and the
+    // enclosing function's both. One entry apiece would keep whichever
+    // was recorded last and leave the other with no uses at all.
+    QMultiHash<cxx::Symbol *, std::pair<int, int>> symbolToLocal;
     bool anyAtAll = false;
 
     for (int at = 0; at < functions.size(); ++at) {
@@ -5282,8 +5287,7 @@ QList<QList<CxxFrontendDocument::Local>> CxxFrontendDocument::Private::localsOfE
         if (!idExpression || !idExpression->symbol || !idExpression->unqualifiedId)
             continue;
 
-        const auto at = symbolToLocal.constFind(idExpression->symbol);
-        if (at == symbolToLocal.cend())
+        if (!symbolToLocal.contains(idExpression->symbol))
             continue;
 
         const cxx::SourceLocation used = idExpression->unqualifiedId->firstSourceLocation();
@@ -5291,14 +5295,16 @@ QList<QList<CxxFrontendDocument::Local>> CxxFrontendDocument::Private::localsOfE
         const Occurrence place{int(position.line), int(position.column),
                                int(unit.tokenAt(used).length())};
 
-        QList<Occurrence> &places = answer[at->first][at->second].places;
         // The same place can be reached twice, once for the parameter and
         // once for the variable that stands for it.
         const auto samePlace = [&place](const Occurrence &other) {
             return other.line == place.line && other.column == place.column;
         };
-        if (std::none_of(places.cbegin(), places.cend(), samePlace))
-            places.append(place);
+        for (const auto &[function, local] : symbolToLocal.values(idExpression->symbol)) {
+            QList<Occurrence> &places = answer[function][local].places;
+            if (std::none_of(places.cbegin(), places.cend(), samePlace))
+                places.append(place);
+        }
     }
     return answer;
 }
