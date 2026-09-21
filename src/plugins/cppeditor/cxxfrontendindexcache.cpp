@@ -321,7 +321,15 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     // age of the last time it was *missed* -- and a project that is fully
     // stored, which is the one worth keeping, would look like the stalest
     // thing there.
-    file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+    //
+    // Through a handle of its own, opened for writing. Setting the time
+    // of a file opened read-only is allowed to the owner on Unix and
+    // refused on Windows, where it needs the attributes to be writable --
+    // and it fails silently, which would leave the bound dropping exactly
+    // the readings it is meant to keep.
+    QFile touch(shardFor(filePath).toFSPathString());
+    if (touch.open(QIODevice::ReadWrite))
+        touch.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
 
     QMutexLocker locker(&m_mutex);
     ++m_hits;
@@ -389,6 +397,12 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
     out.write(qCompress(raw));
     out.commit();
 }
+
+// What a shard is called. Everything else beside them -- the half-written
+// temporaries a QSaveFile leaves while the workers store, whatever the
+// desktop drops in a directory -- is none of this code's business, and
+// reading one as a shard that says nothing would stop the sweep below.
+static const char kShardSuffix[] = ".idx";
 
 // Everything in \a directory and below it, each with what it costs and when
 // it was last written.
@@ -469,7 +483,7 @@ void CxxFrontendIndexCache::pruneToBound() const
     qint64 total = 0;
     QList<std::pair<FilePath, QDateTime>> shards;
     for (const auto &[path, written] : filesUnder(m_directory, &total)) {
-        if (!path.isChildOf(entries))
+        if (path.fileName().endsWith(QLatin1String(kShardSuffix)))
             shards.append({path, written});
     }
     if (total <= m_maximumBytes)
@@ -506,8 +520,8 @@ void CxxFrontendIndexCache::pruneToBound() const
     QSet<QByteArray> wanted;
     bool readThemAll = true;
     m_directory.iterateDirectory(
-        [&wanted, &readThemAll, &entries](const FilePath &path) {
-            if (path.isChildOf(entries))
+        [&wanted, &readThemAll](const FilePath &path) {
+            if (!path.fileName().endsWith(QLatin1String(kShardSuffix)))
                 return IterationPolicy::Continue;
             const std::optional<QSet<QByteArray>> keys = keysOf(path);
             if (!keys) {
