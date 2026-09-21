@@ -2325,9 +2325,24 @@ auto Binder::declareTypedef(DeclaratorAST* declarator, const Decl& decl)
       }
       break;
     }
+    // One typedef may declare several names -- "typedef char *a, b;" --
+    // and they share the type specifier, so for the second and later ones
+    // everything written for the earlier ones stands between the specifier
+    // and this declarator. There is no one run of tokens that is this
+    // name's type then, so nothing is recorded and it is printed from the
+    // type it resolves to, which is right if less like the source.
+    auto declaredEarlier = false;
+    if (declarator) {
+      for (auto at = typeSpecifier->lastSourceLocation();
+           at && at.index() < declarator->firstSourceLocation().index();
+           at = at.next()) {
+        if (unit_->tokenKind(at) == TokenKind::T_COMMA) declaredEarlier = true;
+      }
+    }
+
     if (auto last = declarator ? declarator->lastSourceLocation()
                                : typeSpecifier->lastSourceLocation()) {
-      symbol->setTypeTokens(first, last);
+      if (!declaredEarlier) symbol->setTypeTokens(first, last);
     }
   }
 

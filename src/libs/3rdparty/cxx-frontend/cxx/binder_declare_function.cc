@@ -171,11 +171,20 @@ auto Binder::DeclareFunction::declare() -> FunctionSymbol* {
 
   // What stands where the signature was written: the parameter list and
   // whatever follows it -- cv-qualifiers, a ref-qualifier, an exception
-  // specification, a trailing return type. Not the virt-specifiers, which
-  // follow the declarator and are no part of the type.
+  // specification. Not the virt-specifiers, which follow the declarator
+  // and are no part of the type.
+  //
+  // And not a trailing return type either, which is the return type and
+  // is written in front of the name for every other function. A reader of
+  // signatures is handed the return type apart from them or not at all,
+  // and one function in ten carrying it inline would be neither.
   if (functionDeclarator) {
+    const auto lastToken = functionDeclarator->trailingReturnType
+                               ? functionDeclarator->trailingReturnType
+                                     ->firstSourceLocation()
+                               : functionDeclarator->lastSourceLocation();
     functionSymbol->setTypeTokens(functionDeclarator->firstSourceLocation(),
-                                  functionDeclarator->lastSourceLocation());
+                                  lastToken);
   }
 
   functionSymbol->setTrailingRequiresClause(decl.trailingRequiresClause);
