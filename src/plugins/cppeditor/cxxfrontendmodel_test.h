@@ -58,7 +58,7 @@ private slots:
     void testTheStoreKeepsOneCopyOfWhatAFileDeclares();
     void testTheStoreStaysWithinItsBound();
     void testTheStoreKeepsWhatIsStillBeingUsed();
-    void testTheStoreKeepsShardsItCannotCountItsWayPast();
+    void testTheStoreMakesItsBoundWhereTheEntriesWeighMost();
 };
 
 } // namespace CppEditor::Internal

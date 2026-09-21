@@ -520,6 +520,10 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
 // reading one as a shard that says nothing would stop the sweep below.
 static const char kShardSuffix[] = ".idx";
 
+// And what a file declares, kept beside the shards under a digest of
+// itself. Named here because the pruning has to weigh the two apart.
+static const char kEntriesSuffix[] = ".ent";
+
 // One file of the store, with what it costs and when it was last written.
 class StoredFile
 {
@@ -621,15 +625,58 @@ void CxxFrontendIndexCache::pruneToBound() const
     qint64 total = 0;
     qint64 shardBytes = 0;
     QList<StoredFile> shards;
+    QHash<QByteArray, StoredFile> entryFiles;
     for (const StoredFile &file : filesUnder(m_directory)) {
         total += file.size;
         if (file.path.fileName().endsWith(QLatin1String(kShardSuffix))) {
             shards.append(file);
             shardBytes += file.size;
+        } else if (file.path.fileName().endsWith(QLatin1String(kEntriesSuffix))) {
+            entryFiles.insert(QByteArray::fromHex(file.path.completeBaseName().toLatin1()), file);
         }
     }
     if (total <= m_maximumBytes)
         return;
+
+    // What this session has put to use, whose shard may not be written yet:
+    // the workers are storing while this runs, so neither the sweep below
+    // nor the reckoning above it may count such an entries file as going.
+    QSet<QByteArray> inUse;
+    {
+        QMutexLocker locker(&m_mutex);
+        inUse = m_keysUsed;
+    }
+
+    // What each shard points at, and how many point at each entries file.
+    // Dropping a shard frees the entries that were only its, and that is
+    // most of what it cost: a target that counts the shard alone is a
+    // target the store cannot be brought down to, and one that counts the
+    // whole store without crediting what goes with a shard cannot be
+    // reached at all. Either way the loop runs to the end and empties the
+    // store -- the lately used along with the rest -- leaving the session a
+    // cache that answers nothing. Counting what each drop really frees is
+    // what makes the bound both honest and reachable.
+    //
+    // A shard this cannot read says nothing about what is wanted -- it was
+    // written by another Qt Creator, whose format is not this one's, and
+    // the store is shared between them. Reading it as "wants nothing" would
+    // sweep away the entries only it points at, and that install would find
+    // its whole store dangling. So one such shard leaves the entries alone
+    // altogether: the shards are still dropped, counted on their own, and
+    // what they pointed at is left for a session that can read the lot.
+    QHash<FilePath, QSet<QByteArray>> pointedAtBy;
+    QHash<QByteArray, int> pointingAt;
+    bool readThemAll = true;
+    for (const StoredFile &shard : std::as_const(shards)) {
+        const std::optional<QSet<QByteArray>> keys = keysOf(shard.path);
+        if (!keys) {
+            readThemAll = false;
+            break;
+        }
+        pointedAtBy.insert(shard.path, *keys);
+        for (const QByteArray &key : *keys)
+            ++pointingAt[key];
+    }
 
     // Oldest first, which for a shard is the reading nobody has wanted
     // for longest: take() touches the one it hands back.
@@ -637,72 +684,64 @@ void CxxFrontendIndexCache::pruneToBound() const
         return left.written < right.written;
     });
 
-    // Down to half the bound, counted over the shards alone -- which is all
-    // this loop may remove. The entries beside them go below, and only the
-    // ones nothing points at.
+    // Down to half the bound, so that a session which has just reached it
+    // is not pruning again on the next file it stores.
     //
-    // Weighed against the whole store, the target need not be reachable at
-    // all: where the entries come to more than half the bound, dropping
-    // every shard there is still leaves it above, so every shard is what
-    // this would drop -- the lately used along with the rest, the store
-    // emptied, and the session left with a cache that answers nothing. The
-    // entries are a fifth of a store of this project and the bound is half,
-    // so there is room; a project of many small sources, each declaring a
-    // great deal and including little, is what would close it.
+    // Weighed against the whole store where what each drop frees is known,
+    // and against the shards alone where it is not: unable to say which
+    // entries go with a shard, this would charge itself for every one of
+    // them and never reach a target counted over the lot -- dropping the
+    // whole store to chase it, which is the very thing the reckoning above
+    // exists to prevent. The shards on their own are always reachable.
     //
     // Only what was there before this session began, besides. A shard
     // written a moment ago may be one another worker is about to point at,
     // and the entries beside it are being written as this runs.
     for (const StoredFile &shard : std::as_const(shards)) {
-        if (shardBytes <= m_maximumBytes / 2)
+        if ((readThemAll ? total : shardBytes) <= m_maximumBytes / 2)
             break;
         if (shard.written >= m_startedAt)
             continue;
-        if (shard.path.removeFile())
-            shardBytes -= shard.size;
-    }
+        if (!shard.path.removeFile())
+            continue;
+        total -= shard.size;
+        shardBytes -= shard.size;
+        if (!readThemAll)
+            continue;
 
-    // And then whatever nothing points at any longer, which is most of what
-    // a dropped shard cost: its entries are shared, so they go only where
-    // no other shard kept them.
-    //
-    // A shard this cannot read says nothing about what is wanted -- it was
-    // written by another Qt Creator, whose format is not this one's, and
-    // the store is shared between them. Reading it as "wants nothing"
-    // would sweep away the entries only it points at, and that install
-    // would find its whole store dangling. So one such shard stops the
-    // sweep: the bound has been made by dropping shards already.
-    QSet<QByteArray> wanted;
-    bool readThemAll = true;
-    m_directory.iterateDirectory(
-        [&wanted, &readThemAll](const FilePath &path) {
-            if (!path.fileName().endsWith(QLatin1String(kShardSuffix)))
-                return IterationPolicy::Continue;
-            const std::optional<QSet<QByteArray>> keys = keysOf(path);
-            if (!keys) {
-                readThemAll = false;
-                return IterationPolicy::Stop;
-            }
-            wanted.unite(*keys);
-            return IterationPolicy::Continue;
-        },
-        {{}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories});
+        // And what went with it, which is every entries file this was the
+        // last shard to point at. Counted only where the sweep below will
+        // really take it: one written this session, or one this session has
+        // read, stays whatever points at it.
+        for (const QByteArray &key : std::as_const(pointedAtBy[shard.path])) {
+            if (--pointingAt[key] > 0 || inUse.contains(key))
+                continue;
+            const auto it = entryFiles.constFind(key);
+            if (it != entryFiles.constEnd() && it->written < m_startedAt)
+                total -= it->size;
+        }
+    }
     if (!readThemAll)
         return;
 
-    // And what this session has put to use, whose shard may not be written
-    // yet: the workers are storing while this runs.
+    // Asked for again, because the workers have been storing while the
+    // above ran: one that has taken up an entries file since is a worker
+    // whose shard is not on disk yet, and dropping what it points at would
+    // leave that reading pointing at nothing. Crediting the loop above with
+    // what it turns out it may not have freed only stops it dropping a
+    // little early, which the bound can afford.
     {
         QMutexLocker locker(&m_mutex);
-        wanted.unite(m_keysUsed);
+        inUse.unite(m_keysUsed);
     }
 
+    // And then whatever nothing points at any longer.
     entries.iterateDirectory(
-        [&wanted, this](const FilePath &path) {
+        [&pointingAt, &inUse, this](const FilePath &path) {
             if (path.lastModified() >= m_startedAt)
                 return IterationPolicy::Continue;
             const QByteArray key = QByteArray::fromHex(path.completeBaseName().toLatin1());
-            if (!wanted.contains(key))
+            if (pointingAt.value(key) <= 0 && !inUse.contains(key))
                 path.removeFile();
             return IterationPolicy::Continue;
         },

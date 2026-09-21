@@ -1920,60 +1920,75 @@ void CxxFrontendModelTest::testTheStoreKeepsWhatIsStillBeingUsed()
     QVERIFY(!cache.take(written.at(1), "projectkey"));
 }
 
-// The bound is made by dropping shards, and what each file declares is not
-// the pruning's to drop -- the sweep takes those, and only the ones nothing
-// points at. So a target weighed against the whole store need not be
-// reachable by dropping shards at all, and chasing one that is not would
-// drop every shard there: the store emptied, and a cache left answering
-// nothing for the rest of the session.
-void CxxFrontendModelTest::testTheStoreKeepsShardsItCannotCountItsWayPast()
+// What a file declares is most of the store where the sources are many and
+// small and each of them declares a great deal -- and those entries are not
+// the pruning's to drop directly: the sweep takes them, and only where no
+// shard points at them any longer. So the bound can only be made by
+// counting what goes with each shard that is dropped. Counted on the shards
+// alone, a store shaped like this is already under its target before the
+// loop begins, nothing is ever dropped, and it grows without a bound at all.
+void CxxFrontendModelTest::testTheStoreMakesItsBoundWhereTheEntriesWeighMost()
 {
     TemporaryDir dir;
     QVERIFY(dir.isValid());
     const FilePath store = dir.filePath() / "store";
 
-    // Readings of one file each, so a shard is no bigger than the entries
-    // beside it -- and twelve of them put the entries alone above half the
-    // bound, which is what makes the target unreachable.
-    const int count = 12;
-    const qint64 bound = 2048;
-
-    FilePaths written;
-    for (int i = 0; i < count; ++i) {
+    // A reading of one file declaring two hundred things, each named for
+    // itself: a shard with one path in it against entries many times its
+    // size, and nothing shared between two readings.
+    const auto storeOne = [&](int i, qint64 bound) {
         const FilePath source = dir.createFile(QString("u%1.cpp").arg(i).toUtf8(),
                                                QString("int u%1;\n").arg(i).toUtf8());
-        QVERIFY(!source.isEmpty());
-        written.append(source);
         CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
         CxxFrontendIndexRead read = aReading();
         read.files.first().filePath = source;
-        // So that no two of them share their entries and each really costs
-        // what it costs.
-        read.files.first().entries.first().name = QString("Thing%1").arg(i);
+        QList<CxxFrontendIndexEntry> declares;
+        for (int n = 0; n < 200; ++n) {
+            CxxFrontendIndexEntry entry = read.files.first().entries.first();
+            entry.name = QString("Thing%1_%2").arg(i).arg(n);
+            entry.scope = QString("ns%1::inner%2").arg(i).arg(n);
+            entry.extra = QString("class Thing%1_%2").arg(i).arg(n);
+            declares.append(entry);
+        }
+        read.files.first().entries = declares;
         cache.store(source, "projectkey", read);
+        return source;
+    };
+
+    // A bound of what twenty readings cost, taken from what they really
+    // cost rather than guessed at -- so that nothing here turns on how
+    // long the temporary directory's path happens to be.
+    const int kept = 20;
+    const qint64 roomToSpare = 1024 * 1024;
+    for (int i = 0; i < kept; ++i)
+        QVERIFY(!storeOne(i, roomToSpare).isEmpty());
+
+    qint64 bound = 0;
+    {
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, roomToSpare);
+        bound = cache.sizeOnDisk();
+        QVERIFY(bound > 0);
     }
 
+    // And now twice as much again, every store of it free to prune what
+    // the ones before it left.
+    FilePaths written;
+    for (int i = kept; i < kept * 3; ++i)
+        written.append(storeOne(i, bound));
+
     CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+    QVERIFY2(cache.sizeOnDisk() <= bound,
+             qPrintable(QString("store is %1 bytes, bound is %2")
+                            .arg(cache.sizeOnDisk()).arg(bound)));
+
+    // And it made that bound by dropping what was wanted longest ago, not
+    // by emptying itself: the readings written last are still there.
     int survivors = 0;
     for (const FilePath &source : std::as_const(written)) {
         if (cache.take(source, "projectkey"))
             ++survivors;
     }
-
-    // Counted rather than asked of one reading in particular: the pruning
-    // happens on a session's first store, so whichever was written last
-    // comes after the last prune and is there either way -- which is no
-    // test of anything.
-    //
-    // Weighed against the shards, half the bound is more than they come to
-    // and none of them need go. Weighed against the whole store it is less
-    // than the entries alone, so every shard the pruning may touch is
-    // dropped, and what is left is the few written after it ran.
-    QVERIFY2(survivors > count / 2,
-             qPrintable(QString("only %1 of %2 readings outlived a bound that the shards "
-                                "cannot be counted past")
-                            .arg(survivors)
-                            .arg(count)));
+    QVERIFY2(survivors > 0, "the store was emptied rather than brought within its bound");
 }
 
 void CxxFrontendModelTest::testTheStoreStaysWithinItsBound()
