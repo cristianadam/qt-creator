@@ -1805,4 +1805,82 @@ void CxxFrontendModelTest::testTheStoreDeclinesAFileItNeverHad()
     QVERIFY(!f.cache->take(f.dir.filePath() / "never-seen.cpp", "projectkey"));
 }
 
+void CxxFrontendModelTest::testTheStoreKeepsOneCopyOfWhatAFileDeclares()
+{
+    StoreFixture f;
+    QVERIFY(f.dir.isValid());
+
+    // Two translation units that read the same header, which is what a
+    // project is: every source of it describes the header it includes, and
+    // describes it the same way. Written whole, that is the header's
+    // entries once per source -- a header reached by a thousand files
+    // stored a thousand times.
+    const FilePath other = f.dir.createFile("other.cpp", "#include \"thing.h\"\nint y;\n");
+    QVERIFY(!other.isEmpty());
+    CxxFrontendIndexRead second = f.read;
+    second.files.first().filePath = other;
+    f.cache->store(f.source, "projectkey", f.read);
+    f.cache->store(other, "projectkey", second);
+
+    const FilePath entries = f.cache->directory() / "entries";
+    int copies = 0;
+    entries.iterateDirectory(
+        [&copies](const FilePath &) { ++copies; return IterationPolicy::Continue; },
+        {{}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories});
+
+    // One, and not two: what the two units say of the file is the same
+    // text, so it is the same file on disk.
+    QCOMPARE(copies, 1);
+
+    // And both readings still come back whole, which is what says the
+    // sharing is of the storage and not of the answer.
+    const std::optional<CxxFrontendIndexRead> first = f.cache->take(f.source, "projectkey");
+    QVERIFY(first);
+    QVERIFY(sameAs(*first, f.read));
+    const std::optional<CxxFrontendIndexRead> back = f.cache->take(other, "projectkey");
+    QVERIFY(back);
+    QVERIFY(sameAs(*back, second));
+}
+
+void CxxFrontendModelTest::testTheStoreStaysWithinItsBound()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath store = dir.filePath() / "store";
+
+    // A bound of a few kilobytes, so that a handful of readings exceeds it
+    // the way a real project exceeds half a gigabyte.
+    const qint64 bound = 8 * 1024;
+    const auto storeUnder = [&](const FilePath &source, const QString &declares) {
+        CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+        CxxFrontendIndexRead read = aReading();
+        read.files.first().filePath = source;
+        // Told apart by what it declares, so that no two readings share
+        // their entries and each one really costs what it costs.
+        read.files.first().entries.first().name = declares;
+        cache.store(source, "projectkey", read);
+    };
+
+    FilePaths written;
+    for (int i = 0; i < 40; ++i) {
+        const FilePath source = dir.createFile(QString("f%1.cpp").arg(i).toUtf8(),
+                                               QString("int x%1;\n").arg(i).toUtf8());
+        QVERIFY(!source.isEmpty());
+        written.append(source);
+        storeUnder(source, QString("Thing%1").arg(i));
+    }
+
+    // Each store is its own session, so each one may prune what the ones
+    // before it left; the bound is kept without anybody asking.
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store, bound);
+    QVERIFY2(cache.sizeOnDisk() <= bound,
+             qPrintable(QString("store is %1 bytes, bound is %2")
+                            .arg(cache.sizeOnDisk()).arg(bound)));
+
+    // And what it dropped is what was written longest ago: the last
+    // reading in is still there.
+    QVERIFY(cache.take(written.last(), "projectkey"));
+    QVERIFY(!cache.take(written.first(), "projectkey"));
+}
+
 } // namespace CppEditor::Internal

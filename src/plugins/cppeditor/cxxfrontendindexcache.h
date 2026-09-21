@@ -8,8 +8,10 @@
 #include <utils/filepath.h>
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QHash>
 #include <QMutex>
+#include <QSet>
 
 #include <optional>
 
@@ -37,10 +39,15 @@ public:
     // this Qt Creator indexes where it is empty, which is what a test gives
     // to keep out of.
     //
+    // \a maximumBytes is what the store may take on disk; the default where
+    // it is zero. Exceeding it costs the readings written longest ago, not
+    // the ones being written now.
+    //
     // Constructed on the thread that owns the settings, since the shared
     // place is read from them.
     explicit CxxFrontendIndexCache(const QStringList &macros,
-                                   const Utils::FilePath &directory = {});
+                                   const Utils::FilePath &directory = {},
+                                   qint64 maximumBytes = 0);
 
     // What was stored for \a filePath, where the file and every file read
     // into it are unchanged and \a projectKey is the one it was read under.
@@ -62,6 +69,10 @@ public:
     // Where the store is, for a test that wants to look or to start empty.
     [[nodiscard]] Utils::FilePath directory() const { return m_directory; }
 
+    // What it takes on disk, shards and entries together. The one outward
+    // sign that the bound is doing anything.
+    [[nodiscard]] qint64 sizeOnDisk() const;
+
     // How many readings were taken from the store and how many were stored,
     // since the counts are the only outward sign that any of this works.
     [[nodiscard]] int hits() const;
@@ -75,11 +86,31 @@ private:
     [[nodiscard]] QByteArray contentsOf(const QString &filePath) const;
     [[nodiscard]] Utils::FilePath shardFor(const Utils::FilePath &filePath) const;
 
+    // Where one file's entries live, under a digest of the entries
+    // themselves. A header is described the same way by most of the
+    // translation units that read it, so the copies are one file.
+    [[nodiscard]] Utils::FilePath entriesFor(const QByteArray &key) const;
+    [[nodiscard]] QByteArray writeEntries(const QList<CxxFrontendIndexEntry> &entries) const;
+    [[nodiscard]] std::optional<QList<CxxFrontendIndexEntry>> readEntries(
+        const QByteArray &key) const;
+
+    // Brings the store back under its bound, oldest reading first, and then
+    // drops the entries nothing refers to any longer. Run once a session,
+    // and on the thread that writes rather than the one that draws.
+    void pruneToBound() const;
+
     Utils::FilePath m_directory;
     QByteArray m_macrosKey;
+    qint64 m_maximumBytes = 0;
+    // What was on disk before this session began, which is all the pruning
+    // may remove: a file written since may belong to a shard another worker
+    // has not finished writing.
+    QDateTime m_startedAt;
 
     mutable QMutex m_mutex;
     mutable QHash<QString, QByteArray> m_contents;
+    mutable QSet<QString> m_directoriesMade;
+    mutable bool m_pruned = false;
     mutable int m_hits = 0;
     mutable int m_misses = 0;
 };
