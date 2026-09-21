@@ -1783,6 +1783,17 @@ void CppModelManager::onActiveProjectChanged(Project *project)
     updateCppEditorDocuments();
 }
 
+bool CppModelManager::isIndexing()
+{
+    return d->m_lockedProjectData.get([](const CppModelManagerPrivate::SyncedProjectData &ld) {
+        for (const auto &data : ld.m_projectData) {
+            if (data.indexer)
+                return true;
+        }
+        return false;
+    });
+}
+
 void CppModelManager::onSourceFilesRefreshed()
 {
     if (Internal::isFindErrorsIndexingActive()) {

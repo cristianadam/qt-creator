@@ -571,6 +571,14 @@ void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files,
                 m_awaitingCoverage.remove(file);
                 m_readOnTheirOwn.insert(file);
             }
+
+            // And an editor reports every header read into the document
+            // along with it, which leaves them waiting for the cover of a
+            // pass -- so where there is no pass, they wait for ever. The
+            // built-in reading has just described them and its description
+            // stands; the next pass reads them again.
+            if (!CppModelManager::isIndexing())
+                m_awaitingCoverage.clear();
         }
     }
     readPendingWithCxxFrontend();

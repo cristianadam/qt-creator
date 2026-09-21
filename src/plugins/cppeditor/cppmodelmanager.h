@@ -111,6 +111,12 @@ public:
 
     static void handleSettingsChange(ProjectExplorer::Project *project);
 
+    // Whether a project's files are being read through right now. What a
+    // reader holding something back needs to know: while this is true,
+    // more files are coming, and when it is false nothing is going to
+    // report a file that nobody has asked about.
+    static bool isIndexing();
+
     /// \return The project part with the given project file
     static ProjectPart::ConstPtr projectPartForId(const QString &projectPartId);
     /// \return All project parts that mention the given file name as one of the sources/headers.
