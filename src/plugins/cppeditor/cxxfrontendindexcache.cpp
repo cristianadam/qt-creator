@@ -93,12 +93,16 @@ static QString readPath(QDataStream &stream)
 //
 // The length is given rather than taken from the digest, because it is what
 // the reader will read: one of another size would put every field after it
-// out of step, and a shard misread that way says nothing about being wrong
-// -- it would simply never match again.
-static void writeDigest(QDataStream &stream, const QByteArray &digest, int length)
+// out of step. And a shard misread that way is worse than one that never
+// matches -- keysOf() cannot parse it either, so the sweep that reclaims
+// what the files declare gives up on finding it and goes on giving up, for
+// this store, every session after. Hence the answer rather than an
+// assertion alone: a shard this could not write is one not written at all.
+[[nodiscard]] static bool writeDigest(QDataStream &stream, const QByteArray &digest, int length)
 {
-    QTC_ASSERT(digest.size() == length, return);
+    QTC_ASSERT(digest.size() == length, return false);
     stream.writeRawData(digest.constData(), length);
+    return true;
 }
 
 static QByteArray readDigest(QDataStream &stream, int length)
@@ -207,7 +211,15 @@ std::optional<QList<CxxFrontendIndexEntry>> CxxFrontendIndexCache::readEntries(
     stream.setVersion(QDataStream::Qt_6_0);
     qint32 entryCount = 0;
     stream >> entryCount;
-    if (entryCount < 0)
+
+    // Read as something a disk wrote, the way a shard's counts are. An
+    // entry costs at least 33 bytes -- four for each of three string
+    // lengths, four for each of five numbers, one for the flag -- so the
+    // bytes in hand say how many there can be, and a count past that is a
+    // file this did not write. Without the bound a corrupt one asks QList
+    // for gigabytes and takes a reader down with bad_alloc where a miss was
+    // the answer.
+    if (entryCount < 0 || entryCount > raw.size() / 33)
         return std::nullopt;
 
     QList<CxxFrontendIndexEntry> entries;
@@ -461,7 +473,8 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
             return;
         placeOf.insert(path, place++);
         writePath(stream, path);
-        writeDigest(stream, digest, kDigestLength);
+        if (!writeDigest(stream, digest, kDigestLength))
+            return;
     }
 
     // What each file declares goes beside the shard rather than in it, and
@@ -488,7 +501,8 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
             stream << qint32(-1);
             writePath(stream, path);
         }
-        writeDigest(stream, key, kEntriesKeyLength);
+        if (!writeDigest(stream, key, kEntriesKeyLength))
+            return;
     }
 
     // Written whole or not at all: a half-written shard read back next time
