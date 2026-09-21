@@ -105,13 +105,24 @@ QStringList definesIn(const QByteArray &configFile)
     return macros;
 }
 
-// The configuration file the project part contributes, which the built-in
-// model feeds in as a file of its own -- so it is in the snapshot, which is
-// where whoever was not handed it can read it.
-QByteArray configurationFileIn(const Snapshot &snapshot)
+// The macros in force before the first line of any file in the project.
+//
+// Asked of the model, not read off the configuration document the built-in
+// model feeds in as a file of its own. That document is in the snapshot,
+// but the indexer clears every document's source as soon as it is done
+// with it, so by the time anything here looks the document is there and
+// empty -- and what comes back is no macros at all.
+//
+// Nothing says so. A file read without __cplusplus or __STDC__ takes the
+// pre-ANSI branch of the platform's <sys/cdefs.h>, which defines const,
+// volatile and signed away to nothing, so every file read after it is
+// parsed with those keywords deleted and declarations that mention them
+// fail to parse.
+QStringList projectPredefinedMacros()
 {
-    const Document::Ptr document = snapshot.document(CppModelManager::configurationFileName());
-    return document ? document->utf8Source() : QByteArray();
+    QByteArray configuration = CppModelManager::codeModelConfiguration();
+    configuration += ProjectExplorer::Macro::toByteArray(CppModelManager::definedMacros());
+    return definesIn(configuration);
 }
 
 // Answers with the file the built-in model resolved this include to, and its
@@ -388,7 +399,7 @@ std::optional<CxxFrontendDocument::Counterpart> definitionIn(
 
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(resolverFor(builtinSnapshot, {}));
-    snapshot.setPredefinedMacros(definesIn(configurationFileIn(builtinSnapshot)));
+    snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument * const document
         = snapshot.process(filePath.toFSPathString(), QString::fromUtf8(*contents));
@@ -751,7 +762,7 @@ HoldingDocument readWith(const Snapshot &builtinSnapshot, const WorkingCopy &wor
                 header->source = editedText;
             return header;
         });
-    holding.owned->setPredefinedMacros(definesIn(configurationFileIn(builtinSnapshot)));
+    holding.owned->setPredefinedMacros(projectPredefinedMacros());
     holding.document = holding.owned->process(filePath.toFSPathString(), source);
     return holding;
 }
@@ -1672,19 +1683,7 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
 
 CxxFrontendIndexInputs cxxFrontendIndexInputs(const Snapshot &builtinSnapshot)
 {
-    // Asked of the model rather than read off the configuration document in
-    // the snapshot. That document is in the snapshot, but the indexer clears
-    // every document's source as soon as it is done with it, and a batch is
-    // put together after it has -- so by the time this runs the document is
-    // there and empty, and what comes back is no macros at all.
-    //
-    // Nothing said so. A file read without __cplusplus or __STDC__ takes the
-    // pre-ANSI branch of the platform's <sys/cdefs.h>, which defines const,
-    // volatile and signed away to nothing, so every file read after it is
-    // parsed with those keywords deleted.
-    QByteArray configuration = CppModelManager::codeModelConfiguration();
-    configuration += ProjectExplorer::Macro::toByteArray(CppModelManager::definedMacros());
-    return {builtinSnapshot, definesIn(configuration)};
+    return {builtinSnapshot, projectPredefinedMacros()};
 }
 
 QByteArray cxxFrontendProjectKey(const FilePath &filePath)
@@ -2638,7 +2637,7 @@ std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
     // documents that are kept were read without one.
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(resolverFor(builtinSnapshot, CppModelManager::workingCopy()));
-    snapshot.setPredefinedMacros(definesIn(configurationFileIn(builtinSnapshot)));
+    snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument *document
         = snapshot.processForCompletion(filePath.toFSPathString(), source, line, column);
