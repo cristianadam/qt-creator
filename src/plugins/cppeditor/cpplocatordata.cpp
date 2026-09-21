@@ -223,11 +223,21 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // reported, which is what the check on a result relies on. The
         // headers wait in m_awaitingCoverage instead.
         for (const FilePath &filePath : std::as_const(m_pending)) {
-            if (!ProjectFile::isHeader(ProjectFile::classify(filePath))) {
+            // Read as a translation unit only what the project builds as
+            // one: a file with no project part of its own is written into
+            // another -- moc_foo.cpp lives inside mocs_compilation.cpp,
+            // and there are hundreds of those -- so reading it here would
+            // read it a second time. Headers likewise.
+            //
+            // Getting this wrong costs time and nothing else: a file no
+            // reading covers is read on its own at the end either way.
+            const bool isItsOwnUnit = !ProjectFile::isHeader(ProjectFile::classify(filePath))
+                                      && !CppModelManager::projectPart(filePath).isEmpty();
+            if (isItsOwnUnit) {
                 batch.append(filePath);
                 continue;
             }
-            // Already answered for by a source that includes it. The
+            // Already answered for by a reading that includes it. The
             // indexer reports it all the same, and reading it again would
             // say what has just been said.
             if (!m_coveredThisRun.contains(filePath))
