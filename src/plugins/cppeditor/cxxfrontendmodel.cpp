@@ -1679,6 +1679,13 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
     // index shows for the same declaration -- neither model resolving a
     // name that the source spelled out.
     holding.owned->setPrintsTypesAsWritten(true);
+    // And read without working out what every expression means, which is
+    // what instantiates the templates a file reaches: more than half of
+    // what a reading costs, and the index wants none of it. What it shows
+    // is what the source wrote, above, and what it keeps -- the classes,
+    // the enums, the aliases, the functions defined here -- is declared
+    // whether or not anything in a body type checks.
+    holding.owned->setChecksTypes(false);
     holding.document = holding.owned->process(filePath.toFSPathString(),
                                               QString::fromUtf8(*contents));
     return holding;

@@ -54,6 +54,12 @@ public:
     // see CxxFrontendDocument::Config::typesAsWritten. For the index.
     void setPrintsTypesAsWritten(bool asWritten);
 
+    // Whether to work out what every expression means, which is what
+    // instantiates the templates a file reaches and is more than half of
+    // what reading it costs. On unless a reader says otherwise, and only
+    // the index does -- see CxxFrontendDocument::Config::checkTypes.
+    void setChecksTypes(bool checks);
+
     // Record what every file read into a translation unit declares, each
     // symbol saying which file that is, rather than only the read file's
     // own. For the index, which is about a project rather than a file; see

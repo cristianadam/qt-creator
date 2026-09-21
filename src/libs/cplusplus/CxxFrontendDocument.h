@@ -122,6 +122,21 @@ public:
         // synthesized is printed from its type as before.
         bool typesAsWritten = false;
 
+        // Work out what every expression in the file means, which is what
+        // makes the front end instantiate the templates it meets.
+        //
+        // More than half of what reading a file costs, and a reader that
+        // only wants to know what the file *declares* does not need any of
+        // it: what is declared is declared whether or not the bodies type
+        // check. The index reads with this off and takes what it shows
+        // from what the source wrote -- see typesAsWritten, which is what
+        // makes that possible, since a resolved type is exactly what is no
+        // longer worked out.
+        //
+        // Every other reader needs it: a type under the cursor, what a
+        // call resolves to, what a name in a template stands for.
+        bool checkTypes = true;
+
         // Where a header is and what it says.
         struct Include
         {

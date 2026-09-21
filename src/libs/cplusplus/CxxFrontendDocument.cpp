@@ -2484,7 +2484,7 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
             std::visit(state, unit.continuePreprocessing());
         unit.endPreprocessing();
 
-        unit.parse({.checkTypes = true,
+        unit.parse({.checkTypes = this->config.checkTypes,
                     .complete = [this](const cxx::CodeCompletionContext &context) {
                         recordCompletion(context);
                     }});

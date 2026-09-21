@@ -20,7 +20,7 @@ namespace CppEditor::Internal {
 
 // Bumped whenever what is written changes shape, so that a store written by
 // an older Qt Creator is passed over rather than misread.
-const quint32 kFormat = 3;
+const quint32 kFormat = 4;
 const quint32 kMagic = 0x43585849; // "CXXI"
 
 // What the store may take on disk before the readings written longest ago
