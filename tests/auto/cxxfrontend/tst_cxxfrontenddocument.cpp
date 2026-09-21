@@ -2240,9 +2240,14 @@ using size_type = long long;
 using count_t = size_type;
 using Links = QList<Link>;
 typedef unsigned char byte_t;
+typedef unsigned int uint_a, uint_b;
+typedef char *ptr_a, plain_b;
 typedef char *name_t;
 struct S {
     void insert(size_type where, const QByteArray &what, int n = -1);
+    auto tail() const -> count_t;
+    void v(const char *, ...);
+    void cb(void (*hook)(int n));
     int at([[maybe_unused]] count_t i) const noexcept;
 };
 )";
@@ -2283,6 +2288,27 @@ struct S {
     QVERIFY2(written.contains("insert: (size_type, const QByteArray &, int = -1)"),
              qPrintable(saidWritten));
     QVERIFY2(written.contains("at: (count_t) const noexcept"), qPrintable(saidWritten));
+
+    // A name of a parameter of a parameter is a name too, and the walk
+    // over the function's own parameters does not reach it.
+    QVERIFY2(written.contains("cb: (void (*)(int))"), qPrintable(saidWritten));
+
+    // A function that takes anything writes ", ..." where a pack binds to
+    // the name in front of it.
+    QVERIFY2(written.contains("v: (const char *, ...)"), qPrintable(saidWritten));
+
+    // A trailing return type is the return type, which a signature never
+    // carries: every other function's is handed over apart from it.
+    QVERIFY2(written.contains("tail: () const"), qPrintable(saidWritten));
+
+    // One typedef may declare several names, and everything written for
+    // the earlier ones stands between the type specifier and the later
+    // ones -- so there is no run of tokens that is the later name's type,
+    // and it is described by what it resolves to rather than by nonsense.
+    QVERIFY2(written.contains("uint_a: unsigned int"), qPrintable(saidWritten));
+    QVERIFY2(written.contains("uint_b: unsigned int"), qPrintable(saidWritten));
+    QVERIFY2(written.contains("ptr_a: char *"), qPrintable(saidWritten));
+    QVERIFY2(written.contains("plain_b: char"), qPrintable(saidWritten));
 
     // And with it off the same declarations are described by what their
     // types resolve to, which is what every other reader of this model

@@ -171,8 +171,12 @@ static bool spaceBetween(cxx::TokenKind previous, cxx::TokenKind token)
     case cxx::TokenKind::T_GREATER_GREATER:
     case cxx::TokenKind::T_SEMICOLON:
     case cxx::TokenKind::T_COLON_COLON:
-    case cxx::TokenKind::T_DOT_DOT_DOT:
         return false;
+    case cxx::TokenKind::T_DOT_DOT_DOT:
+        // A pack binds to the name in front of it, "Args...", where a
+        // function that takes anything writes ", ..." after its last
+        // parameter.
+        return previous == cxx::TokenKind::T_COMMA;
     case cxx::TokenKind::T_LPAREN:
         // What follows one of these is an argument to it and not a type of
         // its own: "noexcept(...)", where a function type in a template
@@ -1932,6 +1936,54 @@ QString CxxFrontendDocument::Private::typeAsWritten(cxx::Symbol *symbol) const
         // A sign written in front of a number is part of it: a default
         // argument of -1 is written "-1", where a minus between two things
         // is written with spaces around it.
+        // The name of a parameter of a parameter, which the walk over the
+        // function's own parameters above cannot reach: "void (*)(int n)"
+        // is a pointer to a function taking an int, and the built-in model
+        // writes it without the n. Only inside a nested declarator, and
+        // only where an identifier stands last in a parameter behind
+        // something that can end a type -- so "(struct Foo)" and
+        // "(std::size_t)" keep theirs, neither being a name.
+        if (kind == cxx::TokenKind::T_IDENTIFIER && depth >= 2) {
+            const bool behindAType = [previous] {
+                switch (previous) {
+                case cxx::TokenKind::T_IDENTIFIER:
+                case cxx::TokenKind::T_STAR:
+                case cxx::TokenKind::T_AMP:
+                case cxx::TokenKind::T_AMP_AMP:
+                case cxx::TokenKind::T_GREATER:
+                // The types the language names itself, which a name may
+                // stand behind. Not struct, class, union, enum or
+                // typename, which stand *in front of* one.
+                case cxx::TokenKind::T_CHAR:
+                case cxx::TokenKind::T_CHAR8_T:
+                case cxx::TokenKind::T_CHAR16_T:
+                case cxx::TokenKind::T_CHAR32_T:
+                case cxx::TokenKind::T_WCHAR_T:
+                case cxx::TokenKind::T_BOOL:
+                case cxx::TokenKind::T_INT:
+                case cxx::TokenKind::T_LONG:
+                case cxx::TokenKind::T_SHORT:
+                case cxx::TokenKind::T_SIGNED:
+                case cxx::TokenKind::T_UNSIGNED:
+                case cxx::TokenKind::T_FLOAT:
+                case cxx::TokenKind::T_DOUBLE:
+                case cxx::TokenKind::T_VOID:
+                case cxx::TokenKind::T_AUTO:
+                    return true;
+                default:
+                    return false;
+                }
+            }();
+            const cxx::TokenKind next
+                = at + 1 < last.index()
+                      ? unit.tokenAt(cxx::SourceLocation{at + 1}).kind()
+                      : cxx::TokenKind::T_EOF_SYMBOL;
+            const bool endsTheParameter = next == cxx::TokenKind::T_COMMA
+                                          || next == cxx::TokenKind::T_RPAREN;
+            if (behindAType && endsTheParameter)
+                continue;
+        }
+
         // A default argument is a value and is written the way a value is:
         // "= T()" and not "= T ()". Inside the parentheses of one, the
         // rule that separates a function type from its parameters is off.
