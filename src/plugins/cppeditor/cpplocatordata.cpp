@@ -369,8 +369,10 @@ void CppLocatorData::readPendingWithCxxFrontend()
             result.covered.append(FilePath::fromUserInput(included));
         result.withEntries.reserve(read.files.size());
         for (const CxxFrontendIndexRead::File &file : read.files) {
-            if (!file.entries.isEmpty())
-                result.withEntries.append({file.filePath, cxxFrontendIndexTreeFrom(file)});
+            if (!file.entries.isEmpty()) {
+                result.withEntries.append(
+                    {file.filePath, cxxFrontendIndexTreeFrom(file), int(file.entries.size())});
+            }
         }
         return result;
     };
@@ -423,28 +425,28 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
         for (const ReadFile &read : result.withEntries) {
             // Waiting to be read again, so this is the older of the two
             // answers and the newer one is on its way.
-            if (m_pending.contains(read.first))
+            if (m_pending.contains(read.filePath))
                 continue;
 
             // Taken out of the index since this reading began -- the
             // project was closed, or the file was. Putting the entries in
             // now would name things nothing can reach, and nothing would
             // take them out again.
-            if (m_removedSinceRead.contains(read.first))
+            if (m_removedSinceRead.contains(read.filePath))
                 continue;
 
-            // A header reached by two sources is described twice, once per
-            // reading. The first stands, which is the rule the built-in
-            // model follows too -- it reads a header once, in whichever
-            // translation unit reaches it first -- and it keeps the index
-            // from depending on the order a pool finishes in. The file the
-            // reading was of is always described by it, so it is never the
-            // one turned away here.
-            if (m_describedThisRun.contains(read.first))
+            // A header is read into every file that includes it, and each
+            // of them makes its own thing of it: one that excludes most of
+            // it with an #if describes little. The fullest description is
+            // kept, rather than whichever reading happened to finish
+            // first, so that what the index holds does not depend on the
+            // order a pool comes back in either.
+            const auto described = m_describedThisRun.constFind(read.filePath);
+            if (described != m_describedThisRun.constEnd() && described.value() >= read.count)
                 continue;
-            m_describedThisRun.insert(read.first);
+            m_describedThisRun.insert(read.filePath, read.count);
 
-            m_infosByFile.insert(read.first.intern(), read.second);
+            m_infosByFile.insert(read.filePath.intern(), read.entries);
         }
     }
 }

@@ -86,7 +86,14 @@ private:
 
     // What one file's entries came back as. The path travels with them
     // because a batch is read out of order and finishes out of order.
-    using ReadFile = std::pair<Utils::FilePath, IndexItem::Ptr>;
+    class ReadFile
+    {
+    public:
+        Utils::FilePath filePath;
+        IndexItem::Ptr entries;
+        // How many, so that the fullest reading of a file is the one kept.
+        int count = 0;
+    };
 
     // One reading's worth. A reading is of a whole translation unit, so it
     // answers for every file in it -- which is what \a covered lists -- but
@@ -137,9 +144,11 @@ private:
     // run, so anything already covered in this run is covered; a run of its
     // own starts the set again.
     QSet<Utils::FilePath> m_coveredThisRun;
-    // Of those, the ones some reading actually had entries for, so that the
-    // first reading to describe a header is the one that stands.
-    QSet<Utils::FilePath> m_describedThisRun;
+    // Of those, the ones some reading had entries for, and how many. A
+    // header is read into every file that includes it, and what each of
+    // them makes of it differs -- a translation unit that excludes most of
+    // it describes little. The fullest description is the one kept.
+    QHash<Utils::FilePath, int> m_describedThisRun;
     // Whether the indexer has finished reporting. Until it has, a header
     // waits to be covered rather than being read as a unit of its own: it
     // is reported before the source that includes it, that being the order
