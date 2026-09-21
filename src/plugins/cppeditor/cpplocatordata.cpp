@@ -210,6 +210,14 @@ void CppLocatorData::coverWhatObjectiveCBrings()
     QSet<FilePath> answeredFor;
     for (auto it = snapshot.begin(); it != snapshot.end(); ++it) {
         const FilePath &filePath = it.key();
+        // By the suffix, before asking what the file is. Asking goes to the
+        // mime database, which falls back to reading a file whose name says
+        // nothing -- and a snapshot holds a thousand of libc++'s headers,
+        // <vector> and <string> among them, which have no suffix at all.
+        // This runs on the thread the editor draws on.
+        const QStringView suffix = filePath.suffixView();
+        if (suffix != u"m" && suffix != u"mm")
+            continue;
         if (!ProjectFile::isObjC(filePath))
             continue;
         answeredFor.insert(filePath);
