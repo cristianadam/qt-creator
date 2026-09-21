@@ -229,6 +229,12 @@ void CppLocatorData::coverWhatObjectiveCBrings()
 void CppLocatorData::readPendingWithCxxFrontend()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // Asked for here as well as where a document is reported: this is also
+    // reached from the indexer's own signal, and a model nobody asked for
+    // must not so much as walk the snapshot.
+    if (!cxxFrontendModelRequested())
+        return;
+
     if (m_cxxFrontendWatcher.isRunning()) {
         // Its finishing calls this again and takes whatever has accumulated
         // by then, so nothing more need be posted until it does -- and the
@@ -526,6 +532,9 @@ int CppLocatorData::cxxFrontendCacheMisses() const
 void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files)
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    if (!cxxFrontendModelRequested())
+        return;
+
     // An editor reports the one document it has just reparsed the same way
     // the indexer reports the end of a pass. Told apart here, because they
     // mean opposite things to a header that is waiting: the pass ending
