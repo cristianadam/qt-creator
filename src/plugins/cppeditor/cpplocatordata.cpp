@@ -554,27 +554,24 @@ int CppLocatorData::cxxFrontendCacheMisses() const
 void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files,
                                             CppModelManager::RefreshOrigin origin)
 {
+    // Which files they were says nothing that matters here: a pass ending is
+    // a pass ending whichever files it names, and what each of them declares
+    // arrived through onDocumentUpdated as it was read.
+    Q_UNUSED(files)
 #ifdef QTC_WITH_CXX_FRONTEND
     if (!cxxFrontendModelRequested())
         return;
 
-    // An editor reports the one document it has just reparsed the same way
-    // the indexer reports the end of a pass. They mean opposite things to
-    // a header that is waiting -- the pass ending says nothing more is
-    // coming for any of them, while somebody typing says it only of the
-    // document they are typing in -- and taking the second for the first
-    // read every header of a running pass as a translation unit of its
-    // own, at the first pause in the editor.
+    // An editor reparsing the document somebody is typing in is not a pass
+    // ending: nothing was reading the files that a header waits to be
+    // covered by, and nothing of that reparse reached this at all -- see
+    // onDocumentUpdated. Taking it for a pass ending read every header of a
+    // running pass as a translation unit of its own, at the first pause in
+    // the editor.
     //
-    // Each says which it is, rather than this guessing from the shape of
-    // the refresh: the indexer reports one file too, where one file is all
-    // that changed, and that one may be open in an editor.
-    // An editor reparsing the document somebody is typing in is not a
-    // pass ending: nothing was reading the files that a header waits to
-    // be covered by, and nothing of that reparse reached this at all --
-    // see onDocumentUpdated. Taking it for a pass ending read every
-    // header of a running pass as a translation unit of its own, at the
-    // first pause in the editor.
+    // Each refresh says which of the two it is, rather than this guessing
+    // from the shape of it: the indexer reports one file too, where one file
+    // is all that changed, and that one may be open in an editor.
     if (origin == CppModelManager::RefreshOrigin::Editor)
         return;
 
@@ -583,6 +580,8 @@ void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files,
         m_indexerDone = true;
     }
     readPendingWithCxxFrontend();
+#else
+    Q_UNUSED(origin)
 #endif
 }
 

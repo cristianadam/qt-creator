@@ -90,8 +90,8 @@ public slots:
     // Files have finished being parsed. Where that is the indexer reaching
     // the end of its pass, no source is coming that could cover the headers
     // still waiting and whatever is left is read on its own; where it is an
-    // editor having reparsed the one document somebody is typing in, only
-    // that document is answered for.
+    // editor having reparsed the one document somebody is typing in, there
+    // is nothing to do, that reparse having reported nothing to this.
     void onSourceFilesRefreshed(const QSet<Utils::FilePath> &files,
                                 CppModelManager::RefreshOrigin origin);
 
