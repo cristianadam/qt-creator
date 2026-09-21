@@ -74,7 +74,8 @@ public slots:
     // still waiting and whatever is left is read on its own; where it is an
     // editor having reparsed the one document somebody is typing in, only
     // that document is answered for.
-    void onSourceFilesRefreshed(const QSet<Utils::FilePath> &files);
+    void onSourceFilesRefreshed(const QSet<Utils::FilePath> &files,
+                                CppModelManager::RefreshOrigin origin);
 
 private:
     // One file to read, with what its project part contributes to reading

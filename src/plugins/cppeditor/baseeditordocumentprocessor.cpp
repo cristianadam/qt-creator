@@ -77,7 +77,8 @@ void BaseEditorDocumentProcessor::runParser(QPromise<void> &promise,
     }
 
     parser->update(promise, updateParams);
-    CppModelManager::finishedRefreshingSourceFiles({parser->filePath()});
+    CppModelManager::finishedRefreshingSourceFiles({parser->filePath()},
+                                                   CppModelManager::RefreshOrigin::Editor);
 
     promise.setProgressValue(1);
 }

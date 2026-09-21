@@ -164,7 +164,15 @@ public:
     static void findMacroUsages(const CPlusPlus::Macro &macro);
     static void renameMacroUsages(const CPlusPlus::Macro &macro, const QString &replacement);
 
-    static void finishedRefreshingSourceFiles(const QSet<Utils::FilePath> &files);
+    // Who has finished reading files, which two readers mean opposite
+    // things by: the indexer reaching the end of a pass says that nothing
+    // more is coming for any file it did not name, while an editor having
+    // reparsed the one document somebody is typing in says only that.
+    enum class RefreshOrigin { Indexer, Editor };
+    Q_ENUM(RefreshOrigin)
+
+    static void finishedRefreshingSourceFiles(const QSet<Utils::FilePath> &files,
+                                              RefreshOrigin origin = RefreshOrigin::Indexer);
 
     static void activateClangCodeModel(std::unique_ptr<ModelManagerSupport> &&modelManagerSupport);
     static CppCompletionAssistProvider *completionAssistProvider();
@@ -255,7 +263,7 @@ signals:
     /// Emitted with documentUpdated(), and from the thread that parsed it.
     void fileUpdated(const Utils::FilePath &filePath);
 
-    void sourceFilesRefreshed(const QSet<Utils::FilePath> &files);
+    void sourceFilesRefreshed(const QSet<Utils::FilePath> &files, RefreshOrigin origin);
 
     void projectPartsUpdated(ProjectExplorer::Project *project);
     void projectPartsRemoved(const QStringList &projectPartIds);

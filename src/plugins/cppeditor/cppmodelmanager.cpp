@@ -2151,9 +2151,10 @@ void CppModelManager::GC()
     emit m_instance->gcFinished();
 }
 
-void CppModelManager::finishedRefreshingSourceFiles(const QSet<FilePath> &files)
+void CppModelManager::finishedRefreshingSourceFiles(const QSet<FilePath> &files,
+                                                    RefreshOrigin origin)
 {
-    emit m_instance->sourceFilesRefreshed(files);
+    emit m_instance->sourceFilesRefreshed(files, origin);
 }
 
 void CppModelManager::activateClangCodeModel(

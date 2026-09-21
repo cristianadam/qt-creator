@@ -537,21 +537,25 @@ int CppLocatorData::cxxFrontendCacheMisses() const
 #endif
 }
 
-void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files)
+void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files,
+                                            CppModelManager::RefreshOrigin origin)
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (!cxxFrontendModelRequested())
         return;
 
     // An editor reports the one document it has just reparsed the same way
-    // the indexer reports the end of a pass. Told apart here, because they
-    // mean opposite things to a header that is waiting: the pass ending
-    // says nothing more is coming for any of them, while somebody typing
-    // says it only of the document they are typing in. Taking the second
-    // for the first read every header of a running pass as a translation
-    // unit of its own, at the first pause in the editor.
-    const bool fromAnEditor = files.size() == 1
-                              && CppModelManager::cppEditorDocument(*files.cbegin());
+    // the indexer reports the end of a pass. They mean opposite things to
+    // a header that is waiting -- the pass ending says nothing more is
+    // coming for any of them, while somebody typing says it only of the
+    // document they are typing in -- and taking the second for the first
+    // read every header of a running pass as a translation unit of its
+    // own, at the first pause in the editor.
+    //
+    // Each says which it is, rather than this guessing from the shape of
+    // the refresh: the indexer reports one file too, where one file is all
+    // that changed, and that one may be open in an editor.
+    const bool fromAnEditor = origin == CppModelManager::RefreshOrigin::Editor;
     {
         QMutexLocker locker(&m_pendingMutex);
         if (!fromAnEditor) {
