@@ -169,6 +169,15 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
     if (!cxxFrontendModelRequested())
         return;
 
+    // Not a file at all. The configuration document is where the built-in
+    // model keeps the project's predefined macros, and this model is handed
+    // those directly -- so there is nothing here to read, and nothing on
+    // disk for the store to check it against either. Left in, it is covered
+    // by no reading, taken as a translation unit of its own at the end of
+    // every pass, and missed every time for as long as the session lasts.
+    if (document->filePath() == CppModelManager::configurationFileName())
+        return;
+
     // Only what a pass reports. Outside one, what reports a file is an
     // editor having reparsed the document somebody is typing in -- and it
     // reports every header read into it along with the document, a
