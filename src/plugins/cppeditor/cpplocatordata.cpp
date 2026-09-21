@@ -259,7 +259,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
         // already; a file removed and then indexed again stands in the batch
         // below on its own account.
         m_removedSinceRead.clear();
-        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty())
+        if (m_pending.isEmpty() && m_awaitingCoverage.isEmpty() && m_readOnTheirOwn.isEmpty())
             return;
 
         // Only the sources are read. A reading is of a whole translation
@@ -295,6 +295,13 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 batch.append(filePath);
                 continue;
             }
+            // Nothing is going to cover it: an editor has just reparsed it
+            // on its own account, which is all that is coming for it.
+            if (m_readOnTheirOwn.contains(filePath)) {
+                batch.append(filePath);
+                continue;
+            }
+
             // Already answered for by a reading that includes it. The
             // indexer reports it all the same, and reading it again would
             // say what has just been said.
@@ -302,6 +309,14 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 m_awaitingCoverage.insert(filePath);
         }
         m_pending.clear();
+
+        // The same for one that was waiting for cover rather than pending,
+        // which is where an edited header usually sits by now.
+        for (const FilePath &filePath : std::as_const(m_readOnTheirOwn)) {
+            if (!batch.contains(filePath))
+                batch.append(filePath);
+        }
+        m_readOnTheirOwn.clear();
     }
 
     // Nothing will read what an Objective-C file includes, so it is marked
@@ -481,7 +496,7 @@ int CppLocatorData::cxxFrontendFilesOutstanding() const
     QMutexLocker locker(&m_pendingMutex);
     // What is waiting to be covered is still owed: it either comes back
     // with a source that includes it or is read on its own at the end.
-    return m_pending.size() + m_awaitingCoverage.size() + m_beingRead;
+    return m_pending.size() + m_awaitingCoverage.size() + m_readOnTheirOwn.size() + m_beingRead;
 }
 
 int CppLocatorData::cxxFrontendCacheHits() const
@@ -502,12 +517,34 @@ int CppLocatorData::cxxFrontendCacheMisses() const
 #endif
 }
 
-void CppLocatorData::onSourceFilesRefreshed()
+void CppLocatorData::onSourceFilesRefreshed(const QSet<FilePath> &files)
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // An editor reports the one document it has just reparsed the same way
+    // the indexer reports the end of a pass. Told apart here, because they
+    // mean opposite things to a header that is waiting: the pass ending
+    // says nothing more is coming for any of them, while somebody typing
+    // says it only of the document they are typing in. Taking the second
+    // for the first read every header of a running pass as a translation
+    // unit of its own, at the first pause in the editor.
+    const bool fromAnEditor = files.size() == 1
+                              && CppModelManager::cppEditorDocument(*files.cbegin());
     {
         QMutexLocker locker(&m_pendingMutex);
-        m_indexerDone = true;
+        if (!fromAnEditor) {
+            m_indexerDone = true;
+        } else {
+            // Nothing else will cover it -- no pass is reading the files
+            // that include it -- so it is read on its own account, and now
+            // rather than whenever a pass next ends. It may be waiting for
+            // cover already or still be pending; either way it is owed a
+            // reading of its own, and the dispatch below takes it from
+            // wherever it sits.
+            for (const FilePath &file : files) {
+                m_awaitingCoverage.remove(file);
+                m_readOnTheirOwn.insert(file);
+            }
+        }
     }
     readPendingWithCxxFrontend();
 #endif
@@ -523,6 +560,7 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
         for (const FilePath &file : files) {
             m_pending.remove(file);
             m_awaitingCoverage.remove(file);
+            m_readOnTheirOwn.remove(file);
             // Gone, so nothing stands for it any longer. Were it to come
             // back it would have to be read afresh, and saying it is
             // already answered for would see to it that it never was.

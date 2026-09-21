@@ -69,9 +69,12 @@ public slots:
     void onDocumentUpdated(const CPlusPlus::Document::Ptr &document);
     void onAboutToRemoveFiles(const Utils::FilePaths &files);
 
-    // The indexer has finished its pass, so no source is coming that could
-    // cover the headers still waiting: whatever is left is read on its own.
-    void onSourceFilesRefreshed();
+    // Files have finished being parsed. Where that is the indexer reaching
+    // the end of its pass, no source is coming that could cover the headers
+    // still waiting and whatever is left is read on its own; where it is an
+    // editor having reparsed the one document somebody is typing in, only
+    // that document is answered for.
+    void onSourceFilesRefreshed(const QSet<Utils::FilePath> &files);
 
 private:
     // One file to read, with what its project part contributes to reading
@@ -137,6 +140,12 @@ private:
     // includes one of them. Whatever is left uncovered when the batch ends
     // goes back to be read on its own account.
     QSet<Utils::FilePath> m_awaitingCoverage;
+    // Files that are nobody's translation unit and are not waiting for one
+    // either: an editor has just reparsed them on their own account, which
+    // is all that is coming for them. Read as units of their own at the
+    // next dispatch rather than at the end of the indexer's pass, there
+    // being no pass -- somebody is typing in them now.
+    QSet<Utils::FilePath> m_readOnTheirOwn;
     // Files already answered for since the indexer began reporting, so
     // that a header reached by several sources is read once -- and, more
     // to the point, so that one reported after the source that covered it
