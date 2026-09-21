@@ -6,6 +6,9 @@
 #include "baseeditordocumentprocessor.h"
 #include "builtineditordocumentparser.h"
 #include "cpplocatordata.h"
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 #include "cpptoolstestcase.h"
 #include "editordocumenthandle.h"
 #include "modelmanagertesthelper.h"
@@ -1697,6 +1700,70 @@ void ModelManagerTest::testOptionalIndexing()
         Core::LocatorMatcher::matchers(Core::MatcherType::Functions), "foo");
     QCOMPARE(hasEntry("foo1"), foo1Present);
     QCOMPARE(hasEntry("foo2"), foo2Present);
+}
+
+// The index keeps up with a file that changes.
+//
+// What makes this worth pinning: the cxx front end's index reads what a
+// pass over the project's files reports and nothing else, so everything
+// depends on a change being reported by a pass. Saving a file is one --
+// Qt Creator tells the model manager what it wrote -- and if it ever
+// stopped being one, the index would quietly describe yesterday's code
+// with nothing else looking wrong.
+void ModelManagerTest::testTheIndexFollowsAChangedFile()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath source = dir.createFile("changing.cpp",
+                                           "class DeclaredBefore {};\n"
+                                           "void writtenBefore() {}\n");
+    QVERIFY(!source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    const auto indexHolds = [locatorData](const QString &name) {
+        return !locatorData->findSymbols(IndexItem::All, name).isEmpty();
+    };
+    // The cxx front end's readings outlive the pass that asked for them,
+    // and until they land the entries are the built-in reading's.
+    const auto readThrough = [&](const FilePath &file) {
+        if (!CppEditor::Tests::TestCase::parseFiles({file}))
+            return false;
+        return QTest::qWaitFor([locatorData] {
+            return locatorData->cxxFrontendFilesOutstanding() == 0;
+        }, 60000);
+    };
+
+    QVERIFY(readThrough(source));
+    QVERIFY(indexHolds("DeclaredBefore"));
+    QVERIFY(indexHolds("writtenBefore"));
+
+    // Whether the cxx front end is the one answering here, which it is
+    // only where somebody asked for it. Asked of the setting and not of
+    // what the front end has done so far: the checks above are satisfied
+    // by the built-in reading's entries on their own, so a front end that
+    // has stopped reading anything at all would otherwise excuse itself
+    // from the one check that would catch it.
+#ifdef QTC_WITH_CXX_FRONTEND
+    const bool throughTheCxxFrontEnd = cxxFrontendModelRequested();
+#else
+    const bool throughTheCxxFrontEnd = false;
+#endif
+
+    // The same file, saying something else -- which is what a save is.
+    QVERIFY(source.writeFileContents("class DeclaredAfter {};\n"
+                                     "void writtenAfter() {}\n"));
+    const int readBefore = locatorData->cxxFrontendCacheMisses();
+    QVERIFY(readThrough(source));
+    if (throughTheCxxFrontEnd) {
+        QVERIFY2(locatorData->cxxFrontendCacheMisses() > readBefore,
+                 "the front end was never asked to read the file again");
+    }
+
+    QVERIFY2(indexHolds("DeclaredAfter"), "the index did not follow the file");
+    QVERIFY2(indexHolds("writtenAfter"), "the index did not follow the file");
+    QVERIFY2(!indexHolds("DeclaredBefore"), "the index kept what the file no longer says");
+    QVERIFY2(!indexHolds("writtenBefore"), "the index kept what the file no longer says");
 }
 
 // What indexing a real project costs, which is the only apples-to-apples way

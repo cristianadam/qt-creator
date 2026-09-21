@@ -41,6 +41,7 @@ private slots:
     void testSettingsChanges();
     void testOptionalIndexing_data();
     void testOptionalIndexing();
+    void testTheIndexFollowsAChangedFile();
     void testIndexingCost();
 };
 
