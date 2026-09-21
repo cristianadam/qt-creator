@@ -80,6 +80,18 @@ static int cxxFrontendReaderCount()
 // address space, not memory: only the pages a read touches are committed.
 static constexpr uint cxxFrontendReaderStackSize = 8 * 1024 * 1024;
 
+// This is the one file that knows whether there is a cache type at all, so
+// it is where the deleting has to happen: with the front end built its
+// definition is above, and without it nothing ever made one to delete.
+void Internal::CxxFrontendIndexCacheDeleter::operator()(CxxFrontendIndexCache *cache) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    delete cache;
+#else
+    Q_UNUSED(cache)
+#endif
+}
+
 CppLocatorData::CppLocatorData()
 {
     m_cxxFrontendPool.setMaxThreadCount(cxxFrontendReaderCount());
@@ -396,7 +408,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // remembers of the files goes stale: anything written since the last
     // batch has to be seen afresh.
     if (!m_cxxFrontendCache)
-        m_cxxFrontendCache = std::make_unique<CxxFrontendIndexCache>(inputs.predefinedMacros);
+        m_cxxFrontendCache.reset(new CxxFrontendIndexCache(inputs.predefinedMacros));
     m_cxxFrontendCache->forgetContents();
     CxxFrontendIndexCache * const cache = m_cxxFrontendCache.get();
 

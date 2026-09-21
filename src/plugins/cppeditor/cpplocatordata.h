@@ -19,7 +19,25 @@
 
 namespace CppEditor {
 
-namespace Internal { class CxxFrontendIndexCache; }
+namespace Internal {
+
+class CxxFrontendIndexCache;
+
+// Destroying the cache needs its definition, and that is only built with the
+// front end. This header is included from outside the plugin, where the
+// front end's own define is not set, so the member below cannot be left out
+// of the class there without giving it two layouts -- and std::unique_ptr's
+// own deleter insists on a complete type.
+//
+// So the deleting is done out of line, in the one file that knows whether
+// there is a type to delete. Stateless, so the member stays the size of the
+// pointer it holds.
+struct CxxFrontendIndexCacheDeleter
+{
+    void operator()(CxxFrontendIndexCache *cache) const;
+};
+
+} // namespace Internal
 
 class CPPEDITOR_EXPORT CppLocatorData : public QObject
 {
@@ -170,8 +188,10 @@ private:
     // runs, since where it lives and what it is checked against are only
     // known then. Held by pointer so that this header, which is included
     // outside the plugin, does not need the type -- and so that the class
-    // is the same size whether or not the model is built in.
-    std::unique_ptr<Internal::CxxFrontendIndexCache> m_cxxFrontendCache;
+    // is the same size whether or not the model is built in, which is what
+    // the deleter above is for.
+    std::unique_ptr<Internal::CxxFrontendIndexCache, Internal::CxxFrontendIndexCacheDeleter>
+        m_cxxFrontendCache;
 };
 
 } // namespace CppEditor
