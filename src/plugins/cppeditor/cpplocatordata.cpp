@@ -8,6 +8,7 @@
 #include "cxxfrontendmodel.h"
 #endif
 
+#include <utils/hostosinfo.h>
 #include <utils/stringtable.h>
 
 #include <QThread>
@@ -21,23 +22,48 @@ namespace CppEditor {
 
 using namespace Internal;
 
+// About what one reader needs while it works, which is a whole translation
+// unit's worth of tokens and syntax tree.
+//
+// Measured over a 60-file slice of this project, where the peak went 2.9,
+// 3.4, 4.8 and 7.5 GB on one, two, three and six readers: a fixed couple of
+// gigabytes -- the built-in model's snapshot and the index itself, which are
+// there either way -- and about 0.9 GB for each reader on top.
+static constexpr quint64 cxxFrontendMemoryPerReader = 1024ull * 1024 * 1024;
+
 // How many files the cxx front end reads at once.
 //
-// Half of what the machine reports, not all of it and not one fewer, because
-// more measured *worse*: reading the cplusplus project (118 files) took 15.4s
-// on six and 17.6s on eleven. A read is allocation-heavy -- about a quarter
-// of it is malloc -- so the readers contend rather than scale, and on a
-// machine whose cores are not alike the slow half of them is a poor place to
-// put one. Half also halves the memory a batch holds, which is what bounds
-// this on a smaller machine.
+// Bounded by the cores, and then by the memory, because a reader now reads a
+// whole translation unit: it is the memory that binds first on any ordinary
+// machine, and running out of it is worse for the person using the editor
+// than an index that takes longer.
+//
+// Half the cores, not all of them and not one fewer, because more measured
+// *worse*: reading the cplusplus project (118 files) took 15.4s on six and
+// 17.6s on eleven. A read is allocation-heavy -- about a quarter of it is
+// malloc -- so the readers contend rather than scale, and on a machine whose
+// cores are not alike the slow half of them is a poor place to put one.
+//
+// And then no more than a quarter of what is installed, an index being
+// something that happens while somebody is working rather than the work. On
+// the machine this was written on that quarter is nine gigabytes, so the
+// cores still decide; on a laptop with eight it is what decides.
 static int cxxFrontendReaderCount()
 {
-    // Overridable because what is right depends on the machine's memory as
-    // much as on its cores: a reader holds a whole translation unit while
-    // it works, and a large one is gigabytes.
+    // Overridable, since what a machine can spare is not always what it has:
+    // a build running beside this one wants the same memory.
     if (const int asked = qEnvironmentVariableIntValue("QTC_CXX_FRONTEND_READERS"); asked > 0)
         return asked;
-    return std::max(1, QThread::idealThreadCount() / 2);
+
+    const int byCores = std::max(1, QThread::idealThreadCount() / 2);
+
+    // Nothing known about the memory: the cores decide, as they used to.
+    const std::optional<quint64> installed = HostOsInfo::totalMemoryInstalledInBytes();
+    if (!installed)
+        return byCores;
+
+    const auto byMemory = int(*installed / 4 / cxxFrontendMemoryPerReader);
+    return std::clamp(byMemory, 1, byCores);
 }
 
 // What a reader's stack has to hold.
