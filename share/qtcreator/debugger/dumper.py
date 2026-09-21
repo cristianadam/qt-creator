@@ -4351,9 +4351,16 @@ typename))
         #self.warn("LISTING MEMBERS OF TYPE %s %s" % (value.typeid, self.type_name(value.typeid)))
         typeid = value.typeid
 
-        members = self.type_fields_cache.get(typeid, None)
-        if members is not None:
-            return members
+        # A layout a bridge recorded for the type: the members come out of the
+        # value's memory, and the debugger is not asked.
+        fields = self.type_fields_cache.get(typeid, None)
+        if fields is not None:
+            if value.ldata is None and value.laddress is not None:
+                size = self.type_size(typeid)
+                if size:
+                    value.ldata = self.value_data_from_address(value.laddress, size)
+            return [self.value_member_by_field(value, field)
+                    for field in fields if include_bases or not field.is_base_class]
 
         members = []
         native_type = self.type_nativetype(typeid)

@@ -133,6 +133,8 @@ class Dumper(DumperBase):
         # an element type, a template argument - most likely lives there too, and
         # asking that module first is one GetTypeId() instead of a search.
         self.lookupModuleHint = 0
+        # Types whose members note_struct_layout() cannot vouch for.
+        self.type_layout_rejected = set()
 
     #FIXME
     def register_known_qt_types(self):
@@ -312,7 +314,59 @@ class Dumper(DumperBase):
         nativeValue = value.nativeValue
         if nativeValue is None:
             nativeValue = cdbext.createValue(value.address(), native_type)
-        return self.listNativeValueChildren(nativeValue, include_bases)
+        members = self.listNativeValueChildren(nativeValue, include_bases)
+        if include_bases:
+            self.note_struct_layout(value, members)
+        return members
+
+    def note_struct_layout(self, value: DumperBase.Value, members):
+        # Where the members of the type sit, so that the next value of the type
+        # gets them out of its memory instead of a symbol group: no cast added to
+        # the group, no expansion, no walk over the children.
+        #
+        # Recorded only where memory shows what the symbol group shows. A bitfield
+        # is where it does not: the engine reports the value of the bits, but the
+        # address and the size of the whole storage unit. Members sharing storage
+        # give away all but a bitfield alone in its unit, and that one is caught
+        # by comparing what the engine printed with what the memory holds - as
+        # long as the bits around it are not all zero at that moment, which is the
+        # case this cannot see through. An enum member is left to the symbol group
+        # as well: its display comes from the engine's text, which the memory path
+        # would have to evaluate a cast for.
+        typeid = value.typeid
+        if typeid in self.type_fields_cache or typeid in self.type_layout_rejected:
+            return
+        address = value.laddress
+        size = self.type_size_cache.get(typeid, None)
+        if not address or not size or not members:
+            return
+        blob = None
+        occupied = []
+        fields = []
+        for member in members:
+            if member.laddress is None or member.size is None:
+                return
+            offset = member.laddress - address
+            byte_size = (member.size + 7) // 8
+            if (member.name.startswith('__vtcast_')
+                    or self.type_code(member.typeid) == TypeCode.Enum
+                    or offset < 0 or offset + byte_size > size):
+                self.type_layout_rejected.add(typeid)
+                return
+            if not member.isBaseClass:
+                if any(offset < end and start < offset + byte_size for (start, end) in occupied):
+                    self.type_layout_rejected.add(typeid)
+                    return
+                occupied.append((offset, offset + byte_size))
+            if member.ldata is not None:
+                if blob is None:
+                    blob = bytes(self.value_data(value, size))
+                if blob[offset:offset + byte_size] != bytes(member.ldata):
+                    self.type_layout_rejected.add(typeid)
+                    return
+            fields.append(self.Field(name=member.name, typeid=member.typeid, bitsize=member.size,
+                                     bitpos=offset * 8, is_base_class=member.isBaseClass))
+        self.type_fields_cache[typeid] = fields
 
     def nativeStructAlignment(self, nativeType: cdbext.Type) -> int:
         #DumperBase.warn("NATIVE ALIGN FOR %s" % nativeType.name)
