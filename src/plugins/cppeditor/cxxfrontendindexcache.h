@@ -55,6 +55,18 @@ public:
     [[nodiscard]] std::optional<CxxFrontendIndexRead> take(const Utils::FilePath &filePath,
                                                            const QByteArray &projectKey) const;
 
+    // Only the files that went into the stored reading of \a filePath, each
+    // checked the same way take() checks them and the file itself left out.
+    //
+    // Apart from take() because the rest of a shard is the index over again:
+    // deserializing the descriptions fills the memo that makes a batch cheap
+    // and nothing empties it afterwards, where this question is asked one
+    // file at a time by a reader that wants none of them. The hit and miss
+    // counts are take()'s, too -- they say how much of the *index* came out
+    // of the store, and a question asked beside it should not move them.
+    [[nodiscard]] std::optional<QStringList> includedFilesOf(
+        const Utils::FilePath &filePath, const QByteArray &projectKey) const;
+
     // Stores what reading \a filePath found. Overwrites whatever was there.
     void store(const Utils::FilePath &filePath,
                const QByteArray &projectKey,
@@ -79,7 +91,19 @@ public:
     [[nodiscard]] int hits() const;
     [[nodiscard]] int misses() const;
 
+    // How many closures were served out of a shard, counted apart from the
+    // two above: those say what the index got from the store, and this is
+    // somebody else's question asked of the same shards.
+    [[nodiscard]] int closuresServed() const;
+
 private:
+    // What a caller wants out of a shard: everything it holds, or only the
+    // files that went into it.
+    enum class Wanted { Everything, TheFilesOnly };
+    [[nodiscard]] std::optional<CxxFrontendIndexRead> readShard(const Utils::FilePath &filePath,
+                                                                const QByteArray &projectKey,
+                                                                Wanted wanted) const;
+
     // A file's contents as a short digest, read once per batch. Digests
     // rather than a timestamp because a checkout rewrites timestamps without
     // changing a line, and because a file written twice within the clock's
@@ -126,6 +150,7 @@ private:
     mutable bool m_pruned = false;
     mutable int m_hits = 0;
     mutable int m_misses = 0;
+    mutable int m_closuresServed = 0;
 };
 
 } // namespace CppEditor::Internal

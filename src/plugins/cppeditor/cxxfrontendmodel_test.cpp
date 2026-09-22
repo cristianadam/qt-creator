@@ -884,6 +884,27 @@ void CxxFrontendModelTest::testTheMacroUsesOfAFile()
     // of these were used rather than which macros the file uses.
     QVERIFY(code.macroUsesIn(parsed.mainFilePath(), {"RUN"}).size() == 1);
     QVERIFY(code.macroUsesIn(parsed.mainFilePath(), {}).isEmpty());
+
+    // The same file written on Windows, where a continued line ends in a
+    // backslash, a carriage return and a newline: walking back to the start
+    // of the directive has to step over the return to find the backslash,
+    // and without that the use on its second line is taken for a real one.
+    const Parsed onWindows({{"crlf.cpp",
+                             "#define TWO(a, b) a + b\r\n"
+                             "#define RUN(klass) \\\r\n"
+                             "    TWO(klass, 1)\r\n"
+                             "RUN(tst_Thing)\r\n"}},
+                           "crlf.cpp");
+    QVERIFY(onWindows.isValid());
+
+    const CodeModelQueries written(CppEditor::Tests::TestCase::globalSnapshot(),
+                                   CppModelManager::workingCopy());
+    QStringList onWindowsSaid;
+    for (const CodeModelQueries::WrittenMacroUse &use
+         : written.macroUsesIn(onWindows.mainFilePath(), {"TWO", "RUN"})) {
+        onWindowsSaid << use.name + "(" + use.arguments.join(", ") + ")";
+    }
+    QCOMPARE(onWindowsSaid.join(", "), QString("RUN(tst_Thing)"));
 }
 
 // The same, for the two shapes a Qt test really writes it in: the call

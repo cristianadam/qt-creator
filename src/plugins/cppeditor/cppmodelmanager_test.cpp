@@ -1817,13 +1817,13 @@ void ModelManagerTest::testTheStoredIncludeClosure()
     // Asked with no reading of its own to fall back on: an empty snapshot,
     // so the built-in answer cannot be the one that comes back, and an empty
     // working copy, so the file counts as one nobody is editing.
-    const int servedBefore = locatorData->cxxFrontendCacheHits();
+    const int servedBefore = locatorData->cxxFrontendClosuresServed();
     const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
     QCOMPARE(read.includeClosureOf(source), FilePaths({header}));
 
     // And out of the store rather than by reading the file, which is the
     // whole point and the one thing the answer alone does not say.
-    QVERIFY2(locatorData->cxxFrontendCacheHits() > servedBefore,
+    QVERIFY2(locatorData->cxxFrontendClosuresServed() > servedBefore,
              "the closure was read rather than taken from the store");
 }
 

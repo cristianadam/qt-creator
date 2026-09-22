@@ -321,14 +321,31 @@ static QSet<FilePath> filesOfApplicationTargets(Project *project, const CPlusPlu
     // the source belonging to a header of the closure is not part of it, but can hold the test the
     // header only declares - do not follow its includes, they lead away from the application target
 
-    // Keyed on the directory as the file system really has it. An include
+    const auto stemOf = [](const FilePath &file) {
+        return file.parentDir() / file.completeBaseName();
+    };
+
+    QMultiHash<FilePath, FilePath> projectFilesByStem;
+    const QSet<FilePath> &projectFiles = info->sourceFiles();
+    for (const FilePath &file : projectFiles)
+        projectFilesByStem.insert(stemOf(file), file);
+
+    // A second map, keyed on the directory as the file system really has it,
+    // and filled only where the first one answered nothing. An include
     // resolves to the path with the symlinks followed, where a project lists
     // its files as it was told them -- on macOS a project under /var is read
-    // as /private/var, the one being a link to the other. Two spellings of
-    // one directory put a header and its source in different buckets, and
-    // then the test a library declares is never looked for.
+    // as /private/var, the one being a link to the other -- and then the two
+    // spellings put a header and its source in different buckets, so the
+    // test a library declares is never looked for.
+    //
+    // Second rather than instead: resolving a directory is a round trip to
+    // the device the project is on, and this runs on the thread that draws.
+    // Where the spelling already agrees, which is the ordinary case, nothing
+    // is asked of it at all.
+    QMultiHash<FilePath, FilePath> byRealStem;
+    bool realStemsKnown = false;
     QHash<FilePath, FilePath> realDirectories;
-    const auto stemOf = [&realDirectories](const FilePath &file) {
+    const auto realStemOf = [&realDirectories](const FilePath &file) {
         const FilePath directory = file.parentDir();
         auto known = realDirectories.constFind(directory);
         if (known == realDirectories.constEnd()) {
@@ -338,17 +355,28 @@ static QSet<FilePath> filesOfApplicationTargets(Project *project, const CPlusPlu
         return *known / file.completeBaseName();
     };
 
-    QMultiHash<FilePath, FilePath> projectFilesByStem;
-    const QSet<FilePath> &projectFiles = info->sourceFiles();
-    for (const FilePath &file : projectFiles)
-        projectFilesByStem.insert(stemOf(file), file);
     QSet<FilePath> counterparts;
     for (const FilePath &file : std::as_const(result)) {
         const FilePath stem = stemOf(file);
-        for (auto it = projectFilesByStem.constFind(stem);
-             it != projectFilesByStem.constEnd() && it.key() == stem; ++it) {
-            if (it.value() != file)
-                counterparts.insert(it.value());
+        auto it = projectFilesByStem.constFind(stem);
+        if (it != projectFilesByStem.constEnd()) {
+            for (; it != projectFilesByStem.constEnd() && it.key() == stem; ++it) {
+                if (it.value() != file)
+                    counterparts.insert(it.value());
+            }
+            continue;
+        }
+
+        if (!realStemsKnown) {
+            for (const FilePath &projectFile : projectFiles)
+                byRealStem.insert(realStemOf(projectFile), projectFile);
+            realStemsKnown = true;
+        }
+        const FilePath realStem = realStemOf(file);
+        for (auto real = byRealStem.constFind(realStem);
+             real != byRealStem.constEnd() && real.key() == realStem; ++real) {
+            if (real.value() != file)
+                counterparts.insert(real.value());
         }
     }
     return result.unite(counterparts);

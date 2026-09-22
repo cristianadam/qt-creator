@@ -45,13 +45,20 @@ bool insideADirective(const QString &text, int start)
     if (start == 0)
         return false;
 
+    // Back to the start of the logical line: a directive may be continued
+    // over as many lines as it likes, and what says it is one stands on the
+    // first of them. A line written on Windows ends in a backslash, a
+    // carriage return and a newline, so the return is stepped over before
+    // the backslash is looked for.
     int lineStart = text.lastIndexOf(u'\n', start - 1) + 1;
-    while (lineStart >= 2 && text.at(lineStart - 2) == u'\\') {
-        if (lineStart < 3) {
-            lineStart = 0;
+    while (lineStart > 0) {
+        int beforeTheBreak = lineStart - 2;
+        if (beforeTheBreak >= 0 && text.at(beforeTheBreak) == u'\r')
+            --beforeTheBreak;
+        if (beforeTheBreak < 0 || text.at(beforeTheBreak) != u'\\')
             break;
-        }
-        lineStart = text.lastIndexOf(u'\n', lineStart - 3) + 1;
+        lineStart = beforeTheBreak == 0 ? 0
+                                        : text.lastIndexOf(u'\n', beforeTheBreak - 1) + 1;
     }
     return QStringView(text).mid(lineStart, start - lineStart).trimmed().startsWith(u'#');
 }

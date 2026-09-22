@@ -2759,10 +2759,42 @@ QList<CxxFrontendDocument::WrittenCall> CxxFrontendDocument::callsTo(
     for (const QString &name : qualifiedNames)
         wanted.append(withoutTheLeadingScope(name));
 
+    // Where each function definition begins and ends, gathered as this one
+    // walk reaches them. A pre-order walk reaches a definition before
+    // anything written inside it, so by the time a call is seen the
+    // definition holding it is already here -- and asking definitionAround()
+    // per call would walk the whole unit again each time, where a Qt data
+    // function writes a thousand calls and the unit holds every header the
+    // file reads.
+    struct Definition
+    {
+        unsigned first;
+        unsigned last;
+        cxx::FunctionSymbol *symbol;
+    };
+    QList<Definition> definitions;
+
+    // Outermost wins, and they were gathered outermost first.
+    const auto definitionHolding = [&definitions](cxx::SourceLocation at) -> cxx::FunctionSymbol * {
+        for (const Definition &definition : definitions) {
+            if (at.index() >= definition.first && at.index() < definition.last)
+                return definition.symbol;
+        }
+        return nullptr;
+    };
+
     for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
         auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
         if (!slot || !*slot)
             continue;
+
+        if (auto * const definition = dynamic_cast<cxx::FunctionDefinitionAST *>(*slot);
+            definition && definition->symbol) {
+            definitions.append({definition->firstSourceLocation().index(),
+                                definition->lastSourceLocation().index(),
+                                definition->symbol});
+        }
+
         auto * const call = dynamic_cast<cxx::CallExpressionAST *>(*slot);
         if (!call || !call->baseExpression)
             continue;
@@ -2793,7 +2825,7 @@ QList<CxxFrontendDocument::WrittenCall> CxxFrontendDocument::callsTo(
         // "QTest::newRow(...)" inside exactly such a definition.
         cxx::FunctionSymbol *inside = d->functionAround(at);
         if (!inside)
-            inside = d->definitionAround(at);
+            inside = definitionHolding(at);
         if (inside)
             written.insideFunction = withoutTheLeadingScope(qualifiedNameOf(inside));
         written.line = int(position.line);

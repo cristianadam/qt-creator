@@ -314,6 +314,12 @@ int CxxFrontendIndexCache::hits() const
     return m_hits;
 }
 
+int CxxFrontendIndexCache::closuresServed() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_closuresServed;
+}
+
 int CxxFrontendIndexCache::misses() const
 {
     QMutexLocker locker(&m_mutex);
@@ -323,9 +329,28 @@ int CxxFrontendIndexCache::misses() const
 std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &filePath,
                                                                 const QByteArray &projectKey) const
 {
-    const auto miss = [this]() -> std::optional<CxxFrontendIndexRead> {
-        QMutexLocker locker(&m_mutex);
-        ++m_misses;
+    return readShard(filePath, projectKey, Wanted::Everything);
+}
+
+std::optional<QStringList> CxxFrontendIndexCache::includedFilesOf(
+    const FilePath &filePath, const QByteArray &projectKey) const
+{
+    const std::optional<CxxFrontendIndexRead> read
+        = readShard(filePath, projectKey, Wanted::TheFilesOnly);
+    if (!read)
+        return std::nullopt;
+    return read->includedFiles;
+}
+
+std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::readShard(
+    const FilePath &filePath, const QByteArray &projectKey, Wanted wanted) const
+{
+    const bool counts = wanted == Wanted::Everything;
+    const auto miss = [this, counts]() -> std::optional<CxxFrontendIndexRead> {
+        if (counts) {
+            QMutexLocker locker(&m_mutex);
+            ++m_misses;
+        }
         return std::nullopt;
     };
 
@@ -398,6 +423,17 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &
     }
     // The first is the file itself, which is not one of its own includes.
     read.includedFiles = checked.mid(1);
+
+    // And that is the whole answer for a caller asking what the file
+    // includes. Reading the descriptions as well would deserialize the
+    // index of every file in the unit and keep it in m_entriesByKey, which
+    // is a second copy of what the locator already holds -- kept until a
+    // batch forgets it, and a query is no batch.
+    if (wanted == Wanted::TheFilesOnly) {
+        QMutexLocker locker(&m_mutex);
+        ++m_closuresServed;
+        return read;
+    }
 
     // A reading is of a whole translation unit, so it says what each file
     // in it declares; the file read stands first.

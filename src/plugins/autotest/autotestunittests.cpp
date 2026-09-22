@@ -456,6 +456,14 @@ void QtTestParserTest::testMainsWrittenIn_data()
            "    QTEST_MAIN(C)\n"
         << QStringList{};
 
+    // The same, written on Windows: the line ends in a backslash, a carriage
+    // return and a newline, and walking back to the start of the directive
+    // has to step over the return to find the backslash.
+    QTest::newRow("a define continued over lines, with CRLF")
+        << "#define APP_TEST_MAIN(C) \\\r\n"
+           "    QTEST_MAIN(C)\r\n"
+        << QStringList{};
+
     // One class named twice is one test. Reading the text as written finds
     // both branches of an #ifdef, and calling that two tests takes the
     // checkbox off the real one and makes it unrunnable.

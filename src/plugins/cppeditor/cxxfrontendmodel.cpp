@@ -295,21 +295,6 @@ ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
     return prepared;
 }
 
-// Runs \a read on a thread with the stack the front end's own recursion was
-// written against.
-//
-// A reading has no say in which thread it is asked on -- AutoTest scans on
-// the global pool, the Class View parses on a plain QThread, the decl/def
-// link searches on a pool -- and all of those get the half a megabyte the
-// system hands a secondary thread, which is less than the front end's own
-// depth limits allow it to use. So a reading brings its own thread rather
-// than trusting the one it was called on.
-//
-// Against what it guards this costs nothing: a thread is made in
-// microseconds where reading a file and its headers is a third of a second.
-// The index does not come through here, its pool being sized already.
-//
-// See cxxFrontendReaderStackSize for what the budget is and why.
 // Runs \a read, declining rather than dying where the front end gives up.
 //
 // It throws on invariants of its own -- eighty-odd places call
@@ -330,6 +315,21 @@ void readDeclining(const std::function<void()> &read)
     }
 }
 
+// Runs \a read on a thread with the stack the front end's own recursion was
+// written against.
+//
+// A reading has no say in which thread it is asked on -- AutoTest scans on
+// the global pool, the Class View parses on a plain QThread, the decl/def
+// link searches on a pool -- and all of those get the half a megabyte the
+// system hands a secondary thread, which is less than the front end's own
+// depth limits allow it to use. So a reading brings its own thread rather
+// than trusting the one it was called on.
+//
+// Against what it guards this costs nothing: a thread is made in
+// microseconds where reading a file and its headers is a third of a second.
+// The index does not come through here, its pool being sized already.
+//
+// See cxxFrontendReaderStackSize for what the budget is and why.
 void readOnAReaderStack(const std::function<void()> &read)
 {
     // Whether the reading happened at all. A thread that cannot be started

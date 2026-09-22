@@ -505,10 +505,14 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // thousand files is still read once, and this is where what it
     // remembers of the files goes stale: anything written since the last
     // batch has to be seen afresh.
-    if (!m_cxxFrontendCache)
-        m_cxxFrontendCache.reset(new CxxFrontendIndexCache(inputs.predefinedMacros));
-    m_cxxFrontendCache->forgetContents();
-    CxxFrontendIndexCache * const cache = m_cxxFrontendCache.get();
+    CxxFrontendIndexCache *cache = nullptr;
+    {
+        QMutexLocker locker(&m_cxxFrontendCacheMutex);
+        if (!m_cxxFrontendCache)
+            m_cxxFrontendCache.reset(new CxxFrontendIndexCache(inputs.predefinedMacros));
+        cache = m_cxxFrontendCache.get();
+    }
+    cache->forgetContents();
 
     // Each file's project key worked out here, not on the pool: it is read
     // off the project's data, which belongs to this thread.
@@ -652,8 +656,10 @@ void CppLocatorData::readWhatWasNotCovered()
     // later batch reads a description from disk again, the thing being a
     // cache.
 #ifdef QTC_WITH_CXX_FRONTEND
-    if (nothingLeft && m_cxxFrontendCache)
-        m_cxxFrontendCache->forgetContents();
+    if (nothingLeft) {
+        if (CxxFrontendIndexCache * const cache = storeIfMade())
+            cache->forgetContents();
+    }
 #else
     Q_UNUSED(nothingLeft)
 #endif
@@ -683,29 +689,47 @@ int CppLocatorData::cxxFrontendFilesOutstanding() const
 int CppLocatorData::cxxFrontendCacheHits() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
-    return m_cxxFrontendCache ? m_cxxFrontendCache->hits() : 0;
+    CxxFrontendIndexCache * const store = storeIfMade();
+    return store ? store->hits() : 0;
 #else
     return 0;
+#endif
+}
+
+// The store, once something has made one. Held only for as long as it takes
+// to read the pointer: what it points at lives as long as this object does.
+CxxFrontendIndexCache *CppLocatorData::storeIfMade() const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    QMutexLocker locker(&m_cxxFrontendCacheMutex);
+    return m_cxxFrontendCache.get();
+#else
+    return nullptr;
 #endif
 }
 
 std::optional<FilePaths> CppLocatorData::storedIncludesFor(const FilePath &filePath) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
-    if (!m_cxxFrontendCache)
+    CxxFrontendIndexCache * const store = storeIfMade();
+    if (!store)
         return std::nullopt;
 
     // Under the key the index would read it with, so a reconfiguration that
     // changes where an include is looked for leaves the stored closure
     // behind rather than answering with it.
-    const std::optional<CxxFrontendIndexRead> stored
-        = m_cxxFrontendCache->take(filePath, cxxFrontendProjectKey(filePath));
+    //
+    // The files only: what a shard says each of them declares is the index
+    // over again, and deserializing it here would leave a second copy of the
+    // project's index behind for a question that wanted none of it.
+    const std::optional<QStringList> stored
+        = store->includedFilesOf(filePath, cxxFrontendProjectKey(filePath));
     if (!stored)
         return std::nullopt;
 
     FilePaths includes;
-    includes.reserve(stored->includedFiles.size());
-    for (const QString &included : stored->includedFiles)
+    includes.reserve(stored->size());
+    for (const QString &included : *stored)
         includes.append(FilePath::fromUserInput(included));
     return includes;
 #else
@@ -714,10 +738,21 @@ std::optional<FilePaths> CppLocatorData::storedIncludesFor(const FilePath &fileP
 #endif
 }
 
+int CppLocatorData::cxxFrontendClosuresServed() const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    CxxFrontendIndexCache * const store = storeIfMade();
+    return store ? store->closuresServed() : 0;
+#else
+    return 0;
+#endif
+}
+
 int CppLocatorData::cxxFrontendCacheMisses() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
-    return m_cxxFrontendCache ? m_cxxFrontendCache->misses() : 0;
+    CxxFrontendIndexCache * const store = storeIfMade();
+    return store ? store->misses() : 0;
 #else
     return 0;
 #endif

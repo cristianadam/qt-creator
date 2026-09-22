@@ -90,6 +90,10 @@ public:
     int cxxFrontendCacheHits() const;
     int cxxFrontendCacheMisses() const;
 
+    // How many include closures came out of the store rather than being read
+    // for. Counted apart from the two above, which are the index's own.
+    int cxxFrontendClosuresServed() const;
+
     // Every file the index's reading of \a filePath reached through its
     // includes, out of the store and without reading anything. Nothing where
     // the store has no reading of that file that still holds.
@@ -106,6 +110,12 @@ public:
     // has just been checked. A file being edited is not asked about here --
     // what is on disk is not what it says.
     std::optional<Utils::FilePaths> storedIncludesFor(const Utils::FilePath &filePath) const;
+
+private:
+    // The store, or nothing where none has been made yet.
+    Internal::CxxFrontendIndexCache *storeIfMade() const;
+
+public:
 
 public slots:
     // Called where the document was parsed, which is a worker thread: what a
@@ -243,6 +253,10 @@ private:
     // the deleter above is for.
     std::unique_ptr<Internal::CxxFrontendIndexCache, Internal::CxxFrontendIndexCacheDeleter>
         m_cxxFrontendCache;
+    // Guards the pointer above, not what it points at -- the store is safe to
+    // use from several threads, but it is made on the thread that owns the
+    // project's data while a query may be asking for it on a pool.
+    mutable QMutex m_cxxFrontendCacheMutex;
 };
 
 } // namespace CppEditor
