@@ -14,11 +14,10 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <coreplugin/progressmanager/taskprogress.h>
 
-#include <cplusplus/CppDocument.h>
-
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
+#include <cppeditor/cppprojectfile.h>
 
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/buildtargetinfo.h>
@@ -32,7 +31,6 @@
 
 #include <QLoggingCategory>
 #include <QMultiHash>
-#include <QStack>
 
 using namespace Core;
 using namespace QtTaskTree;
@@ -289,7 +287,8 @@ static void parseFileForTests(QPromise<TestParseResultPtr> &promise,
 // tests from any file of their translation unit
 // counterpart hop mirrors what CppModelManager::dependingInternalTargets() does,
 // so a test in a library the application target links against is kept
-static QSet<FilePath> filesOfApplicationTargets(Project *project, const CPlusPlus::Snapshot &snapshot)
+static QSet<FilePath> filesOfApplicationTargets(Project *project,
+                                                const CppEditor::CodeModelQueries &queries)
 {
     const BuildSystem *buildSystem = project->activeBuildSystem();
     if (!buildSystem)
@@ -303,20 +302,22 @@ static QSet<FilePath> filesOfApplicationTargets(Project *project, const CPlusPlu
     if (!info)
         return {};
     QSet<FilePath> result;
-    QStack<FilePath> pending;
+    FilePaths ownFiles;
     for (const CppEditor::ProjectPart::ConstPtr &part : info->projectParts()) {
         if (!buildKeys.contains(part->buildSystemTarget))
             continue;
         for (const CppEditor::ProjectFile &file : part->files) {
             if (Utils::insert(result, file.path))
-                pending.push(file.path);
+                ownFiles.append(file.path);
         }
     }
-    while (!pending.isEmpty()) {
-        for (const FilePath &file : CppEditor::includesOf(snapshot, pending.pop())) {
-            if (Utils::insert(result, file))
-                pending.push(file);
-        }
+    // Everything those files reach, asked of whichever front end has read
+    // them: the closure is transitive already, so a file of the closure is
+    // not asked about again. Walking it one direct include at a time needed
+    // a document of every header, which only the built-in pass produces.
+    for (const FilePath &file : std::as_const(ownFiles)) {
+        for (const FilePath &included : queries.includeClosureOf(file))
+            result.insert(included);
     }
     // the source belonging to a header of the closure is not part of it, but can hold the test the
     // header only declares - do not follow its includes, they lead away from the application target
@@ -404,9 +405,12 @@ void TestCodeParser::scanForTests(const QSet<FilePath> &filePaths,
     Project *project = ProjectManager::startupProject();
     if (!project)
         return;
-    const CPlusPlus::Snapshot cppSnapshot = CppEditor::CppModelManager::snapshot();
+    // One reading for every question this scan asks, as the parsers do with
+    // the file each of them processes.
+    const CppEditor::CodeModelQueries queries(CppEditor::CppModelManager::snapshot(),
+                                              CppEditor::CppModelManager::workingCopy());
     if (isFullParse) {
-        m_applicationTargetFiles = filesOfApplicationTargets(project, cppSnapshot);
+        m_applicationTargetFiles = filesOfApplicationTargets(project, queries);
         const QSet<FilePath> &targetFiles = m_applicationTargetFiles;
         if (targetFiles.isEmpty()) {
             files = Utils::toSet(project->files(Project::SourceFiles));
@@ -514,16 +518,19 @@ void TestCodeParser::scanForTests(const QSet<FilePath> &filePaths,
         for (const QString &ext : parser->supportedExtensions())
             extensions.insert(ext);
     }
-    // We are only interested in files that have been either parsed by the c++ parser,
-    // or have an extension that one of the parsers is specifically interested in.
+    // We are only interested in files a front end reads as C++, or which have
+    // an extension that one of the parsers is specifically interested in.
+    // Whether the built-in code model had a document for the file used to
+    // stand for the first of those, and says nothing where the cxx front end
+    // is the code model: its index produces no documents.
     const QSet<FilePath> filteredFiles
-        = Utils::filtered(files, [&extensions, &cppSnapshot](const FilePath &fn) {
+        = Utils::filtered(files, [&extensions](const FilePath &fn) {
               const bool isSupportedExtension = Utils::anyOf(extensions, [&fn](const QString &ext) {
                   return fn.suffix() == ext;
               });
               if (isSupportedExtension)
                   return true;
-              return cppSnapshot.contains(fn);
+              return CppEditor::ProjectFile::isCppFile(fn);
           });
     m_withTaskProgress = isFullParse || filteredFiles.size() > 20;
 

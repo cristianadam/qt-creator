@@ -36,29 +36,12 @@ TestTreeItem *QtTestParseResult::createTestTreeItem() const
     return item;
 }
 
-static bool includesQtTest(const CPlusPlus::Document::Ptr &doc,
-                           const CPlusPlus::Snapshot &snapshot,
-                           const CppEditor::CodeModelQueries &queries)
+static bool includesQtTest(const FilePath &filePath, const CppEditor::CodeModelQueries &queries)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtTest.framework/Headers", "QtTest"}) : QStringList({"QtTest"});
 
-    const QList<CPlusPlus::Document::Include> includes = doc->resolvedIncludes();
-
-    for (const CPlusPlus::Document::Include &inc : includes) {
-        // TODO this short cut works only for #include <QtTest>
-        // bad, as there could be much more different approaches
-        if (inc.unresolvedFileName() == QString("QtTest")) {
-            for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(QString("%1/QtTest").arg(prefix)))
-                    return true;
-            }
-        }
-    }
-
-    // Asked only where what the file writes itself did not say so: off the
-    // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(filePath)) {
         for (const QString &prefix : expectedHeaderPrefixes) {
         if (include.pathView().endsWith(QString("%1/qtest.h").arg(prefix)))
             return true;
@@ -66,8 +49,8 @@ static bool includesQtTest(const CPlusPlus::Document::Ptr &doc,
     }
 
     for (const QString &prefix : expectedHeaderPrefixes) {
-        if (CppParser::precompiledHeaderContains(snapshot,
-                                                 doc->filePath(),
+        if (CppParser::precompiledHeaderContains(queries,
+                                                 filePath,
                                                  QString("%1/qtest.h").arg(prefix))) {
             return true;
         }
@@ -209,9 +192,6 @@ TestCases mainsWrittenIn(const QString &text)
 TestCases QtTestParser::testCases(const CppEditor::CodeModelQueries &queries,
                                   const FilePath &filePath) const
 {
-    if (CppEditor::CppModelManager::document(filePath).isNull())
-        return {};
-
     // A QTEST_MAIN-family macro says which class the test runs, and what it
     // says is the text it was handed: the macro's own definition is Qt's,
     // and expanding it says nothing about the class.
@@ -434,8 +414,7 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     if (!m_prefilteredFiles.contains(fileName))
         return false;
 
-    CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull())
+    if (!selectedForBuilding(fileName))
         return false;
 
     // One reading for everything asked about this file, the files its test
@@ -445,7 +424,7 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
 
     const TestCases &oldTestCases = m_testCases.value(fileName);
-    if ((!includesQtTest(doc, m_cppSnapshot, queries) || !qtTestLibDefined(fileName))
+    if ((!includesQtTest(fileName, queries) || !qtTestLibDefined(fileName))
         && oldTestCases.isEmpty()) {
         return false;
     }
@@ -459,7 +438,7 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
         if (!testCase.name.isEmpty()) {
             TestCaseData data;
             std::optional<bool> earlyReturn = fillTestCaseData(queries, testCase.name,
-                                                               doc, data);
+                                                               fileName, data);
             if (earlyReturn.has_value() || !data.valid)
                 continue;
 
@@ -480,16 +459,16 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
 
 std::optional<bool> QtTestParser::fillTestCaseData(
         const CppEditor::CodeModelQueries &queries, const QString &testCaseName,
-        const CPlusPlus::Document::Ptr &doc, TestCaseData &data) const
+        const FilePath &filePath, TestCaseData &data) const
 {
     // The file that names the class, or one of the files it was found named
     // in before -- a test class is declared in a header and named from a
     // source file, and either may be the one being parsed.
-    FilePath namedIn = doc->filePath();
+    FilePath namedIn = filePath;
     CppEditor::CodeModelQueries::ClassWithPrivateSlots found
             = queries.classWithPrivateSlots(namedIn, testCaseName);
     if (!found.klass.isValid()) {
-        const FilePaths &alternativeFiles = m_alternativeFiles.values(doc->filePath());
+        const FilePaths &alternativeFiles = m_alternativeFiles.values(filePath);
         for (const FilePath &alternativeFile : alternativeFiles) {
             found = queries.classWithPrivateSlots(alternativeFile, testCaseName);
             if (found.klass.isValid()) {

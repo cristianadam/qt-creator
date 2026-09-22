@@ -16,6 +16,8 @@ class QPromise;
 class QRegularExpression;
 QT_END_NAMESPACE
 
+namespace CppEditor { class CodeModelQueries; }
+
 namespace Autotest {
 
 class ITestFramework;
@@ -69,15 +71,13 @@ public:
 
     CPlusPlus::Document::Ptr document(const Utils::FilePath &fileName);
 
-    // Every file \a filePath reaches through its includes, off whichever
-    // front end has read it: what says whether a file reaches a framework's
-    // header at all, however deep the include that brings it in.
-    Utils::FilePaths includeClosureOf(const Utils::FilePath &filePath) const;
-
-    static bool precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
+    // Whether one of \a filePath's precompiled headers reaches the header
+    // asked about. The closure comes from \a queries, so it is answered by
+    // whichever front end has read the precompiled header.
+    static bool precompiledHeaderContains(const CppEditor::CodeModelQueries &queries,
                                           const Utils::FilePath &filePath,
                                           const QString &headerFilePath);
-    static bool precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
+    static bool precompiledHeaderContains(const CppEditor::CodeModelQueries &queries,
                                           const Utils::FilePath &filePath,
                                           const QRegularExpression &headerFileRegex);
     // returns all files of the startup project whose ProjectPart has the given \a macroName

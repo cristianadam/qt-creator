@@ -84,26 +84,8 @@ static QSet<FilePath> filesToRead(const FilePaths &filesInProject)
     QSet<FilePath> files;
     files.reserve(filesInProject.size());
     for (const FilePath &filePath : filesInProject) {
-        switch (CppEditor::ProjectFile::classify(filePath)) {
-        case CppEditor::ProjectFile::CHeader:
-        case CppEditor::ProjectFile::CSource:
-        case CppEditor::ProjectFile::CXXHeader:
-        case CppEditor::ProjectFile::CXXSource:
-        case CppEditor::ProjectFile::ObjCHeader:
-        case CppEditor::ProjectFile::ObjCSource:
-        case CppEditor::ProjectFile::ObjCXXHeader:
-        case CppEditor::ProjectFile::ObjCXXSource:
-        case CppEditor::ProjectFile::CudaSource:
-        case CppEditor::ProjectFile::OpenCLSource:
-        case CppEditor::ProjectFile::AmbiguousHeader:
+        if (CppEditor::ProjectFile::isCppFile(filePath))
             files.insert(filePath);
-            break;
-        case CppEditor::ProjectFile::Unclassified:
-        case CppEditor::ProjectFile::Unsupported:
-            // An extension nothing recognized as C++, which is what a form or
-            // a QML file is here.
-            break;
-        }
     }
     return files;
 }

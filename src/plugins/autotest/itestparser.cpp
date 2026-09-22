@@ -58,7 +58,7 @@ QByteArray CppParser::getFileContent(const FilePath &filePath) const
 }
 
 static bool precompiledHeaderContains(
-    const CPlusPlus::Snapshot &snapshot,
+    const CppEditor::CodeModelQueries &queries,
     const FilePath &filePath,
     const QString &cacheString,
     const std::function<bool(const FilePath &)> &checker)
@@ -73,7 +73,7 @@ static bool precompiledHeaderContains(
         auto it = s_pchLookupCache.find(info);
         if (it == s_pchLookupCache.end()) {
             it = s_pchLookupCache.insert(info,
-                         Utils::anyOf(snapshot.allIncludesForDocument(header), checker));
+                         Utils::anyOf(queries.includeClosureOf(header), checker));
         }
         return it.value();
     };
@@ -81,11 +81,11 @@ static bool precompiledHeaderContains(
     return Utils::anyOf(precompiledHeaders, headerContains);
 }
 
-bool CppParser::precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
+bool CppParser::precompiledHeaderContains(const CppEditor::CodeModelQueries &queries,
                                           const FilePath &filePath,
                                           const QString &headerFilePath)
 {
-    return Autotest::precompiledHeaderContains(snapshot,
+    return Autotest::precompiledHeaderContains(queries,
                                                filePath,
                                                headerFilePath,
                                                [&](const FilePath &include) {
@@ -93,11 +93,11 @@ bool CppParser::precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
                                                });
 }
 
-bool CppParser::precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
+bool CppParser::precompiledHeaderContains(const CppEditor::CodeModelQueries &queries,
                                           const FilePath &filePath,
                                           const QRegularExpression &headerFileRegex)
 {
-    return Autotest::precompiledHeaderContains(snapshot,
+    return Autotest::precompiledHeaderContains(queries,
                                                filePath,
                                                headerFileRegex.pattern(),
                                                [&](const FilePath &include) {
@@ -137,14 +137,13 @@ void CppParser::release()
     s_pchLookupCache.clear();
 }
 
+// The file as the built-in front end parsed it, which only a question that
+// cannot be answered any other way should ask for: the cxx front end's index
+// produces no such document, so a parser gated on one finds nothing at all
+// where the built-in pass has not run.
 CPlusPlus::Document::Ptr CppParser::document(const FilePath &fileName)
 {
     return selectedForBuilding(fileName) ? m_cppSnapshot.document(fileName) : nullptr;
-}
-
-FilePaths CppParser::includeClosureOf(const FilePath &filePath) const
-{
-    return CppEditor::CodeModelQueries(m_cppSnapshot, m_workingCopy).includeClosureOf(filePath);
 }
 
 } // namespace Autotest

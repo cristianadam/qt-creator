@@ -67,7 +67,7 @@ private:
 
     std::optional<bool> fillTestCaseData(const CppEditor::CodeModelQueries &queries,
                                          const QString &testCaseName,
-                                         const CPlusPlus::Document::Ptr &doc,
+                                         const Utils::FilePath &filePath,
                                          TestCaseData &data) const;
     QtTestParseResult *createParseResult(
         const QString &testCaseName,

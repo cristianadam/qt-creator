@@ -39,6 +39,14 @@ public:
     static Kind sourceForHeaderKind(Kind kind);
     static Kind sourceKind(Kind kind);
 
+    // Whether a front end reads this file as C++ at all -- which is what a
+    // consumer that used to ask whether the built-in code model had a
+    // document for it wants to know, the cxx front end's index producing no
+    // such document. Everything the code model handles counts: C,
+    // Objective-C(++), CUDA and OpenCL as much as C++.
+    static bool isCppFile(Kind kind);
+    static bool isCppFile(const Utils::FilePath &filePath);
+
     static bool isSource(Kind kind);
     static bool isHeader(Kind kind);
     static bool isHeader(const Utils::FilePath &fp);

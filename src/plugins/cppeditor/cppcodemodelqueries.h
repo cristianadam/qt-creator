@@ -173,12 +173,6 @@ CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, 
 // built-in reading made rather than making its own. So this is the model
 // manager's own bookkeeping, offered here so that a plugin wanting nothing
 // more than the include closure need not know a front end at all.
-//
-// The overload taking a reading is for walking a closure -- following the
-// includes of the includes -- where every step has to be about the same
-// reading, and it is the one to use off the GUI thread.
-CPPEDITOR_EXPORT Utils::FilePaths includesOf(const CPlusPlus::Snapshot &snapshot,
-                                             const Utils::FilePath &filePath);
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
 // The files \a snapshot has read that include a header called \a fileName,

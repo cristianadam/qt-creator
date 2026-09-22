@@ -119,6 +119,37 @@ ProjectFile::Kind ProjectFile::sourceKind(Kind kind)
     return sourceKind;
 }
 
+bool ProjectFile::isCppFile(ProjectFile::Kind kind)
+{
+    switch (kind) {
+    case ProjectFile::CHeader:
+    case ProjectFile::CSource:
+    case ProjectFile::CXXHeader:
+    case ProjectFile::CXXSource:
+    case ProjectFile::ObjCHeader:
+    case ProjectFile::ObjCSource:
+    case ProjectFile::ObjCXXHeader:
+    case ProjectFile::ObjCXXSource:
+    case ProjectFile::CudaSource:
+    case ProjectFile::OpenCLSource:
+    case ProjectFile::AmbiguousHeader:
+        return true;
+    case ProjectFile::Unclassified:
+    case ProjectFile::Unsupported:
+        // An extension nothing recognized as C++, which is what a form or a
+        // QML file is here. Note that isHeader() calls Unsupported a header,
+        // for the extension-less headers of the standard library, which a
+        // project does not list among its files.
+        return false;
+    }
+    return false;
+}
+
+bool ProjectFile::isCppFile(const Utils::FilePath &filePath)
+{
+    return isCppFile(classify(filePath));
+}
+
 bool ProjectFile::isHeader(ProjectFile::Kind kind)
 {
     switch (kind) {

@@ -63,30 +63,14 @@ static FilePaths activeBuildDirectories()
     return builddirs;
 }
 
-static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
-                                const CPlusPlus::Snapshot &snapshot,
+static bool includesQtQuickTest(const FilePath &filePath,
                                 const CppEditor::CodeModelQueries &queries)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtQuickTest.framework/Headers", "QtQuickTest"})
             : QStringList({"QtQuickTest"});
 
-    const QList<CPlusPlus::Document::Include> includes = doc->resolvedIncludes();
-
-    for (const CPlusPlus::Document::Include &inc : includes) {
-        if (inc.unresolvedFileName() == "QtQuickTest/quicktest.h") {
-            for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(
-                            QString("%1/quicktest.h").arg(prefix))) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    // Asked only where what the file writes itself did not say so: off the
-    // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(filePath)) {
         for (const QString &prefix : expectedHeaderPrefixes) {
             if (include.pathView().endsWith(QString("%1/quicktest.h").arg(prefix)))
                 return true;
@@ -94,8 +78,8 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
     }
 
     for (const QString &prefix : expectedHeaderPrefixes) {
-        if (CppParser::precompiledHeaderContains(snapshot,
-                                                 doc->filePath(),
+        if (CppParser::precompiledHeaderContains(queries,
+                                                 filePath,
                                                  QString("%1/quicktest.h").arg(prefix))) {
             return true;
         }
@@ -126,10 +110,8 @@ static QString quickTestSrcDir(const FilePath &fileName)
 }
 
 QString QuickTestParser::quickTestName(const CppEditor::CodeModelQueries &queries,
-                                       const CPlusPlus::Document::Ptr &doc) const
+                                       const FilePath &filePath) const
 {
-    const FilePath filePath = doc->filePath();
-
     // A QUICK_TEST_MAIN-family macro says what the tests are named, and
     // what it says is the text it was handed.
     for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
@@ -153,7 +135,7 @@ QString QuickTestParser::quickTestName(const CppEditor::CodeModelQueries &querie
             : QStringList({"QtQuickTest"});
     bool pchIncludes = false;
     for (const QString &prefix : expectedHeaderPrefixes) {
-        if (CppParser::precompiledHeaderContains(m_cppSnapshot, filePath,
+        if (CppParser::precompiledHeaderContains(queries, filePath,
                                                  QString("%1/quicktest.h").arg(prefix))) {
             pchIncludes = true;
             break;
@@ -265,17 +247,16 @@ static bool checkQmlDocumentForQuickTestCode(QPromise<TestParseResultPtr> &promi
 
 bool QuickTestParser::handleQtQuickTest(QPromise<TestParseResultPtr> &promise,
                                         const CppEditor::CodeModelQueries &queries,
-                                        CPlusPlus::Document::Ptr document,
+                                        const FilePath &cppFileName,
                                         ITestFramework *framework)
 {
-    if (quickTestName(queries, document).isEmpty())
+    if (quickTestName(queries, cppFileName).isEmpty())
         return false;
 
     QList<CppEditor::ProjectPart::ConstPtr> ppList =
-        CppEditor::CppModelManager::projectPart(document->filePath());
+        CppEditor::CppModelManager::projectPart(cppFileName);
     if (ppList.isEmpty()) // happens if shutting down while parsing
         return false;
-    const FilePath cppFileName = document->filePath();
     const FilePath proFile = ppList.at(0)->projectFile;
     {
         QWriteLocker lock(&m_parseLock);
@@ -413,17 +394,16 @@ bool QuickTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     if (!m_prefilteredFiles.contains(fileName))
         return false;
 
-   CPlusPlus::Document::Ptr cppdoc = document(fileName);
-   if (cppdoc.isNull())
+   if (!selectedForBuilding(fileName))
        return false;
 
    // One reading for every question asked about this file; off the cxx front
    // end an object of its own would parse the file and its headers again.
    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
-   if (!includesQtQuickTest(cppdoc, m_cppSnapshot, queries))
+   if (!includesQtQuickTest(fileName, queries))
        return false;
 
-   return handleQtQuickTest(promise, queries, cppdoc, framework());
+   return handleQtQuickTest(promise, queries, fileName, framework());
 }
 
 FilePath QuickTestParser::projectFileForMainCppFile(const FilePath &fileName)

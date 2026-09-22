@@ -51,24 +51,16 @@ TestTreeItem *BoostTestParseResult::createTestTreeItem() const
 }
 
 
-static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
-                              const CPlusPlus::Snapshot &snapshot,
+static bool includesBoostTest(const FilePath &filePath,
                               const CppEditor::CodeModelQueries &queries)
 {
     static const QRegularExpression boostTestHpp("^.*/boost/test/.*\\.hpp$");
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        if (boostTestHpp.match(inc.resolvedFileName().path()).hasMatch())
-            return true;
-    }
-
-    // Asked only where what the file writes itself did not say so: off the
-    // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(filePath)) {
         if (boostTestHpp.match(include.path()).hasMatch())
             return true;
     }
 
-    return CppParser::precompiledHeaderContains(snapshot, doc->filePath(), boostTestHpp);
+    return CppParser::precompiledHeaderContains(queries, filePath, boostTestHpp);
 }
 
 // Whether the file writes one of Boost's test macros. Read off the file's
@@ -100,16 +92,22 @@ static BoostTestParseResult *createParseResult(const QString &name, const FilePa
 bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
-    CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull())
+    if (!selectedForBuilding(fileName))
         return false;
 
     // One reading for every question asked about this file.
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
-    if (!includesBoostTest(doc, m_cppSnapshot, queries)
+    if (!includesBoostTest(fileName, queries)
         || !hasBoostTestMacros(queries, fileName)) {
         return false;
     }
+
+    // What a suite is called is read off what the file's macros resolve to,
+    // which is the one question here that still wants a translation unit.
+    // Asked last, so a file that names no Boost test at all costs nothing.
+    const CPlusPlus::Document::Ptr doc = document(fileName);
+    if (doc.isNull())
+        return false;
 
     const QList<CppEditor::ProjectPart::ConstPtr> projectParts
             = CppEditor::CppModelManager::projectPart(fileName);

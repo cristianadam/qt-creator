@@ -49,8 +49,7 @@ static QStringList catchMacroNames()
     return names;
 }
 
-static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
-                                const CPlusPlus::Snapshot &snapshot,
+static bool includesCatchHeader(const FilePath &filePath,
                                 const CppEditor::CodeModelQueries &queries)
 {
     static const QStringList catchHeaders{"catch.hpp", // v2
@@ -59,16 +58,7 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
                                           "catch_test_macros.hpp",
                                           "catch_template_test_macros.hpp"
                                          };
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        for (const QString &catchHeader : catchHeaders) {
-            if (inc.resolvedFileName().endsWith(catchHeader))
-                return true;
-        }
-    }
-
-    // Asked only where what the file writes itself did not say so: off the
-    // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(filePath)) {
         for (const QString &catchHeader : catchHeaders) {
             if (include.endsWith(catchHeader))
                 return true;
@@ -76,7 +66,7 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
     }
 
     for (const QString &catchHeader : catchHeaders) {
-        if (CppParser::precompiledHeaderContains(snapshot, doc->filePath(), catchHeader))
+        if (CppParser::precompiledHeaderContains(queries, filePath, catchHeader))
             return true;
     }
     return false;
@@ -93,16 +83,15 @@ static bool hasCatchNames(const CppEditor::CodeModelQueries &queries, const File
 bool CatchTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
-    CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull())
+    if (!selectedForBuilding(fileName))
         return false;
 
     // One reading for every question asked about this file.
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
-    if (!includesCatchHeader(doc, m_cppSnapshot, queries))
+    if (!includesCatchHeader(fileName, queries))
         return false;
 
-    const QString &filePath = doc->filePath().toUserOutput();
+    const QString &filePath = fileName.toUserOutput();
     const QByteArray &fileContent = getFileContent(fileName);
 
     if (!hasCatchNames(queries, fileName)) {

@@ -40,12 +40,12 @@ private:
     // would read the file again.
     bool handleQtQuickTest(QPromise<TestParseResultPtr> &promise,
                            const CppEditor::CodeModelQueries &queries,
-                           CPlusPlus::Document::Ptr document,
+                           const Utils::FilePath &cppFileName,
                            ITestFramework *framework);
     void handleDirectoryChanged(const Utils::FilePath &directory);
     void doUpdateWatchPaths(const Utils::FilePaths &directories);
     QString quickTestName(const CppEditor::CodeModelQueries &queries,
-                          const CPlusPlus::Document::Ptr &doc) const;
+                          const Utils::FilePath &filePath) const;
     QList<QmlJS::Document::Ptr> scanDirectoryForQuickTestQmlFiles(const Utils::FilePath &srcDir);
 
     QmlJS::Snapshot m_qmlSnapshot;

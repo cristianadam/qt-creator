@@ -39,24 +39,15 @@ TestTreeItem *GTestParseResult::createTestTreeItem() const
     return item;
 }
 
-static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
-                          const CPlusPlus::Snapshot &snapshot,
-                          const CppEditor::CodeModelQueries &queries)
+static bool includesGTest(const FilePath &filePath, const CppEditor::CodeModelQueries &queries)
 {
     static const QString gtestH("gtest/gtest.h");
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        if (inc.resolvedFileName().endsWith(gtestH))
-            return true;
-    }
-
-    // Asked only where what the file writes itself did not say so: off the
-    // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(filePath)) {
         if (include.path().endsWith(gtestH))
             return true;
     }
 
-    return CppParser::precompiledHeaderContains(snapshot, doc->filePath(), gtestH);
+    return CppParser::precompiledHeaderContains(queries, filePath, gtestH);
 }
 
 // Whether the file writes one of GTest's macros with the two arguments a
@@ -75,13 +66,12 @@ static bool hasGTestNames(const CppEditor::CodeModelQueries &queries, const File
 bool GTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                   const FilePath &fileName)
 {
-    CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull())
+    if (!selectedForBuilding(fileName))
         return false;
 
     // One reading for every question asked about this file.
     const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
-    if (!includesGTest(doc, m_cppSnapshot, queries))
+    if (!includesGTest(fileName, queries))
         return false;
 
     const QByteArray &fileContent = getFileContent(fileName);
@@ -91,7 +81,10 @@ bool GTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
             return false;
     }
 
-    const FilePath filePath = doc->filePath();
+    // GTest's own visitors want a translation unit: what a TEST_F() names is
+    // read off the call the macro expands to, so this one question still
+    // parses. The file is preprocessed here rather than taken from the
+    // snapshot, so it needs no built-in reading of its own.
     CPlusPlus::Document::Ptr document = m_cppSnapshot.preprocessedDocument(fileContent, fileName, false);
     document->check();
     CPlusPlus::AST *ast = document->translationUnit()->ast();
@@ -101,7 +94,7 @@ bool GTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     const QMap<GTestCaseSpec, GTestCodeLocationList> result = visitor.gtestFunctions();
     FilePath proFile;
     const QList<CppEditor::ProjectPart::ConstPtr> &ppList =
-        CppEditor::CppModelManager::projectPart(filePath);
+        CppEditor::CppModelManager::projectPart(fileName);
     if (!ppList.isEmpty())
         proFile = ppList.first()->projectFile;
     else
