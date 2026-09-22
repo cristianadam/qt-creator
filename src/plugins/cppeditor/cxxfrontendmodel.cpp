@@ -253,24 +253,16 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
 // each, so a few megabytes for a project the size of this one.
 ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
 {
-    // The same three places the editor's own parser looks, in the same order
-    // (ProjectPartChooser): the parts that build the file, then the parts
-    // that reach it through an include, then the fallback part a session
-    // without a project still has. Asking only the first left a file no
-    // project lists -- one opened on its own, a header no part names, the
-    // stragglers at the end of an indexing pass -- resolving no <...>
-    // include whatever, where the built-in model had answered for all of
-    // them through that same fallback.
-    QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
-    if (parts.isEmpty())
-        parts = CppModelManager::projectPartFromDependencies(filePath);
-    if (parts.isEmpty()) {
-        if (const ProjectPart::ConstPtr fallback = CppModelManager::fallbackProjectPart())
-            parts.append(fallback);
-    }
-    if (parts.isEmpty())
+    // Through the three places the editor's own parser looks, in the same
+    // order (ProjectPartChooser). Asking only the parts that build the file
+    // left a file no project lists -- one opened on its own, a header no
+    // part names, the stragglers at the end of an indexing pass --
+    // resolving no <...> include whatever, where the built-in model had
+    // answered for all of them through that same fallback.
+    const ProjectPart::ConstPtr part = CppModelManager::partReading(filePath);
+    if (!part)
         return {};
-    const ProjectExplorer::HeaderPaths &raw = parts.first()->headerPaths;
+    const ProjectExplorer::HeaderPaths &raw = part->headerPaths;
 
     QCryptographicHash hash(QCryptographicHash::Sha1);
     for (const ProjectExplorer::HeaderPath &path : raw) {

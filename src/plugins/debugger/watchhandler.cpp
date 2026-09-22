@@ -27,7 +27,6 @@
 #include <coreplugin/session.h>
 
 #include <cplusplus/ExpressionUnderCursor.h>
-#include <cplusplus/CppDocument.h>
 
 #include <texteditor/syntaxhighlighter.h>
 #include <texteditor/textdocument.h>
@@ -35,6 +34,7 @@
 
 #include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
+#include <cppeditor/cppprojectfile.h>
 #include <utils/basetreeview.h>
 #include <utils/checkablemessagebox.h>
 #include <utils/fancylineedit.h>
@@ -311,9 +311,7 @@ public:
 static int firstRelevantLine(const FilePath &filePath, int line, int column)
 {
     QTC_ASSERT(line > 0 && column > 0, return 0);
-    return CppEditor::functionAround(CppEditor::CppModelManager::snapshot(), filePath, line,
-                                     column)
-        .fromLine;
+    return CppEditor::functionAround(filePath, line, column).fromLine;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -531,16 +529,17 @@ public:
         TextEditorWidget *widget = textEditor->editorWidget();
         TextDocument *textDocument = widget->textDocument();
         const FilePath filePath = loc.fileName();
-        const Snapshot snapshot = CppEditor::CppModelManager::snapshot();
-        const Document::Ptr cppDocument = snapshot.document(filePath);
-        if (!cppDocument) // For non-C++ documents.
+        if (!CppEditor::ProjectFile::isCppFile(filePath)) // For non-C++ documents.
             return;
 
         const int firstLine = firstRelevantLine(filePath, loc.textPosition().line, 1);
         if (firstLine < 1)
             return;
 
-        CPlusPlus::ExpressionUnderCursor expressionUnderCursor(cppDocument->languageFeatures());
+        // How the file is to be lexed is what its project part says, which is
+        // so whether or not anything has parsed it.
+        CPlusPlus::ExpressionUnderCursor expressionUnderCursor(
+            CppEditor::CppModelManager::languageFeatures(filePath));
         QTextCursor tc = widget->textCursor();
         for (int lineNumber = loc.textPosition().line; lineNumber >= firstLine; --lineNumber) {
             const QTextBlock block = textDocument->document()->findBlockByNumber(lineNumber - 1);

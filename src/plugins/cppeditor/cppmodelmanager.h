@@ -132,6 +132,19 @@ public:
     /// \return A synthetic \c ProjectPart which consists of all defines/includes/frameworks from
     ///         all loaded projects.
     static ProjectPart::ConstPtr fallbackProjectPart();
+    /// \return The part to read \a filePath with: the parts that build it, else the parts that
+    ///         reach it through an include, else the fallback part -- the same three places in
+    ///         the same order as \c ProjectPartChooser, which is what the editor's own parser
+    ///         asks. Null only where no project is loaded at all.
+    static ProjectPart::ConstPtr partReading(const Utils::FilePath &filePath);
+
+    /// \return How \a filePath is to be read -- which standard, whether Qt's keywords and
+    ///         Objective-C are in force -- which is what its project part says, and what a
+    ///         lexer over its text needs. The defaults where no part has it.
+    ///
+    /// This is project data rather than anything a front end settled, so it is answered
+    /// whether or not the file has been parsed.
+    static CPlusPlus::LanguageFeatures languageFeatures(const Utils::FilePath &filePath);
 
     static CPlusPlus::Snapshot snapshot();
     static Document::Ptr document(const Utils::FilePath &filePath);

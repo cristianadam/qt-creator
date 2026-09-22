@@ -1723,6 +1723,32 @@ ProjectPart::ConstPtr CppModelManager::fallbackProjectPart()
     return d->m_fallbackProjectPart;
 }
 
+ProjectPart::ConstPtr CppModelManager::partReading(const FilePath &filePath)
+{
+    // The three places the editor's own parser looks, in the same order
+    // (ProjectPartChooser): the parts that build the file, then the parts
+    // that reach it through an include, then the fallback part a session
+    // without a project still has.
+    QList<ProjectPart::ConstPtr> parts = projectPart(filePath);
+    if (parts.isEmpty())
+        parts = projectPartFromDependencies(filePath);
+    if (!parts.isEmpty())
+        return parts.first();
+    return fallbackProjectPart();
+}
+
+LanguageFeatures CppModelManager::languageFeatures(const FilePath &filePath)
+{
+    // As BuiltinEditorDocumentParser does it: the fallback part is made of
+    // every loaded project's flags at once and says nothing about how this
+    // file is built, so its features are not to be preferred over the
+    // defaults.
+    const ProjectPart::ConstPtr part = partReading(filePath);
+    if (part && part->hasProject())
+        return part->languageFeatures;
+    return LanguageFeatures::defaultFeatures();
+}
+
 bool CppModelManager::isCppEditor(IEditor *editor)
 {
     return editor->context().contains(ProjectExplorer::Constants::CXX_LANGUAGE_ID);

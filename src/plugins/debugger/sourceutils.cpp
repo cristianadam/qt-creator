@@ -216,8 +216,7 @@ QStringList getUninitializedVariables(const Snapshot &snapshot,
 
 QString cppFunctionAt(const FilePath &filePath, int line, int column)
 {
-    return CppEditor::functionAround(CppModelManager::snapshot(), filePath, line, column)
-        .qualifiedName;
+    return CppEditor::functionAround(filePath, line, column).qualifiedName;
 }
 
 
@@ -230,8 +229,6 @@ QString cppExpressionAt(TextEditorWidget *editorWidget, int pos,
         function->clear();
 
     const FilePath filePath = editorWidget->textDocument()->filePath();
-    const Snapshot snapshot = CppModelManager::snapshot();
-    const Document::Ptr document = snapshot.document(filePath);
     QTextCursor tc = editorWidget->textCursor();
     QString expr;
     if (tc.hasSelection() && pos >= tc.selectionStart() && pos <= tc.selectionEnd()) {
@@ -242,9 +239,10 @@ QString cppExpressionAt(TextEditorWidget *editorWidget, int pos,
         if (ch.isLetterOrNumber() || ch == '_')
             tc.movePosition(QTextCursor::EndOfWord);
 
-        // Fetch the expression's code.
-        ExpressionUnderCursor expressionUnderCursor(document ? document->languageFeatures()
-                                                             : LanguageFeatures::defaultFeatures());
+        // Fetch the expression's code. How the file is to be lexed is what
+        // its project part says, which is so whether or not anything has
+        // parsed it.
+        ExpressionUnderCursor expressionUnderCursor(CppModelManager::languageFeatures(filePath));
         expr = expressionUnderCursor(tc);
     }
 
@@ -253,7 +251,7 @@ QString cppExpressionAt(TextEditorWidget *editorWidget, int pos,
 
     if (!expr.isEmpty()) {
         const CppEditor::EnclosingFunction enclosing
-            = CppEditor::functionAround(snapshot, filePath, *line, *column);
+            = CppEditor::functionAround(filePath, *line, *column);
         if (function)
             *function = enclosing.qualifiedName;
         if (scopeFromLine)

@@ -190,6 +190,41 @@ void ModelManagerTest::testPathsAreClean()
     QVERIFY(headerPaths.contains(HeaderPath::makeFramework(dataDir / "frameworks")));
 }
 
+/// Check: How a file is to be read is what its project part says, and it is
+/// said whether or not anything has parsed the file. A consumer outside this
+/// plugin -- the debugger, lexing an expression off the line it has stopped
+/// on -- used to take this off the document an indexing pass had left behind.
+void ModelManagerTest::testLanguageFeaturesWithoutAParse()
+{
+    ModelManagerTestHelper helper;
+
+    const FilePath source = testDataDir("testdata") / "sources/test_modelmanager_refresh.cpp";
+    const auto project = helper.createProject(_("test_modelmanager_language_features"),
+                                              Utils::FilePath::fromString("blubb.pro"));
+    RawProjectPart rpp;
+    rpp.setQtVersion(Utils::QtMajorVersion::Qt5);
+    // Which is what tells the part's answer from the all-features default.
+    rpp.setMacros({ProjectExplorer::Macro("QT_NO_KEYWORDS", "1")});
+    const auto part = ProjectPart::create(project->projectFilePath(), rpp, {},
+                                          {ProjectFile(source, ProjectFile::CXXSource)});
+    CppModelManager::updateProjectInfo(
+        ProjectInfo::create(ProjectUpdateInfo(project, KitInfo(nullptr), {}, {}), {part}));
+
+    // Nothing has parsed it: updateProjectInfo() alone starts no indexing
+    // pass, which is the whole point of the question.
+    QVERIFY(!CppModelManager::snapshot().document(source));
+
+    const CPlusPlus::LanguageFeatures features = CppModelManager::languageFeatures(source);
+    QVERIFY(!features.qtKeywordsEnabled);
+    QVERIFY(features.qtEnabled);
+
+    // And the defaults where no project part reaches the file at all, since
+    // a lexer has to be given something.
+    const FilePath stranger = testDataDir("testdata") / "sources/nothing_lists_this.cpp";
+    QCOMPARE(CppModelManager::languageFeatures(stranger),
+             CPlusPlus::LanguageFeatures::defaultFeatures());
+}
+
 /// Check: Frameworks headers are resolved.
 void ModelManagerTest::testFrameworkHeaders()
 {
