@@ -3,6 +3,7 @@
 
 #include "cppcodemodelqueries.h"
 
+#include "cpplocatordata.h"
 #include "cppmodelmanager.h"
 #include "symbolfinder.h"
 
@@ -880,6 +881,23 @@ FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
     if (d->snapshot.contains(filePath))
         return Utils::toList(d->snapshot.allIncludesForDocument(filePath));
 
+    // Then the index's store, which kept this beside the entries because a
+    // stored reading has to be checked against every file that went into it.
+    // It is clangd's IncludeGraph, and answering out of it is what clangd
+    // does with every cross-file question: one parse per translation unit
+    // ever, and queries served from what that parse was distilled into.
+    //
+    // Not for a file being edited, whose text is not what was indexed. The
+    // same order clangd merges in: what is open wins over what is stored.
+    if (!d->workingCopy.get(filePath)) {
+        if (CppLocatorData * const index = CppModelManager::locatorData()) {
+            if (const std::optional<FilePaths> stored = index->storedIncludesFor(filePath))
+                return *stored;
+        }
+    }
+
+    // And only then the file itself, which is a parse of it and every header
+    // it reaches -- seconds, where the two above are a lookup.
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<FilePaths> reached = d->model->allIncludesFor(filePath))
         return *reached;

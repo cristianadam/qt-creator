@@ -19,6 +19,7 @@
 #include <QThreadPool>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace CppEditor {
@@ -88,6 +89,23 @@ public:
     // the first.
     int cxxFrontendCacheHits() const;
     int cxxFrontendCacheMisses() const;
+
+    // Every file the index's reading of \a filePath reached through its
+    // includes, out of the store and without reading anything. Nothing where
+    // the store has no reading of that file that still holds.
+    //
+    // The store keeps this beside the entries because a reading has to be
+    // checked against every file that went into it; it is the same list
+    // clangd keeps as its IncludeGraph, and for the same reason. Offered
+    // here because a question about what a file includes can then be
+    // answered for a file nobody has open and no pass has parsed, which is
+    // otherwise a parse of it and every header it reaches.
+    //
+    // As stale as the store is, which is to say: it names what the file
+    // included when it was last indexed, and the digest of every one of them
+    // has just been checked. A file being edited is not asked about here --
+    // what is on disk is not what it says.
+    std::optional<Utils::FilePaths> storedIncludesFor(const Utils::FilePath &filePath) const;
 
 public slots:
     // Called where the document was parsed, which is a worker thread: what a

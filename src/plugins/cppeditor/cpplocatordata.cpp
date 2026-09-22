@@ -689,6 +689,31 @@ int CppLocatorData::cxxFrontendCacheHits() const
 #endif
 }
 
+std::optional<FilePaths> CppLocatorData::storedIncludesFor(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (!m_cxxFrontendCache)
+        return std::nullopt;
+
+    // Under the key the index would read it with, so a reconfiguration that
+    // changes where an include is looked for leaves the stored closure
+    // behind rather than answering with it.
+    const std::optional<CxxFrontendIndexRead> stored
+        = m_cxxFrontendCache->take(filePath, cxxFrontendProjectKey(filePath));
+    if (!stored)
+        return std::nullopt;
+
+    FilePaths includes;
+    includes.reserve(stored->includedFiles.size());
+    for (const QString &included : stored->includedFiles)
+        includes.append(FilePath::fromUserInput(included));
+    return includes;
+#else
+    Q_UNUSED(filePath)
+    return std::nullopt;
+#endif
+}
+
 int CppLocatorData::cxxFrontendCacheMisses() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND

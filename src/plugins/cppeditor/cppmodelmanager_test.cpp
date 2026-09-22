@@ -5,6 +5,7 @@
 
 #include "baseeditordocumentprocessor.h"
 #include "builtineditordocumentparser.h"
+#include "cppcodemodelqueries.h"
 #include "cpplocatordata.h"
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendindexcache.h"
@@ -1770,6 +1771,60 @@ void ModelManagerTest::testTheIndexFollowsAChangedFile()
     QVERIFY2(indexHolds("writtenAfter"), "the index did not follow the file");
     QVERIFY2(!indexHolds("DeclaredBefore"), "the index kept what the file no longer says");
     QVERIFY2(!indexHolds("writtenBefore"), "the index kept what the file no longer says");
+}
+
+// What a file includes, answered out of the index's store: no pass has read
+// it here and no reading is made, and the answer is still right.
+//
+// This is what clangd does with every cross-file question -- one parse per
+// translation unit ever, and queries served from what that parse was
+// distilled into. The store keeps the closure beside the entries because a
+// stored reading has to be checked against every file that went into it, so
+// it is already there; what this pins is that the question is answered from
+// it rather than by reading the file, which for a file that includes a Qt
+// module is seconds.
+static bool theIndexHasAStore()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    return cxxFrontendModelRequested();
+#else
+    // The store is the cxx front end's, and it is not built here.
+    return false;
+#endif
+}
+
+void ModelManagerTest::testTheStoredIncludeClosure()
+{
+    if (!theIndexHasAStore())
+        QSKIP("Only this model's index has a store to answer from");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("reached.h", "class Reached {};\n");
+    const FilePath source = dir.createFile("unit.cpp", "#include \"reached.h\"\n"
+                                                       "class Unit {};\n");
+    QVERIFY(!header.isEmpty() && !source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+
+    // Indexed, which is what puts a reading of it in the store.
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked with no reading of its own to fall back on: an empty snapshot,
+    // so the built-in answer cannot be the one that comes back, and an empty
+    // working copy, so the file counts as one nobody is editing.
+    const int servedBefore = locatorData->cxxFrontendCacheHits();
+    const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+    QCOMPARE(read.includeClosureOf(source), FilePaths({header}));
+
+    // And out of the store rather than by reading the file, which is the
+    // whole point and the one thing the answer alone does not say.
+    QVERIFY2(locatorData->cxxFrontendCacheHits() > servedBefore,
+             "the closure was read rather than taken from the store");
 }
 
 // What indexing a real project costs, which is the only apples-to-apples way
