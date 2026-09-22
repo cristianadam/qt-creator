@@ -82,6 +82,7 @@ class LineStarts
 {
 public:
     explicit LineStarts(const QString &text)
+        : m_length(int(text.size()))
     {
         m_starts.append(0);
         for (int at = text.indexOf(u'\n'); at >= 0; at = text.indexOf(u'\n', at + 1))
@@ -93,7 +94,14 @@ public:
     {
         if (line < 1 || line > m_starts.size() || column < 1)
             return -1;
-        return m_starts.at(line - 1) + column - 1;
+        const int offset = m_starts.at(line - 1) + column - 1;
+
+        // Not past the end of that line. A column is counted here in the
+        // units a token's offset is in, and one counted in any other -- bytes
+        // where a character takes two of them -- must land on nothing rather
+        // than reach into the line below.
+        const int end = line < m_starts.size() ? m_starts.at(line) : m_length;
+        return offset < end ? offset : -1;
     }
 
     void placeOf(int offset, int *line, int *column) const
@@ -105,6 +113,7 @@ public:
 
 private:
     QList<int> m_starts;
+    int m_length = 0;
 };
 
 // A file as the questions answered off its own tokens want it: its text, its
@@ -134,17 +143,14 @@ public:
     QString spelled(int at) const { return spelling(text, tokens.at(at)); }
 
     // The name written at \a at, with whatever stands in front of it:
-    // "NS::Thing" where that is how it reads, and the first token it is made
-    // of in \a from.
-    QString qualifiedNameAt(int at, int *from = nullptr) const
+    // "NS::Thing" where that is how it reads.
+    QString qualifiedNameAt(int at) const
     {
         int begin = at;
         while (begin >= 2 && tokens.at(begin - 1).kind() == T_COLON_COLON
                && tokens.at(begin - 2).kind() == T_IDENTIFIER) {
             begin -= 2;
         }
-        if (from)
-            *from = begin;
         QStringList parts;
         for (int i = begin; i <= at; i += 2)
             parts << spelled(i);
@@ -185,13 +191,36 @@ bool marksSignals(const QString &text, const Token &token)
 // and what it derives from.
 struct WrittenClassShape
 {
+    // Where the class's own name stands in its own body, which is not always
+    // the place it was looked for at: a class declared before it is written
+    // is recorded at the declaration.
+    int line = 0; // counted from one, the column too
+    int column = 0;
+
     QList<WrittenFunction> privateSlots;
     QStringList baseClasses;
 };
 
+// Whether a class is what the name at \a at is the name of, and the word that
+// says so -- "class" or "struct", which is also what the members written
+// before any access label have for access. An export macro may stand between
+// the word and the name; a class a macro's body wrote has neither.
+//
+// -1 where the name is nobody's class.
+int classKeywordBefore(const Lexed &lexed, int at)
+{
+    int keyword = at - 1;
+    while (keyword >= 0 && lexed.tokens.at(keyword).kind() == T_IDENTIFIER)
+        --keyword;
+    if (keyword < 0 || (lexed.tokens.at(keyword).kind() != T_CLASS
+                        && lexed.tokens.at(keyword).kind() != T_STRUCT)) {
+        return -1;
+    }
+    return keyword;
+}
+
 // That shape, read off the tokens of the file that writes the class, whose
-// own name stands at \a line and \a column of \a text -- both counted from
-// one.
+// own name stands at \a at.
 //
 // A lexer's job, and moc's precedent: an access section, the word that marks
 // one as Qt's and a base clause are all there in the text, and none of them
@@ -199,9 +228,9 @@ struct WrittenClassShape
 // question for whoever has read the project -- the index answers it -- and
 // this is what the class says there.
 //
-// Nothing where the tokens write no class of that name at that place, which
-// is what says the place is out of date or that a macro's body wrote the
-// class: then the caller reads the file after all.
+// Nothing where no class with a body is written at that place, which is what
+// says the name is a declaration's rather than the class's own, that the
+// place is out of date, or that a macro's body wrote the class.
 //
 // As the text has it, which differs from a reading of the translation unit in
 // the ways a reader asking what a file says can live with. A slot declared in
@@ -211,35 +240,18 @@ struct WrittenClassShape
 // anyway. And the signature carries the parameter list as written, names and
 // all, where a reading writes the types alone -- a test function takes none,
 // and nothing asks this of a private slot.
-std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath &filePath,
-                                              const QString &ownName, int line, int column)
+std::optional<WrittenClassShape> shapeOfTheClassAt(const Lexed &lexed, const FilePath &filePath,
+                                                   int at)
 {
     const QString &text = lexed.text;
     const Tokens &tokens = lexed.tokens;
 
-    const int offset = lexed.lines.offsetOf(line, column);
-    if (offset < 0)
+    const int keyword = classKeywordBefore(lexed, at);
+    if (keyword < 0)
         return std::nullopt;
-
-    int at = -1;
-    for (int i = 0; i < tokens.size() && tokens.at(i).utf16charsBegin() <= offset; ++i) {
-        if (tokens.at(i).utf16charsBegin() == offset)
-            at = i;
-    }
-    if (at < 0 || tokens.at(at).kind() != T_IDENTIFIER || spelling(text, tokens.at(at)) != ownName)
-        return std::nullopt;
-
-    // And that the name is a class's. An export macro may stand between the
-    // word and the name; a class a macro's body wrote has neither.
-    int keyword = at - 1;
-    while (keyword >= 0 && tokens.at(keyword).kind() == T_IDENTIFIER)
-        --keyword;
-    if (keyword < 0 || (tokens.at(keyword).kind() != T_CLASS
-                        && tokens.at(keyword).kind() != T_STRUCT)) {
-        return std::nullopt;
-    }
 
     WrittenClassShape shape;
+    lexed.lines.placeOf(tokens.at(at).utf16charsBegin(), &shape.line, &shape.column);
     int i = at + 1;
 
     // "final" stands between the name and what follows it, and is written as
@@ -272,11 +284,14 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
             case T_LESS: case T_LPAREN: case T_LBRACKET:
                 ++nesting;
                 break;
+            // Never below nothing: a base clause may write a ">" that closes
+            // no bracket -- "Base<(N > 1 ? X : Y)>" -- and a count gone
+            // negative would never see the body begin.
             case T_GREATER: case T_RPAREN: case T_RBRACKET:
-                --nesting;
+                nesting = std::max(0, nesting - 1);
                 break;
             case T_GREATER_GREATER: // two template arguments closing at once
-                nesting -= 2;
+                nesting = std::max(0, nesting - 2);
                 break;
             case T_COMMA:
                 if (nesting == 0) {
@@ -301,9 +316,34 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
     if (i >= tokens.size() || tokens.at(i).kind() != T_LBRACE)
         return std::nullopt;
 
-    // A class starts in no slot section whatever it is written as: a section
-    // is one only where the word that marks it stands.
-    bool inPrivateSlots = false;
+    // What a member written here has for access, and whether the section it
+    // stands in is one of Qt's slot sections. A class starts in no such
+    // section whatever it is written as -- a section is one only where the
+    // word that marks it stands -- and what is written before any label at
+    // all is private in a class and public in a struct.
+    bool isPrivate = tokens.at(keyword).kind() == T_CLASS;
+    bool inSlotsSection = false;
+
+    // Qt's other spelling: a member marked a slot one at a time rather than a
+    // section of them. The mark stands in front of the declaration, so what
+    // ended the one before it says how far back to look.
+    const auto markedASlot = [&](int name) {
+        for (int back = name - 1; back >= 0; --back) {
+            const Token &before = tokens.at(back);
+            if (before.kind() == T_Q_SLOT
+                || (before.kind() == T_IDENTIFIER && spelling(text, before) == "Q_SLOT")) {
+                return true;
+            }
+            switch (before.kind()) {
+            case T_SEMICOLON: case T_LBRACE: case T_RBRACE: case T_COLON:
+                return false;
+            default:
+                break;
+            }
+        }
+        return false;
+    };
+
     int depth = 1;
     for (++i; i < tokens.size() && depth > 0; ++i) {
         const Token &token = tokens.at(i);
@@ -329,7 +369,8 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
             if (marked || (after < tokens.size() && marksSignals(text, tokens.at(after))))
                 ++after;
             if (after < tokens.size() && tokens.at(after).kind() == T_COLON) {
-                inPrivateSlots = marked && kind == T_PRIVATE;
+                isPrivate = kind == T_PRIVATE;
+                inSlotsSection = marked;
                 i = after;
             }
             continue;
@@ -339,15 +380,21 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
         // signals are: whatever section stood before it has ended.
         if ((marksSlots(text, token) || marksSignals(text, token)) && i + 1 < tokens.size()
             && tokens.at(i + 1).kind() == T_COLON) {
-            inPrivateSlots = false;
+            isPrivate = false;
+            inSlotsSection = false;
             ++i;
             continue;
         }
 
-        if (!inPrivateSlots || kind != T_IDENTIFIER || i + 1 >= tokens.size()
+        if (kind != T_IDENTIFIER || i + 1 >= tokens.size()
             || tokens.at(i + 1).kind() != T_LPAREN) {
             continue;
         }
+
+        // A private slot, written either way: in a section of them, or marked
+        // on its own in a private section.
+        if (!isPrivate || !(inSlotsSection || markedASlot(i)))
+            continue;
 
         // A name inside a preprocessor directive declares nothing: what
         // stands in "#if defined(SOMETHING)" is a condition and what stands
@@ -415,6 +462,46 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
     }
 
     return shape;
+}
+
+// The same, off the place a reader of the project recorded the class at: \a
+// line and \a column, both counted from one, of the file \a lexed holds.
+//
+// Every place the name stands as a class's is tried, that one first. A class
+// declared before it is written -- "class tst_Foo;" above, which is how a
+// header keeps its includes down -- is *one* symbol to the front end that
+// recorded the place, and the place is the declaration, where nothing is
+// declared to read. The definition is further down the same file as a rule,
+// and where it is in another the caller reads after all.
+std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath &filePath,
+                                              const QString &ownName, int line, int column)
+{
+    const int offset = lexed.lines.offsetOf(line, column);
+    if (offset < 0)
+        return std::nullopt;
+
+    int at = -1;
+    for (int i = 0; i < lexed.tokens.size(); ++i) {
+        const int begins = lexed.tokens.at(i).utf16charsBegin();
+        if (begins > offset)
+            break;
+        if (begins == offset)
+            at = i;
+    }
+    if (at < 0 || lexed.tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != ownName)
+        return std::nullopt;
+
+    for (; at < lexed.tokens.size(); ++at) {
+        if (lexed.tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != ownName
+            || classKeywordBefore(lexed, at) < 0) {
+            continue;
+        }
+        if (const std::optional<WrittenClassShape> shape
+            = shapeOfTheClassAt(lexed, filePath, at)) {
+            return shape;
+        }
+    }
+    return std::nullopt;
 }
 
 // Whether a type is what \a token starts.
@@ -521,16 +608,20 @@ std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int befo
 // a pointer to it: "QTest::qExec(&test, argc, argv)" with "tst_Simple test;"
 // above, or a class made right there. Both are in the text.
 //
-// A call whose first argument is neither -- something this returns, a cast, a
-// member of something else -- is one only a reading settles, and then nothing
-// comes back here and the caller reads the file. An empty list is an answer:
-// most files that include QtTest call no runner at all, which is the case
-// this exists for.
+// A call whose first argument is neither -- what some function hands back, a
+// cast, a member of something else, or a name this file does not declare --
+// is one only a reading settles, and then nothing comes back here at all: a
+// list with that call left out of it would be read as an answer, and a
+// missing class is a test nobody can run.
+//
+// An empty list, on the other hand, is an answer: most files that include
+// QtTest call no runner at all, which is the case this exists for.
 //
 // As the text has it. A call reachable through a using directive is among
 // them, being written with as much in front of it as the name asked for ends
 // in; a class is named as the declaration names it rather than written out in
-// full, which is what a reader looking it up in turn asks with anyway.
+// full, which is what a reader looking it up in turn asks with anyway. A
+// class handed over twice comes back twice, since the caller dedupes.
 std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &functionName)
 {
     const Tokens &tokens = lexed.tokens;
@@ -579,7 +670,14 @@ std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &
 
         const bool addressOf = tokens.at(first).kind() == T_AMPER;
         const int named = addressOf ? first + 1 : first;
-        if (named >= tokens.size() || tokens.at(named).kind() != T_IDENTIFIER)
+        if (named + 1 >= tokens.size() || tokens.at(named).kind() != T_IDENTIFIER)
+            return std::nullopt;
+
+        // And that the name is the whole of the argument. Something that
+        // merely begins with one -- "test.get()", "d->tc" -- hands over what
+        // the rest of it says, which is a reading's question: reading the
+        // name's own declaration would answer about the wrong thing.
+        if (tokens.at(named + 1).kind() != T_COMMA && tokens.at(named + 1).kind() != T_RPAREN)
             return std::nullopt;
 
         // Otherwise what the name holds, as the declaration above it writes
@@ -1340,9 +1438,9 @@ public:
     // difference between a scan that finishes and one that does not.
     //
     // \a reachable is what \a filePath includes: a class of that name written
-    // in a file this one never reads is a different class. Two of the
-    // reachable files writing one is a question only a reading settles, and
-    // is declined here.
+    // in a file this one never reads is a different class. Where two of the
+    // reachable files write one, or one of them writes two under different
+    // scopes, only a reading settles which is meant and this declines.
     std::optional<ClassWithPrivateSlots> classShapeFromTheIndex(
         const QString &className, const FilePath &filePath, const FilePaths &reachable) const
     {
@@ -1350,54 +1448,70 @@ public:
         if (!index)
             return std::nullopt;
 
+        // The file asked about before the files it reads: where it writes a
+        // class of that name itself, that is the one it means.
         const QSet<FilePath> among(reachable.cbegin(), reachable.cend());
-        IndexItem::Ptr found;
-        bool inTwoFiles = false;
+        QList<IndexItem::Ptr> candidates;
         for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Class, className)) {
-            if (candidate->filePath() != filePath && !among.contains(candidate->filePath()))
-                continue;
-            if (!found) {
-                found = candidate;
-                continue;
-            }
-            if (found->filePath() == candidate->filePath())
-                continue; // one file writing it twice, in two branches of an #if
-            if (candidate->filePath() == filePath) {
-                // The file asked about writes it itself, which settles it:
-                // that is the class it means by the name.
-                found = candidate;
-                inTwoFiles = false;
-            } else if (found->filePath() != filePath) {
-                inTwoFiles = true;
-            }
+            if (candidate->filePath() == filePath)
+                candidates.prepend(candidate);
+            else if (among.contains(candidate->filePath()))
+                candidates.append(candidate);
         }
-        if (!found || inTwoFiles)
-            return std::nullopt;
 
-        // Not for a file being edited: what the index has of it is a reading
-        // of what was on disk, and the text somebody is typing is not that.
-        // The order clangd merges its two indexes in -- what is open wins
-        // over what was stored.
-        if (workingCopy.get(found->filePath()))
-            return std::nullopt;
+        std::optional<ClassWithPrivateSlots> answer;
+        for (const IndexItem::Ptr &candidate : std::as_const(candidates)) {
+            // Not for a file being edited: what the index has of it is a
+            // reading of what was on disk, and the text somebody is typing is
+            // not that. The order clangd merges its two indexes in -- what is
+            // open wins over what was stored.
+            if (workingCopy.get(candidate->filePath()))
+                return std::nullopt;
 
-        const std::shared_ptr<const Lexed> tokens = lexed(found->filePath());
-        if (!tokens)
-            return std::nullopt;
+            const std::shared_ptr<const Lexed> tokens = lexed(candidate->filePath());
+            if (!tokens)
+                return std::nullopt;
 
-        // An entry counts columns from zero, where a place counts them from
-        // one.
-        const std::optional<WrittenClassShape> shape
-            = classShapeIn(*tokens, found->filePath(), found->symbolName(), found->line(),
-                           found->column() + 1);
-        if (!shape)
-            return std::nullopt;
+            // An entry counts columns from zero, where a place counts them
+            // from one.
+            const std::optional<WrittenClassShape> shape
+                = classShapeIn(*tokens, candidate->filePath(), candidate->symbolName(),
+                               candidate->line(), candidate->column() + 1);
 
-        ClassWithPrivateSlots answer;
-        answer.klass = {found->symbolName(), found->scopedSymbolName(), found->filePath(),
-                        found->line(), found->column() + 1};
-        answer.privateSlots = shape->privateSlots;
-        answer.baseClasses = shape->baseClasses;
+            // Nothing written there. Which is what the index says of a
+            // forward declaration as much as of a class -- "class tst_Foo;"
+            // is an entry of its own -- so the next candidate is tried
+            // rather than the whole question given up on.
+            if (!shape)
+                continue;
+
+            if (answer) {
+                // A second class really written under that name. Two files
+                // writing one, or two scopes of one file: the index is asked
+                // with a name as the code writes it, which for a base class
+                // is as little as the class deriving from it bothered with,
+                // so both happen. Only a reading knows which is in scope.
+                if (answer->klass.filePath != candidate->filePath()
+                    || answer->klass.qualifiedName != candidate->scopedSymbolName()) {
+                    return std::nullopt;
+                }
+                continue; // one file writing it twice, in two branches of an #if
+            }
+
+            // Where the tokens write it rather than where the index
+            // recorded it: those differ for a class declared before it is
+            // written, and it is the body a reader is sent to.
+            answer.emplace();
+            answer->klass = {candidate->symbolName(), candidate->scopedSymbolName(),
+                             candidate->filePath(), shape->line, shape->column};
+            answer->privateSlots = shape->privateSlots;
+            answer->baseClasses = shape->baseClasses;
+
+            // Where the file asked about writes it, nothing else can be
+            // meant and the rest are not looked at.
+            if (candidate->filePath() == filePath)
+                return answer;
+        }
         return answer;
     }
 #endif
@@ -1691,6 +1805,16 @@ QList<CodeModelQueries::WrittenCall> CodeModelQueries::callsTo(
 QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,
                                               const QString &functionName) const
 {
+    // Once each, whichever front end answers and however many times a class
+    // is handed over: a caller that finds several classes takes the file for
+    // one that runs several tests, which takes the checkbox off every one of
+    // them. The tokens below hold both branches of an #ifdef where a build
+    // takes one, so that is where a repeat comes from -- and it is the same
+    // reason the text-based reading of a main() in QtTestParser dedupes.
+    const auto onceEach = [](const QStringList &classes) {
+        return Utils::filteredUnique(classes);
+    };
+
 #ifdef QTC_WITH_CXX_FRONTEND
     // The file's own tokens first, which cost no parse at all. Which class a
     // test runs is what its main() says in so many words, and most of the
@@ -1703,21 +1827,21 @@ QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,
         if (const std::shared_ptr<const Lexed> tokens = d->lexed(filePath)) {
             if (const std::optional<QStringList> classes
                 = classesPassedToIn(*tokens, functionName)) {
-                return *classes;
+                return onceEach(*classes);
             }
         }
     }
 
     if (const std::optional<QStringList> classes
         = d->model->classesPassedToIn(filePath, functionName)) {
-        return *classes;
+        return onceEach(*classes);
     }
 #endif
 
     const Document::Ptr doc = d->reparse(filePath);
     if (!doc || !doc->translationUnit() || !doc->translationUnit()->ast())
         return {};
-    return ClassesPassedTo(doc, d->snapshot, functionName).classes();
+    return onceEach(ClassesPassedTo(doc, d->snapshot, functionName).classes());
 }
 
 CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(

@@ -1857,40 +1857,52 @@ void ModelManagerTest::testTheIndexedClassShape()
         "#pragma once\n"                                        // 1
         "#define Q_OBJECT\n"                                    // 2
         "#define Q_CLASSINFO(name, value)\n"                     // 3
-        "#define TESTED_EXPORT\n"                                // 4
-        "class QObject {};\n"                                    // 5
-        "class tst_Base : public QObject\n"                      // 6
-        "{\n"                                                    // 7
-        "private slots:\n"                                        // 8
-        "    void inherited();\n"                                // 9
-        "};\n"                                                   // 10
-        "namespace NS {\n"                                       // 11
-        "class TESTED_EXPORT tst_Shape : public tst_Base\n"      // 12
-        "{\n"                                                    // 13
-        "    Q_OBJECT\n"                                         // 14
-        "    Q_CLASSINFO(\"a\", \"b\")\n"                        // 15
-        "public:\n"                                              // 16
-        "    tst_Shape();\n"                                     // 17
-        "    ~tst_Shape();\n"                                    // 18
-        "    void notASlot();\n"                                 // 19
-        "public slots:\n"                                        // 20
-        "    void notPrivate();\n"                               // 21
-        "private slots:\n"                                       // 22
-        "    void testOne();\n"                                  // 23
-        "    void testTwo_data();\n"                             // 24
-        "    void testTwo();\n"                                  // 25
-        "    void withArguments(int one, int two);\n"            // 26
-        "    void writtenHere() { notASlot(); }\n"               // 27
-        "    Q_CLASSINFO(\"c\", \"d\")\n"                        // 28
-        "private:\n"                                             // 29
-        "    void notASlotEither();\n"                           // 30
-        "    class Nested\n"                                     // 31
-        "    {\n"                                                // 32
-        "    private slots:\n"                                    // 33
-        "        void notOurs();\n"                              // 34
-        "    };\n"                                               // 35
-        "};\n"                                                   // 36
-        "} // namespace NS\n");                                  // 37
+        "#define Q_SLOT\n"                                       // 4
+        "#define TESTED_EXPORT\n"                                // 5
+        "class QObject {};\n"                                    // 6
+        "class tst_Base : public QObject\n"                      // 7
+        "{\n"                                                    // 8
+        "private slots:\n"                                        // 9
+        "    void inherited();\n"                                // 10
+        "};\n"                                                   // 11
+        "namespace NS {\n"                                       // 12
+        "class tst_Shape;\n"                                     // 13, declared first
+        "class TESTED_EXPORT tst_Shape : public tst_Base\n"      // 14
+        "{\n"                                                    // 15
+        "    Q_OBJECT\n"                                         // 16
+        "    Q_CLASSINFO(\"a\", \"b\")\n"                        // 17
+        "public:\n"                                              // 18
+        "    tst_Shape();\n"                                     // 19
+        "    ~tst_Shape();\n"                                    // 20
+        "    void notASlot();\n"                                 // 21
+        "public slots:\n"                                        // 22
+        "    void notPrivate();\n"                               // 23
+        "private slots:\n"                                       // 24
+        "    void testOne();\n"                                  // 25
+        "    void testTwo_data();\n"                             // 26
+        "    void testTwo();\n"                                  // 27
+        "    void withArguments(int one, int two);\n"            // 28
+        "    void writtenHere() { notASlot(); }\n"               // 29
+        "    Q_CLASSINFO(\"c\", \"d\")\n"                        // 30
+        "private:\n"                                             // 31
+        "    Q_SLOT void markedOnItsOwn();\n"                    // 32
+        "    void notASlotEither();\n"                           // 33
+        "    class Nested\n"                                     // 34
+        "    {\n"                                                // 35
+        "    private slots:\n"                                    // 36
+        "        void notOurs();\n"                              // 37
+        "    };\n"                                               // 38
+        "};\n"                                                   // 39
+        "} // namespace NS\n"                                    // 40
+        "template<int V> class Valued {};\n"                     // 41
+        "constexpr int Bound = 2;\n"                             // 42
+        "class tst_Deep : public Valued<(Bound > 1 ? 2 : 3)>\n"  // 43
+        "{\n"                                                    // 44
+        "private slots:\n"                                        // 45
+        "    void deep();\n"                                     // 46
+        "};\n"                                                   // 47
+        "class Twin {};\n"                                       // 48
+        "namespace NS { class Twin {}; }\n");                    // 49
     const FilePath source = dir.createFile("tst_shape.cpp",
                                            "#include \"tst_shape.h\"\n"
                                            "int main() { NS::tst_Shape shape; }\n");
@@ -1929,16 +1941,29 @@ void ModelManagerTest::testTheIndexedClassShape()
     // The private slots in the order they are declared and nothing else, the
     // class found through the header the source file includes, and the base
     // as the class names it.
+    //
+    // The class is declared before it is written, and the index keeps an
+    // entry for that declaration as much as for the class: it declares
+    // nothing, so the entry that does is the one answered from.
+    //
+    // Qt's other spelling for a slot is among them: a member marked one on
+    // its own in a private section rather than a section of them.
     QCOMPARE(said("NS::tst_Shape"),
-             QString("NS::tst_Shape at tst_shape.h:12 | testOne() at 23, "
-                     "testTwo_data() at 24, testTwo() at 25, "
-                     "withArguments(int one, int two) at 26, writtenHere() at 27 "
-                     "| bases: tst_Base"));
+             QString("NS::tst_Shape at tst_shape.h:14 | testOne() at 25, "
+                     "testTwo_data() at 26, testTwo() at 27, "
+                     "withArguments(int one, int two) at 28, writtenHere() at 29, "
+                     "markedOnItsOwn() at 32 | bases: tst_Base"));
 
     // And the base, asked for by the name the class above named it with --
     // which is how a runner walks a hierarchy.
     QCOMPARE(said("tst_Base"),
-             QString("tst_Base at tst_shape.h:6 | inherited() at 9 | bases: QObject"));
+             QString("tst_Base at tst_shape.h:7 | inherited() at 10 | bases: QObject"));
+
+    // A base clause may write a ">" that closes no bracket, and what nests
+    // has to survive it: a scan that loses count never sees the body begin.
+    QCOMPARE(said("tst_Deep"),
+             QString("tst_Deep at tst_shape.h:43 | deep() at 46 "
+                     "| bases: Valued<(Bound > 1 ? 2 : 3)>"));
 
     // And both without reading a translation unit, which is the whole point
     // and the one thing the answers alone do not say: a reading of the source
@@ -1954,8 +1979,19 @@ void ModelManagerTest::testTheIndexedClassShape()
     // on, and reading is what it costs.
     QCOMPARE(said("NS::tst_Missing"), QString("nothing"));
 #ifdef QTC_WITH_CXX_FRONTEND
-    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+    const int afterTheMissingOne = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheMissingOne > readBefore,
              "a class the index does not have was answered for without reading");
+#endif
+
+    // And neither is a name two classes are really written under. The index
+    // is asked with a name as the code writes it, which for a base class is
+    // as little as whoever derives from it bothered with, so one file
+    // declaring both Twin and NS::Twin is a question only a reading settles.
+    read.classWithPrivateSlots(source, "Twin");
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > afterTheMissingOne,
+             "a name two classes are written under was answered for without reading");
 #endif
 }
 
@@ -1981,6 +2017,7 @@ void ModelManagerTest::testTheClassesHandedToARunner()
         "class tst_Two {};\n"
         "class tst_Three {};\n"
         "class tst_Four {};\n"
+        "class tst_Five {};\n"
         "int byValue(int);\n"
         "using namespace QTest;\n"
         "int main(int argc, char **argv)\n"
@@ -1988,11 +2025,17 @@ void ModelManagerTest::testTheClassesHandedToARunner()
         "    NS::tst_One one;\n"
         "    tst_Two *two = new tst_Two;\n"
         "    tst_Four four;\n"
+        "    tst_Five five;\n"
         "    QTest::qExec(&one, argc, argv);\n"   // the address of an object
         "    QTest::qExec(two, argc, argv);\n"    // a pointer that holds one
         "    QTest::qExec(new tst_Three, argc, argv);\n" // one made right there
-        "    qExec(&one, argc, argv);\n"          // as a using directive leaves it
-        "    Other::qExec(&four, argc, argv);\n"  // somebody else's function
+        "    qExec(&four, argc, argv);\n"         // as a using directive leaves it
+        "    Other::qExec(&five, argc, argv);\n"  // somebody else's function
+        "#ifdef SOMETHING_UNSET\n"                // the same class in both
+        "    QTest::qExec(&one, argc, argv);\n"   // branches of an #ifdef, which
+        "#else\n"                                 // is one class and not two
+        "    QTest::qExec(&one, argc, argv);\n"
+        "#endif\n"
         "    byValue(argc);\n"
         "    return 0;\n"
         "}\n");
@@ -2002,8 +2045,13 @@ void ModelManagerTest::testTheClassesHandedToARunner()
     const int readBefore = cxxFrontendReadingsMade();
 #endif
     const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+
+    // Each of the four ways one is handed over, once each and in the order
+    // they are written. A class handed over in both branches of an #ifdef is
+    // one class: a caller that finds several takes the file for one that runs
+    // several tests, and takes the checkbox off all of them.
     QCOMPARE(read.classesPassedTo(source, "QTest::qExec").join(", "),
-             QString("NS::tst_One, tst_Two, tst_Three, NS::tst_One"));
+             QString("NS::tst_One, tst_Two, tst_Three, tst_Four"));
     QCOMPARE(read.classesPassedTo(source, "byValue"), QStringList());
     QCOMPARE(read.classesPassedTo(source, "QTest::qExecNot"), QStringList());
 
@@ -2025,8 +2073,30 @@ void ModelManagerTest::testTheClassesHandedToARunner()
     const CodeModelQueries readAgain{CPlusPlus::Snapshot(), WorkingCopy()};
     readAgain.classesPassedTo(unsettled, "QTest::qExec");
 #ifdef QTC_WITH_CXX_FRONTEND
-    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+    const int afterTheFirst = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheFirst > readBefore,
              "a runner handed what the text does not settle was answered for without reading");
+#endif
+
+    // Including an argument that only *begins* with a name: reading that
+    // name's own declaration would answer about the wrong thing, and an
+    // answer with the call left out of it reads as a file that runs no test
+    // at all.
+    const FilePath throughAMember = dir.createFile(
+        "through_a_member.cpp",
+        "class tst_Held {};\n"
+        "struct Wrapper { tst_Held *held; };\n"
+        "int main(int argc, char **argv)\n"
+        "{\n"
+        "    Wrapper wrapper;\n"
+        "    return QTest::qExec(wrapper.held, argc, argv);\n"
+        "}\n");
+    QVERIFY(!throughAMember.isEmpty());
+    const CodeModelQueries readOnce{CPlusPlus::Snapshot(), WorkingCopy()};
+    readOnce.classesPassedTo(throughAMember, "QTest::qExec");
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > afterTheFirst,
+             "a runner handed a member of something was answered for without reading");
 #endif
 }
 

@@ -343,11 +343,23 @@ public:
 
     // The classes \a filePath hands to calls of the function called
     // \a functionName -- written out in full -- each by the name of what the
-    // call's first argument points at, in the order the calls are written.
+    // call's first argument points at, once each and in the order the calls
+    // are written.
     //
     // What a Qt test's main() says by calling QTest::qExec(&tst_Simple): the
     // class to run. An argument that is not a pointer is none of them, a
     // runner being handed an object rather than a value.
+    //
+    // Answered off the file's own tokens where it can be: which class is
+    // handed over is what the text says -- "tst_Simple test;" above the call,
+    // a class made right there, or a pointer that already holds one -- and
+    // most of the files this is asked about hand over nothing at all, calling
+    // no runner. Only where the text does not settle what the first argument
+    // is does a front end read the file.
+    //
+    // As the text has it, then, and on purpose a superset: a call written
+    // with as much in front of it as \a functionName ends in is one of them,
+    // so a runner reached through a using directive counts.
     QStringList classesPassedTo(const Utils::FilePath &filePath,
                                 const QString &functionName) const;
 
