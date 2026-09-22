@@ -1995,6 +1995,97 @@ void ModelManagerTest::testTheIndexedClassShape()
 #endif
 }
 
+// The tags a data function writes, read off the file's own tokens: which
+// function a call stands in is which braces it is written between, and the
+// tag is the literal it is handed.
+//
+// Nothing is indexed or parsed here. This is the last of the questions a
+// test framework's scan asks that used to cost a translation unit.
+void ModelManagerTest::testTheTagsADataFunctionWrites()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model reads a data function's calls off the tokens");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath source = dir.createFile(
+        "tags.cpp",
+        "namespace QTest { void newRow(const char *); }\n"   // 1, declared here
+        "namespace NS {\n"                                   // 2
+        "class Thing\n"                                      // 3
+        "{\n"                                                // 4
+        "private slots:\n"                                    // 5
+        "    void inlineRows_data()\n"                       // 6
+        "    {\n"                                            // 7
+        "        QTest::newRow(\"inline\");\n"               // 8
+        "    }\n"                                            // 9
+        "    void rows_data();\n"                            // 10
+        "};\n"                                               // 11
+        "void Thing::rows_data()\n"                          // 12
+        "{\n"                                                // 13
+        "    QTest::newRow(\"first\") << 1;\n"               // 14
+        "    newRow(\"unqualified\");\n"                     // 15
+        "    QTest::newRow(\"format %1\", 2);\n"             // 16
+        "    Other::newRow(\"somebody else's\");\n"          // 17
+        "}\n"                                                // 18
+        "} // namespace NS\n"                                // 19
+        "void freeFunction()\n"                              // 20
+        "{\n"                                                // 21
+        "    QTest::newRow(\"in a free function\");\n"       // 22
+        "}\n");                                              // 23
+    QVERIFY(!source.isEmpty());
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int readBefore = cxxFrontendReadingsMade();
+#endif
+    const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+
+    // Put together rather than formatted: a tag written with a "%1" in it is
+    // one of the rows below, and arg() would take that for a place of its
+    // own to substitute into.
+    QStringList said;
+    for (const CodeModelQueries::WrittenCall &call : read.callsTo(source, {"QTest::newRow"})) {
+        said << call.arguments.join("+") + " in " + call.insideFunction + " at "
+                    + QString::number(call.line) + ":" + QString::number(call.column);
+    }
+
+    // In the order they are written: a data function defined in its class
+    // and one defined outside it, a call reached through a using directive,
+    // a second argument that is no literal and says nothing, and a call in
+    // a free function. Not the declaration on the first line, and not
+    // somebody else's function of the same name.
+    QCOMPARE(said.join("\n"),
+             QString("inline in NS::Thing::inlineRows_data at 8:9\n"
+                     "first in NS::Thing::rows_data at 14:5\n"
+                     "unqualified in NS::Thing::rows_data at 15:5\n"
+                     "format %1+ in NS::Thing::rows_data at 16:5\n"
+                     "in a free function in freeFunction at 22:5"));
+
+    // And no reading, which is the one thing the answer does not say.
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
+    // A call in a scope the text does not name -- a lambda -- is not
+    // answered for out of the tokens: a caller keeping what a "_data"
+    // function writes would drop a call it cannot place, and a dropped call
+    // is a tag nobody can be sent to.
+    const FilePath inALambda = dir.createFile(
+        "in_a_lambda.cpp",
+        "void rows_data()\n"
+        "{\n"
+        "    auto write = [] { QTest::newRow(\"hidden\"); };\n"
+        "    write();\n"
+        "}\n");
+    QVERIFY(!inALambda.isEmpty());
+    const CodeModelQueries readAgain{CPlusPlus::Snapshot(), WorkingCopy()};
+    readAgain.callsTo(inALambda, {"QTest::newRow"});
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+             "a call in a scope the tokens do not name was answered for without reading");
+#endif
+}
+
 // Where the project defines the function declared at a place, out of the
 // index: the file that defines it is never parsed, and the answer is the one
 // a search of the project gives.

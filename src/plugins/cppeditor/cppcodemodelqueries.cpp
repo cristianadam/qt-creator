@@ -142,15 +142,23 @@ public:
 
     QString spelled(int at) const { return spelling(text, tokens.at(at)); }
 
-    // The name written at \a at, with whatever stands in front of it:
-    // "NS::Thing" where that is how it reads.
-    QString qualifiedNameAt(int at) const
+    // Where the name that *ends* at \a at begins: at itself, or at the first
+    // of the names that qualify it -- the "NS" of "NS::Thing".
+    int nameBeginsAt(int at) const
     {
         int begin = at;
         while (begin >= 2 && tokens.at(begin - 1).kind() == T_COLON_COLON
                && tokens.at(begin - 2).kind() == T_IDENTIFIER) {
             begin -= 2;
         }
+        return begin;
+    }
+
+    // The name written at \a at, with whatever stands in front of it:
+    // "NS::Thing" where that is how it reads.
+    QString qualifiedNameAt(int at) const
+    {
+        const int begin = nameBeginsAt(at);
         QStringList parts;
         for (int i = begin; i <= at; i += 2)
             parts << spelled(i);
@@ -201,72 +209,174 @@ struct WrittenClassShape
     QStringList baseClasses;
 };
 
-// The named scopes the token at \a at is written inside, outermost first:
-// "NS", "NS::Outer" and so on, as they are written.
+// The name of the function whose body the brace at \a brace opens, as it is
+// written -- "C::f" where the function is defined outside its class -- or
+// empty where that brace opens no function body.
 //
-// A walk from the top of the file, since a brace is what opens a scope and
-// nothing but the tokens before it says whether that scope has a name.
-// "namespace NS {" and "class C {" have one; a function's body, a statement's
-// block and an initialiser's braces do not, and a level with no name adds
-// nothing to what a place is written inside.
-//
-// What a lexer can say about a place in a file nobody parsed, and what the
-// index has to be asked with: an entry is keyed by the name written out in
-// full.
-QStringList scopesAround(const Lexed &lexed, int at)
+// A head ends in its parameter list, with the words that say how the
+// function may be called standing after it, and a constructor's initialiser
+// list between that and the body. So the parentheses are found by walking
+// back over those.
+QString functionOpenedAt(const Lexed &lexed, int brace)
 {
     const Tokens &tokens = lexed.tokens;
-    QStringList open; // with an empty entry for a scope that has no name
-    QString pending;  // the name the next brace would open
 
-    for (int i = 0; i < at && i < tokens.size(); ++i) {
-        switch (tokens.at(i).kind()) {
+    // Where a parameter list's ")" stands, given that \a from is the token
+    // before something that may follow it.
+    const auto closingParenthesisAt = [&](int from) {
+        for (int at = from; at >= 0; --at) {
+            switch (tokens.at(at).kind()) {
+            case T_CONST: case T_VOLATILE: case T_NOEXCEPT: case T_AMPER:
+            case T_AMPER_AMPER: case T_THROW: case T_ARROW: case T_COLON_COLON:
+            case T_IDENTIFIER: // "override", "final", a macro
+                continue;
+            case T_RPAREN:
+                return at;
+            default:
+                return -1;
+            }
+        }
+        return -1;
+    };
+
+    // And the "(" it belongs to.
+    const auto openingParenthesisOf = [&](int close) {
+        int nesting = 0;
+        for (int at = close; at >= 0; --at) {
+            const int kind = tokens.at(at).kind();
+            if (kind == T_RPAREN) {
+                ++nesting;
+            } else if (kind == T_LPAREN && --nesting == 0) {
+                return at;
+            }
+        }
+        return -1;
+    };
+
+    int close = closingParenthesisAt(brace - 1);
+    for (;;) {
+        if (close < 0)
+            return {};
+        const int open = openingParenthesisOf(close);
+        if (open <= 0)
+            return {};
+
+        // What stands in front of those parentheses: the name of the
+        // function, or -- in a constructor's initialiser list -- the name of
+        // a member being initialised, and then the head is further back
+        // still.
+        if (tokens.at(open - 1).kind() != T_IDENTIFIER)
+            return {};
+        const int name = open - 1;
+        const int before = name - 1;
+        if (before >= 0 && (tokens.at(before).kind() == T_COMMA
+                            || tokens.at(before).kind() == T_COLON)) {
+            close = closingParenthesisAt(before - 1);
+            continue;
+        }
+        return lexed.qualifiedNameAt(name);
+    }
+}
+
+// The scopes open where a walk over a file's tokens has reached, and what
+// they are called.
+//
+// One walk, not one per question: a walk that starts again from the top for
+// every call it looks at is quadratic, and a data function writes a thousand
+// calls.
+class ScopeWalk
+{
+public:
+    // Called for each token in order, and then what is open is what is open
+    // *inside* that token -- which for a brace is the scope it just opened.
+    void passed(const Lexed &lexed, int at)
+    {
+        const Tokens &tokens = lexed.tokens;
+        switch (tokens.at(at).kind()) {
         case T_LBRACE:
-            open << pending;
-            pending.clear();
+            // A class or a namespace names its scope; otherwise a function's
+            // body may, and a statement's block and an initialiser's braces
+            // name nothing.
+            m_open << (m_pending.isEmpty() ? functionOpenedAt(lexed, at) : m_pending);
+            m_pending.clear();
             break;
         case T_RBRACE:
-            if (!open.isEmpty())
-                open.removeLast();
-            pending.clear();
+            if (!m_open.isEmpty())
+                m_open.removeLast();
+            m_pending.clear();
             break;
 
-        // Both of these may also be written without a body -- a forward
+        // Both of these may be written without a body -- a forward
         // declaration, a namespace alias -- and then the semicolon below
         // takes the name back before any brace uses it.
         case T_NAMESPACE:
-            if (i + 1 < at && tokens.at(i + 1).kind() == T_IDENTIFIER) {
+            if (at + 1 < tokens.size() && tokens.at(at + 1).kind() == T_IDENTIFIER) {
                 // "namespace A::B {" opens both at once, which is one name
                 // as far as anything asking about a place is concerned.
-                int name = i + 1;
-                while (name + 2 < at && tokens.at(name + 1).kind() == T_COLON_COLON
+                int name = at + 1;
+                while (name + 2 < tokens.size()
+                       && tokens.at(name + 1).kind() == T_COLON_COLON
                        && tokens.at(name + 2).kind() == T_IDENTIFIER) {
                     name += 2;
                 }
-                pending = lexed.qualifiedNameAt(name);
-                i = name;
+                m_pending = lexed.qualifiedNameAt(name);
+                m_skipTo = name;
             }
             break;
         case T_CLASS: case T_STRUCT: case T_UNION:
             // The name, with whatever export macro stands in front of it
             // skipped: the last identifier of the run is the class's own.
-            pending.clear();
-            for (int name = i + 1; name < at && tokens.at(name).kind() == T_IDENTIFIER; ++name) {
-                pending = lexed.spelled(name);
-                i = name;
+            m_pending.clear();
+            for (int name = at + 1;
+                 name < tokens.size() && tokens.at(name).kind() == T_IDENTIFIER; ++name) {
+                m_pending = lexed.spelled(name);
+                m_skipTo = name;
             }
             break;
 
         case T_SEMICOLON:
         case T_EQUAL: // "struct S s = { ... }": those braces open no scope
-            pending.clear();
+            m_pending.clear();
             break;
         default:
             break;
         }
     }
 
-    return Utils::filtered(open, [](const QString &name) { return !name.isEmpty(); });
+    // How far a caller may skip ahead, a name having been read past here.
+    int skipTo() const { return m_skipTo; }
+
+    // The scopes that have names, outermost first.
+    QStringList named() const
+    {
+        return Utils::filtered(m_open, [](const QString &name) { return !name.isEmpty(); });
+    }
+
+    // Whether the innermost of them has no name: a lambda, a block, or a
+    // function head this cannot read. A place inside one is a place this
+    // cannot say what it is written in.
+    bool insideSomethingUnnamed() const { return !m_open.isEmpty() && m_open.last().isEmpty(); }
+
+private:
+    QStringList m_open; // with an empty entry for a scope that has no name
+    QString m_pending;  // the name the next brace would open
+    int m_skipTo = -1;
+};
+
+// The named scopes the token at \a at is written inside, outermost first:
+// "NS", "NS::Outer" and so on, as they are written.
+//
+// What a lexer can say about a place in a file nobody parsed, and what the
+// index has to be asked with: an entry is keyed by the name written out in
+// full.
+QStringList scopesAround(const Lexed &lexed, int at)
+{
+    ScopeWalk walk;
+    for (int i = 0; i < at && i < lexed.tokens.size(); ++i) {
+        walk.passed(lexed, i);
+        i = std::max(i, walk.skipTo());
+    }
+    return walk.named();
 }
 
 // Whether a class is what the name at \a at is the name of, and the word that
@@ -668,6 +778,30 @@ std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int befo
     return std::nullopt;
 }
 
+// Whether the name beginning at \a at is being declared rather than called.
+//
+// A declaration has a type in front of the name -- "void newRow(const char
+// *)" -- where a call has the start of a statement, an operator, or a word
+// like "return": a file that declares the function it is asked about
+// otherwise reads as one that calls it.
+bool declaresRatherThanCalls(const Lexed &lexed, int at)
+{
+    if (at == 0)
+        return false;
+    const Token &before = lexed.tokens.at(at - 1);
+    if (startsAType(before))
+        return true;
+    switch (before.kind()) {
+    case T_IDENTIFIER: // a class as the return type, or a macro in front of it
+    case T_STAR: case T_AMPER: case T_AMPER_AMPER: // a pointer or a reference
+    case T_GREATER: // the end of a template argument list
+    case T_TILDE: // a destructor, which is nobody's call either
+        return true;
+    default:
+        return false;
+    }
+}
+
 // The classes a file hands to calls of a function called \a functionName --
 // written out in full -- read off the file's own tokens, or nothing where a
 // call is written in a way its text does not settle.
@@ -690,6 +824,20 @@ std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int befo
 // in; a class is named as the declaration names it rather than written out in
 // full, which is what a reader looking it up in turn asks with anyway. A
 // class handed over twice comes back twice, since the caller dedupes.
+// Whether the name written at \a at is the one \a asked about, that being a
+// function's name split on "::".
+//
+// Written with as much in front of it as the file bothers with, which has to
+// be the tail of what was asked for: QTest::qExec is asked for and "qExec"
+// under a using directive is it, where "Other::qExec" is somebody else's
+// function of the same name.
+bool namesTheFunction(const Lexed &lexed, int at, const QStringList &asked)
+{
+    const QStringList written = lexed.qualifiedNameAt(at).split("::");
+    return written.size() <= asked.size()
+           && written == asked.mid(asked.size() - written.size());
+}
+
 std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &functionName)
 {
     const Tokens &tokens = lexed.tokens;
@@ -705,13 +853,8 @@ std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &
             continue;
         }
 
-        // Written with as much in front of it as the file bothers with, which
-        // has to be the tail of what was asked for: QTest::qExec is asked for
-        // and "qExec" under a using directive is it, where "Other::qExec" is
-        // somebody else's function of the same name.
-        const QStringList written = lexed.qualifiedNameAt(i).split("::");
-        if (written.size() > asked.size()
-            || written != asked.mid(asked.size() - written.size())) {
+        if (!namesTheFunction(lexed, i, asked)
+            || declaresRatherThanCalls(lexed, lexed.nameBeginsAt(i))) {
             continue;
         }
 
@@ -772,6 +915,108 @@ std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &
             classes << holds->name;
     }
     return classes;
+}
+
+// The calls a file makes to any of the functions called \a functionNames --
+// each written out in full -- read off the file's own tokens: what each
+// argument says where it is a string literal, and the function the call
+// stands in.
+//
+// Both of those are in the text. A tag is a literal handed to a call, and
+// which function writes it is which braces the call stands between -- so a
+// data function's tags need neither a name resolved nor a header read.
+//
+// Nothing where a call stands in a scope this cannot name: a lambda, or a
+// head it cannot read. A call whose function is unknown is one a caller
+// looking for a "_data" function drops, and a dropped call is a tag nobody
+// can be sent to -- so the file is read rather than half-answered for.
+//
+// As the text has it, and a superset on purpose the same way the classes
+// above are: a call reachable through a using directive is among them, and
+// so is one in a branch this configuration does not build.
+std::optional<QList<CodeModelQueries::WrittenCall>> callsToIn(
+    const Lexed &lexed, const QStringList &functionNames)
+{
+    const Tokens &tokens = lexed.tokens;
+    QList<QStringList> asked;
+    for (const QString &name : functionNames) {
+        const QStringList parts = name.split("::", Qt::SkipEmptyParts);
+        if (!parts.isEmpty())
+            asked << parts;
+    }
+
+    QList<CodeModelQueries::WrittenCall> calls;
+    if (asked.isEmpty())
+        return calls;
+
+    ScopeWalk walk;
+    for (int i = 0; i < tokens.size(); ++i) {
+        walk.passed(lexed, i);
+        i = std::max(i, walk.skipTo());
+        if (i + 1 >= tokens.size() || tokens.at(i).kind() != T_IDENTIFIER
+            || tokens.at(i + 1).kind() != T_LPAREN
+            || insideADirective(lexed.text, tokens.at(i).utf16charsBegin())) {
+            continue;
+        }
+        if (!Utils::anyOf(asked, [&](const QStringList &name) {
+                return lexed.spelled(i) == name.last() && namesTheFunction(lexed, i, name);
+            })) {
+            continue;
+        }
+
+        // A file that declares the function itself is not calling it there.
+        const int begins = lexed.nameBeginsAt(i);
+        if (declaresRatherThanCalls(lexed, begins))
+            continue;
+
+        // Which function it stands in, which is what a caller keeping the
+        // calls a "_data" function makes goes by.
+        if (walk.insideSomethingUnnamed())
+            return std::nullopt;
+
+        // Where the called name stands, which is where what qualifies it
+        // begins: "QTest::newRow" stands where the "QTest" does.
+        CodeModelQueries::WrittenCall call;
+        call.insideFunction = walk.named().join("::");
+        lexed.lines.placeOf(tokens.at(begins).utf16charsBegin(), &call.line, &call.column);
+
+        // One entry per argument: what it says where it is a string literal
+        // -- the text between the quotes -- and nothing where it is anything
+        // else, so that a caller wanting the third can count to it. A
+        // literal written with a prefix or as a raw string says nothing
+        // here: what it stands for is not what stands between its quotes.
+        int nesting = 0;
+        int from = i + 2; // the first token of the argument being read
+        const auto flush = [&](int end) {
+            QString says;
+            if (end == from + 1) {
+                const QString spelled = lexed.spelled(from);
+                if (tokens.at(from).kind() == T_STRING_LITERAL && spelled.size() >= 2
+                    && spelled.startsWith(u'"') && spelled.endsWith(u'"')) {
+                    says = spelled.mid(1, spelled.size() - 2);
+                }
+            }
+            call.arguments << says;
+        };
+        for (int j = i + 1; j < tokens.size(); ++j) {
+            const int kind = tokens.at(j).kind();
+            if (kind == T_LPAREN || kind == T_LBRACKET || kind == T_LBRACE) {
+                ++nesting;
+            } else if (kind == T_RPAREN || kind == T_RBRACKET || kind == T_RBRACE) {
+                if (--nesting > 0)
+                    continue;
+                if (j > i + 2) // a call handed nothing has no arguments
+                    flush(j);
+                break;
+            } else if (kind == T_COMMA && nesting == 1) {
+                flush(j);
+                from = j + 1;
+            }
+        }
+
+        calls << call;
+    }
+    return calls;
 }
 
 #endif // QTC_WITH_CXX_FRONTEND
@@ -1917,6 +2162,21 @@ QList<CodeModelQueries::WrittenCall> CodeModelQueries::callsTo(
     const FilePath &filePath, const QStringList &functionNames) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The file's own tokens first, which cost no parse at all: a tag is a
+    // literal handed to a call, and which function writes it is which braces
+    // the call stands between.
+    //
+    // Only where this model is the one in use: the built-in path below is
+    // what this series is replacing, not what it is improving.
+    if (Internal::cxxFrontendModelRequested()) {
+        if (const std::shared_ptr<const Lexed> tokens = d->lexed(filePath)) {
+            if (const std::optional<QList<WrittenCall>> calls
+                = callsToIn(*tokens, functionNames)) {
+                return *calls;
+            }
+        }
+    }
+
     if (const std::optional<QList<CxxFrontendDocument::WrittenCall>> calls
         = d->model->callsIn(filePath, functionNames)) {
         QList<WrittenCall> written;

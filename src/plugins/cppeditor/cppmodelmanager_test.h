@@ -46,6 +46,7 @@ private slots:
     void testTheIndexedClassShape();
     void testTheClassesHandedToARunner();
     void testTheIndexedDefinition();
+    void testTheTagsADataFunctionWrites();
     void testIndexingCost();
 };
 
