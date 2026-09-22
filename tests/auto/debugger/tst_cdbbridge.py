@@ -325,6 +325,32 @@ displays = [dumper.value_display(dumper.value_members(dumper.createValue(address
 expect('the engine text, with the 0n taken off', displays, ['V2 (1)', 'V2 (1)'])
 expect('one cast expression for both values', enumCasts, ['(Kind)1'])
 
+print('')
+print('--- the string of a Utils::Id is fetched from the debuggee once ---')
+idCalls = []
+
+
+def fake_call(function):
+    idCalls.append(function)
+    if function.startswith('Utilsd!'):
+        return None
+    return FakeValue('*', FakeType('char *', TypeCode.Pointer), address=0x40000)
+
+
+_cdbext.call = fake_call
+expect('the string address', dumper.nameForCoreId(5), 0x40000)
+expect('the debug module is asked first, then the release one',
+       idCalls, ['Utilsd!Utils::nameForId(5)', 'Utils!Utils::nameForId(5)'])
+idCalls.clear()
+expect('the same id again', dumper.nameForCoreId(5), 0x40000)
+expect('without a call', idCalls, [])
+dumper.nameForCoreId(6)
+expect('another id asks the module that answered before, and only that',
+       idCalls, ['Utils!Utils::nameForId(6)'])
+idCalls.clear()
+expect('the null id has no string', dumper.nameForCoreId(0), 0)
+expect('and costs no call', idCalls, [])
+
 # A module with vtables and their RTTI locators, and a heap with objects
 # pointing at them. The addresses are what couldBePointer() lets through.
 MODULE = 0x7ff600000000

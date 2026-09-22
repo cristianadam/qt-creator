@@ -151,6 +151,10 @@ class Dumper(DumperBase):
         # cast expression added to the symbol group; the answer holds for as
         # long as the process lives.
         self.enum_displays = {}
+        # Utils::Id -> the address of its string, and the Utils modules in
+        # the order to ask them, see nameForCoreId().
+        self.coreIdNames = {}
+        self.coreIdModules = ['Utilsd', 'Utils']
 
     def resetStats(self):
         DumperBase.resetStats(self)
@@ -952,12 +956,26 @@ class Dumper(DumperBase):
     def callHelper(self, rettype, value, function, args):
         raise Exception("cdb does not support calling functions")
 
-    def nameForCoreId(self, id: int) -> DumperBase.Value:
-        for dll in ['Utilsd', 'Utils']:
-            idName = cdbext.call('%s!Utils::nameForId(%d)' % (dll, id))
-            if idName is not None:
-                break
-        return self.fromNativeValue(idName)
+    def nameForCoreId(self, id: int) -> int:
+        # The address of the string behind a Utils::Id. Fetching it runs a
+        # function in the debuggee, so it is fetched once per id - the string
+        # lives as long as the process - from the module that answered the
+        # last time, and not at all for the null id.
+        if id == 0:
+            return 0
+        address = self.coreIdNames.get(id, None)
+        if address is None:
+            for dll in self.coreIdModules:
+                idName = cdbext.call('%s!Utils::nameForId(%d)' % (dll, id))
+                if idName is not None:
+                    address = self.fromNativeValue(idName).address()
+                    self.coreIdModules = [dll] + [other for other in self.coreIdModules
+                                                  if other != dll]
+                    break
+            if not address:
+                return 0
+            self.coreIdNames[id] = address
+        return address
 
     def putCallItem(self, name, rettype, value, func, *args):
         return
