@@ -886,6 +886,43 @@ void CxxFrontendModelTest::testTheMacroUsesOfAFile()
     QVERIFY(code.macroUsesIn(parsed.mainFilePath(), {}).isEmpty());
 }
 
+// The same, for the two shapes a Qt test really writes it in: the call
+// stands inside a member function defined out of line, and its value is
+// streamed into rather than thrown away.
+//
+// A data tag is written "QTest::newRow(\"tag\") << value;", so the call is
+// the left operand of an operator and the statement is not a call at all.
+void CxxFrontendModelTest::testTheCallsATestWrites()
+{
+    const Parsed parsed({{"main.cpp",
+                          "namespace QTest {\n"
+                          "class Data {};\n"
+                          "Data &newRow(const char *);\n"
+                          "}\n"
+                          "QTest::Data &operator<<(QTest::Data &, int);\n"
+                          "struct Thing {\n"
+                          "    void rows_data();\n"
+                          "};\n"
+                          "void Thing::rows_data()\n"
+                          "{\n"
+                          "    QTest::newRow(\"streamed\") << 1;\n"
+                          "    QTest::newRow(\"plain\");\n"
+                          "}\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    const CodeModelQueries code(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    QStringList said;
+    for (const CodeModelQueries::WrittenCall &call
+         : code.callsTo(parsed.mainFilePath(), {"QTest::newRow"})) {
+        said << call.arguments.value(0) + " in " + call.insideFunction;
+    }
+
+    QCOMPARE(said.join("\n"), QString("streamed in Thing::rows_data\n"
+                                      "plain in Thing::rows_data"));
+}
+
 // A file whose templates nest deeply is read whatever thread asked for it.
 //
 // The front end bounds its own recursion at 256 nested instantiations, and

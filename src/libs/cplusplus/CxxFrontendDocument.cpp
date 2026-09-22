@@ -2784,8 +2784,18 @@ QList<CxxFrontendDocument::WrittenCall> CxxFrontendDocument::callsTo(
         const cxx::SourcePosition position = d->unit.tokenStartPosition(at);
 
         WrittenCall written;
-        if (cxx::FunctionSymbol * const function = d->functionAround(at))
-            written.insideFunction = withoutTheLeadingScope(qualifiedNameOf(function));
+
+        // The scope a function opens is not where a member defined out of
+        // line is written: the class reaches as far as its body, and
+        // "void Thing::f() {}" stands outside it. So the definition is asked
+        // where the scopes do not answer, the way localsAt() does -- and
+        // that is most of the calls there are to find, a Qt test writing
+        // "QTest::newRow(...)" inside exactly such a definition.
+        cxx::FunctionSymbol *inside = d->functionAround(at);
+        if (!inside)
+            inside = d->definitionAround(at);
+        if (inside)
+            written.insideFunction = withoutTheLeadingScope(qualifiedNameOf(inside));
         written.line = int(position.line);
         written.column = int(position.column);
 

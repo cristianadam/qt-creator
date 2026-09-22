@@ -35,6 +35,7 @@ private slots:
     void testAClassPrivateSlotsAndBases();
     void testTheClassesAFileHandsToARunner();
     void testTheCallsWithALiteral();
+    void testTheCallsATestWrites();
     void testTheMacroUsesOfAFile();
     void testTheIncludeClosureOfAFile();
     void testReadsDeepTemplatesOnAnyThread();
