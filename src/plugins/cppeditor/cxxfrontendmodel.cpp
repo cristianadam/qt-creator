@@ -173,13 +173,19 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
     const std::shared_ptr<ResolvedNames> shared = amongThePaths ? amongThePaths
                                                                 : std::make_shared<ResolvedNames>();
 
-    // And the same for the headers' text, for the same reason: a caller
-    // reading one file alone still gains, a header being asked for once per
-    // inclusion rather than once per file.
-    const std::shared_ptr<HeaderContents> contents = texts ? texts
-                                                           : std::make_shared<HeaderContents>();
+    // The headers' text is kept only where a caller hands a table in, and
+    // *not* made here for one that does not -- which is the opposite of
+    // the line above, for a reason.
+    //
+    // A resolver outlives the reading that installed it: the snapshot holds
+    // it and the editor's model keeps the last few snapshots. A table made
+    // here would therefore be held by each of those for as long as the
+    // snapshot lives, and a translation unit reaches some 12 MB of headers
+    // -- twice that as QString, several times over for the snapshots kept.
+    // The index hands one in and drops it when its batch ends; an editor
+    // reading one file reads each header once per inclusion, as before.
 
-    return [headerPaths, workingCopy, shared, beside, hereAlready, contents](
+    return [headerPaths, workingCopy, shared, beside, hereAlready, texts](
                const QString &name, bool isSystem, const QString &includedFrom)
                -> std::optional<CxxFrontendSnapshot::Header> {
         const auto isThere = [&workingCopy](const FilePath &path) {
@@ -234,10 +240,17 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
             return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
                                                QString::fromUtf8(*edited)};
         }
-        const std::optional<QString> text = contents->textOf(resolved);
-        if (!text)
+        if (texts) {
+            const std::optional<QString> text = texts->textOf(resolved);
+            if (!text)
+                return std::nullopt;
+            return CxxFrontendSnapshot::Header{resolved.toFSPathString(), *text};
+        }
+        const Result<QByteArray> contents = resolved.fileContents();
+        if (!contents)
             return std::nullopt;
-        return CxxFrontendSnapshot::Header{resolved.toFSPathString(), *text};
+        return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
+                                           QString::fromUtf8(*contents)};
     };
 }
 

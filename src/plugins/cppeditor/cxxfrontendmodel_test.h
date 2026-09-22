@@ -53,6 +53,7 @@ private slots:
     void testNamesAcrossFiles();
     void testHighlightingReachesTheEditor();
     void testTheHeadersAreReadOnce();
+    void testTheHeaderCacheIsWhatTheResolverReads();
     void testTheStoreGivesBackWhatWasPutIn();
     void testTheStoreForgetsWhenTheFileChanges();
     void testTheStoreForgetsWhenAnIncludedFileChanges();

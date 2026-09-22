@@ -1908,14 +1908,67 @@ void CxxFrontendModelTest::testTheHeadersAreReadOnce()
     QCOMPARE(contents.misses(), 3);
 
     // Past the bound nothing more is kept, so a reader still gets an answer
-    // and gets it from the disk. One byte of room holds nothing at all.
+    // and gets it from the disk. One byte of room holds nothing at all --
+    // and the file is written over between the two asks here as well, so
+    // that the second answer says where it came from.
     HeaderContents bounded(1);
     QVERIFY(bounded.textOf(header));
+    QVERIFY(header.writeFileContents("class Third {};\n"));
     const std::optional<QString> unkept = bounded.textOf(header);
     QVERIFY(unkept);
-    QCOMPARE(*unkept, QString("class Other {};\n")); // read afresh, so the new text
+    QCOMPARE(*unkept, QString("class Third {};\n")); // read afresh, so the new text
     QCOMPARE(bounded.hits(), 0);
     QCOMPARE(bounded.misses(), 2);
+}
+
+// And the index really reads through it: two readings of one batch, and the
+// second gets the header out of the table rather than off the disk.
+//
+// Through the reading rather than through the resolver, which is where the
+// table could be wired up and not used -- and where the measurement that
+// justifies it was taken.
+void CxxFrontendModelTest::testTheHeaderCacheIsWhatTheResolverReads()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("thing.h", "class OnDisk {};\n");
+    const FilePath one = dir.createFile("one.cpp", "#include \"thing.h\"\nint a;\n");
+    const FilePath two = dir.createFile("two.cpp", "#include \"thing.h\"\nint b;\n");
+    QVERIFY(!header.isEmpty() && !one.isEmpty() && !two.isEmpty());
+
+    const ProjectExplorer::HeaderPaths paths{
+        ProjectExplorer::HeaderPath::makeUser(dir.filePath())};
+    const auto texts = std::make_shared<HeaderContents>();
+    const auto names = std::make_shared<ResolvedNames>();
+    const CxxFrontendIndexInputs inputs;
+
+    const std::optional<CxxFrontendIndexRead> first
+        = cxxFrontendReadForIndex(inputs, one, paths, names, texts);
+    QVERIFY(first);
+    QVERIFY(first->includedFiles.contains(header.toFSPathString()));
+    const qint64 readsAfterOne = texts->misses();
+    QVERIFY(readsAfterOne > 0);
+
+    // Written over between the two, so that what the second reading says
+    // about the header shows which text it was given. A reading that went
+    // back to the disk would have Changed and not OnDisk.
+    QVERIFY(header.writeFileContents("class Changed {};\n"));
+
+    const std::optional<CxxFrontendIndexRead> second
+        = cxxFrontendReadForIndex(inputs, two, paths, names, texts);
+    QVERIFY(second);
+    QCOMPARE(texts->misses(), readsAfterOne); // nothing new was read
+    QVERIFY(texts->hits() > 0);
+
+    const auto describes = [](const CxxFrontendIndexRead &read, const FilePath &file) {
+        for (const CxxFrontendIndexRead::File &described : read.files) {
+            if (described.filePath == file)
+                return Utils::transform(described.entries,
+                                        [](const CxxFrontendIndexEntry &e) { return e.name; });
+        }
+        return QStringList();
+    };
+    QCOMPARE(describes(*second, header), QStringList{"OnDisk"});
 }
 
 void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()

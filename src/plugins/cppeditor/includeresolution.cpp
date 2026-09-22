@@ -135,13 +135,13 @@ std::optional<QString> HeaderContents::textOf(const FilePath &filePath)
     return text;
 }
 
-int HeaderContents::hits() const
+qint64 HeaderContents::hits() const
 {
     QMutexLocker locker(&m_mutex);
     return m_hits;
 }
 
-int HeaderContents::misses() const
+qint64 HeaderContents::misses() const
 {
     QMutexLocker locker(&m_mutex);
     return m_misses;

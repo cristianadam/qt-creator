@@ -106,16 +106,18 @@ public:
 
     // How many asks were answered without going to the disk, and how many
     // were not: the one outward sign that this does anything.
-    int hits() const;
-    int misses() const;
+    qint64 hits() const;
+    qint64 misses() const;
 
 private:
     mutable QMutex m_mutex;
     QHash<Utils::FilePath, QString> m_known;
     qint64 m_bytes = 0;
     const qint64 m_maximumBytes;
-    int m_hits = 0;
-    int m_misses = 0;
+    // Counted in sixty-four bits because a batch is everything pending and
+    // a reading asks some sixteen thousand times.
+    qint64 m_hits = 0;
+    qint64 m_misses = 0;
 };
 
 } // namespace CppEditor::Internal
