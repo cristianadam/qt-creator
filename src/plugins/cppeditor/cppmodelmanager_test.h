@@ -14,6 +14,7 @@ class ModelManagerTest : public QObject
 private slots:
     void testPathsAreClean();
     void testLanguageFeaturesWithoutAParse();
+    void testReadingOneNamedFile();
     void testFrameworkHeaders();
     void testRefreshAlsoIncludesOfProjectFiles();
     void testRefreshSeveralTimes();

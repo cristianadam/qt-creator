@@ -26,6 +26,7 @@ private slots:
     void testRenameSymbolDryRun();
     void testRenameSymbolClashCheck();
     void testResultCap();
+    void testAFileNoPassHasParsed();
     void testErrorHandling();
 };
 

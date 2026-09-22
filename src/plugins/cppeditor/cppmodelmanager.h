@@ -152,6 +152,22 @@ public:
 
     static CPlusPlus::Snapshot snapshot();
     static Document::Ptr document(const Utils::FilePath &filePath);
+
+    /// \return What the built-in front end makes of \a filePath, read now where nothing
+    ///         has read it, and nothing where it cannot be read at all.
+    ///
+    /// The same document an indexing pass over the whole project would have left behind:
+    /// read with that file's project part -- its header paths, its defines, its language
+    /// features -- and published to the model, headers and all, so the next caller finds
+    /// it in the snapshot.
+    ///
+    /// For one named file that somebody asked about. **Never in bulk and never on a loop
+    /// over a project**: this parses the file and every header it reaches, which is a
+    /// good part of a second and some megabytes, on the thread that calls it. A caller
+    /// that wants an answer for many files wants the index instead -- see
+    /// CodeModelQueries, which answers off whichever front end has the file.
+    static Document::Ptr parsedDocument(const Utils::FilePath &filePath);
+
     static bool replaceDocument(Document::Ptr newDoc);
 
     static void emitDocumentUpdated(Document::Ptr doc);

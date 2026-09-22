@@ -1043,6 +1043,40 @@ Document::Ptr CppModelManager::document(const FilePath &filePath)
     return d->m_snapshot.document(filePath);
 }
 
+Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
+{
+    if (const Document::Ptr already = document(filePath))
+        return already;
+
+    // Read the way the indexing pass reads one file, so that what a caller
+    // gets here and what it would have got from the pass are the same
+    // document: the part's own header paths and language features, the
+    // defines run in before the file itself -- a file read without them is
+    // a file with the wrong branches taken.
+    //
+    // The pass's choice of part, too, and not the editor's: parts.first()
+    // where a file is in several, and the fallback paths where it is in
+    // none, which is most headers.
+    const QList<ProjectPart::ConstPtr> parts = projectPart(filePath);
+    const ProjectPart::ConstPtr part = parts.isEmpty() ? ProjectPart::ConstPtr() : parts.first();
+
+    const std::unique_ptr<CppSourceProcessor> processor(createSourceProcessor());
+    processor->setWorkingCopy(workingCopy());
+    processor->setHeaderPaths(part ? part->headerPaths : headerPaths());
+    processor->setLanguageFeatures(
+        part ? part->languageFeatures
+             : ProjectFile::isC(ProjectFile::classify(filePath))
+                   ? LanguageFeatures::cFeatures()
+                   : LanguageFeatures::defaultFeatures());
+    processor->run(configurationFileName());
+    processor->run(filePath);
+
+    // From the model rather than from the processor: what it read went
+    // through replaceDocument(), which is where a document newer than this
+    // one wins -- the editor may have parsed the same file while this ran.
+    return document(filePath);
+}
+
 /// Replace the document in the snapshot.
 ///
 /// Returns true if successful, false if the new document is out-dated.

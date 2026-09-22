@@ -643,8 +643,10 @@ void registerMcpTools()
             .description(
                 "Returns the C++ symbols (classes, functions, enums, declarations) in a file "
                 "from Qt Creator's C++ code model, each with its kind, fully qualified scope, "
-                "type/signature and 1-based line and column. The file must be known to the "
-                "code model, i.e. a C++ source or header that belongs to an open project.")
+                "type/signature and 1-based line and column. The file is read if the code "
+                "model has not read it yet, so it need not have been parsed; it does have to "
+                "be a C++ source or header, and it is read as the project it belongs to "
+                "builds it.")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -676,16 +678,12 @@ void registerMcpTools()
             }
 
             const FilePath filePath = FilePath::fromUserInput(file);
-            const CPlusPlus::Document::Ptr doc = CppModelManager::document(filePath);
-            if (!doc) {
-                return CallToolResult{}.isError(true).addContent(TextContent{}.text(
-                    QString("No C++ code model document for \"%1\". Is it a C++ file that "
-                            "belongs to an open project?")
-                        .arg(filePath.toUserOutput())));
-            }
 
             QJsonArray symbols;
 #ifdef QTC_WITH_CXX_FRONTEND
+            // Asked before anything is read: this model reads the file
+            // itself where no pass has, and asking for a built-in document
+            // first would parse it for nothing.
             if (const std::optional<QJsonArray> onTheModel = fileSymbolsOnTheModel(filePath)) {
                 int total = 0;
                 bool truncated = false;
@@ -695,6 +693,17 @@ void registerMcpTools()
                     {"symbols", capped}, {"total", total}, {"truncated", truncated}});
             }
 #endif
+
+            // And the built-in front end otherwise, which reads the file
+            // here where no indexing pass has: one file somebody named is
+            // what this is for.
+            const CPlusPlus::Document::Ptr doc = CppModelManager::parsedDocument(filePath);
+            if (!doc) {
+                return CallToolResult{}.isError(true).addContent(TextContent{}.text(
+                    QString("No C++ code model document for \"%1\". Is it a C++ file that "
+                            "belongs to an open project?")
+                        .arg(filePath.toUserOutput())));
+            }
 
             SearchSymbols searcher;
             searcher.setSymbolsToSearchFor(SymbolType::AllTypes);
@@ -732,8 +741,9 @@ void registerMcpTools()
             .description(
                 "Returns the C++ code model diagnostics (parser and semantic warnings and "
                 "errors) for a file, each with its severity and 1-based line and column. The "
-                "file must be known to the code model, i.e. a C++ source or header that "
-                "belongs to an open project.")
+                "file is read if the code model has not read it yet, so it need not have "
+                "been parsed; it does have to be a C++ source or header, and it is read as "
+                "the project it belongs to builds it.")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -761,7 +771,11 @@ void registerMcpTools()
             }
 
             const FilePath filePath = FilePath::fromUserInput(file);
-            const CPlusPlus::Document::Ptr doc = CppModelManager::document(filePath);
+
+            // The built-in front end and no other: what a file's problems
+            // are is what checking it said, and the cxx-frontend index does
+            // not type check. Read here where no pass has read it.
+            const CPlusPlus::Document::Ptr doc = CppModelManager::parsedDocument(filePath);
             if (!doc) {
                 return CallToolResult{}.isError(true).addContent(TextContent{}.text(
                     QString("No C++ code model document for \"%1\". Is it a C++ file that "
@@ -1981,10 +1995,15 @@ void registerMcpTools()
             }
 
             const FilePath filePath = FilePath::fromUserInput(file);
-            if (!CppModelManager::document(filePath)) {
+
+            // Whether this is a C++ file at all, which is what the question
+            // below needs -- the editor it opens parses the file itself,
+            // and whether some pass parsed it first says nothing. A file
+            // with no extension is a header (the standard library's are),
+            // which is what isCppFile() alone would turn away.
+            if (!ProjectFile::isCppFile(filePath) && !filePath.suffix().isEmpty()) {
                 return CallToolResult{}.isError(true).addContent(TextContent{}.text(
-                    QString("No C++ code model document for \"%1\". Is it a C++ file that "
-                            "belongs to an open project?").arg(filePath.toUserOutput())));
+                    QString("\"%1\" is not a C++ file.").arg(filePath.toUserOutput())));
             }
 
             Core::IEditor *editor = Core::EditorManager::openEditor(

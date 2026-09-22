@@ -227,6 +227,62 @@ void ModelManagerTest::testLanguageFeaturesWithoutAParse()
              CPlusPlus::LanguageFeatures::defaultFeatures());
 }
 
+// A file nothing has parsed, read because somebody asked about that one.
+//
+// What an indexing pass over the whole project used to guarantee, and what
+// the consumers of the global snapshot outside this plugin were really
+// leaning on: that a document is simply there for any file of the project.
+// With the pass off there is not one, so the callers that want one named
+// file ask for it to be read.
+void ModelManagerTest::testReadingOneNamedFile()
+{
+    TestCase testCase;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.filePath() / "thing.h";
+    QVERIFY(header.writeFileContents("class Thing {};\n"));
+    const FilePath source = dir.filePath() / "one.cpp";
+    QVERIFY(source.writeFileContents("#include \"thing.h\"\nint fromTheSource;\n"));
+
+    // In no project and under no pass, which is the state this answers in.
+    QVERIFY(!CppModelManager::document(source));
+
+    const auto namesIn = [](const Document::Ptr &document) {
+        QStringList names;
+        const CPlusPlus::Namespace * const global = document->globalNamespace();
+        for (int i = 0; global && i < global->memberCount(); ++i) {
+            const CPlusPlus::Symbol * const symbol = global->memberAt(i);
+            if (symbol && symbol->name() && symbol->name()->asNameId())
+                names << QString::fromUtf8(symbol->name()->asNameId()->chars());
+        }
+        return names;
+    };
+
+    const Document::Ptr doc = CppModelManager::parsedDocument(source);
+    QVERIFY(doc);
+    QVERIFY(namesIn(doc).contains("fromTheSource"));
+
+    // And what it read on the way is in the model as well, the way the
+    // pass left its headers there -- so the file's own declarations are
+    // its own, and the next caller finds both without reading anything.
+    QVERIFY(CppModelManager::document(header));
+    QVERIFY(namesIn(CppModelManager::document(header)).contains("Thing"));
+
+    // Asked again it is the document the model holds and not a second
+    // read. The file is written over in between, so a read would show in
+    // the answer rather than only in the time it took.
+    QVERIFY(source.writeFileContents("int rewritten;\n"));
+    const Document::Ptr again = CppModelManager::parsedDocument(source);
+    QVERIFY(again);
+    QVERIFY(namesIn(again).contains("fromTheSource"));
+
+    // A file that is not there is no document, rather than an empty one:
+    // a caller has to be able to tell "nothing to say about it" from "not
+    // a file".
+    QVERIFY(!CppModelManager::parsedDocument(dir.filePath() / "absent.cpp"));
+}
+
 /// Check: Frameworks headers are resolved.
 void ModelManagerTest::testFrameworkHeaders()
 {

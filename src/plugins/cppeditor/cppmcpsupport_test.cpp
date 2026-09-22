@@ -5,6 +5,7 @@
 
 #include <utils/algorithm.h>
 
+#include "cppmodelmanager.h"
 #include "cpptoolstestcase.h"
 
 #include <mcp/server/toolregistry.h>
@@ -362,6 +363,44 @@ void CppMcpSupportTest::testResultCap()
     QCOMPARE(result.value("symbols").toArray().size(), 2);
     QVERIFY(result.value("truncated").toBool());
     QCOMPARE(result.value("total").toInt(), 3);
+}
+
+// A file nothing has parsed, which is every file of a project where the
+// built-in indexing pass is off. Both of these tools used to turn such a
+// file away -- "is it a C++ file that belongs to an open project?" -- on
+// the strength of the pass having run.
+void CppMcpSupportTest::testAFileNoPassHasParsed()
+{
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+    CppEditor::Tests::TemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    // Written and deliberately not parsed, which is the whole row: the
+    // helper the rows above use parses as well.
+    const Utils::FilePath file = dir.createFile("unparsed.cpp",
+                                                "int fromTheFile;\n"
+                                                "struct S { int m; };\n"
+                                                "void f( { }\n"); // and a way to fail to parse
+    QVERIFY(!file.isEmpty());
+    QVERIFY(!CppModelManager::document(file));
+
+    QString error;
+    const QJsonArray symbols = callTool("cpp_get_file_symbols",
+                                        {{"file", file.toFSPathString()}}, &error)
+                                   .value("symbols").toArray();
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(!objectNamed(symbols, "fromTheFile").isEmpty());
+    QVERIFY(!objectNamed(symbols, "S").isEmpty());
+
+    // And what checking it said, which only the built-in front end says --
+    // the cxx-frontend index does not type check, so this one has nowhere
+    // else to go.
+    const QJsonArray problems = callTool("cpp_get_file_problems",
+                                         {{"file", file.toFSPathString()}}, &error)
+                                    .value("problems").toArray();
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(!problems.isEmpty());
 }
 
 void CppMcpSupportTest::testErrorHandling()
