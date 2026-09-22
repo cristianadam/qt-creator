@@ -200,6 +200,26 @@ QByteArray CxxFrontendIndexCache::writeEntries(const QList<CxxFrontendIndexEntry
 std::optional<QList<CxxFrontendIndexEntry>> CxxFrontendIndexCache::readEntries(
     const QByteArray &key) const
 {
+    // Asked for once per file a reading describes, which over a project is
+    // far more often than there are answers: the units of this project
+    // between them describe some three hundred thousand files out of five
+    // thousand descriptions, so one of these was being opened,
+    // decompressed and deserialized sixty-odd times over.
+    //
+    // Safe to remember for as long as the session lasts, and this is the
+    // one reason it needs no invalidating: the key is a digest of the very
+    // bytes it names, so what a key answers cannot change. A shard whose
+    // files have changed is a miss on the digests above, not a stale
+    // description here.
+    //
+    // The list is copy-on-write, so handing one back costs a reference.
+    {
+        QMutexLocker locker(&m_mutex);
+        const auto known = m_entriesByKey.constFind(key);
+        if (known != m_entriesByKey.constEnd())
+            return *known;
+    }
+
     QFile file(entriesFor(key).toFSPathString());
     if (!file.open(QIODevice::ReadOnly))
         return std::nullopt;
@@ -249,6 +269,10 @@ std::optional<QList<CxxFrontendIndexEntry>> CxxFrontendIndexCache::readEntries(
     }
     if (stream.status() != QDataStream::Ok)
         return std::nullopt;
+    // Read outside the lock, so two workers may read one of these twice;
+    // it cannot differ, being named after its own contents.
+    QMutexLocker locker(&m_mutex);
+    m_entriesByKey.insert(key, entries);
     return entries;
 }
 
@@ -276,6 +300,12 @@ void CxxFrontendIndexCache::forgetContents()
 {
     QMutexLocker locker(&m_mutex);
     m_contents.clear();
+    // The descriptions go with them, not because one could ever be wrong --
+    // a key is a digest of its own bytes -- but because they are the index
+    // over again, a second copy beside the one the locator keeps. Held for
+    // the batch, which is where the sharing is: the units read together are
+    // the ones reading the same headers.
+    m_entriesByKey.clear();
 }
 
 int CxxFrontendIndexCache::hits() const

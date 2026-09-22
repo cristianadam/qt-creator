@@ -62,8 +62,9 @@ public:
 
     // Forgets what each file's contents were, which is remembered only so
     // that a header reached by a thousand files is read once while a batch
-    // is checked. Called when a batch begins, so that a file written since
-    // the last one is seen to have changed.
+    // is checked, and what each file was described as. Called when a batch
+    // begins, so that a file written since the last one is seen to have
+    // changed.
     void forgetContents();
 
     // Where the store is, for a test that wants to look or to start empty.
@@ -98,6 +99,14 @@ private:
     // drops the entries nothing refers to any longer. Run once a session,
     // and on the thread that writes rather than the one that draws.
     void pruneToBound() const;
+
+    // What each description was, for as long as the batch lasts. A key is a
+    // digest of its own bytes, so this can never answer wrongly and wants
+    // no invalidating; it is dropped with the contents above because it is
+    // the index over again -- deserialized, a second copy of what the
+    // locator already holds -- and the sharing that makes it worth having
+    // is between the units of one batch anyway.
+    mutable QHash<QByteArray, QList<CxxFrontendIndexEntry>> m_entriesByKey;
 
     Utils::FilePath m_directory;
     QByteArray m_macrosKey;
