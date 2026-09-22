@@ -105,9 +105,23 @@ QByteArray shortDigest(const QByteArray &data);
 // already there. Whatever is read first stays, which is the hot set --
 // every translation unit reaches much the same headers.
 //
+// Past the bound the two answers can part company: the digest is the
+// first bytes this batch saw and the text is whatever the disk holds now,
+// so a file written over mid-batch may be *read* newer than it is
+// *described*. That way round costs a miss next session -- the shard says
+// the old bytes and the disk says the new ones -- except where the file is
+// put back as it was, which is a branch switched out and in again while a
+// batch runs. Keeping the two in one entry is what would close it, and it
+// would mean keeping the text of every file past the bound.
+//
 // Shared between the workers of a batch, so it locks; and as with
 // ResolvedNames the disk read happens outside the lock, since holding it
 // across one would put every reader behind whichever is reading.
+//
+// Keyed on the path as the front end spells it -- Utils::FilePath does not
+// clean a path it is handed, so a header found under a header path with a
+// ".." in it is named that way in a shard too, and a key cleaned on one
+// side and not the other is a miss that quietly reads the file.
 class HeaderContents
 {
 public:
@@ -121,7 +135,12 @@ public:
     std::optional<QString> textOf(const Utils::FilePath &filePath);
 
     // A shortDigest() of what \a filePath held when this batch first read
-    // it, or nothing where it cannot be read.
+    // it, and nothing where it cannot be read -- which is remembered as
+    // well, a header deleted under a batch being asked about by every
+    // shard that names it.
+    //
+    // \a filePath is the path as a shard holds it, which is the path the
+    // front end was given rather than a cleaned one: see above.
     //
     // The digests are kept whatever the bound does with the text: there is
     // one per file where a text is a file, and dropping a digest would cost
@@ -132,7 +151,7 @@ public:
     // from the store asks this and nothing else, and filling the bound with
     // the text of files nobody is going to parse is 256 MB spent on a
     // guess.
-    std::optional<QByteArray> digestOf(const Utils::FilePath &filePath);
+    QByteArray digestOf(const QString &filePath);
 
     // What a caller read for itself, so that its digest is of the bytes it
     // used. For the file a reading is *of*: that one is read as a whole
@@ -149,12 +168,15 @@ public:
 private:
     // The digest of \a contents kept for \a filePath, unless this batch
     // already has one -- two readers may reach a file at once, and which of
-    // them is remembered must not depend on that.
-    QByteArray noteDigest(const Utils::FilePath &filePath, const QByteArray &contents);
+    // them is remembered must not depend on that. \a readable false keeps
+    // the emptiness rather than the digest of nothing.
+    QByteArray noteDigest(const QString &filePath,
+                          const QByteArray &contents,
+                          bool readable = true);
 
     mutable QMutex m_mutex;
-    QHash<Utils::FilePath, QString> m_known;
-    QHash<Utils::FilePath, QByteArray> m_digests;
+    QHash<QString, QString> m_known;
+    QHash<QString, QByteArray> m_digests;
     qint64 m_bytes = 0;
     const qint64 m_maximumBytes;
     // Counted in sixty-four bits because a batch is everything pending and

@@ -1929,6 +1929,11 @@ void CxxFrontendModelTest::testTheHeadersAreReadOnce()
 // justifies it was taken.
 void CxxFrontendModelTest::testTheHeaderCacheIsWhatTheResolverReads()
 {
+    // The index reads nothing unless this model was asked for, so with it
+    // off there is no reading here to look at.
+    if (!cxxFrontendModelRequested())
+        QSKIP("Only this model reads a file for the index");
+
     TemporaryDir dir;
     QVERIFY(dir.isValid());
     const FilePath header = dir.createFile("thing.h", "class OnDisk {};\n");
@@ -1980,6 +1985,9 @@ void CxxFrontendModelTest::testTheHeaderCacheIsWhatTheResolverReads()
 // took the stored reading, and showed what the file no longer declares.
 void CxxFrontendModelTest::testAReadingIsStoredUnderTheBytesItWasMadeFrom()
 {
+    if (!cxxFrontendModelRequested())
+        QSKIP("Only this model reads a file for the index");
+
     TemporaryDir dir;
     QVERIFY(dir.isValid());
     const FilePath header = dir.createFile("thing.h", "class OnDisk {};\n");
@@ -1990,6 +1998,7 @@ void CxxFrontendModelTest::testAReadingIsStoredUnderTheBytesItWasMadeFrom()
         ProjectExplorer::HeaderPath::makeUser(dir.filePath())};
     const auto texts = std::make_shared<HeaderContents>();
     const CxxFrontendIndexInputs inputs;
+    const FilePath store = dir.filePath() / "store";
 
     const std::optional<CxxFrontendIndexRead> read
         = cxxFrontendReadForIndex(inputs, source, paths,
@@ -2001,22 +2010,92 @@ void CxxFrontendModelTest::testAReadingIsStoredUnderTheBytesItWasMadeFrom()
     // two reads used to straddle.
     QVERIFY(header.writeFileContents("class Changed {};\n"));
 
-    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, dir.filePath() / "store");
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store);
     cache.store(source, "projectkey", *read, texts);
 
     // A later session, with a table that has seen nothing: the header on
     // disk is Changed and the shard describes OnDisk, so the shard is
     // stale and the file has to be read afresh. Digested a second time it
     // would say it was still good.
-    CxxFrontendIndexCache reopened(QStringList{"FOO 1"}, dir.filePath() / "store");
+    CxxFrontendIndexCache reopened(QStringList{"FOO 1"}, store);
     QVERIFY(!reopened.take(source, "projectkey"));
 
     // And the same store does answer for a header that did not move, so
     // what is being shown above is the digest and not a shard this cannot
     // read at all.
     QVERIFY(header.writeFileContents("class OnDisk {};\n"));
-    CxxFrontendIndexCache asItWas(QStringList{"FOO 1"}, dir.filePath() / "store");
+    CxxFrontendIndexCache asItWas(QStringList{"FOO 1"}, store);
     QVERIFY(asItWas.take(source, "projectkey"));
+
+    // And the same holds of the file the reading is *of*, which the
+    // resolver never hands over and which the reading therefore has to
+    // note for itself. It stands first among the files a shard checks.
+    const FilePath other = dir.createFile("two.cpp", "#include \"thing.h\"\nint b;\n");
+    QVERIFY(!other.isEmpty());
+    const auto second = std::make_shared<HeaderContents>();
+    const std::optional<CxxFrontendIndexRead> readOther
+        = cxxFrontendReadForIndex(inputs, other, paths,
+                                  std::make_shared<ResolvedNames>(), second);
+    QVERIFY(readOther);
+
+    // Only the source moves this time, so nothing but its own digest can
+    // make the shard stale.
+    QVERIFY(other.writeFileContents("#include \"thing.h\"\nint b;\nint c;\n"));
+    CxxFrontendIndexCache forOther(QStringList{"FOO 1"}, store);
+    forOther.store(other, "projectkey", *readOther, second);
+
+    CxxFrontendIndexCache afterwards(QStringList{"FOO 1"}, store);
+    QVERIFY(!afterwards.take(other, "projectkey"));
+}
+
+// And a header path with a ".." in it names the same file, though nothing
+// anywhere cleans it.
+//
+// A resolver appends a name to a header path and Utils::FilePath keeps
+// what it is handed, so the file is called <dir>/sub/../thing.h by the
+// reading, by the front end and by the shard alike. Cleaning that path on
+// the way into the batch's table -- or on the way out of it -- makes the
+// two sides disagree about which file is meant, and the miss is silent:
+// the digest is simply read off the disk again, at the later moment this
+// is all here to avoid.
+void CxxFrontendModelTest::testAHeaderPathIsNotCleanedOnOneSideOnly()
+{
+    if (!cxxFrontendModelRequested())
+        QSKIP("Only this model reads a file for the index");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("thing.h", "class OnDisk {};\n");
+    // In angle brackets, so that it is looked for among the header paths
+    // rather than beside the file that includes it -- that search goes
+    // through resolvePath(), which does clean.
+    const FilePath source = dir.createFile("one.cpp", "#include <thing.h>\nint a;\n");
+    QVERIFY(!header.isEmpty() && !source.isEmpty());
+    QVERIFY((dir.filePath() / "sub").ensureWritableDir());
+
+    // The one thing this row does differently, and it is what a project
+    // configured with -I<build>/../src hands over.
+    const ProjectExplorer::HeaderPaths paths{
+        ProjectExplorer::HeaderPath::makeUser(dir.filePath() / "sub" / "..")};
+    const auto texts = std::make_shared<HeaderContents>();
+    const CxxFrontendIndexInputs inputs;
+    const FilePath store = dir.filePath() / "store";
+
+    const std::optional<CxxFrontendIndexRead> read
+        = cxxFrontendReadForIndex(inputs, source, paths,
+                                  std::make_shared<ResolvedNames>(), texts);
+    QVERIFY(read);
+    // Named as it was reached, which is the whole premise of the row.
+    QVERIFY(read->includedFiles.contains((dir.filePath() / "sub" / ".." / "thing.h")
+                                             .toFSPathString()));
+
+    QVERIFY(header.writeFileContents("class Changed {};\n"));
+
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, store);
+    cache.store(source, "projectkey", *read, texts);
+
+    CxxFrontendIndexCache reopened(QStringList{"FOO 1"}, store);
+    QVERIFY(!reopened.take(source, "projectkey"));
 }
 
 void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()

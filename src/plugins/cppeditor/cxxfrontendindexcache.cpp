@@ -278,8 +278,12 @@ QByteArray CxxFrontendIndexCache::contentsOf(const QString &filePath,
     // read them, so this asks rather than reads. It stands for the memo
     // below and lasts exactly as long -- one table for the question, on
     // the side that reads the files.
+    //
+    // Asked with the path as it stands in the shard, which is the path the
+    // front end was given: a cleaned one would not be found, nothing
+    // having cleaned what the resolver appended to a header path.
     if (texts)
-        return texts->digestOf(FilePath::fromUserInput(filePath)).value_or(QByteArray());
+        return texts->digestOf(filePath);
 
     {
         QMutexLocker locker(&m_mutex);

@@ -115,9 +115,14 @@ HeaderContents::HeaderContents(qint64 maximumBytes)
 
 std::optional<QString> HeaderContents::textOf(const FilePath &filePath)
 {
+    // The path as the front end spells it, which is the path a shard holds
+    // and the one the digest side asks about. Not a cleaned one: nothing
+    // cleans what a resolver appends to a header path, so cleaning here
+    // alone would make every such file a miss on the other side.
+    const QString key = filePath.toFSPathString();
     {
         QMutexLocker locker(&m_mutex);
-        const auto known = m_known.constFind(filePath);
+        const auto known = m_known.constFind(key);
         if (known != m_known.constEnd()) {
             ++m_hits;
             return *known;
@@ -133,24 +138,24 @@ std::optional<QString> HeaderContents::textOf(const FilePath &filePath)
     // Taken of the very bytes this reading will be made from, and before
     // the text is offered to anyone, so that no reading can be described
     // from one version of a file and stored under the digest of another.
-    noteDigest(filePath, *contents);
+    noteDigest(key, *contents);
 
     QMutexLocker locker(&m_mutex);
     // Two readers may have read it at once, which costs a read. Whichever
     // got there first is the answer -- the digest above is that one's, and
     // a file written over in between would otherwise be handed to one
     // reading as it became and to another as it was.
-    const auto known = m_known.constFind(filePath);
+    const auto known = m_known.constFind(key);
     if (known != m_known.constEnd())
         return *known;
     if (m_bytes + contents->size() <= m_maximumBytes) {
         m_bytes += contents->size();
-        m_known.insert(filePath, text);
+        m_known.insert(key, text);
     }
     return text;
 }
 
-std::optional<QByteArray> HeaderContents::digestOf(const FilePath &filePath)
+QByteArray HeaderContents::digestOf(const QString &filePath)
 {
     {
         QMutexLocker locker(&m_mutex);
@@ -165,20 +170,30 @@ std::optional<QByteArray> HeaderContents::digestOf(const FilePath &filePath)
     // Outside the lock, as the text above is read outside it and for the
     // same reason: whoever is at the disk must not hold every other worker
     // behind them.
-    const Result<QByteArray> contents = filePath.fileContents();
-    if (!contents)
-        return std::nullopt;
-    return noteDigest(filePath, *contents);
+    const Result<QByteArray> contents = FilePath::fromUserInput(filePath).fileContents();
+
+    // A file that cannot be read has no digest, and that is remembered as
+    // much as one that has: a header deleted under a batch is named by
+    // every shard that ever read it, and a batch would otherwise try the
+    // open again for each. Unlike the text above, which is an answer a
+    // reading needs and worth looking for again.
+    return noteDigest(filePath, contents ? *contents : QByteArray(), contents.has_value());
 }
 
 void HeaderContents::noteContents(const FilePath &filePath, const QByteArray &contents)
 {
-    noteDigest(filePath, contents);
+    noteDigest(filePath.toFSPathString(), contents);
 }
 
-QByteArray HeaderContents::noteDigest(const FilePath &filePath, const QByteArray &contents)
+QByteArray HeaderContents::noteDigest(const QString &filePath,
+                                      const QByteArray &contents,
+                                      bool readable)
 {
-    const QByteArray digest = shortDigest(contents);
+    // Nothing rather than the digest of nothing, which is a real digest
+    // and would have an empty file and a missing one describing each
+    // other. The store reads an empty answer as "this cannot be checked"
+    // and writes no shard.
+    const QByteArray digest = readable ? shortDigest(contents) : QByteArray();
 
     QMutexLocker locker(&m_mutex);
     // Whichever version of a file this batch saw first is the one it is

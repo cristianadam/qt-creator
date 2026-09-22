@@ -55,6 +55,7 @@ private slots:
     void testTheHeadersAreReadOnce();
     void testTheHeaderCacheIsWhatTheResolverReads();
     void testAReadingIsStoredUnderTheBytesItWasMadeFrom();
+    void testAHeaderPathIsNotCleanedOnOneSideOnly();
     void testTheStoreGivesBackWhatWasPutIn();
     void testTheStoreForgetsWhenTheFileChanges();
     void testTheStoreForgetsWhenAnIncludedFileChanges();
