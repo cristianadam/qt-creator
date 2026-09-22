@@ -1043,16 +1043,58 @@ Document::Ptr CppModelManager::document(const FilePath &filePath)
     return d->m_snapshot.document(filePath);
 }
 
+// What the indexing pass leaves out of the files it is given -- defined below,
+// where the pass itself uses it, and named here because parsedDocument() reads
+// one named file by the same rule.
+static QSet<FilePath> filteredFilesRemoved(const QSet<FilePath> &files,
+                                           const CppCodeModelSettingsData &settings);
+
 Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
 {
-    if (const Document::Ptr already = document(filePath))
+    // What the model has already, unless the file has moved on since it was
+    // read -- the same comparison timeStampModifiedFiles() makes for a
+    // session coming back to a project. Where the pass is off nothing else
+    // ever reads a file again that is not open in an editor, so a caller
+    // that has just written the file would otherwise be handed what it said
+    // before, for the rest of the session. A document with no time of its
+    // own was made from an editor's buffer rather than from disk, and that
+    // one is the better answer whatever the disk says.
+    const Document::Ptr already = document(filePath);
+    if (already && (already->lastModified().isNull()
+                    || already->lastModified() == filePath.lastModified())) {
         return already;
+    }
+
+    // Nothing to read is nothing to say, and it has to be said here:
+    // CppSourceProcessor's "could not read it" exit is written for a file
+    // included *from* another, so at the top level it falls through and
+    // publishes a document under an empty path -- which then stands in the
+    // snapshot for every file nobody can read.
+    if (!workingCopy().get(filePath) && !filePath.isReadableFile())
+        return {};
+
+    // And nothing this front end reads is nothing to parse. A file with no
+    // extension is a header -- the standard library's are -- which is what
+    // isCppFile() alone would turn away.
+    if (!ProjectFile::isCppFile(filePath) && !filePath.suffix().isEmpty())
+        return {};
+
+    // What the indexing pass would not have read, this does not read:
+    // indexing turned off, a file past the size limit, a file the ignore
+    // pattern names. The rule is the pass's own so that "the document the
+    // pass would have left" stays true where it would have left none --
+    // and a caller naming a sixty-megabyte generated source must not
+    // freeze the thread it asked on.
+    const CppCodeModelSettingsData settings
+        = CppCodeModelSettings::settingsForProject(ProjectManager::projectForFile(filePath));
+    if (filteredFilesRemoved({filePath}, settings).isEmpty())
+        return {};
 
     // Read the way the indexing pass reads one file, so that what a caller
     // gets here and what it would have got from the pass are the same
-    // document: the part's own header paths and language features, the
-    // defines run in before the file itself -- a file read without them is
-    // a file with the wrong branches taken.
+    // document: the part's own header paths and language features, and the
+    // configuration file run in before it -- a file read without those
+    // defines is a file with the wrong branches taken.
     //
     // The pass's choice of part, too, and not the editor's: parts.first()
     // where a file is in several, and the fallback paths where it is in
@@ -1068,6 +1110,16 @@ Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
              : ProjectFile::isC(ProjectFile::classify(filePath))
                    ? LanguageFeatures::cFeatures()
                    : LanguageFeatures::defaultFeatures());
+    // Which the pass does not set and the editor's parser does: the pass
+    // sifts its own file list instead, and nothing sifts the headers a
+    // reading reaches.
+    processor->setFileSizeLimitInMb(settings.effectiveIndexerFileSizeLimitInMb());
+    // And out of the copy of the snapshot the processor carries, as the
+    // pass takes every file it is about to read out of it: a document
+    // already there is reused rather than read, and a file reached here is
+    // one that has changed since -- reusing what it said before is the
+    // answer this exists to avoid.
+    processor->removeFromCache(filePath);
     processor->run(configurationFileName());
     processor->run(filePath);
 

@@ -1953,9 +1953,10 @@ void registerMcpTools()
                 "Lists the C++ quick-fixes and refactoring actions the editor offers at a "
                 "position - what \"Alt+Enter\" would show - each with its description. Give "
                 "the file and a 1-based line and column. This only lists the available "
-                "actions; it does not apply them. The file is opened in an editor if it is "
-                "not already, and must belong to an open project and be parsed (the actions "
-                "depend on the editor's semantic info being up to date).")
+                "actions; it does not apply them. The file has to be a C++ source or "
+                "header, and is opened in an editor if it is not already; the actions "
+                "depend on that editor's semantic info, so a file it has only just opened "
+                "may need asking about twice.")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1998,10 +1999,14 @@ void registerMcpTools()
 
             // Whether this is a C++ file at all, which is what the question
             // below needs -- the editor it opens parses the file itself,
-            // and whether some pass parsed it first says nothing. A file
-            // with no extension is a header (the standard library's are),
-            // which is what isCppFile() alone would turn away.
-            if (!ProjectFile::isCppFile(filePath) && !filePath.suffix().isEmpty()) {
+            // and whether some pass parsed it first says nothing.
+            //
+            // By its extension and nothing else, where the two tools above
+            // also take a file that has none: what those do with such a
+            // file is read it, and what this does is *open* it, which
+            // would leave a LICENSE or a Makefile standing in the editor
+            // list of somebody who asked about a C++ file.
+            if (!ProjectFile::isCppFile(filePath)) {
                 return CallToolResult{}.isError(true).addContent(TextContent{}.text(
                     QString("\"%1\" is not a C++ file.").arg(filePath.toUserOutput())));
             }

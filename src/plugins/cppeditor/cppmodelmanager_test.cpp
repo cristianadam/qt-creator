@@ -236,6 +236,15 @@ void ModelManagerTest::testLanguageFeaturesWithoutAParse()
 // file ask for it to be read.
 void ModelManagerTest::testReadingOneNamedFile()
 {
+    // Writing a file twice in a row says nothing about when it changed,
+    // the two writes falling inside whatever the file system's clock can
+    // tell apart. Said outright instead -- and not slept for.
+    const auto setLastModified = [](const FilePath &filePath, const QDateTime &when) {
+        QFile file(filePath.toFSPathString());
+        return file.open(QIODevice::ReadWrite)
+               && file.setFileTime(when, QFileDevice::FileModificationTime);
+    };
+
     TestCase testCase;
 
     TemporaryDir dir;
@@ -269,18 +278,35 @@ void ModelManagerTest::testReadingOneNamedFile()
     QVERIFY(CppModelManager::document(header));
     QVERIFY(namesIn(CppModelManager::document(header)).contains("Thing"));
 
-    // Asked again it is the document the model holds and not a second
-    // read. The file is written over in between, so a read would show in
-    // the answer rather than only in the time it took.
+    // Asked again with nothing touched it is the very document the model
+    // holds, rather than a second reading of the same bytes.
+    QCOMPARE(CppModelManager::parsedDocument(source).data(), doc.data());
+
+    // And read again where the file has moved on, which where the pass is
+    // off nothing else would ever do: the answer is what the file says
+    // now. The time is set rather than waited for -- a second write inside
+    // the clock's resolution is the same file as far as anything can tell.
     QVERIFY(source.writeFileContents("int rewritten;\n"));
+    QVERIFY(setLastModified(source, doc->lastModified().addSecs(2)));
     const Document::Ptr again = CppModelManager::parsedDocument(source);
     QVERIFY(again);
-    QVERIFY(namesIn(again).contains("fromTheSource"));
+    QVERIFY(namesIn(again).contains("rewritten"));
+    QVERIFY(!namesIn(again).contains("fromTheSource"));
 
     // A file that is not there is no document, rather than an empty one:
     // a caller has to be able to tell "nothing to say about it" from "not
-    // a file".
+    // a file". And nothing of it is left in the model either -- the
+    // processor's own way of failing is to publish a document under an
+    // empty path, which would then stand for every file nobody can read.
+    const int held = CppModelManager::snapshot().size();
     QVERIFY(!CppModelManager::parsedDocument(dir.filePath() / "absent.cpp"));
+    QCOMPARE(CppModelManager::snapshot().size(), held);
+
+    // Nor does it read what this front end does not read.
+    const FilePath notCpp = dir.filePath() / "notes.txt";
+    QVERIFY(notCpp.writeFileContents("not C++ at all\n"));
+    QVERIFY(!CppModelManager::parsedDocument(notCpp));
+    QCOMPARE(CppModelManager::snapshot().size(), held);
 }
 
 /// Check: Frameworks headers are resolved.
