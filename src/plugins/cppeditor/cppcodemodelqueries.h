@@ -255,6 +255,22 @@ public:
 
     // The class called \a className -- written out in full -- as the reading
     // of \a filePath has it, the headers it reads included.
+    //
+    // Answered without reading anything where it can be: the index says
+    // which of the files \a filePath reads writes that class, and the class's
+    // own tokens say the rest -- an access section, the word that marks one
+    // as Qt's and a base clause are all there in the text, which is how moc
+    // reads them too. That is what clangd does with a cross-file question,
+    // and what makes a scan over a project affordable: asking a front end is
+    // a parse of a file and every header it reaches, and this is asked of
+    // every test class and of every class those derive from.
+    //
+    // Where that leaves the text and a reading saying different things, the
+    // text is taken -- a slot declared in a branch this configuration does
+    // not build is among them, the way a macro use in one is, and a slot's
+    // signature carries its parameter list as written where a reading writes
+    // the types alone. A class a macro's body writes has no tokens to read,
+    // and is answered for by a reading as before.
     ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
                                                 const QString &className) const;
 

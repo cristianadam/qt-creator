@@ -39,6 +39,8 @@
 #include <QMutexLocker>
 #include <QThread>
 
+#include <atomic>
+
 using namespace CPlusPlus;
 using namespace Utils;
 
@@ -1032,6 +1034,10 @@ public:
     const CxxFrontendDocument *document = nullptr;
 };
 
+// How many files have been read here, which cxxFrontendReadingsMade() hands
+// out. Written from every thread a question may be asked on.
+std::atomic<int> theReadingsMade{0};
+
 // Reads \a filePath with this model, taking \a editedFile's text from \a
 // editedText rather than from the working copy -- which is a parse behind
 // whatever somebody is typing right now.
@@ -1049,6 +1055,11 @@ HoldingDocument readWith(const WorkingCopy &workingCopy,
     } else {
         return {};
     }
+    ++theReadingsMade;
+    // Which file, for whoever is measuring where a scan's time goes; the
+    // count above is what a test asserts on. Off by default, this category
+    // being at info.
+    qCDebug(cxxFrontendLog) << "reading" << filePath << "to answer a question";
 
     // Found among the part's header paths, the way a compiler finds it and
     // the way the index does. Through the built-in model's snapshot before,
@@ -1551,6 +1562,11 @@ private:
 };
 
 } // namespace
+
+int cxxFrontendReadingsMade()
+{
+    return theReadingsMade;
+}
 
 std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     const FilePath &filePath, int line, int column,

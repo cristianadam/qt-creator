@@ -1827,6 +1827,137 @@ void ModelManagerTest::testTheStoredIncludeClosure()
              "the closure was read rather than taken from the store");
 }
 
+// What a test class declares, answered out of the index and the class's own
+// tokens: no pass has read the file, no translation unit is read, and the
+// answer is the one a reading gives.
+//
+// The other half of what clangd does with a cross-file question. The closure
+// above comes out of the index's store; this is the rest of the pattern --
+// the index says which file writes the class, and where a text-level fact
+// about a file nobody parsed is what is wanted, the file is lexed. Reading it
+// instead is a parse of it and every header it reaches, and a test
+// framework's scan asks this of every test class and of every class those
+// derive from.
+void ModelManagerTest::testTheIndexedClassShape()
+{
+    if (!theIndexHasAStore())
+        QSKIP("Only this model's index describes the headers a unit read");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    // A Qt test class as one is really written, with what a lexer has to see
+    // past: a class named through an export macro and inside a namespace, a
+    // constructor and a destructor, the macros a class body uses, a slot
+    // defined where it is declared, a nested class of its own with private
+    // slots, and sections that are not private slots at all.
+    const FilePath header = dir.createFile(
+        "tst_shape.h",
+        "#pragma once\n"                                        // 1
+        "#define Q_OBJECT\n"                                    // 2
+        "#define Q_CLASSINFO(name, value)\n"                     // 3
+        "#define TESTED_EXPORT\n"                                // 4
+        "class QObject {};\n"                                    // 5
+        "class tst_Base : public QObject\n"                      // 6
+        "{\n"                                                    // 7
+        "private slots:\n"                                        // 8
+        "    void inherited();\n"                                // 9
+        "};\n"                                                   // 10
+        "namespace NS {\n"                                       // 11
+        "class TESTED_EXPORT tst_Shape : public tst_Base\n"      // 12
+        "{\n"                                                    // 13
+        "    Q_OBJECT\n"                                         // 14
+        "    Q_CLASSINFO(\"a\", \"b\")\n"                        // 15
+        "public:\n"                                              // 16
+        "    tst_Shape();\n"                                     // 17
+        "    ~tst_Shape();\n"                                    // 18
+        "    void notASlot();\n"                                 // 19
+        "public slots:\n"                                        // 20
+        "    void notPrivate();\n"                               // 21
+        "private slots:\n"                                       // 22
+        "    void testOne();\n"                                  // 23
+        "    void testTwo_data();\n"                             // 24
+        "    void testTwo();\n"                                  // 25
+        "    void withArguments(int one, int two);\n"            // 26
+        "    void writtenHere() { notASlot(); }\n"               // 27
+        "    Q_CLASSINFO(\"c\", \"d\")\n"                        // 28
+        "private:\n"                                             // 29
+        "    void notASlotEither();\n"                           // 30
+        "    class Nested\n"                                     // 31
+        "    {\n"                                                // 32
+        "    private slots:\n"                                    // 33
+        "        void notOurs();\n"                              // 34
+        "    };\n"                                               // 35
+        "};\n"                                                   // 36
+        "} // namespace NS\n");                                  // 37
+    const FilePath source = dir.createFile("tst_shape.cpp",
+                                           "#include \"tst_shape.h\"\n"
+                                           "int main() { NS::tst_Shape shape; }\n");
+    QVERIFY(!header.isEmpty() && !source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+
+    // Indexed, which is what describes the header the unit read.
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked with no reading of its own to fall back on: an empty snapshot,
+    // so the built-in answer cannot be the one that comes back, and an empty
+    // working copy, so the files count as ones nobody is editing.
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int readBefore = cxxFrontendReadingsMade();
+#endif
+    const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+    const auto said = [&read, &source](const QString &className) {
+        const CodeModelQueries::ClassWithPrivateSlots found
+            = read.classWithPrivateSlots(source, className);
+        if (!found.klass.isValid())
+            return QString("nothing");
+        QStringList declared; // "slots" is one of Qt's own macros here
+        for (const WrittenFunction &slot : found.privateSlots)
+            declared << QString("%1 at %2").arg(slot.signature).arg(slot.line);
+        return QString("%1 at %2:%3 | %4 | bases: %5")
+            .arg(found.klass.qualifiedName, found.klass.filePath.fileName())
+            .arg(found.klass.line)
+            .arg(declared.join(", "), found.baseClasses.join(", "));
+    };
+
+    // The private slots in the order they are declared and nothing else, the
+    // class found through the header the source file includes, and the base
+    // as the class names it.
+    QCOMPARE(said("NS::tst_Shape"),
+             QString("NS::tst_Shape at tst_shape.h:12 | testOne() at 23, "
+                     "testTwo_data() at 24, testTwo() at 25, "
+                     "withArguments(int one, int two) at 26, writtenHere() at 27 "
+                     "| bases: tst_Base"));
+
+    // And the base, asked for by the name the class above named it with --
+    // which is how a runner walks a hierarchy.
+    QCOMPARE(said("tst_Base"),
+             QString("tst_Base at tst_shape.h:6 | inherited() at 9 | bases: QObject"));
+
+    // And both without reading a translation unit, which is the whole point
+    // and the one thing the answers alone do not say: a reading of the source
+    // file answers them correctly too, and costs a parse of it and every
+    // header it reaches.
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
+    // A name the index has nothing under is not answered for out of it: that
+    // the index has no such class is no proof that the file writes none --
+    // one a macro's body wrote is exactly that -- so the question is passed
+    // on, and reading is what it costs.
+    QCOMPARE(said("NS::tst_Missing"), QString("nothing"));
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+             "a class the index does not have was answered for without reading");
+#endif
+}
+
 // What indexing a real project costs, which is the only apples-to-apples way
 // to compare the two models: the same project, the same kit, in the editor
 // that will do it.

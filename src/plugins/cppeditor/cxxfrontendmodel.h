@@ -54,6 +54,20 @@ namespace CppEditor::Internal {
 // work can be asked for directly -- which is how the test drives it.
 bool cxxFrontendModelRequested();
 
+// How many files this model has been asked to read to answer a question,
+// since the session began: a parse of the file and every header it reaches,
+// which is a second for anything that includes a Qt module.
+//
+// The one outward sign of what a question cost. An answer taken from the
+// index or read off a file's own tokens leaves this standing where one that
+// needs a translation unit moves it, which is what a test pinning the source
+// of an answer asserts on -- the answer itself is the same either way -- and
+// what measuring a framework's scan over a project counts.
+//
+// The index's own readings are not among them: how much of it came out of
+// the store is what its hits and misses say.
+int cxxFrontendReadingsMade();
+
 // What the stack of a thread reading with this front end has to hold.
 //
 // The front end walks a file by recursion and bounds itself by counting its

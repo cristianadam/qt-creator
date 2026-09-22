@@ -28,6 +28,8 @@
 #include <QTextCursor>
 #include <QTextDocument>
 
+#include <algorithm>
+
 using namespace CPlusPlus;
 using namespace Utils;
 
@@ -62,6 +64,397 @@ bool insideADirective(const QString &text, int start)
     }
     return QStringView(text).mid(lineStart, start - lineStart).trimmed().startsWith(u'#');
 }
+
+// The text \a token stands for.
+QString spelling(const QString &text, const Token &token)
+{
+    return text.mid(token.utf16charsBegin(), token.utf16charsEnd() - token.utf16charsBegin());
+}
+
+#ifdef QTC_WITH_CXX_FRONTEND
+
+// Where each line of a file begins, so that a place some other reader
+// recorded can be found among the file's tokens and a token can be reported
+// as a place again.
+//
+// A place counts lines and columns from one, an index entry counts columns
+// from zero, and a token knows only how far into the file it begins -- so the
+// line starts are counted out once and each conversion is a lookup.
+class LineStarts
+{
+public:
+    explicit LineStarts(const QString &text)
+    {
+        m_starts.append(0);
+        for (int at = text.indexOf(u'\n'); at >= 0; at = text.indexOf(u'\n', at + 1))
+            m_starts.append(at + 1);
+    }
+
+    // Both counted from one, and -1 where the file has no such place.
+    int offsetOf(int line, int column) const
+    {
+        if (line < 1 || line > m_starts.size() || column < 1)
+            return -1;
+        return m_starts.at(line - 1) + column - 1;
+    }
+
+    void placeOf(int offset, int *line, int *column) const
+    {
+        const auto after = std::upper_bound(m_starts.cbegin(), m_starts.cend(), offset);
+        *line = int(after - m_starts.cbegin());
+        *column = offset - *(after - 1) + 1;
+    }
+
+private:
+    QList<int> m_starts;
+};
+
+// Whether \a token is one of the words that marks an access section as one of
+// Qt's: "slots" and "Q_SLOTS", or "signals" and "Q_SIGNALS".
+//
+// A lexer told about Qt's keywords hands each over as a token of its own, and
+// one told nothing about them as an identifier, so both are taken -- which
+// scanner is installed is not this reader's business.
+bool marksSlots(const QString &text, const Token &token)
+{
+    if (token.kind() == T_Q_SLOTS)
+        return true;
+    if (token.kind() != T_IDENTIFIER)
+        return false;
+    const QString word = spelling(text, token);
+    return word == "slots" || word == "Q_SLOTS";
+}
+
+bool marksSignals(const QString &text, const Token &token)
+{
+    if (token.kind() == T_Q_SIGNALS)
+        return true;
+    if (token.kind() != T_IDENTIFIER)
+        return false;
+    const QString word = spelling(text, token);
+    return word == "signals" || word == "Q_SIGNALS";
+}
+
+// What a test runner needs of a class beyond where it stands: the slots it
+// declares privately -- which is how a Qt test writes its test functions --
+// and what it derives from.
+struct WrittenClassShape
+{
+    QList<WrittenFunction> privateSlots;
+    QStringList baseClasses;
+};
+
+// That shape, read off the tokens of the file that writes the class, whose
+// own name stands at \a line and \a column of \a text -- both counted from
+// one.
+//
+// A lexer's job, and moc's precedent: an access section, the word that marks
+// one as Qt's and a base clause are all there in the text, and none of them
+// needs a name resolved or a header read. Where the class is written is a
+// question for whoever has read the project -- the index answers it -- and
+// this is what the class says there.
+//
+// Nothing where the tokens write no class of that name at that place, which
+// is what says the place is out of date or that a macro's body wrote the
+// class: then the caller reads the file after all.
+//
+// As the text has it, which differs from a reading of the translation unit in
+// the ways a reader asking what a file says can live with. A slot declared in
+// a branch this configuration does not build is among them, the way a macro
+// use in one is. A base is named as the class names it rather than written
+// out in full, which is what a reader looking that base up in turn asks with
+// anyway. And the signature carries the parameter list as written, names and
+// all, where a reading writes the types alone -- a test function takes none,
+// and nothing asks this of a private slot.
+std::optional<WrittenClassShape> classShapeIn(const QString &text, const LineStarts &lines,
+                                              const FilePath &filePath, const QString &ownName,
+                                              int line, int column)
+{
+    const int offset = lines.offsetOf(line, column);
+    if (offset < 0)
+        return std::nullopt;
+
+    // Whichever scanner is installed, told about Qt's keywords: what marks an
+    // access section as a slot section is one of them.
+    SimpleLexer lexer;
+    lexer.setSkipComments(true);
+    lexer.setLanguageFeatures(LanguageFeatures::defaultFeatures());
+    const Tokens tokens = lexer(text);
+
+    int at = -1;
+    for (int i = 0; i < tokens.size() && tokens.at(i).utf16charsBegin() <= offset; ++i) {
+        if (tokens.at(i).utf16charsBegin() == offset)
+            at = i;
+    }
+    if (at < 0 || tokens.at(at).kind() != T_IDENTIFIER || spelling(text, tokens.at(at)) != ownName)
+        return std::nullopt;
+
+    // And that the name is a class's. An export macro may stand between the
+    // word and the name; a class a macro's body wrote has neither.
+    int keyword = at - 1;
+    while (keyword >= 0 && tokens.at(keyword).kind() == T_IDENTIFIER)
+        --keyword;
+    if (keyword < 0 || (tokens.at(keyword).kind() != T_CLASS
+                        && tokens.at(keyword).kind() != T_STRUCT)) {
+        return std::nullopt;
+    }
+
+    WrittenClassShape shape;
+    int i = at + 1;
+
+    // "final" stands between the name and what follows it, and is written as
+    // an identifier rather than a keyword.
+    if (i < tokens.size() && tokens.at(i).kind() == T_IDENTIFIER
+        && spelling(text, tokens.at(i)) == "final") {
+        ++i;
+    }
+
+    if (i < tokens.size() && tokens.at(i).kind() == T_COLON) {
+        // The base clause: what the class names, as written, up to its body.
+        // A comma inside brackets of any kind separates nothing -- Base<int,
+        // char> is one base, however it reads -- so what nests is counted.
+        int nesting = 0;
+        int from = -1; // the first token of the base being read, and the last
+        int to = -1;
+        const auto flush = [&] {
+            if (from >= 0 && to >= from) {
+                shape.baseClasses << text.mid(tokens.at(from).utf16charsBegin(),
+                                              tokens.at(to).utf16charsEnd()
+                                                  - tokens.at(from).utf16charsBegin());
+            }
+            from = to = -1;
+        };
+        for (++i; i < tokens.size(); ++i) {
+            const int kind = tokens.at(i).kind();
+            if (nesting == 0 && (kind == T_LBRACE || kind == T_SEMICOLON))
+                break;
+            switch (kind) {
+            case T_LESS: case T_LPAREN: case T_LBRACKET:
+                ++nesting;
+                break;
+            case T_GREATER: case T_RPAREN: case T_RBRACKET:
+                --nesting;
+                break;
+            case T_GREATER_GREATER: // two template arguments closing at once
+                nesting -= 2;
+                break;
+            case T_COMMA:
+                if (nesting == 0) {
+                    flush();
+                    continue;
+                }
+                break;
+            case T_PUBLIC: case T_PRIVATE: case T_PROTECTED: case T_VIRTUAL:
+                if (nesting == 0)
+                    continue; // how it is inherited, not what from
+                break;
+            }
+            if (from < 0)
+                from = i;
+            to = i;
+        }
+        flush();
+    }
+
+    // A class named without a body declares nothing there, so there is
+    // nothing to read off it.
+    if (i >= tokens.size() || tokens.at(i).kind() != T_LBRACE)
+        return std::nullopt;
+
+    // A class starts in no slot section whatever it is written as: a section
+    // is one only where the word that marks it stands.
+    bool inPrivateSlots = false;
+    int depth = 1;
+    for (++i; i < tokens.size() && depth > 0; ++i) {
+        const Token &token = tokens.at(i);
+        const int kind = token.kind();
+        if (kind == T_LBRACE) {
+            ++depth;
+            continue;
+        }
+        if (kind == T_RBRACE) {
+            --depth;
+            continue;
+        }
+        // What a nested class declares, and what a function defined here
+        // writes inside itself, is its own business.
+        if (depth != 1)
+            continue;
+
+        if (kind == T_PUBLIC || kind == T_PRIVATE || kind == T_PROTECTED) {
+            // "slots" is one of Qt's own macros where this is compiled, so
+            // it is no name for a variable here.
+            int after = i + 1;
+            const bool marked = after < tokens.size() && marksSlots(text, tokens.at(after));
+            if (marked || (after < tokens.size() && marksSignals(text, tokens.at(after))))
+                ++after;
+            if (after < tokens.size() && tokens.at(after).kind() == T_COLON) {
+                inPrivateSlots = marked && kind == T_PRIVATE;
+                i = after;
+            }
+            continue;
+        }
+
+        // A section written with no access in front of it, which Qt's
+        // signals are: whatever section stood before it has ended.
+        if ((marksSlots(text, token) || marksSignals(text, token)) && i + 1 < tokens.size()
+            && tokens.at(i + 1).kind() == T_COLON) {
+            inPrivateSlots = false;
+            ++i;
+            continue;
+        }
+
+        if (!inPrivateSlots || kind != T_IDENTIFIER || i + 1 >= tokens.size()
+            || tokens.at(i + 1).kind() != T_LPAREN) {
+            continue;
+        }
+
+        // A name inside a preprocessor directive declares nothing: what
+        // stands in "#if defined(SOMETHING)" is a condition and what stands
+        // in "#define WRAPPER(x)" is a definition's own parameter.
+        if (insideADirective(text, token.utf16charsBegin()))
+            continue;
+
+        // A slot has a return type written in front of its name. What has
+        // nothing in front of it is not one, however much it reads like a
+        // call: a macro a class body uses -- Q_CLASSINFO("a", "b"),
+        // Q_DECLARE_FLAGS(Flags, Flag) -- stands at the start of what it
+        // writes, and so do a constructor and, after its tilde, a
+        // destructor. Neither of those is a slot either.
+        //
+        // The token before the name is always there: the body's brace stands
+        // before everything in it.
+        switch (tokens.at(i - 1).kind()) {
+        case T_SEMICOLON: case T_LBRACE: case T_RBRACE: case T_COLON:
+        case T_COMMA: case T_TILDE: case T_POUND:
+            continue;
+        default:
+            break;
+        }
+
+        // Where the parentheses close.
+        int nesting = 0;
+        int close = -1;
+        for (int j = i + 1; j < tokens.size(); ++j) {
+            const int inside = tokens.at(j).kind();
+            if (inside == T_LPAREN) {
+                ++nesting;
+            } else if (inside == T_RPAREN && --nesting == 0) {
+                close = j;
+                break;
+            }
+        }
+        if (close < 0)
+            continue;
+
+        // And that a declaration is what this is: what may follow a
+        // parameter list is the end of it, a body written here, or one of the
+        // words a declaration carries -- const, noexcept, a reference
+        // qualifier, a trailing return type, "= 0", "override".
+        switch (close + 1 < tokens.size() ? tokens.at(close + 1).kind() : T_EOF_SYMBOL) {
+        case T_SEMICOLON: case T_LBRACE: case T_CONST: case T_VOLATILE:
+        case T_NOEXCEPT: case T_THROW: case T_ARROW: case T_EQUAL:
+        case T_AMPER: case T_AMPER_AMPER: case T_IDENTIFIER:
+            break;
+        default:
+            continue;
+        }
+
+        int nameLine = 0;
+        int nameColumn = 0;
+        lines.placeOf(token.utf16charsBegin(), &nameLine, &nameColumn);
+        const QString name = spelling(text, token);
+        const QString parameters = text.mid(tokens.at(i + 1).utf16charsBegin(),
+                                            tokens.at(close).utf16charsEnd()
+                                                - tokens.at(i + 1).utf16charsBegin());
+        shape.privateSlots << WrittenFunction{name, name + parameters.simplified(), filePath,
+                                              nameLine, nameColumn};
+        // Past the parameter list. A body written here is stepped over by the
+        // depth above, a declaration's semicolon says nothing.
+        i = close;
+    }
+
+    return shape;
+}
+
+// The class called \a className -- written out in full -- as the index and
+// that file's own tokens have it between them, or nothing where the two
+// cannot answer.
+//
+// What clangd does with a cross-file question: one parse per translation unit
+// ever, distilled into per-file entries, and every question after that served
+// from those -- and where it needs a text-level fact about a file it never
+// parsed, it lexes that file. Asking a front end instead is a parse of the
+// file and every header it reaches, which for anything including a Qt module
+// is a second; a test framework's scan asks this of every test class and of
+// every class those derive from, so it is the difference between a scan that
+// finishes and one that does not.
+//
+// \a reachable is what \a filePath includes: a class of that name written in
+// a file this one never reads is a different class. Two of the reachable
+// files writing one is a question only a reading settles, and is declined
+// here.
+std::optional<CodeModelQueries::ClassWithPrivateSlots> classShapeFromTheIndex(
+    const QString &className, const FilePath &filePath, const FilePaths &reachable,
+    const WorkingCopy &workingCopy)
+{
+    CppLocatorData * const index = CppModelManager::locatorData();
+    if (!index)
+        return std::nullopt;
+
+    const QSet<FilePath> among(reachable.cbegin(), reachable.cend());
+    IndexItem::Ptr found;
+    bool inTwoFiles = false;
+    for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Class, className)) {
+        if (candidate->filePath() != filePath && !among.contains(candidate->filePath()))
+            continue;
+        if (!found) {
+            found = candidate;
+            continue;
+        }
+        if (found->filePath() == candidate->filePath())
+            continue; // one file writing it twice, in two branches of an #if
+        if (candidate->filePath() == filePath) {
+            // The file asked about writes it itself, which settles it: that
+            // is the class it means by the name.
+            found = candidate;
+            inTwoFiles = false;
+        } else if (found->filePath() != filePath) {
+            inTwoFiles = true;
+        }
+    }
+    if (!found || inTwoFiles)
+        return std::nullopt;
+
+    // Not for a file being edited: what the index has of it is a reading of
+    // what was on disk, and the text somebody is typing is not that. The
+    // order clangd merges its two indexes in -- what is open wins over what
+    // was stored.
+    if (workingCopy.get(found->filePath()))
+        return std::nullopt;
+
+    const Result<QByteArray> contents = found->filePath().fileContents();
+    if (!contents)
+        return std::nullopt;
+
+    const QString text = QString::fromUtf8(*contents);
+    const LineStarts lines(text);
+    // An entry counts columns from zero, where a place counts them from one.
+    const std::optional<WrittenClassShape> shape
+        = classShapeIn(text, lines, found->filePath(), found->symbolName(), found->line(),
+                       found->column() + 1);
+    if (!shape)
+        return std::nullopt;
+
+    CodeModelQueries::ClassWithPrivateSlots answer;
+    answer.klass = {found->symbolName(), found->scopedSymbolName(), found->filePath(),
+                    found->line(), found->column() + 1};
+    answer.privateSlots = shape->privateSlots;
+    answer.baseClasses = shape->baseClasses;
+    return answer;
+}
+
+#endif // QTC_WITH_CXX_FRONTEND
 
 // The name \a name stands for where it is written, written out in full. A
 // name nothing declares -- which is what a header that was never generated
@@ -713,6 +1106,47 @@ public:
         return doc;
     }
 
+    // What \a filePath includes, the headers of its headers among them, out
+    // of what has already been read -- and nothing where nothing has read it,
+    // which is not the same answer as a file that includes nothing.
+    //
+    // The reading passed in first, which is the other way round from every
+    // other question here, and for two reasons.
+    //
+    // A closure is not something the two front ends answer differently: it is
+    // which files the preprocessor read, and a pass that has read the file
+    // knows them. So where that reading has the file its answer is as good,
+    // and it costs a walk over documents it holds already -- where reading
+    // the file to find out costs a parse of it and every header it reaches,
+    // seconds for a file that includes a Qt module.
+    //
+    // And it is the answer to trust where the two differ. The cxx-frontend
+    // model resolves includes against the header paths of one project part,
+    // where a pass resolved them as the file was really built, so a closure
+    // read there can come back short of one already known.
+    //
+    // Then the index's store, which kept this beside the entries because a
+    // stored reading has to be checked against every file that went into it.
+    // It is clangd's IncludeGraph, and answering out of it is what clangd
+    // does with every cross-file question: one parse per translation unit
+    // ever, and queries served from what that parse was distilled into.
+    //
+    // Not for a file being edited, whose text is not what was indexed. The
+    // same order clangd merges in: what is open wins over what is stored.
+    std::optional<FilePaths> closureAlreadyKnown(const FilePath &filePath) const
+    {
+        if (snapshot.contains(filePath))
+            return Utils::toList(snapshot.allIncludesForDocument(filePath));
+
+        if (!workingCopy.get(filePath)) {
+            if (CppLocatorData * const index = CppModelManager::locatorData()) {
+                if (const std::optional<FilePaths> stored = index->storedIncludesFor(filePath))
+                    return stored;
+            }
+        }
+        return std::nullopt;
+    }
+
     mutable QHash<FilePath, Document::Ptr> reparsed;
 };
 
@@ -894,40 +1328,11 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
 
 FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
 {
-    // The reading passed in first, which is the other way round from every
-    // other question here, and for two reasons.
-    //
-    // A closure is not something the two front ends answer differently:
-    // it is which files the preprocessor read, and a pass that has read
-    // the file knows them. So where that reading has the file its answer
-    // is as good, and it costs a walk over documents it holds already --
-    // where reading the file to find out costs a parse of it and every
-    // header it reaches, seconds for a file that includes a Qt module.
-    //
-    // And it is the answer to trust where the two differ. This model
-    // resolves includes against the header paths of one project part,
-    // where a pass resolved them as the file was really built, so a
-    // closure read here can come back short of one already known.
-    if (d->snapshot.contains(filePath))
-        return Utils::toList(d->snapshot.allIncludesForDocument(filePath));
-
-    // Then the index's store, which kept this beside the entries because a
-    // stored reading has to be checked against every file that went into it.
-    // It is clangd's IncludeGraph, and answering out of it is what clangd
-    // does with every cross-file question: one parse per translation unit
-    // ever, and queries served from what that parse was distilled into.
-    //
-    // Not for a file being edited, whose text is not what was indexed. The
-    // same order clangd merges in: what is open wins over what is stored.
-    if (!d->workingCopy.get(filePath)) {
-        if (CppLocatorData * const index = CppModelManager::locatorData()) {
-            if (const std::optional<FilePaths> stored = index->storedIncludesFor(filePath))
-                return *stored;
-        }
-    }
+    if (const std::optional<FilePaths> known = d->closureAlreadyKnown(filePath))
+        return *known;
 
     // And only then the file itself, which is a parse of it and every header
-    // it reaches -- seconds, where the two above are a lookup.
+    // it reaches -- seconds, where the two the helper asks are a lookup.
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<FilePaths> reached = d->model->allIncludesFor(filePath))
         return *reached;
@@ -965,8 +1370,7 @@ QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
         if (name.kind() != T_IDENTIFIER || tokens.at(i + 1).kind() != T_LPAREN)
             continue;
 
-        const QString spelled = text.mid(name.utf16charsBegin(),
-                                         name.utf16charsEnd() - name.utf16charsBegin());
+        const QString spelled = spelling(text, name);
         if (!wanted.contains(spelled) || insideADirective(text, name.utf16charsBegin()))
             continue;
 
@@ -1051,6 +1455,22 @@ CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
     const QString ownName = afterTheScopes < 0 ? className : className.mid(afterTheScopes + 2);
 
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The index and the class's own tokens first, which is the whole answer
+    // for no parse at all where they have it.
+    //
+    // Only where this model is the one in use: with the built-in one running
+    // there is a pass that has read every file, and its answer costs nothing
+    // either and is a reading of the translation unit rather than of the
+    // text. It is the one below, and this would be a step backwards from it.
+    if (Internal::cxxFrontendModelRequested()) {
+        if (const std::optional<FilePaths> reachable = d->closureAlreadyKnown(filePath)) {
+            if (const std::optional<ClassWithPrivateSlots> found
+                = classShapeFromTheIndex(className, filePath, *reachable, d->workingCopy)) {
+                return *found;
+            }
+        }
+    }
+
     if (const std::optional<CxxFrontendDocument::Place> place
         = d->model->classNamedIn(filePath, className);
         place && place->line > 0) {
