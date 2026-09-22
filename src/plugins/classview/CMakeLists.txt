@@ -17,7 +17,9 @@ add_qtc_plugin(ClassView
 
 extend_qtc_plugin(ClassView
   CONDITION WITH_TESTS
-  SOURCES classviewparsertreeitem_test.cpp
+  SOURCES
+    classviewparser_test.cpp
+    classviewparsertreeitem_test.cpp
 )
 
 # Only so that the test can say which front end answered its questions: the

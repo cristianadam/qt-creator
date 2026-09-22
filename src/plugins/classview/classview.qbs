@@ -37,7 +37,10 @@ QtcPlugin {
     ]
 
     QtcTestFiles {
-        files: [ "classviewparsertreeitem_test.cpp" ]
+        files: [
+            "classviewparser_test.cpp",
+            "classviewparsertreeitem_test.cpp",
+        ]
 
         // Only so that the test can say which front end answered its
         // questions: the pane itself asks in places and is none the wiser.

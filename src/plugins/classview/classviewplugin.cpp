@@ -9,6 +9,7 @@
 namespace ClassView::Internal {
 
 #ifdef WITH_TESTS
+QObject *createClassViewParserTest();
 QObject *createClassViewTreeTest();
 #endif
 
@@ -33,6 +34,7 @@ class ClassViewPlugin final : public ExtensionSystem::IPlugin
         setupClassViewManager();
 
 #ifdef WITH_TESTS
+        addTestCreator(createClassViewParserTest);
         addTestCreator(createClassViewTreeTest);
 #endif
     }

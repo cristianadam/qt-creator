@@ -9,8 +9,6 @@
 
 #include <cppeditor/cppworkingcopy.h>
 
-#include <cplusplus/CppDocument.h>
-
 namespace ClassView::Internal {
 
 class ParserPrivate;
@@ -43,11 +41,10 @@ signals:
     void treeRegenerated(const ParserTreeItem::ConstPtr &root);
 
 private:
-    void updateDocumentsFromSnapshot(const QSet<Utils::FilePath> &documentPaths,
-                                     const CPlusPlus::Snapshot &snapshot);
+    void updateDocumentTrees(const QSet<Utils::FilePath> &documentPaths);
 
-    ParserTreeItem::ConstPtr getParseDocumentTree(const CPlusPlus::Document::Ptr &doc);
-    ParserTreeItem::ConstPtr getCachedOrParseDocumentTree(const CPlusPlus::Document::Ptr &doc);
+    ParserTreeItem::ConstPtr getParseDocumentTree(const Utils::FilePath &filePath);
+    ParserTreeItem::ConstPtr getCachedOrParseDocumentTree(const Utils::FilePath &filePath);
     ParserTreeItem::ConstPtr getParseProjectTree(const Utils::FilePath &projectPath,
                                                  const QSet<Utils::FilePath> &filesInProject);
     ParserTreeItem::ConstPtr getCachedOrParseProjectTree(const Utils::FilePath &projectPath,
