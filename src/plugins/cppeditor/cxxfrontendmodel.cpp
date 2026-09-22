@@ -3,6 +3,7 @@
 
 #include "cxxfrontendmodel.h"
 
+#include "cppeditorlogging.h"
 #include "cppfileiterationorder.h"
 #include "cpptoolsreuse.h"
 #include "cppmodelmanager.h"
@@ -311,7 +312,23 @@ ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
 // See cxxFrontendReaderStackSize for what the budget is and why.
 void readOnAReaderStack(const std::function<void()> &read)
 {
-    const std::unique_ptr<QThread> reader(QThread::create(read));
+    const std::unique_ptr<QThread> reader(QThread::create([&read] {
+        // Caught here because an exception cannot cross a thread boundary:
+        // let out of one, it is std::terminate. The front end throws on
+        // invariants of its own -- eighty-odd places call
+        // cxx_runtime_error(), "no template declaration" among them -- and
+        // that is something a reading may decline rather than die of. What
+        // it was about to produce stays unset, which every caller already
+        // reads as this front end having nothing to say.
+        try {
+            read();
+        } catch (const std::exception &thrown) {
+            qCWarning(cxxFrontendLog) << "the front end gave up on a reading:"
+                                      << thrown.what();
+        } catch (...) {
+            qCWarning(cxxFrontendLog) << "the front end gave up on a reading";
+        }
+    }));
     reader->setStackSize(cxxFrontendReaderStackSize);
     reader->start();
     reader->wait();
