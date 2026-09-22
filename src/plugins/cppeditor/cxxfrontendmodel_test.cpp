@@ -871,13 +871,19 @@ void CxxFrontendModelTest::testTheMacroUsesOfAFile()
                                 CppModelManager::workingCopy());
     QStringList said;
     for (const CodeModelQueries::WrittenMacroUse &use
-         : code.macroUsesIn(parsed.mainFilePath())) {
+         : code.macroUsesIn(parsed.mainFilePath(), {"PLAIN", "TWO", "RUN"})) {
         said << use.name + "(" + use.arguments.join(", ") + ")";
     }
 
     // What was written, each argument trimmed -- and nothing for the one
-    // used without arguments, which has nothing to read.
+    // used without arguments, which has nothing to read, nor for either
+    // definition, where the name stands over its own parameters.
     QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
+
+    // A macro nobody asked about is not reported, the question being which
+    // of these were used rather than which macros the file uses.
+    QVERIFY(code.macroUsesIn(parsed.mainFilePath(), {"RUN"}).size() == 1);
+    QVERIFY(code.macroUsesIn(parsed.mainFilePath(), {}).isEmpty());
 }
 
 // A file whose templates nest deeply is read whatever thread asked for it.

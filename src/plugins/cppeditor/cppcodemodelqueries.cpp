@@ -18,6 +18,7 @@
 #include <cplusplus/Icons.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/Overview.h>
+#include <cplusplus/SimpleLexer.h>
 #include <cplusplus/Symbols.h>
 #include <cplusplus/TypeOfExpression.h>
 
@@ -32,6 +33,28 @@ using namespace Utils;
 
 namespace CppEditor {
 namespace {
+
+// Whether \a start stands inside a preprocessor directive.
+//
+// A directive may be continued over as many lines as it likes, and what says
+// it is one stands on the first of them, so the backslashes are followed
+// back. What this is for: a macro written inside a #define names nothing --
+// what stands there is the definition's own parameter, not a class.
+bool insideADirective(const QString &text, int start)
+{
+    if (start == 0)
+        return false;
+
+    int lineStart = text.lastIndexOf(u'\n', start - 1) + 1;
+    while (lineStart >= 2 && text.at(lineStart - 2) == u'\\') {
+        if (lineStart < 3) {
+            lineStart = 0;
+            break;
+        }
+        lineStart = text.lastIndexOf(u'\n', lineStart - 3) + 1;
+    }
+    return QStringView(text).mid(lineStart, start - lineStart).trimmed().startsWith(u'#');
+}
 
 // The name \a name stands for where it is written, written out in full. A
 // name nothing declares -- which is what a header that was never generated
@@ -907,24 +930,11 @@ FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
 }
 
 QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
-    const FilePath &filePath) const
+    const FilePath &filePath, const QStringList &names) const
 {
-#ifdef QTC_WITH_CXX_FRONTEND
-    if (const std::optional<QList<CxxFrontendDocument::MacroUse>> uses
-        = d->model->macroUsesIn(filePath)) {
-        QList<WrittenMacroUse> written;
-        for (const CxxFrontendDocument::MacroUse &use : *uses)
-            written.append({use.name, use.arguments});
-        return written;
-    }
-#endif
-
-    const Document::Ptr doc = d->snapshot.document(filePath);
-    if (!doc)
+    if (names.isEmpty())
         return {};
 
-    // The text each argument stands in, which the document does not keep:
-    // what it records is where they are.
     QByteArray contents;
     if (const auto source = d->workingCopy.source(filePath))
         contents = *source;
@@ -933,21 +943,61 @@ QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(
     else
         return {};
 
+    const QString text = QString::fromUtf8(contents);
+    const QSet<QString> wanted(names.cbegin(), names.cend());
+
+    // Whichever scanner is installed, which is the same one the front ends
+    // read with.
+    SimpleLexer lexer;
+    lexer.setSkipComments(true);
+    const Tokens tokens = lexer(text);
+
     QList<WrittenMacroUse> uses;
-    for (const Document::MacroUse &use : doc->macroUses()) {
-        if (!use.isFunctionLike() || use.arguments().isEmpty())
+    for (int i = 0; i + 1 < tokens.size(); ++i) {
+        const Token &name = tokens.at(i);
+        if (name.kind() != T_IDENTIFIER || tokens.at(i + 1).kind() != T_LPAREN)
             continue;
-        WrittenMacroUse written;
-        written.name = QString::fromUtf8(use.macro().name());
-        for (const Document::Block &argument : use.arguments()) {
-            if (int(argument.bytesEnd()) > contents.size())
-                continue;
-            written.arguments.append(
-                QString::fromUtf8(contents.mid(int(argument.bytesBegin()),
-                                               int(argument.bytesEnd() - argument.bytesBegin())))
-                    .trimmed());
+
+        const QString spelled = text.mid(name.utf16charsBegin(),
+                                         name.utf16charsEnd() - name.utf16charsBegin());
+        if (!wanted.contains(spelled) || insideADirective(text, name.utf16charsBegin()))
+            continue;
+
+        // What stands between the parentheses, split where the preprocessor
+        // splits it: on a comma inside no brackets of any kind. A comma
+        // between angle brackets is not one of those -- Thing<int, int> is
+        // two arguments to a macro, however it reads.
+        QStringList arguments;
+        int depth = 0;
+        int argumentBegin = tokens.at(i + 1).utf16charsEnd();
+        int end = i + 1;
+        for (; end < tokens.size(); ++end) {
+            const Token &token = tokens.at(end);
+            const int kind = token.kind();
+            if (kind == T_LPAREN || kind == T_LBRACKET || kind == T_LBRACE) {
+                ++depth;
+            } else if (kind == T_RPAREN || kind == T_RBRACKET || kind == T_RBRACE) {
+                if (--depth > 0)
+                    continue;
+                arguments.append(text.mid(argumentBegin,
+                                          token.utf16charsBegin() - argumentBegin).trimmed());
+                break;
+            } else if (kind == T_COMMA && depth == 1) {
+                arguments.append(text.mid(argumentBegin,
+                                          token.utf16charsBegin() - argumentBegin).trimmed());
+                argumentBegin = token.utf16charsEnd();
+            }
         }
-        uses.append(written);
+
+        // Nothing closed it, so the file ends inside the call and there is
+        // nothing to read off it.
+        if (end == tokens.size())
+            continue;
+
+        // A use with no arguments says nothing.
+        if (arguments.size() != 1 || !arguments.first().isEmpty())
+            uses.append({spelled, arguments});
+        i = end;
     }
     return uses;
 }

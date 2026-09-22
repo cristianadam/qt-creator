@@ -25,6 +25,10 @@ using TestCases = QList<TestCase>;
 namespace QTestUtils {
 
 bool isQTestMacro(const QByteArray &macro);
+
+// The macros a test's main() is written with, for asking a file which of
+// them it uses.
+QStringList macroNames();
 QHash<Utils::FilePath, TestCases> testCaseNamesForFiles(ITestFramework *framework,
                                                         const QSet<Utils::FilePath> &files);
 QMultiHash<Utils::FilePath, Utils::FilePath> alternativeFiles(ITestFramework *framework,

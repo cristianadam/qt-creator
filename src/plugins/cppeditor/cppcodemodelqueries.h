@@ -267,10 +267,24 @@ public:
         QStringList arguments; // as written, trimmed
     };
 
-    // The function-like macro uses \a filePath makes, in the order they are
-    // written. A use with no arguments is not among them: there is nothing
-    // to read off one.
-    QList<WrittenMacroUse> macroUsesIn(const Utils::FilePath &filePath) const;
+    // The uses \a filePath makes of any of the macros called \a names, in
+    // the order they are written, and what each was handed as written. A use
+    // with no arguments is not among them: there is nothing to read off one.
+    //
+    // Read off the file's own tokens rather than off either front end: which
+    // macro was used and what it was handed is what the text says, so a
+    // reading -- a parse of the file and every header it reaches -- buys
+    // nothing. That is why the names are asked for, too: a lexer cannot tell
+    // a macro use from a call of the same name, and every reader of this is
+    // looking for macros it can name.
+    //
+    // As the text has it, which differs from a preprocessed reading in two
+    // ways, both of which suit a reader asking what a file says: a use in a
+    // branch this configuration does not build is among them, and one
+    // written inside a #define is not -- that names nothing, what stands
+    // there being the definition's own parameter.
+    QList<WrittenMacroUse> macroUsesIn(const Utils::FilePath &filePath,
+                                       const QStringList &names) const;
 
     // Every file \a filePath reaches through its includes -- the headers of
     // its headers included, itself left out -- each as the file it was

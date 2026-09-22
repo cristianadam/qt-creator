@@ -5,6 +5,7 @@
 #include "../itestframework.h"
 #include "../testtreeitem.h"
 
+#include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
 #include <QByteArrayList>
@@ -13,11 +14,19 @@ using namespace Utils;
 
 namespace Autotest::Internal::QuickTestUtils {
 
+static const QByteArrayList validMacros = {"QUICK_TEST_MAIN", "QUICK_TEST_OPENGL_MAIN",
+                                           "QUICK_TEST_MAIN_WITH_SETUP"};
+
 bool isQuickTestMacro(const QByteArray &macro)
 {
-    static const QByteArrayList valid = {"QUICK_TEST_MAIN", "QUICK_TEST_OPENGL_MAIN",
-                                         "QUICK_TEST_MAIN_WITH_SETUP"};
-    return valid.contains(macro);
+    return validMacros.contains(macro);
+}
+
+QStringList macroNames()
+{
+    return Utils::transform(validMacros, [](const QByteArray &macro) {
+        return QString::fromLatin1(macro);
+    });
 }
 
 QHash<FilePath, FilePath> proFilesForQmlFiles(ITestFramework *framework,

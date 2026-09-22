@@ -209,8 +209,8 @@ TestCases QtTestParser::testCases(const CppEditor::CodeModelQueries &queries,
     // says is the text it was handed: the macro's own definition is Qt's,
     // and expanding it says nothing about the class.
     for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
-         : queries.macroUsesIn(filePath)) {
-        if (QTestUtils::isQTestMacro(use.name.toUtf8()) && !use.arguments.isEmpty())
+         : queries.macroUsesIn(filePath, QTestUtils::macroNames())) {
+        if (!use.arguments.isEmpty())
             return { {use.arguments.first(), false} };
     }
 
@@ -233,8 +233,8 @@ TestCases QtTestParser::testCases(const CppEditor::CodeModelQueries &queries,
     const QStringList wrappers = wrapperMacrosIn(text);
     if (!wrappers.isEmpty()) {
         for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
-             : queries.macroUsesIn(filePath)) {
-            if (wrappers.contains(use.name) && !use.arguments.isEmpty())
+             : queries.macroUsesIn(filePath, wrappers)) {
+            if (!use.arguments.isEmpty())
                 return { {use.arguments.first(), false} };
         }
     }

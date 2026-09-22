@@ -133,8 +133,8 @@ QString QuickTestParser::quickTestName(const CppEditor::CodeModelQueries &querie
     // A QUICK_TEST_MAIN-family macro says what the tests are named, and
     // what it says is the text it was handed.
     for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
-         : queries.macroUsesIn(filePath)) {
-        if (QuickTestUtils::isQuickTestMacro(use.name.toUtf8()) && !use.arguments.isEmpty())
+         : queries.macroUsesIn(filePath, QuickTestUtils::macroNames())) {
+        if (!use.arguments.isEmpty())
             return use.arguments.first();
     }
 

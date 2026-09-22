@@ -14,6 +14,10 @@ class ITestFramework;
 namespace Internal::QuickTestUtils {
 
 bool isQuickTestMacro(const QByteArray &macro);
+
+// The macros a QML test's main() is written with, for asking a file which
+// of them it uses.
+QStringList macroNames();
 QHash<Utils::FilePath, Utils::FilePath> proFilesForQmlFiles(ITestFramework *framework,
                                                             const QSet<Utils::FilePath> &files);
 

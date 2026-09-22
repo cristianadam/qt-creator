@@ -25,6 +25,13 @@ bool isQTestMacro(const QByteArray &macro)
     return valid.contains(macro);
 }
 
+QStringList macroNames()
+{
+    return Utils::transform(valid, [](const QByteArray &macro) {
+        return QString::fromLatin1(macro);
+    });
+}
+
 QHash<FilePath, TestCases> testCaseNamesForFiles(ITestFramework *framework,
                                                  const QSet<FilePath> &files)
 {
