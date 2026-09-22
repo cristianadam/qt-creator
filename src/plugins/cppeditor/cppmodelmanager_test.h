@@ -45,6 +45,7 @@ private slots:
     void testTheStoredIncludeClosure();
     void testTheIndexedClassShape();
     void testTheClassesHandedToARunner();
+    void testTheIndexedDefinition();
     void testIndexingCost();
 };
 

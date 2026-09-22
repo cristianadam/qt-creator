@@ -1995,6 +1995,82 @@ void ModelManagerTest::testTheIndexedClassShape()
 #endif
 }
 
+// Where the project defines the function declared at a place, out of the
+// index: the file that defines it is never parsed, and the answer is the one
+// a search of the project gives.
+//
+// clangd's rule for a cross-file question -- served from the index, never by
+// parsing a closed file. The reading this stands in front of parses the file
+// asked about and then as many of its likely counterparts as its bound
+// allows, so the index is both cheaper and more complete.
+void ModelManagerTest::testTheIndexedDefinition()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index is asked for a definition");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("counted.h",
+                                           "#pragma once\n"                       // 1
+                                           "namespace NS {\n"                     // 2
+                                           "class Counted\n"                      // 3
+                                           "{\n"                                  // 4
+                                           "public:\n"                            // 5
+                                           "    void definedElsewhere();\n"       // 6
+                                           "    void definedHere() { }\n"         // 7
+                                           "    void definedNowhere();\n"         // 8
+                                           "};\n"                                 // 9
+                                           "} // namespace NS\n");                // 10
+    const FilePath source = dir.createFile("counted.cpp",
+                                           "#include \"counted.h\"\n"             // 1
+                                           "namespace NS {\n"                     // 2
+                                           "void Counted::definedElsewhere()\n"   // 3
+                                           "{\n"                                  // 4
+                                           "}\n"                                  // 5
+                                           "} // namespace NS\n");                // 6
+    QVERIFY(!header.isEmpty() && !source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int readBefore = cxxFrontendReadingsMade();
+#endif
+    const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+
+    // The declaration is in the header and the definition in the source
+    // file, which is the whole question -- and the name the index is asked
+    // with is what the tokens around the declaration say it is: the
+    // namespace, the class, and the name itself.
+    const Link elsewhere = read.definitionOfFunctionAt(header, 6, 10);
+    QCOMPARE(elsewhere.targetFilePath, source);
+    QCOMPARE(elsewhere.target.line, 3);
+
+    // One defined where it is declared is its own definition.
+    const Link here = read.definitionOfFunctionAt(header, 7, 10);
+    QCOMPARE(here.targetFilePath, header);
+    QCOMPARE(here.target.line, 7);
+
+    // And neither is read for, which is the one thing the answers do not
+    // say.
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
+    // A function nothing defines is not answered for out of the index: that
+    // it holds no definition is no proof that the project has none -- a file
+    // it has not indexed yet is exactly that -- so the question is passed on.
+    read.definitionOfFunctionAt(header, 8, 10);
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+             "a definition the index does not have was answered for without reading");
+#endif
+}
+
 // Which class a test runs, read off the main() that says so: a file nobody
 // has parsed, no reading made, and a class of its own for each of the ways a
 // runner is handed one.

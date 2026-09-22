@@ -201,6 +201,74 @@ struct WrittenClassShape
     QStringList baseClasses;
 };
 
+// The named scopes the token at \a at is written inside, outermost first:
+// "NS", "NS::Outer" and so on, as they are written.
+//
+// A walk from the top of the file, since a brace is what opens a scope and
+// nothing but the tokens before it says whether that scope has a name.
+// "namespace NS {" and "class C {" have one; a function's body, a statement's
+// block and an initialiser's braces do not, and a level with no name adds
+// nothing to what a place is written inside.
+//
+// What a lexer can say about a place in a file nobody parsed, and what the
+// index has to be asked with: an entry is keyed by the name written out in
+// full.
+QStringList scopesAround(const Lexed &lexed, int at)
+{
+    const Tokens &tokens = lexed.tokens;
+    QStringList open; // with an empty entry for a scope that has no name
+    QString pending;  // the name the next brace would open
+
+    for (int i = 0; i < at && i < tokens.size(); ++i) {
+        switch (tokens.at(i).kind()) {
+        case T_LBRACE:
+            open << pending;
+            pending.clear();
+            break;
+        case T_RBRACE:
+            if (!open.isEmpty())
+                open.removeLast();
+            pending.clear();
+            break;
+
+        // Both of these may also be written without a body -- a forward
+        // declaration, a namespace alias -- and then the semicolon below
+        // takes the name back before any brace uses it.
+        case T_NAMESPACE:
+            if (i + 1 < at && tokens.at(i + 1).kind() == T_IDENTIFIER) {
+                // "namespace A::B {" opens both at once, which is one name
+                // as far as anything asking about a place is concerned.
+                int name = i + 1;
+                while (name + 2 < at && tokens.at(name + 1).kind() == T_COLON_COLON
+                       && tokens.at(name + 2).kind() == T_IDENTIFIER) {
+                    name += 2;
+                }
+                pending = lexed.qualifiedNameAt(name);
+                i = name;
+            }
+            break;
+        case T_CLASS: case T_STRUCT: case T_UNION:
+            // The name, with whatever export macro stands in front of it
+            // skipped: the last identifier of the run is the class's own.
+            pending.clear();
+            for (int name = i + 1; name < at && tokens.at(name).kind() == T_IDENTIFIER; ++name) {
+                pending = lexed.spelled(name);
+                i = name;
+            }
+            break;
+
+        case T_SEMICOLON:
+        case T_EQUAL: // "struct S s = { ... }": those braces open no scope
+            pending.clear();
+            break;
+        default:
+            break;
+        }
+    }
+
+    return Utils::filtered(open, [](const QString &name) { return !name.isEmpty(); });
+}
+
 // Whether a class is what the name at \a at is the name of, and the word that
 // says so -- "class" or "struct", which is also what the members written
 // before any access label have for access. An export macro may stand between
@@ -1514,6 +1582,68 @@ public:
         }
         return answer;
     }
+
+    // Where the project defines the function declared at \a line and
+    // \a column of \a filePath, out of the index and without reading
+    // anything -- or nothing where the index cannot settle it.
+    //
+    // clangd's rule for a cross-file question: served from the index, never
+    // by parsing a closed file. The reading this stands in front of does the
+    // opposite -- it parses the file, and then as many of the files whose
+    // names look like counterparts of it as its bound allows -- so it is both
+    // slower and less complete: a definition in a file that bound leaves out
+    // is one the index has and it does not.
+    //
+    // An entry is keyed by the name written out in full, which is what the
+    // tokens around the declaration say: the scopes it stands inside, and the
+    // name itself.
+    std::optional<Link> definitionFromTheIndex(const FilePath &filePath,
+                                               int line, int column) const
+    {
+        CppLocatorData * const index = CppModelManager::locatorData();
+        if (!index)
+            return std::nullopt;
+
+        const std::shared_ptr<const Lexed> tokens = lexed(filePath);
+        if (!tokens)
+            return std::nullopt;
+
+        const int offset = tokens->lines.offsetOf(line, column);
+        if (offset < 0)
+            return std::nullopt;
+
+        int at = -1;
+        for (int i = 0; i < tokens->tokens.size(); ++i) {
+            const int begins = tokens->tokens.at(i).utf16charsBegin();
+            if (begins > offset)
+                break;
+            if (begins == offset)
+                at = i;
+        }
+        if (at < 0 || tokens->tokens.at(at).kind() != T_IDENTIFIER)
+            return std::nullopt;
+
+        QStringList scopes = scopesAround(*tokens, at);
+        scopes << tokens->spelled(at);
+        const QString qualified = scopes.join("::");
+
+        // Exactly one definition, or this says nothing. Two of one name is a
+        // project that builds one file or the other -- a platform's own
+        // implementation -- and which of them a reader means is not a
+        // question the index answers.
+        Link found;
+        for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Function, qualified)) {
+            if (!candidate->isFunctionDefinition() || candidate->scopedSymbolName() != qualified)
+                continue;
+            if (found.hasValidTarget())
+                return std::nullopt;
+            // An entry counts columns from zero, and so does a link.
+            found = Link(candidate->filePath(), candidate->line(), candidate->column());
+        }
+        if (!found.hasValidTarget())
+            return std::nullopt;
+        return found;
+    }
 #endif
 
     mutable QHash<FilePath, Document::Ptr> reparsed;
@@ -1953,6 +2083,20 @@ DeclarationToDefine CodeModelQueries::declarationToDefineAt(const CppRefactoring
 Link CodeModelQueries::definitionOfFunctionAt(const FilePath &filePath, int line, int column) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The index first, which costs no parse at all: where a function is
+    // defined is what an index is for, and this one holds every definition
+    // the project has.
+    //
+    // Only where this model is the one in use: the built-in path below reads
+    // the question off a pass that has already parsed the project, which is
+    // as free and is what this series is replacing rather than improving.
+    if (Internal::cxxFrontendModelRequested()) {
+        if (const std::optional<Link> definition = d->definitionFromTheIndex(filePath, line,
+                                                                             column)) {
+            return *definition;
+        }
+    }
+
     if (const std::optional<Link> definition
         = d->model->definitionOfFunctionIn(filePath, line, column);
         definition && definition->hasValidTarget()) {
