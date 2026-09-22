@@ -1848,12 +1848,13 @@ void ModelManagerTest::testIndexingCost()
     // no store of its own. Here each of the project's translation units is
     // asked of the store and nothing else -- every shard checked against a
     // digest of each file it names, and not a line parsed.
+#ifdef QTC_WITH_CXX_FRONTEND
     if (qtcEnvironmentVariableIsSet("QTC_INDEX_STOREONLY")) {
-    // Timed on one thread and on as many as the index itself uses, because
-    // the second is what a session would really pay: the store is consulted
-    // on the pool, and in a warm run that work hides behind the built-in
-    // pass entirely.
-    const QStringList macros = cxxFrontendIndexInputs().predefinedMacros;
+        // Timed on one thread and on as many as the index itself uses,
+        // because the second is what a session would really pay: the store is
+        // consulted on the pool, and in a warm run that work hides behind the
+        // built-in pass entirely.
+        const QStringList macros = cxxFrontendIndexInputs().predefinedMacros;
         const QSet<FilePath> sources = projectInfo->sourceFiles();
 
         // The keys first, so that what is timed below is the store and not
@@ -1903,6 +1904,7 @@ void ModelManagerTest::testIndexingCost()
                     << std::accumulate(described.begin(), described.end(), 0);
         }
     }
+#endif
 
     // What typing costs the index, where QTC_INDEX_TYPING asks for it.
     //

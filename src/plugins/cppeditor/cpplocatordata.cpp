@@ -660,8 +660,12 @@ void CppLocatorData::readWhatWasNotCovered()
     // which this cannot know; and the two answers differ only in whether a
     // later batch reads a description from disk again, the thing being a
     // cache.
+#ifdef QTC_WITH_CXX_FRONTEND
     if (nothingLeft && m_cxxFrontendCache)
         m_cxxFrontendCache->forgetContents();
+#else
+    Q_UNUSED(nothingLeft)
+#endif
 
     {
         QMutexLocker locker(&m_pendingMutex);
