@@ -1783,19 +1783,20 @@ void ModelManagerTest::testTheIndexFollowsAChangedFile()
 // it is already there; what this pins is that the question is answered from
 // it rather than by reading the file, which for a file that includes a Qt
 // module is seconds.
-static bool theIndexHasAStore()
+static bool theCxxFrontendModelIsInUse()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     return cxxFrontendModelRequested();
 #else
-    // The store is the cxx front end's, and it is not built here.
+    // The store, the index's description of a header and the readings these
+    // count are all that model's, and it is not built here.
     return false;
 #endif
 }
 
 void ModelManagerTest::testTheStoredIncludeClosure()
 {
-    if (!theIndexHasAStore())
+    if (!theCxxFrontendModelIsInUse())
         QSKIP("Only this model's index has a store to answer from");
 
     TemporaryDir dir;
@@ -1840,7 +1841,7 @@ void ModelManagerTest::testTheStoredIncludeClosure()
 // derive from.
 void ModelManagerTest::testTheIndexedClassShape()
 {
-    if (!theIndexHasAStore())
+    if (!theCxxFrontendModelIsInUse())
         QSKIP("Only this model's index describes the headers a unit read");
 
     TemporaryDir dir;
@@ -1955,6 +1956,77 @@ void ModelManagerTest::testTheIndexedClassShape()
 #ifdef QTC_WITH_CXX_FRONTEND
     QVERIFY2(cxxFrontendReadingsMade() > readBefore,
              "a class the index does not have was answered for without reading");
+#endif
+}
+
+// Which class a test runs, read off the main() that says so: a file nobody
+// has parsed, no reading made, and a class of its own for each of the ways a
+// runner is handed one.
+//
+// Nothing is indexed here on purpose. This is the other half of clangd's
+// rule -- where a text-level fact about a file is what is wanted, lex the
+// file -- and most of the files this is asked about call no runner at all,
+// which is an empty answer for the price of a lex.
+void ModelManagerTest::testTheClassesHandedToARunner()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model reads a runner's classes off the tokens");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath source = dir.createFile(
+        "main.cpp",
+        "namespace QTest { int qExec(void *, int, char **); }\n" // declared, never called
+        "namespace NS { class tst_One {}; }\n"
+        "class tst_Two {};\n"
+        "class tst_Three {};\n"
+        "class tst_Four {};\n"
+        "int byValue(int);\n"
+        "using namespace QTest;\n"
+        "int main(int argc, char **argv)\n"
+        "{\n"
+        "    NS::tst_One one;\n"
+        "    tst_Two *two = new tst_Two;\n"
+        "    tst_Four four;\n"
+        "    QTest::qExec(&one, argc, argv);\n"   // the address of an object
+        "    QTest::qExec(two, argc, argv);\n"    // a pointer that holds one
+        "    QTest::qExec(new tst_Three, argc, argv);\n" // one made right there
+        "    qExec(&one, argc, argv);\n"          // as a using directive leaves it
+        "    Other::qExec(&four, argc, argv);\n"  // somebody else's function
+        "    byValue(argc);\n"
+        "    return 0;\n"
+        "}\n");
+    QVERIFY(!source.isEmpty());
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int readBefore = cxxFrontendReadingsMade();
+#endif
+    const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+    QCOMPARE(read.classesPassedTo(source, "QTest::qExec").join(", "),
+             QString("NS::tst_One, tst_Two, tst_Three, NS::tst_One"));
+    QCOMPARE(read.classesPassedTo(source, "byValue"), QStringList());
+    QCOMPARE(read.classesPassedTo(source, "QTest::qExecNot"), QStringList());
+
+    // All of it off the tokens, which is the one thing the answers do not
+    // say: a reading answers them too, and costs a parse of the file and
+    // every header it reaches.
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
+    // And a runner handed something the text does not settle is not answered
+    // for out of it: what a function hands back is a question for a reading,
+    // and reading is what it costs.
+    const FilePath unsettled = dir.createFile(
+        "unsettled.cpp",
+        "#include \"made_elsewhere.h\"\n"
+        "int main(int argc, char **argv) { return QTest::qExec(runner(), argc, argv); }\n");
+    QVERIFY(!unsettled.isEmpty());
+    const CodeModelQueries readAgain{CPlusPlus::Snapshot(), WorkingCopy()};
+    readAgain.classesPassedTo(unsettled, "QTest::qExec");
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+             "a runner handed what the text does not settle was answered for without reading");
 #endif
 }
 

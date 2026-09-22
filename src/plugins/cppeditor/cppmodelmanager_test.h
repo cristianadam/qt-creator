@@ -44,6 +44,7 @@ private slots:
     void testTheIndexFollowsAChangedFile();
     void testTheStoredIncludeClosure();
     void testTheIndexedClassShape();
+    void testTheClassesHandedToARunner();
     void testIndexingCost();
 };
 

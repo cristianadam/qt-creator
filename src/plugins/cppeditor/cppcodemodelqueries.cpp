@@ -71,8 +71,6 @@ QString spelling(const QString &text, const Token &token)
     return text.mid(token.utf16charsBegin(), token.utf16charsEnd() - token.utf16charsBegin());
 }
 
-#ifdef QTC_WITH_CXX_FRONTEND
-
 // Where each line of a file begins, so that a place some other reader
 // recorded can be found among the file's tokens and a token can be reported
 // as a place again.
@@ -108,6 +106,53 @@ public:
 private:
     QList<int> m_starts;
 };
+
+// A file as the questions answered off its own tokens want it: its text, its
+// tokens and where its lines begin.
+//
+// Lexed once however many of those questions are asked about the file, which
+// is what keeping this object alive over a file is for -- a reader asks
+// several. Told about Qt's keywords, since what marks an access section as a
+// slot section is one of them.
+class Lexed
+{
+public:
+    explicit Lexed(const QString &source)
+        : text(source)
+        , lines(source)
+    {
+        SimpleLexer lexer;
+        lexer.setSkipComments(true);
+        lexer.setLanguageFeatures(LanguageFeatures::defaultFeatures());
+        tokens = lexer(text);
+    }
+
+    QString text;
+    LineStarts lines;
+    Tokens tokens;
+
+    QString spelled(int at) const { return spelling(text, tokens.at(at)); }
+
+    // The name written at \a at, with whatever stands in front of it:
+    // "NS::Thing" where that is how it reads, and the first token it is made
+    // of in \a from.
+    QString qualifiedNameAt(int at, int *from = nullptr) const
+    {
+        int begin = at;
+        while (begin >= 2 && tokens.at(begin - 1).kind() == T_COLON_COLON
+               && tokens.at(begin - 2).kind() == T_IDENTIFIER) {
+            begin -= 2;
+        }
+        if (from)
+            *from = begin;
+        QStringList parts;
+        for (int i = begin; i <= at; i += 2)
+            parts << spelled(i);
+        return parts.join("::");
+    }
+};
+
+#ifdef QTC_WITH_CXX_FRONTEND
 
 // Whether \a token is one of the words that marks an access section as one of
 // Qt's: "slots" and "Q_SLOTS", or "signals" and "Q_SIGNALS".
@@ -166,20 +211,15 @@ struct WrittenClassShape
 // anyway. And the signature carries the parameter list as written, names and
 // all, where a reading writes the types alone -- a test function takes none,
 // and nothing asks this of a private slot.
-std::optional<WrittenClassShape> classShapeIn(const QString &text, const LineStarts &lines,
-                                              const FilePath &filePath, const QString &ownName,
-                                              int line, int column)
+std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath &filePath,
+                                              const QString &ownName, int line, int column)
 {
-    const int offset = lines.offsetOf(line, column);
+    const QString &text = lexed.text;
+    const Tokens &tokens = lexed.tokens;
+
+    const int offset = lexed.lines.offsetOf(line, column);
     if (offset < 0)
         return std::nullopt;
-
-    // Whichever scanner is installed, told about Qt's keywords: what marks an
-    // access section as a slot section is one of them.
-    SimpleLexer lexer;
-    lexer.setSkipComments(true);
-    lexer.setLanguageFeatures(LanguageFeatures::defaultFeatures());
-    const Tokens tokens = lexer(text);
 
     int at = -1;
     for (int i = 0; i < tokens.size() && tokens.at(i).utf16charsBegin() <= offset; ++i) {
@@ -362,7 +402,7 @@ std::optional<WrittenClassShape> classShapeIn(const QString &text, const LineSta
 
         int nameLine = 0;
         int nameColumn = 0;
-        lines.placeOf(token.utf16charsBegin(), &nameLine, &nameColumn);
+        lexed.lines.placeOf(token.utf16charsBegin(), &nameLine, &nameColumn);
         const QString name = spelling(text, token);
         const QString parameters = text.mid(tokens.at(i + 1).utf16charsBegin(),
                                             tokens.at(close).utf16charsEnd()
@@ -377,81 +417,195 @@ std::optional<WrittenClassShape> classShapeIn(const QString &text, const LineSta
     return shape;
 }
 
-// The class called \a className -- written out in full -- as the index and
-// that file's own tokens have it between them, or nothing where the two
-// cannot answer.
+// Whether a type is what \a token starts.
 //
-// What clangd does with a cross-file question: one parse per translation unit
-// ever, distilled into per-file entries, and every question after that served
-// from those -- and where it needs a text-level fact about a file it never
-// parsed, it lexes that file. Asking a front end instead is a parse of the
-// file and every header it reaches, which for anything including a Qt module
-// is a second; a test framework's scan asks this of every test class and of
-// every class those derive from, so it is the difference between a scan that
-// finishes and one that does not.
-//
-// \a reachable is what \a filePath includes: a class of that name written in
-// a file this one never reads is a different class. Two of the reachable
-// files writing one is a question only a reading settles, and is declined
-// here.
-std::optional<CodeModelQueries::ClassWithPrivateSlots> classShapeFromTheIndex(
-    const QString &className, const FilePath &filePath, const FilePaths &reachable,
-    const WorkingCopy &workingCopy)
+// What says a name followed by parentheses is being declared rather than
+// called -- a parameter list is written with types in it -- and, in front of
+// a name, that the type is one of the language's own rather than a class.
+bool startsAType(const Token &token)
 {
-    CppLocatorData * const index = CppModelManager::locatorData();
-    if (!index)
-        return std::nullopt;
-
-    const QSet<FilePath> among(reachable.cbegin(), reachable.cend());
-    IndexItem::Ptr found;
-    bool inTwoFiles = false;
-    for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Class, className)) {
-        if (candidate->filePath() != filePath && !among.contains(candidate->filePath()))
-            continue;
-        if (!found) {
-            found = candidate;
-            continue;
-        }
-        if (found->filePath() == candidate->filePath())
-            continue; // one file writing it twice, in two branches of an #if
-        if (candidate->filePath() == filePath) {
-            // The file asked about writes it itself, which settles it: that
-            // is the class it means by the name.
-            found = candidate;
-            inTwoFiles = false;
-        } else if (found->filePath() != filePath) {
-            inTwoFiles = true;
-        }
+    if (token.isPrimitiveType()) // int, char, void: a keyword of its own kind
+        return true;
+    switch (token.kind()) {
+    case T_CONST: case T_VOLATILE: case T_AUTO: case T_CLASS: case T_STRUCT:
+    case T_ENUM: case T_UNION: case T_TYPENAME:
+        return true;
+    default:
+        return false;
     }
-    if (!found || inTwoFiles)
+}
+
+// A type as it is written, without what decorates it: what a declaration in
+// front of a name says the name holds.
+struct WrittenTypeOfAName
+{
+    QString name;          // as written, "NS::Thing"
+    bool isPointer = false;
+    bool isBuiltin = false; // and then it is no class
+};
+
+// What the nearest declaration of \a name before \a before says its type is,
+// or nothing where no declaration of it stands there.
+//
+// Nearest rather than the one in scope: a block is not followed here, and the
+// declaration a use means is written above it. What this is for is reading
+// "tst_Simple test;" off the main() that hands &test to a runner, which is
+// the one shape the answer turns on.
+std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int before,
+                                                    const QString &name)
+{
+    const Tokens &tokens = lexed.tokens;
+    for (int at = before - 1; at > 0; --at) {
+        if (tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != name)
+            continue;
+
+        // A declaration's name is followed by the end of it, by what it is
+        // initialised with, or by the next name in the same declaration.
+        switch (at + 1 < tokens.size() ? tokens.at(at + 1).kind() : T_EOF_SYMBOL) {
+        case T_SEMICOLON: case T_EQUAL: case T_COMMA: case T_LPAREN:
+        case T_LBRACE: case T_RPAREN: case T_LBRACKET:
+            break;
+        default:
+            continue;
+        }
+
+        // And a type in front of it, which is what says this is a
+        // declaration rather than a use of the name.
+        WrittenTypeOfAName written;
+        int from = at;
+        for (int back = at - 1; back >= 0; --back) {
+            const int kind = tokens.at(back).kind();
+            if (kind == T_STAR) {
+                written.isPointer = true;
+            } else if (kind == T_IDENTIFIER || kind == T_COLON_COLON || kind == T_CONST
+                       || kind == T_VOLATILE || kind == T_AMPER || kind == T_LESS
+                       || kind == T_GREATER || kind == T_CLASS || kind == T_STRUCT) {
+                // A name, what qualifies it, its template arguments, or a
+                // word that says how it is held.
+            } else if (startsAType(tokens.at(back))) {
+                // A type written with a word of the language -- int,
+                // unsigned, auto -- which is no class.
+                written.isBuiltin = true;
+            } else {
+                break;
+            }
+            from = back;
+        }
+        // The name of the type, which is the last name the run holds: what
+        // stands after it says how the thing is held rather than what it is.
+        int nameEnd = -1;
+        for (int i = from; i < at; ++i) {
+            if (tokens.at(i).kind() == T_IDENTIFIER)
+                nameEnd = i;
+        }
+
+        // A type has to be named for this to be a declaration at all. What
+        // stands in front of the name otherwise is an expression it is part
+        // of -- "&test" handed to a call reads as "& test" and would
+        // otherwise be taken for one.
+        if (nameEnd < 0 && !written.isBuiltin)
+            continue;
+
+        if (nameEnd >= 0)
+            written.name = lexed.qualifiedNameAt(nameEnd);
+        return written;
+    }
+    return std::nullopt;
+}
+
+// The classes a file hands to calls of a function called \a functionName --
+// written out in full -- read off the file's own tokens, or nothing where a
+// call is written in a way its text does not settle.
+//
+// Which class a Qt test runs is what its main() says, and a runner is handed
+// a pointer to it: "QTest::qExec(&test, argc, argv)" with "tst_Simple test;"
+// above, or a class made right there. Both are in the text.
+//
+// A call whose first argument is neither -- something this returns, a cast, a
+// member of something else -- is one only a reading settles, and then nothing
+// comes back here and the caller reads the file. An empty list is an answer:
+// most files that include QtTest call no runner at all, which is the case
+// this exists for.
+//
+// As the text has it. A call reachable through a using directive is among
+// them, being written with as much in front of it as the name asked for ends
+// in; a class is named as the declaration names it rather than written out in
+// full, which is what a reader looking it up in turn asks with anyway.
+std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &functionName)
+{
+    const Tokens &tokens = lexed.tokens;
+    const QStringList asked = functionName.split("::", Qt::SkipEmptyParts);
+    if (asked.isEmpty())
         return std::nullopt;
 
-    // Not for a file being edited: what the index has of it is a reading of
-    // what was on disk, and the text somebody is typing is not that. The
-    // order clangd merges its two indexes in -- what is open wins over what
-    // was stored.
-    if (workingCopy.get(found->filePath()))
-        return std::nullopt;
+    QStringList classes;
+    for (int i = 0; i + 2 < tokens.size(); ++i) {
+        if (tokens.at(i).kind() != T_IDENTIFIER || tokens.at(i + 1).kind() != T_LPAREN
+            || lexed.spelled(i) != asked.last()
+            || insideADirective(lexed.text, tokens.at(i).utf16charsBegin())) {
+            continue;
+        }
 
-    const Result<QByteArray> contents = found->filePath().fileContents();
-    if (!contents)
-        return std::nullopt;
+        // Written with as much in front of it as the file bothers with, which
+        // has to be the tail of what was asked for: QTest::qExec is asked for
+        // and "qExec" under a using directive is it, where "Other::qExec" is
+        // somebody else's function of the same name.
+        const QStringList written = lexed.qualifiedNameAt(i).split("::");
+        if (written.size() > asked.size()
+            || written != asked.mid(asked.size() - written.size())) {
+            continue;
+        }
 
-    const QString text = QString::fromUtf8(*contents);
-    const LineStarts lines(text);
-    // An entry counts columns from zero, where a place counts them from one.
-    const std::optional<WrittenClassShape> shape
-        = classShapeIn(text, lines, found->filePath(), found->symbolName(), found->line(),
-                       found->column() + 1);
-    if (!shape)
-        return std::nullopt;
+        // What the first argument says. A class made right there names
+        // itself.
+        const int first = i + 2;
+        if (tokens.at(first).kind() == T_NEW) {
+            if (first + 1 >= tokens.size() || tokens.at(first + 1).kind() != T_IDENTIFIER)
+                return std::nullopt;
+            int nameEnd = first + 1;
+            while (nameEnd + 2 < tokens.size() && tokens.at(nameEnd + 1).kind() == T_COLON_COLON
+                   && tokens.at(nameEnd + 2).kind() == T_IDENTIFIER) {
+                nameEnd += 2;
+            }
+            classes << lexed.qualifiedNameAt(nameEnd);
+            continue;
+        }
 
-    CodeModelQueries::ClassWithPrivateSlots answer;
-    answer.klass = {found->symbolName(), found->scopedSymbolName(), found->filePath(),
-                    found->line(), found->column() + 1};
-    answer.privateSlots = shape->privateSlots;
-    answer.baseClasses = shape->baseClasses;
-    return answer;
+        // A declaration of a function of that name rather than a call of one,
+        // which a file that declares the runner itself writes. It hands
+        // nothing over.
+        if (startsAType(tokens.at(first)))
+            continue;
+
+        const bool addressOf = tokens.at(first).kind() == T_AMPER;
+        const int named = addressOf ? first + 1 : first;
+        if (named >= tokens.size() || tokens.at(named).kind() != T_IDENTIFIER)
+            return std::nullopt;
+
+        // Otherwise what the name holds, as the declaration above it writes
+        // it -- and nothing at all where no declaration of it stands in this
+        // file, that being a question for a reading rather than for a lexer.
+        const std::optional<WrittenTypeOfAName> holds
+            = declarationBefore(lexed, named, lexed.spelled(named));
+        if (!holds)
+            return std::nullopt;
+        if (holds->isBuiltin || holds->name.isEmpty()) {
+            // Handed something the text names no class in. A value of such a
+            // type is an answer -- a runner takes an object, so it hands over
+            // no class -- where an address or a pointer is a question for a
+            // reading: what "auto *test = new tst_Simple" holds is written in
+            // the initialiser rather than in the type.
+            if (addressOf || holds->isPointer)
+                return std::nullopt;
+            continue;
+        }
+
+        // A runner takes an object rather than a value: the address of one,
+        // or a pointer that already holds one.
+        if (addressOf ? !holds->isPointer : holds->isPointer)
+            classes << holds->name;
+    }
+    return classes;
 }
 
 #endif // QTC_WITH_CXX_FRONTEND
@@ -1106,6 +1260,30 @@ public:
         return doc;
     }
 
+    // \a filePath's own tokens, lexed once however many questions are asked
+    // off them -- and nothing where the file cannot be read, which is
+    // remembered too so that it is not tried again.
+    //
+    // What is being typed rather than what is on disk where somebody has the
+    // file open, the same way a reparse takes it.
+    std::shared_ptr<const Lexed> lexed(const FilePath &filePath) const
+    {
+        const auto known = lexedFiles.constFind(filePath);
+        if (known != lexedFiles.constEnd())
+            return *known;
+
+        QByteArray contents;
+        if (const auto source = workingCopy.source(filePath))
+            contents = *source;
+        else if (const Result<QByteArray> read = filePath.fileContents())
+            contents = *read;
+        else
+            return *lexedFiles.insert(filePath, {});
+
+        return *lexedFiles.insert(filePath,
+                                  std::make_shared<const Lexed>(QString::fromUtf8(contents)));
+    }
+
     // What \a filePath includes, the headers of its headers among them, out
     // of what has already been read -- and nothing where nothing has read it,
     // which is not the same answer as a file that includes nothing.
@@ -1147,7 +1325,85 @@ public:
         return std::nullopt;
     }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+    // The class called \a className -- written out in full -- as the index
+    // and that class's own tokens have it between them, or nothing where the
+    // two cannot answer.
+    //
+    // What clangd does with a cross-file question: one parse per translation
+    // unit ever, distilled into per-file entries, and every question after
+    // that served from those -- and where it needs a text-level fact about a
+    // file it never parsed, it lexes that file. Asking a front end instead is
+    // a parse of the file and every header it reaches, which for anything
+    // including a Qt module is a second; a test framework's scan asks this of
+    // every test class and of every class those derive from, so it is the
+    // difference between a scan that finishes and one that does not.
+    //
+    // \a reachable is what \a filePath includes: a class of that name written
+    // in a file this one never reads is a different class. Two of the
+    // reachable files writing one is a question only a reading settles, and
+    // is declined here.
+    std::optional<ClassWithPrivateSlots> classShapeFromTheIndex(
+        const QString &className, const FilePath &filePath, const FilePaths &reachable) const
+    {
+        CppLocatorData * const index = CppModelManager::locatorData();
+        if (!index)
+            return std::nullopt;
+
+        const QSet<FilePath> among(reachable.cbegin(), reachable.cend());
+        IndexItem::Ptr found;
+        bool inTwoFiles = false;
+        for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Class, className)) {
+            if (candidate->filePath() != filePath && !among.contains(candidate->filePath()))
+                continue;
+            if (!found) {
+                found = candidate;
+                continue;
+            }
+            if (found->filePath() == candidate->filePath())
+                continue; // one file writing it twice, in two branches of an #if
+            if (candidate->filePath() == filePath) {
+                // The file asked about writes it itself, which settles it:
+                // that is the class it means by the name.
+                found = candidate;
+                inTwoFiles = false;
+            } else if (found->filePath() != filePath) {
+                inTwoFiles = true;
+            }
+        }
+        if (!found || inTwoFiles)
+            return std::nullopt;
+
+        // Not for a file being edited: what the index has of it is a reading
+        // of what was on disk, and the text somebody is typing is not that.
+        // The order clangd merges its two indexes in -- what is open wins
+        // over what was stored.
+        if (workingCopy.get(found->filePath()))
+            return std::nullopt;
+
+        const std::shared_ptr<const Lexed> tokens = lexed(found->filePath());
+        if (!tokens)
+            return std::nullopt;
+
+        // An entry counts columns from zero, where a place counts them from
+        // one.
+        const std::optional<WrittenClassShape> shape
+            = classShapeIn(*tokens, found->filePath(), found->symbolName(), found->line(),
+                           found->column() + 1);
+        if (!shape)
+            return std::nullopt;
+
+        ClassWithPrivateSlots answer;
+        answer.klass = {found->symbolName(), found->scopedSymbolName(), found->filePath(),
+                        found->line(), found->column() + 1};
+        answer.privateSlots = shape->privateSlots;
+        answer.baseClasses = shape->baseClasses;
+        return answer;
+    }
+#endif
+
     mutable QHash<FilePath, Document::Ptr> reparsed;
+    mutable QHash<FilePath, std::shared_ptr<const Lexed>> lexedFiles;
 };
 
 CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &workingCopy)
@@ -1436,6 +1692,22 @@ QStringList CodeModelQueries::classesPassedTo(const FilePath &filePath,
                                               const QString &functionName) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The file's own tokens first, which cost no parse at all. Which class a
+    // test runs is what its main() says in so many words, and most of the
+    // files this is asked about call no runner at all -- so the common answer
+    // is an empty list off a lexer rather than a translation unit.
+    //
+    // Only where this model is the one in use: the built-in path below is
+    // what this series is replacing, not what it is improving.
+    if (Internal::cxxFrontendModelRequested()) {
+        if (const std::shared_ptr<const Lexed> tokens = d->lexed(filePath)) {
+            if (const std::optional<QStringList> classes
+                = classesPassedToIn(*tokens, functionName)) {
+                return *classes;
+            }
+        }
+    }
+
     if (const std::optional<QStringList> classes
         = d->model->classesPassedToIn(filePath, functionName)) {
         return *classes;
@@ -1465,7 +1737,7 @@ CodeModelQueries::ClassWithPrivateSlots CodeModelQueries::classWithPrivateSlots(
     if (Internal::cxxFrontendModelRequested()) {
         if (const std::optional<FilePaths> reachable = d->closureAlreadyKnown(filePath)) {
             if (const std::optional<ClassWithPrivateSlots> found
-                = classShapeFromTheIndex(className, filePath, *reachable, d->workingCopy)) {
+                = d->classShapeFromTheIndex(className, filePath, *reachable)) {
                 return *found;
             }
         }
