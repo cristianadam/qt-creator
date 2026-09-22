@@ -11,6 +11,8 @@
 
 #include <QReadWriteLock>
 
+namespace CppEditor { class CodeModelQueries; }
+
 namespace Autotest::Internal {
 
 class QuickTestParseResult : public TestParseResult
@@ -33,12 +35,17 @@ public:
     QStringList supportedExtensions() const override { return {"qml"}; };
 
 private:
+    // \a queries is one reading of the file being processed, shared by every
+    // question asked about it: off the cxx front end each object of its own
+    // would read the file again.
     bool handleQtQuickTest(QPromise<TestParseResultPtr> &promise,
+                           const CppEditor::CodeModelQueries &queries,
                            CPlusPlus::Document::Ptr document,
                            ITestFramework *framework);
     void handleDirectoryChanged(const Utils::FilePath &directory);
     void doUpdateWatchPaths(const Utils::FilePaths &directories);
-    QString quickTestName(const CPlusPlus::Document::Ptr &doc) const;
+    QString quickTestName(const CppEditor::CodeModelQueries &queries,
+                          const CPlusPlus::Document::Ptr &doc) const;
     QList<QmlJS::Document::Ptr> scanDirectoryForQuickTestQmlFiles(const Utils::FilePath &srcDir);
 
     QmlJS::Snapshot m_qmlSnapshot;

@@ -10,6 +10,8 @@
 
 #include <optional>
 
+namespace CppEditor { class CodeModelQueries; }
+
 namespace Autotest::Internal {
 
 // Which classes the QTEST_MAIN-family macros written in a text name, the ones
@@ -46,8 +48,13 @@ public:
                          const Utils::FilePath &fileName) override;
 
 private:
-    TestCases testCases(const Utils::FilePath &fileName) const;
-    QHash<QString, QtTestCodeLocationList> checkForDataTags(const Utils::FilePath &fileName) const;
+    // \a queries is one reading of the file being processed, shared by every
+    // question asked about it: off the cxx front end each object of its own
+    // would read the file again, and processing one file asks four times.
+    TestCases testCases(const CppEditor::CodeModelQueries &queries,
+                        const Utils::FilePath &fileName) const;
+    QHash<QString, QtTestCodeLocationList> checkForDataTags(
+        const CppEditor::CodeModelQueries &queries, const Utils::FilePath &fileName) const;
     struct TestCaseData {
         Utils::FilePath fileName;
         int line = 0;
@@ -58,9 +65,10 @@ private:
         bool valid = false;
     };
 
-    std::optional<bool> fillTestCaseData(const QString &testCaseName,
-                                           const CPlusPlus::Document::Ptr &doc,
-                                           TestCaseData &data) const;
+    std::optional<bool> fillTestCaseData(const CppEditor::CodeModelQueries &queries,
+                                         const QString &testCaseName,
+                                         const CPlusPlus::Document::Ptr &doc,
+                                         TestCaseData &data) const;
     QtTestParseResult *createParseResult(
         const QString &testCaseName,
         const TestCaseData &data,

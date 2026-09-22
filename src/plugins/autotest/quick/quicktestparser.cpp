@@ -65,7 +65,7 @@ static FilePaths activeBuildDirectories()
 
 static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
                                 const CPlusPlus::Snapshot &snapshot,
-                                const CppParser &parser)
+                                const CppEditor::CodeModelQueries &queries)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtQuickTest.framework/Headers", "QtQuickTest"})
@@ -86,7 +86,7 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
 
     // Asked only where what the file writes itself did not say so: off the
     // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
         for (const QString &prefix : expectedHeaderPrefixes) {
             if (include.pathView().endsWith(QString("%1/quicktest.h").arg(prefix)))
                 return true;
@@ -125,10 +125,10 @@ static QString quickTestSrcDir(const FilePath &fileName)
     return {};
 }
 
-QString QuickTestParser::quickTestName(const CPlusPlus::Document::Ptr &doc) const
+QString QuickTestParser::quickTestName(const CppEditor::CodeModelQueries &queries,
+                                       const CPlusPlus::Document::Ptr &doc) const
 {
     const FilePath filePath = doc->filePath();
-    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
 
     // A QUICK_TEST_MAIN-family macro says what the tests are named, and
     // what it says is the text it was handed.
@@ -264,10 +264,11 @@ static bool checkQmlDocumentForQuickTestCode(QPromise<TestParseResultPtr> &promi
 }
 
 bool QuickTestParser::handleQtQuickTest(QPromise<TestParseResultPtr> &promise,
+                                        const CppEditor::CodeModelQueries &queries,
                                         CPlusPlus::Document::Ptr document,
                                         ITestFramework *framework)
 {
-    if (quickTestName(document).isEmpty())
+    if (quickTestName(queries, document).isEmpty())
         return false;
 
     QList<CppEditor::ProjectPart::ConstPtr> ppList =
@@ -413,10 +414,16 @@ bool QuickTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
         return false;
 
    CPlusPlus::Document::Ptr cppdoc = document(fileName);
-   if (cppdoc.isNull() || !includesQtQuickTest(cppdoc, m_cppSnapshot, *this))
+   if (cppdoc.isNull())
        return false;
 
-   return handleQtQuickTest(promise, cppdoc, framework());
+   // One reading for every question asked about this file; off the cxx front
+   // end an object of its own would parse the file and its headers again.
+   const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+   if (!includesQtQuickTest(cppdoc, m_cppSnapshot, queries))
+       return false;
+
+   return handleQtQuickTest(promise, queries, cppdoc, framework());
 }
 
 FilePath QuickTestParser::projectFileForMainCppFile(const FilePath &fileName)

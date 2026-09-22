@@ -38,7 +38,7 @@ TestTreeItem *QtTestParseResult::createTestTreeItem() const
 
 static bool includesQtTest(const CPlusPlus::Document::Ptr &doc,
                            const CPlusPlus::Snapshot &snapshot,
-                           const CppParser &parser)
+                           const CppEditor::CodeModelQueries &queries)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtTest.framework/Headers", "QtTest"}) : QStringList({"QtTest"});
@@ -58,7 +58,7 @@ static bool includesQtTest(const CPlusPlus::Document::Ptr &doc,
 
     // Asked only where what the file writes itself did not say so: off the
     // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
         for (const QString &prefix : expectedHeaderPrefixes) {
         if (include.pathView().endsWith(QString("%1/qtest.h").arg(prefix)))
             return true;
@@ -199,12 +199,11 @@ TestCases mainsWrittenIn(const QString &text)
     return result;
 }
 
-TestCases QtTestParser::testCases(const FilePath &filePath) const
+TestCases QtTestParser::testCases(const CppEditor::CodeModelQueries &queries,
+                                  const FilePath &filePath) const
 {
     if (CppEditor::CppModelManager::document(filePath).isNull())
         return {};
-
-    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
 
     // A QTEST_MAIN-family macro says which class the test runs, and what it
     // says is the text it was handed: the macro's own definition is Qt's,
@@ -259,10 +258,9 @@ static QSet<FilePath> filesWithDataFunctionDefinitions(
 }
 
 QHash<QString, QtTestCodeLocationList> QtTestParser::checkForDataTags(
-        const FilePath &fileName) const
+        const CppEditor::CodeModelQueries &queries, const FilePath &fileName) const
 {
     static const QString dataSuffix("_data");
-    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
 
     QHash<QString, QtTestCodeLocationList> dataTags;
     for (const CppEditor::CodeModelQueries::WrittenCall &call
@@ -432,13 +430,20 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     CPlusPlus::Document::Ptr doc = document(fileName);
     if (doc.isNull())
         return false;
+
+    // One reading for everything asked about this file, the files its test
+    // class derives from and the files its data functions are written in.
+    // Off the cxx front end a reading is a parse of a file and its headers,
+    // and these questions used to make four of them per file.
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+
     const TestCases &oldTestCases = m_testCases.value(fileName);
-    if ((!includesQtTest(doc, m_cppSnapshot, *this) || !qtTestLibDefined(fileName))
+    if ((!includesQtTest(doc, m_cppSnapshot, queries) || !qtTestLibDefined(fileName))
         && oldTestCases.isEmpty()) {
         return false;
     }
 
-    TestCases testCaseList(testCases(fileName));
+    TestCases testCaseList(testCases(queries, fileName));
     bool reported = false;
     // we might be in a reparse without the original entry point with the QTest::qExec()
     if (testCaseList.isEmpty() && !oldTestCases.empty())
@@ -446,7 +451,8 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     for (const TestCase &testCase : std::as_const(testCaseList)) {
         if (!testCase.name.isEmpty()) {
             TestCaseData data;
-            std::optional<bool> earlyReturn = fillTestCaseData(testCase.name, doc, data);
+            std::optional<bool> earlyReturn = fillTestCaseData(queries, testCase.name,
+                                                               doc, data);
             if (earlyReturn.has_value() || !data.valid)
                 continue;
 
@@ -466,13 +472,9 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
 }
 
 std::optional<bool> QtTestParser::fillTestCaseData(
-        const QString &testCaseName, const CPlusPlus::Document::Ptr &doc,
-        TestCaseData &data) const
+        const CppEditor::CodeModelQueries &queries, const QString &testCaseName,
+        const CPlusPlus::Document::Ptr &doc, TestCaseData &data) const
 {
-    // One reading for the class and every base of it: reading a file is what
-    // this costs, and a hierarchy means asking about the same files again.
-    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
-
     // The file that names the class, or one of the files it was found named
     // in before -- a test class is declared in a header and named from a
     // source file, and either may be the one being parsed.
@@ -508,7 +510,7 @@ std::optional<bool> QtTestParser::fillTestCaseData(
 
     const QSet<FilePath> &files = filesWithDataFunctionDefinitions(data.testFunctions);
     for (const FilePath &file : files)
-        Utils::addToHash(&(data.dataTags), checkForDataTags(file));
+        Utils::addToHash(&(data.dataTags), checkForDataTags(queries, file));
 
     data.fileName = found.klass.filePath;
     data.valid = true;
