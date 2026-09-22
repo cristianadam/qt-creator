@@ -132,10 +132,14 @@ public:
     /// \return A synthetic \c ProjectPart which consists of all defines/includes/frameworks from
     ///         all loaded projects.
     static ProjectPart::ConstPtr fallbackProjectPart();
-    /// \return The part to read \a filePath with: the parts that build it, else the parts that
-    ///         reach it through an include, else the fallback part -- the same three places in
-    ///         the same order as \c ProjectPartChooser, which is what the editor's own parser
-    ///         asks. Null only where no project is loaded at all.
+    /// \return A part to read \a filePath with: one of the parts that build it, else one of
+    ///         those that reach it through an include, else the fallback part. The same three
+    ///         places \c ProjectPartChooser looks -- but the first of each list, where the
+    ///         chooser ranks them, so this is "a part that would do" rather than the one the
+    ///         editor's own parser settled on.
+    ///
+    /// Not cheap: the second place walks a dependency table that \c snapshot() hands out
+    /// unbuilt, so a caller on the GUI thread wants something else.
     static ProjectPart::ConstPtr partReading(const Utils::FilePath &filePath);
 
     /// \return How \a filePath is to be read -- which standard, whether Qt's keywords and
@@ -143,7 +147,7 @@ public:
     ///         lexer over its text needs. The defaults where no part has it.
     ///
     /// This is project data rather than anything a front end settled, so it is answered
-    /// whether or not the file has been parsed.
+    /// whether or not the file has been parsed. Cheap enough to ask per keystroke.
     static CPlusPlus::LanguageFeatures languageFeatures(const Utils::FilePath &filePath);
 
     static CPlusPlus::Snapshot snapshot();

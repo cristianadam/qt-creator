@@ -198,7 +198,11 @@ void ModelManagerTest::testLanguageFeaturesWithoutAParse()
 {
     ModelManagerTestHelper helper;
 
-    const FilePath source = testDataDir("testdata") / "sources/test_modelmanager_refresh.cpp";
+    // A file the part lists and that is not on disk, so that nothing can
+    // ever parse it: updateProjectInfo() does start an indexing pass, and
+    // the question here is precisely what is answered without one.
+    const FilePath source = testDataDir("testdata") / "sources/nothing_wrote_this.cpp";
+    QVERIFY(!source.exists());
     const auto project = helper.createProject(_("test_modelmanager_language_features"),
                                               Utils::FilePath::fromString("blubb.pro"));
     RawProjectPart rpp;
@@ -210,8 +214,6 @@ void ModelManagerTest::testLanguageFeaturesWithoutAParse()
     CppModelManager::updateProjectInfo(
         ProjectInfo::create(ProjectUpdateInfo(project, KitInfo(nullptr), {}, {}), {part}));
 
-    // Nothing has parsed it: updateProjectInfo() alone starts no indexing
-    // pass, which is the whole point of the question.
     QVERIFY(!CppModelManager::snapshot().document(source));
 
     const CPlusPlus::LanguageFeatures features = CppModelManager::languageFeatures(source);

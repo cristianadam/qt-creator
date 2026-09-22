@@ -3,6 +3,7 @@
 
 #include "cppmodelmanager.h"
 
+#include "baseeditordocumentparser.h"
 #include "baseeditordocumentprocessor.h"
 #include "compileroptionsbuilder.h"
 #include "cppbuiltinmodelmanagersupport.h"
@@ -1739,13 +1740,29 @@ ProjectPart::ConstPtr CppModelManager::partReading(const FilePath &filePath)
 
 LanguageFeatures CppModelManager::languageFeatures(const FilePath &filePath)
 {
-    // As BuiltinEditorDocumentParser does it: the fallback part is made of
-    // every loaded project's flags at once and says nothing about how this
-    // file is built, so its features are not to be preferred over the
-    // defaults.
-    const ProjectPart::ConstPtr part = partReading(filePath);
-    if (part && part->hasProject())
-        return part->languageFeatures;
+    // The part the file's own editor was configured with, where it has one.
+    // That is ProjectPartChooser's answer -- ranked, and including the two
+    // places below -- worked out once when the editor opened and kept; and
+    // whoever asks this is reacting to something on screen.
+    if (const BaseEditorDocumentParser::Ptr parser = BaseEditorDocumentParser::get(filePath)) {
+        const ProjectPart::ConstPtr part = parser->projectPartInfo().projectPart;
+        if (part && part->hasProject())
+            return part->languageFeatures;
+    }
+
+    // Otherwise the parts that build the file. Deliberately *not*
+    // partReading(): this is asked on the GUI thread as somebody moves the
+    // mouse, and projectPartFromDependencies() walks a dependency table
+    // that snapshot() hands out unbuilt, so every call would build one over
+    // the whole snapshot and throw it away.
+    const QList<ProjectPart::ConstPtr> parts = projectPart(filePath);
+
+    // The fallback part is left out for the same reason
+    // BuiltinEditorDocumentParser leaves it out: it is every loaded
+    // project's flags at once and says nothing about how this file is
+    // built, so it is no better an answer than the defaults.
+    if (!parts.isEmpty() && parts.first()->hasProject())
+        return parts.first()->languageFeatures;
     return LanguageFeatures::defaultFeatures();
 }
 

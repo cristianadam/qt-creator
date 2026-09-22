@@ -529,7 +529,12 @@ public:
         TextEditorWidget *widget = textEditor->editorWidget();
         TextDocument *textDocument = widget->textDocument();
         const FilePath filePath = loc.fileName();
-        if (!CppEditor::ProjectFile::isCppFile(filePath)) // For non-C++ documents.
+        // For non-C++ documents. A file with no extension at all counts:
+        // that is how the standard library writes its headers, and stopping
+        // inside one of those is ordinary. What this replaced was "the
+        // built-in code model has a document for this path", which covered
+        // them because whatever included them pulled them in.
+        if (!CppEditor::ProjectFile::isCppFile(filePath) && !filePath.suffix().isEmpty())
             return;
 
         const int firstLine = firstRelevantLine(filePath, loc.textPosition().line, 1);
