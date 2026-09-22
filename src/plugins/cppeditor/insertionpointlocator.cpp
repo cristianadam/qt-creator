@@ -12,6 +12,7 @@
 #include <cplusplus/Symbol.h>
 #include <cplusplus/Overview.h>
 
+#include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 #include <utils/textutils.h>
 
@@ -1137,10 +1138,31 @@ static InsertionLocation nextToSurroundingDefinitions(const FilePath &filePath,
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<SurroundingDefinitionsOnTheModel> onTheModel
         = cxxSurroundingDefinitions(filePath, line, column)) {
-        return placeNextToDefinitions(onTheModel->count, onTheModel->index, destinationFile,
-                                      [&](int index) {
-                                          return onTheModel->definitions.at(index);
-                                      });
+        // Only where it found a sibling in the file the definition is going
+        // into, because that is the one it can place anything against.
+        //
+        // This model says "no definition" both for a member that has none
+        // and for one whose definition it could not find -- it reads the
+        // files it is given, and where it has no project to look through
+        // that is the file the class is written in and no other. The two
+        // look alike from here and only one of them is an answer. Taken as
+        // one, the place came out as the end of the destination file
+        // wherever the siblings really were, which is what five rows of
+        // CodegenTest were failing on.
+        //
+        // Declining costs nothing: the built-in walk has the project parsed
+        // and reaches the same conclusion where there is genuinely nothing
+        // to sit beside.
+        const auto isInTheDestination = [&destinationFile](
+                                            const std::optional<SurroundingDefinition> &where) {
+            return where && where->filePath == destinationFile;
+        };
+        if (Utils::anyOf(onTheModel->definitions, isInTheDestination)) {
+            return placeNextToDefinitions(onTheModel->count, onTheModel->index, destinationFile,
+                                          [&](int index) {
+                                              return onTheModel->definitions.at(index);
+                                          });
+        }
     }
 #endif
 
