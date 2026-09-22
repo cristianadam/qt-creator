@@ -177,6 +177,9 @@ private:
         // Shared by every request resolving against the same ones, a name's
         // answer depending on the paths and nothing else.
         std::shared_ptr<Internal::ResolvedNames> resolvedNames;
+        // And what those files say. Shared by the whole batch rather than
+        // per part: a header's text is its text, whichever paths found it.
+        std::shared_ptr<Internal::HeaderContents> headerTexts;
     };
 
     // What one file's entries came back as. The path travels with them

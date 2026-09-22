@@ -103,4 +103,48 @@ FilePath ResolvedNames::resolve(const QString &name,
     return resolved;
 }
 
+HeaderContents::HeaderContents(qint64 maximumBytes)
+    : m_maximumBytes(maximumBytes)
+{}
+
+std::optional<QString> HeaderContents::textOf(const FilePath &filePath)
+{
+    {
+        QMutexLocker locker(&m_mutex);
+        const auto known = m_known.constFind(filePath);
+        if (known != m_known.constEnd()) {
+            ++m_hits;
+            return *known;
+        }
+        ++m_misses;
+    }
+
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents)
+        return std::nullopt;
+    const QString text = QString::fromUtf8(*contents);
+
+    QMutexLocker locker(&m_mutex);
+    // Two readers may have read it at once, which costs a read and cannot
+    // differ. Counting the bytes of whichever is already there keeps the
+    // total honest.
+    if (!m_known.contains(filePath) && m_bytes + contents->size() <= m_maximumBytes) {
+        m_bytes += contents->size();
+        m_known.insert(filePath, text);
+    }
+    return text;
+}
+
+int HeaderContents::hits() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_hits;
+}
+
+int HeaderContents::misses() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_misses;
+}
+
 } // namespace CppEditor::Internal

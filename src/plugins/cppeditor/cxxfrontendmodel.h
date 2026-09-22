@@ -957,7 +957,8 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
     const CxxFrontendIndexInputs &inputs,
     const Utils::FilePath &filePath,
     const ProjectExplorer::HeaderPaths &headerPaths,
-    const std::shared_ptr<ResolvedNames> &resolvedNames);
+    const std::shared_ptr<ResolvedNames> &resolvedNames,
+    const std::shared_ptr<HeaderContents> &headerTexts);
 
 // The same entries as the tree an index keeps them in: one root per file with
 // what it declares hung under it, nested so that a walk can stop at an enum

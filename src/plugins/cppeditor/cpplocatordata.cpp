@@ -619,6 +619,10 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // And one table of what each name was found to be per part, shared by
     // every reading of this batch that resolves against the same paths.
     QHash<QByteArray, std::shared_ptr<Internal::ResolvedNames>> namesFor;
+    // And one table of what each header says, shared by the whole batch --
+    // a header's text does not depend on which part reached it, and a
+    // reading asks for one once per inclusion rather than once per file.
+    const auto headerTexts = std::make_shared<Internal::HeaderContents>();
     for (const FilePath &filePath : std::as_const(batch)) {
         const QByteArray projectKey = cxxFrontendProjectKey(filePath);
         const auto known = pathsFor.constFind(projectKey);
@@ -633,7 +637,8 @@ void CppLocatorData::readPendingWithCxxFrontend()
                          names != namesFor.constEnd()
                              ? *names
                              : *namesFor.insert(projectKey,
-                                              std::make_shared<Internal::ResolvedNames>())});
+                                              std::make_shared<Internal::ResolvedNames>()),
+                         headerTexts});
     }
 
     const auto resultOf = [](const FilePath &filePath, const CxxFrontendIndexRead &read) {
@@ -672,7 +677,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
 
             const std::optional<CxxFrontendIndexRead> read
                 = cxxFrontendReadForIndex(inputs, request.filePath, request.headerPaths,
-                                          request.resolvedNames);
+                                          request.resolvedNames, request.headerTexts);
             if (!read) {
                 ReadResult declined;
                 declined.covered.append(request.filePath);

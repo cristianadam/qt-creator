@@ -142,7 +142,8 @@ QStringList projectPredefinedMacros()
 // it. \a headerPaths must already be prepared (preparedHeaderPaths).
 CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderPaths &headerPaths,
                                                   const WorkingCopy &workingCopy,
-                                                  const std::shared_ptr<ResolvedNames> &amongThePaths)
+                                                  const std::shared_ptr<ResolvedNames> &amongThePaths,
+                                                  const std::shared_ptr<HeaderContents> &texts)
 {
     // What each name has already been found to be, because a name is asked
     // about far more often than there are files: reading one translation
@@ -172,7 +173,13 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
     const std::shared_ptr<ResolvedNames> shared = amongThePaths ? amongThePaths
                                                                 : std::make_shared<ResolvedNames>();
 
-    return [headerPaths, workingCopy, shared, beside, hereAlready](
+    // And the same for the headers' text, for the same reason: a caller
+    // reading one file alone still gains, a header being asked for once per
+    // inclusion rather than once per file.
+    const std::shared_ptr<HeaderContents> contents = texts ? texts
+                                                           : std::make_shared<HeaderContents>();
+
+    return [headerPaths, workingCopy, shared, beside, hereAlready, contents](
                const QString &name, bool isSystem, const QString &includedFrom)
                -> std::optional<CxxFrontendSnapshot::Header> {
         const auto isThere = [&workingCopy](const FilePath &path) {
@@ -221,15 +228,16 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
         if (resolved.isEmpty())
             return std::nullopt;
 
+        // What is being typed ahead of what is on disk, and never kept:
+        // the text below is the file, and an editor's buffer is not.
         if (const std::optional<QByteArray> edited = workingCopy.source(resolved)) {
             return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
                                                QString::fromUtf8(*edited)};
         }
-        const Result<QByteArray> contents = resolved.fileContents();
-        if (!contents)
+        const std::optional<QString> text = contents->textOf(resolved);
+        if (!text)
             return std::nullopt;
-        return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
-                                           QString::fromUtf8(*contents)};
+        return CxxFrontendSnapshot::Header{resolved.toFSPathString(), *text};
     };
 }
 
@@ -365,7 +373,7 @@ void updateCxxFrontendModel(const FilePath &filePath,
     // only worth keeping as long as what it was read against still holds.
     auto snapshot = std::make_shared<CxxFrontendSnapshot>();
     snapshot->setHeaderResolver(
-        resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {}));
+        resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {}, {}));
     snapshot->setPredefinedMacros(definesIn(configFile));
     readOnAReaderStack([&] {
         snapshot->process(filePath.toFSPathString(), QString::fromUtf8(*onDisk));
@@ -694,7 +702,7 @@ std::optional<CxxFrontendDocument::Counterpart> definitionIn(
         return std::nullopt;
 
     CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(resolverAmong(preparedHeaderPathsFor(filePath), {}, {}));
+    snapshot.setHeaderResolver(resolverAmong(preparedHeaderPathsFor(filePath), {}, {}, {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument *document = nullptr;
@@ -1058,7 +1066,7 @@ HoldingDocument readWith(const WorkingCopy &workingCopy,
     // which answered only for what that model had already resolved -- so
     // this could not read a file it had not read first.
     const CxxFrontendSnapshot::HeaderResolver through
-        = resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {});
+        = resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {}, {});
     HoldingDocument holding;
     holding.owned = std::make_shared<CxxFrontendSnapshot>();
     holding.owned->setHeaderResolver(
@@ -2003,7 +2011,8 @@ namespace {
 HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
                              const FilePath &filePath,
                              const ProjectExplorer::HeaderPaths &headerPaths,
-                             const std::shared_ptr<ResolvedNames> &resolvedNames)
+                             const std::shared_ptr<ResolvedNames> &resolvedNames,
+                             const std::shared_ptr<HeaderContents> &headerTexts)
 {
     const Result<QByteArray> contents = filePath.fileContents();
     if (!contents)
@@ -2014,7 +2023,7 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
     // Found among the project part's header paths rather than looked up in
     // the built-in model's snapshot, so that a reading needs nothing of
     // that model and the index need not follow its indexer.
-    holding.owned->setHeaderResolver(resolverAmong(headerPaths, {}, resolvedNames));
+    holding.owned->setHeaderResolver(resolverAmong(headerPaths, {}, resolvedNames, headerTexts));
     holding.owned->setPredefinedMacros(inputs.predefinedMacros);
     // What every file in the unit declares, not only this one. A project's
     // headers are read into its sources anyway; reading them again one by
@@ -2095,7 +2104,8 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
     const CxxFrontendIndexInputs &inputs,
     const FilePath &filePath,
     const ProjectExplorer::HeaderPaths &headerPaths,
-    const std::shared_ptr<ResolvedNames> &resolvedNames)
+    const std::shared_ptr<ResolvedNames> &resolvedNames,
+    const std::shared_ptr<HeaderContents> &headerTexts)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
@@ -2112,7 +2122,7 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
     // declares would read as written by hand and stand wherever the line
     // markers put it.
     const HoldingDocument holding = readForIndex(inputs, filePath, headerPaths,
-                                                resolvedNames);
+                                                resolvedNames, headerTexts);
     if (!holding.document)
         return std::nullopt;
 
@@ -3016,7 +3026,7 @@ std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
     // documents that are kept were read without one.
     CxxFrontendSnapshot snapshot;
     snapshot.setHeaderResolver(
-        resolverAmong(preparedHeaderPathsFor(filePath), CppModelManager::workingCopy(), {}));
+        resolverAmong(preparedHeaderPathsFor(filePath), CppModelManager::workingCopy(), {}, {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument *document = nullptr;

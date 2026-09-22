@@ -52,6 +52,7 @@ private slots:
     void testNames();
     void testNamesAcrossFiles();
     void testHighlightingReachesTheEditor();
+    void testTheHeadersAreReadOnce();
     void testTheStoreGivesBackWhatWasPutIn();
     void testTheStoreForgetsWhenTheFileChanges();
     void testTheStoreForgetsWhenAnIncludedFileChanges();

@@ -69,4 +69,53 @@ private:
     QHash<QString, Utils::FilePath> m_known;
 };
 
+// The text of the headers a batch reads.
+//
+// A header is handed over once per *inclusion*, not once per file and not
+// once per reading: the front end asks for it again every time an #include
+// names it, since whether an include guard makes that a no-op is something
+// only the preprocessor knows. Measured over a twenty-file slice of this
+// project, one batch made **320,000 reads of 4.9 GB against 1,801 distinct
+// files holding 12 MB** -- the same bytes some four hundred times over, and
+// a third of the reader's time in open() and the UTF-8 decode behind it.
+//
+// So the text is kept for as long as the batch is, which is the same view
+// of the disk the store's content digests are memoized against. A file
+// written while a batch runs is read again on the next pass, the way one
+// changed between passes is.
+//
+// Bounded, because a large project's header set is not: past the bound
+// nothing more is kept and the readers go back to the disk for what is not
+// already there. Whatever is read first stays, which is the hot set --
+// every translation unit reaches much the same headers.
+//
+// Shared between the workers of a batch, so it locks; and as with
+// ResolvedNames the disk read happens outside the lock, since holding it
+// across one would put every reader behind whichever is reading.
+class HeaderContents
+{
+public:
+    // \a maximumBytes counts the files' own bytes rather than what they
+    // take as QString, which is about twice that for text.
+    explicit HeaderContents(qint64 maximumBytes = 256 * 1024 * 1024);
+
+    // What \a filePath says, or nothing where it cannot be read. The same
+    // QString every time, so handing it over costs a reference rather than
+    // a copy of the file.
+    std::optional<QString> textOf(const Utils::FilePath &filePath);
+
+    // How many asks were answered without going to the disk, and how many
+    // were not: the one outward sign that this does anything.
+    int hits() const;
+    int misses() const;
+
+private:
+    mutable QMutex m_mutex;
+    QHash<Utils::FilePath, QString> m_known;
+    qint64 m_bytes = 0;
+    const qint64 m_maximumBytes;
+    int m_hits = 0;
+    int m_misses = 0;
+};
+
 } // namespace CppEditor::Internal

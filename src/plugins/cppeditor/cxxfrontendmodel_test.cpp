@@ -1868,6 +1868,56 @@ public:
 
 } // namespace
 
+// A header the batch reaches again is not read from disk again.
+//
+// Which is the whole of what this costs and most of what it saves: a
+// twenty-file slice of this project read 4.9 GB off disk over 320,000 asks,
+// against 1,801 distinct files holding 12 MB -- the same bytes some four
+// hundred times over, because the front end asks once per *inclusion* and
+// not once per file.
+void CxxFrontendModelTest::testTheHeadersAreReadOnce()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("thing.h", "class Thing {};\n");
+    QVERIFY(!header.isEmpty());
+
+    HeaderContents contents;
+    const std::optional<QString> first = contents.textOf(header);
+    QVERIFY(first);
+    QCOMPARE(*first, QString("class Thing {};\n"));
+    QCOMPARE(contents.hits(), 0);
+    QCOMPARE(contents.misses(), 1);
+
+    // And the second ask is the same text without a read. Written over in
+    // between, so that a second read would be visible in the answer rather
+    // than only in the counters -- the counters alone would pass on a cache
+    // that read the file and threw the reading away.
+    QVERIFY(header.writeFileContents("class Other {};\n"));
+    const std::optional<QString> again = contents.textOf(header);
+    QVERIFY(again);
+    QCOMPARE(*again, QString("class Thing {};\n"));
+    QCOMPARE(contents.hits(), 1);
+    QCOMPARE(contents.misses(), 1);
+
+    // A file that cannot be read is no answer, and is not remembered as
+    // one: the next batch may well find it there.
+    QVERIFY(!contents.textOf(dir.filePath() / "absent.h"));
+    QVERIFY(!contents.textOf(dir.filePath() / "absent.h"));
+    QCOMPARE(contents.hits(), 1);
+    QCOMPARE(contents.misses(), 3);
+
+    // Past the bound nothing more is kept, so a reader still gets an answer
+    // and gets it from the disk. One byte of room holds nothing at all.
+    HeaderContents bounded(1);
+    QVERIFY(bounded.textOf(header));
+    const std::optional<QString> unkept = bounded.textOf(header);
+    QVERIFY(unkept);
+    QCOMPARE(*unkept, QString("class Other {};\n")); // read afresh, so the new text
+    QCOMPARE(bounded.hits(), 0);
+    QCOMPARE(bounded.misses(), 2);
+}
+
 void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()
 {
     StoreFixture f;
