@@ -142,6 +142,23 @@ public:
 
     QString spelled(int at) const { return spelling(text, tokens.at(at)); }
 
+    // The token that begins exactly at \a offset, or -1 where none does --
+    // which is the answer where a place some other reader recorded no longer
+    // has anything at it.
+    int tokenBeginningAt(int offset) const
+    {
+        if (offset < 0)
+            return -1;
+        for (int i = 0; i < tokens.size(); ++i) {
+            const int begins = tokens.at(i).utf16charsBegin();
+            if (begins > offset)
+                break;
+            if (begins == offset)
+                return i;
+        }
+        return -1;
+    }
+
     // Where the name that *ends* at \a at begins: at itself, or at the first
     // of the names that qualify it -- the "NS" of "NS::Thing".
     int nameBeginsAt(int at) const
@@ -209,6 +226,133 @@ struct WrittenClassShape
     QStringList baseClasses;
 };
 
+// Whether a type is what \a token starts.
+//
+// What says a name followed by parentheses is being declared rather than
+// called -- a parameter list is written with types in it -- and, in front of
+// a name, that the type is one of the language's own rather than a class.
+bool startsAType(const Token &token)
+{
+    if (token.isPrimitiveType()) // int, char, void: a keyword of its own kind
+        return true;
+    switch (token.kind()) {
+    case T_CONST: case T_VOLATILE: case T_AUTO: case T_CLASS: case T_STRUCT:
+    case T_ENUM: case T_UNION: case T_TYPENAME:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// A type as it is written, without what decorates it: what a declaration in
+// front of a name says the name holds.
+struct WrittenTypeOfAName
+{
+    QString name;          // as written, "NS::Thing"
+    bool isPointer = false;
+    bool isBuiltin = false; // and then it is no class
+};
+
+// What the nearest declaration of \a name before \a before says its type is,
+// or nothing where no declaration of it stands there.
+//
+// Nearest rather than the one in scope: a block is not followed here, and the
+// declaration a use means is written above it. What this is for is reading
+// "tst_Simple test;" off the main() that hands &test to a runner, which is
+// the one shape the answer turns on.
+std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int before,
+                                                    const QString &name)
+{
+    const Tokens &tokens = lexed.tokens;
+    for (int at = before - 1; at > 0; --at) {
+        if (tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != name)
+            continue;
+
+        // A declaration's name is followed by the end of it, by what it is
+        // initialised with, or by the next name in the same declaration.
+        switch (at + 1 < tokens.size() ? tokens.at(at + 1).kind() : T_EOF_SYMBOL) {
+        case T_SEMICOLON: case T_EQUAL: case T_COMMA: case T_LPAREN:
+        case T_LBRACE: case T_RPAREN: case T_LBRACKET:
+            break;
+        default:
+            continue;
+        }
+
+        // And a type in front of it, which is what says this is a
+        // declaration rather than a use of the name.
+        WrittenTypeOfAName written;
+        int from = at;
+        for (int back = at - 1; back >= 0; --back) {
+            const int kind = tokens.at(back).kind();
+            if (kind == T_STAR) {
+                written.isPointer = true;
+            } else if (kind == T_IDENTIFIER || kind == T_COLON_COLON || kind == T_CONST
+                       || kind == T_VOLATILE || kind == T_AMPER || kind == T_LESS
+                       || kind == T_GREATER || kind == T_CLASS || kind == T_STRUCT) {
+                // A name, what qualifies it, its template arguments, or a
+                // word that says how it is held.
+            } else if (startsAType(tokens.at(back))) {
+                // A type written with a word of the language -- int,
+                // unsigned, auto -- which is no class.
+                written.isBuiltin = true;
+            } else {
+                break;
+            }
+            from = back;
+        }
+        // The name of the type, which is the last name the run holds: what
+        // stands after it says how the thing is held rather than what it is.
+        int nameEnd = -1;
+        for (int i = from; i < at; ++i) {
+            if (tokens.at(i).kind() == T_IDENTIFIER)
+                nameEnd = i;
+        }
+
+        // A type has to be named for this to be a declaration at all. What
+        // stands in front of the name otherwise is an expression it is part
+        // of -- "&test" handed to a call reads as "& test" and would
+        // otherwise be taken for one.
+        if (nameEnd < 0 && !written.isBuiltin)
+            continue;
+
+        if (nameEnd >= 0)
+            written.name = lexed.qualifiedNameAt(nameEnd);
+        return written;
+    }
+    return std::nullopt;
+}
+
+// Whether the name beginning at \a at is being declared rather than called.
+//
+// A declaration has a type in front of the name -- "void newRow(const char
+// *)" -- where a call has the start of a statement, an operator, or a word
+// like "return": a file that declares the function it is asked about
+// otherwise reads as one that calls it.
+bool declaresRatherThanCalls(const Lexed &lexed, int at)
+{
+    if (at == 0)
+        return false;
+    const Token &before = lexed.tokens.at(at - 1);
+
+    // What stands in a directive is no type of anything: the token before a
+    // call written under an "#endif" is the word "endif", which a lexer hands
+    // over as an identifier like any other.
+    if (insideADirective(lexed.text, before.utf16charsBegin()))
+        return false;
+
+    if (startsAType(before))
+        return true;
+    switch (before.kind()) {
+    case T_IDENTIFIER: // a class as the return type, or a macro in front of it
+    case T_STAR: case T_AMPER: case T_AMPER_AMPER: // a pointer or a reference
+    case T_GREATER: // the end of a template argument list
+    case T_TILDE: // a destructor, which is nobody's call either
+        return true;
+    default:
+        return false;
+    }
+}
+
 // The name of the function whose body the brace at \a brace opens, as it is
 // written -- "C::f" where the function is defined outside its class -- or
 // empty where that brace opens no function body.
@@ -263,17 +407,25 @@ QString functionOpenedAt(const Lexed &lexed, int brace)
 
         // What stands in front of those parentheses: the name of the
         // function, or -- in a constructor's initialiser list -- the name of
-        // a member being initialised, and then the head is further back
-        // still.
+        // a member or a base being initialised, and then the head is further
+        // back still.
         if (tokens.at(open - 1).kind() != T_IDENTIFIER)
             return {};
         const int name = open - 1;
-        const int before = name - 1;
-        if (before >= 0 && (tokens.at(before).kind() == T_COMMA
-                            || tokens.at(before).kind() == T_COLON)) {
-            close = closingParenthesisAt(before - 1);
+        const int begins = lexed.nameBeginsAt(name);
+        if (begins > 0 && (tokens.at(begins - 1).kind() == T_COMMA
+                           || tokens.at(begins - 1).kind() == T_COLON)) {
+            close = closingParenthesisAt(begins - 2);
             continue;
         }
+
+        // And that a function is what this head belongs to: it is written
+        // like a declaration, with a type in front of the name, where a macro
+        // that opens a block -- "TEST_F(Suite, Case) { ... }" -- has nothing
+        // in front of it. So is a constructor, whose body this therefore
+        // leaves unnamed rather than guessing at.
+        if (!declaresRatherThanCalls(lexed, begins))
+            return {};
         return lexed.qualifiedNameAt(name);
     }
 }
@@ -292,7 +444,22 @@ public:
     void passed(const Lexed &lexed, int at)
     {
         const Tokens &tokens = lexed.tokens;
-        switch (tokens.at(at).kind()) {
+
+        // Whether the walk is inside a preprocessor directive, which is a
+        // line the compiler never sees braces in: a "#define" whose body
+        // opens one -- "namespace X {" is a real macro -- would otherwise
+        // put this out by one for the rest of the file.
+        //
+        // Off the tokens' own line flags rather than by looking at the text
+        // for each of them, which would be a scan back to the line's start
+        // per token.
+        const Token &token = tokens.at(at);
+        if (token.newline() && !token.joined())
+            m_inADirective = token.kind() == T_POUND;
+        if (m_inADirective)
+            return;
+
+        switch (token.kind()) {
         case T_LBRACE:
             // A class or a namespace names its scope; otherwise a function's
             // body may, and a statement's block and an initialiser's braces
@@ -323,16 +490,37 @@ public:
                 m_skipTo = name;
             }
             break;
-        case T_CLASS: case T_STRUCT: case T_UNION:
-            // The name, with whatever export macro stands in front of it
-            // skipped: the last identifier of the run is the class's own.
+        case T_CLASS: case T_STRUCT: case T_UNION: {
+            // The name: the last of the identifiers written after the word,
+            // since an export macro may stand in front of it -- and "final"
+            // after it, which is not a name.
             m_pending.clear();
+            QStringList written;
+            int last = at;
             for (int name = at + 1;
                  name < tokens.size() && tokens.at(name).kind() == T_IDENTIFIER; ++name) {
-                m_pending = lexed.spelled(name);
-                m_skipTo = name;
+                written << lexed.spelled(name);
+                last = name;
+            }
+            if (!written.isEmpty() && written.last() == "final")
+                written.removeLast();
+            if (written.isEmpty())
+                break;
+
+            // And only where a class is what this declares. "template <class
+            // T>" and "void f(class Foo *p)" name a type they are written in
+            // terms of, and neither opens a scope of that name.
+            switch (last + 1 < tokens.size() ? tokens.at(last + 1).kind() : T_EOF_SYMBOL) {
+            case T_GREATER: case T_GREATER_GREATER: case T_COMMA: case T_STAR:
+            case T_AMPER: case T_AMPER_AMPER: case T_RPAREN: case T_EQUAL:
+                break;
+            default:
+                m_pending = written.last();
+                m_skipTo = last;
+                break;
             }
             break;
+        }
 
         case T_SEMICOLON:
         case T_EQUAL: // "struct S s = { ... }": those braces open no scope
@@ -357,10 +545,16 @@ public:
     // cannot say what it is written in.
     bool insideSomethingUnnamed() const { return !m_open.isEmpty() && m_open.last().isEmpty(); }
 
+    // Whether the walk is on a preprocessor directive, where what is written
+    // is not what the file says: a macro whose body holds the name a reader
+    // is looking for makes the tokens the wrong thing to read it off.
+    bool onADirective() const { return m_inADirective; }
+
 private:
     QStringList m_open; // with an empty entry for a scope that has no name
     QString m_pending;  // the name the next brace would open
     int m_skipTo = -1;
+    bool m_inADirective = false;
 };
 
 // The named scopes the token at \a at is written inside, outermost first:
@@ -658,14 +852,7 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
     if (offset < 0)
         return std::nullopt;
 
-    int at = -1;
-    for (int i = 0; i < lexed.tokens.size(); ++i) {
-        const int begins = lexed.tokens.at(i).utf16charsBegin();
-        if (begins > offset)
-            break;
-        if (begins == offset)
-            at = i;
-    }
+    int at = lexed.tokenBeginningAt(offset);
     if (at < 0 || lexed.tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != ownName)
         return std::nullopt;
 
@@ -682,124 +869,18 @@ std::optional<WrittenClassShape> classShapeIn(const Lexed &lexed, const FilePath
     return std::nullopt;
 }
 
-// Whether a type is what \a token starts.
+// Whether the name written at \a at is the one \a asked about, that being a
+// function's name split on "::".
 //
-// What says a name followed by parentheses is being declared rather than
-// called -- a parameter list is written with types in it -- and, in front of
-// a name, that the type is one of the language's own rather than a class.
-bool startsAType(const Token &token)
+// Written with as much in front of it as the file bothers with, which has to
+// be the tail of what was asked for: QTest::qExec is asked for and "qExec"
+// under a using directive is it, where "Other::qExec" is somebody else's
+// function of the same name.
+bool namesTheFunction(const Lexed &lexed, int at, const QStringList &asked)
 {
-    if (token.isPrimitiveType()) // int, char, void: a keyword of its own kind
-        return true;
-    switch (token.kind()) {
-    case T_CONST: case T_VOLATILE: case T_AUTO: case T_CLASS: case T_STRUCT:
-    case T_ENUM: case T_UNION: case T_TYPENAME:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// A type as it is written, without what decorates it: what a declaration in
-// front of a name says the name holds.
-struct WrittenTypeOfAName
-{
-    QString name;          // as written, "NS::Thing"
-    bool isPointer = false;
-    bool isBuiltin = false; // and then it is no class
-};
-
-// What the nearest declaration of \a name before \a before says its type is,
-// or nothing where no declaration of it stands there.
-//
-// Nearest rather than the one in scope: a block is not followed here, and the
-// declaration a use means is written above it. What this is for is reading
-// "tst_Simple test;" off the main() that hands &test to a runner, which is
-// the one shape the answer turns on.
-std::optional<WrittenTypeOfAName> declarationBefore(const Lexed &lexed, int before,
-                                                    const QString &name)
-{
-    const Tokens &tokens = lexed.tokens;
-    for (int at = before - 1; at > 0; --at) {
-        if (tokens.at(at).kind() != T_IDENTIFIER || lexed.spelled(at) != name)
-            continue;
-
-        // A declaration's name is followed by the end of it, by what it is
-        // initialised with, or by the next name in the same declaration.
-        switch (at + 1 < tokens.size() ? tokens.at(at + 1).kind() : T_EOF_SYMBOL) {
-        case T_SEMICOLON: case T_EQUAL: case T_COMMA: case T_LPAREN:
-        case T_LBRACE: case T_RPAREN: case T_LBRACKET:
-            break;
-        default:
-            continue;
-        }
-
-        // And a type in front of it, which is what says this is a
-        // declaration rather than a use of the name.
-        WrittenTypeOfAName written;
-        int from = at;
-        for (int back = at - 1; back >= 0; --back) {
-            const int kind = tokens.at(back).kind();
-            if (kind == T_STAR) {
-                written.isPointer = true;
-            } else if (kind == T_IDENTIFIER || kind == T_COLON_COLON || kind == T_CONST
-                       || kind == T_VOLATILE || kind == T_AMPER || kind == T_LESS
-                       || kind == T_GREATER || kind == T_CLASS || kind == T_STRUCT) {
-                // A name, what qualifies it, its template arguments, or a
-                // word that says how it is held.
-            } else if (startsAType(tokens.at(back))) {
-                // A type written with a word of the language -- int,
-                // unsigned, auto -- which is no class.
-                written.isBuiltin = true;
-            } else {
-                break;
-            }
-            from = back;
-        }
-        // The name of the type, which is the last name the run holds: what
-        // stands after it says how the thing is held rather than what it is.
-        int nameEnd = -1;
-        for (int i = from; i < at; ++i) {
-            if (tokens.at(i).kind() == T_IDENTIFIER)
-                nameEnd = i;
-        }
-
-        // A type has to be named for this to be a declaration at all. What
-        // stands in front of the name otherwise is an expression it is part
-        // of -- "&test" handed to a call reads as "& test" and would
-        // otherwise be taken for one.
-        if (nameEnd < 0 && !written.isBuiltin)
-            continue;
-
-        if (nameEnd >= 0)
-            written.name = lexed.qualifiedNameAt(nameEnd);
-        return written;
-    }
-    return std::nullopt;
-}
-
-// Whether the name beginning at \a at is being declared rather than called.
-//
-// A declaration has a type in front of the name -- "void newRow(const char
-// *)" -- where a call has the start of a statement, an operator, or a word
-// like "return": a file that declares the function it is asked about
-// otherwise reads as one that calls it.
-bool declaresRatherThanCalls(const Lexed &lexed, int at)
-{
-    if (at == 0)
-        return false;
-    const Token &before = lexed.tokens.at(at - 1);
-    if (startsAType(before))
-        return true;
-    switch (before.kind()) {
-    case T_IDENTIFIER: // a class as the return type, or a macro in front of it
-    case T_STAR: case T_AMPER: case T_AMPER_AMPER: // a pointer or a reference
-    case T_GREATER: // the end of a template argument list
-    case T_TILDE: // a destructor, which is nobody's call either
-        return true;
-    default:
-        return false;
-    }
+    const QStringList written = lexed.qualifiedNameAt(at).split("::");
+    return written.size() <= asked.size()
+           && written == asked.mid(asked.size() - written.size());
 }
 
 // The classes a file hands to calls of a function called \a functionName --
@@ -824,20 +905,6 @@ bool declaresRatherThanCalls(const Lexed &lexed, int at)
 // in; a class is named as the declaration names it rather than written out in
 // full, which is what a reader looking it up in turn asks with anyway. A
 // class handed over twice comes back twice, since the caller dedupes.
-// Whether the name written at \a at is the one \a asked about, that being a
-// function's name split on "::".
-//
-// Written with as much in front of it as the file bothers with, which has to
-// be the tail of what was asked for: QTest::qExec is asked for and "qExec"
-// under a using directive is it, where "Other::qExec" is somebody else's
-// function of the same name.
-bool namesTheFunction(const Lexed &lexed, int at, const QStringList &asked)
-{
-    const QStringList written = lexed.qualifiedNameAt(at).split("::");
-    return written.size() <= asked.size()
-           && written == asked.mid(asked.size() - written.size());
-}
-
 std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &functionName)
 {
     const Tokens &tokens = lexed.tokens;
@@ -848,10 +915,16 @@ std::optional<QStringList> classesPassedToIn(const Lexed &lexed, const QString &
     QStringList classes;
     for (int i = 0; i + 2 < tokens.size(); ++i) {
         if (tokens.at(i).kind() != T_IDENTIFIER || tokens.at(i + 1).kind() != T_LPAREN
-            || lexed.spelled(i) != asked.last()
-            || insideADirective(lexed.text, tokens.at(i).utf16charsBegin())) {
+            || lexed.spelled(i) != asked.last()) {
             continue;
         }
+
+        // A macro written around the call: "#define RUN(c) QTest::qExec(c)"
+        // and then RUN wherever a test is run. Where the call is is not
+        // something the tokens of this file say any more, so they are the
+        // wrong thing to read it off at all.
+        if (insideADirective(lexed.text, tokens.at(i).utf16charsBegin()))
+            return std::nullopt;
 
         if (!namesTheFunction(lexed, i, asked)
             || declaresRatherThanCalls(lexed, lexed.nameBeginsAt(i))) {
@@ -954,8 +1027,7 @@ std::optional<QList<CodeModelQueries::WrittenCall>> callsToIn(
         walk.passed(lexed, i);
         i = std::max(i, walk.skipTo());
         if (i + 1 >= tokens.size() || tokens.at(i).kind() != T_IDENTIFIER
-            || tokens.at(i + 1).kind() != T_LPAREN
-            || insideADirective(lexed.text, tokens.at(i).utf16charsBegin())) {
+            || tokens.at(i + 1).kind() != T_LPAREN) {
             continue;
         }
         if (!Utils::anyOf(asked, [&](const QStringList &name) {
@@ -963,6 +1035,13 @@ std::optional<QList<CodeModelQueries::WrittenCall>> callsToIn(
             })) {
             continue;
         }
+
+        // A macro written around the call: "#define ROW(t) QTest::newRow(t)"
+        // and then ROW wherever a row is wanted. Where the calls are is not
+        // something the tokens of this file say any more, so they are the
+        // wrong thing to read them off at all.
+        if (walk.onADirective())
+            return std::nullopt;
 
         // A file that declares the function itself is not calling it there.
         const int begins = lexed.nameBeginsAt(i);
@@ -1853,18 +1932,7 @@ public:
         if (!tokens)
             return std::nullopt;
 
-        const int offset = tokens->lines.offsetOf(line, column);
-        if (offset < 0)
-            return std::nullopt;
-
-        int at = -1;
-        for (int i = 0; i < tokens->tokens.size(); ++i) {
-            const int begins = tokens->tokens.at(i).utf16charsBegin();
-            if (begins > offset)
-                break;
-            if (begins == offset)
-                at = i;
-        }
+        const int at = tokens->tokenBeginningAt(tokens->lines.offsetOf(line, column));
         if (at < 0 || tokens->tokens.at(at).kind() != T_IDENTIFIER)
             return std::nullopt;
 
@@ -1876,12 +1944,31 @@ public:
         // project that builds one file or the other -- a platform's own
         // implementation -- and which of them a reader means is not a
         // question the index answers.
+        const QString ownName = scopes.last();
         Link found;
         for (const IndexItem::Ptr &candidate : index->findSymbols(IndexItem::Function, qualified)) {
             if (!candidate->isFunctionDefinition() || candidate->scopedSymbolName() != qualified)
                 continue;
             if (found.hasValidTarget())
                 return std::nullopt;
+
+            // And the place has to be where that function still stands. An
+            // entry says where it was when the file was last read for the
+            // index, which is behind a file that has moved on since -- one
+            // somebody is typing in, or one a checkout rewrote -- and a link
+            // into the wrong line is worse than the reading this declines
+            // to, which reads the file itself.
+            const std::shared_ptr<const Lexed> defining = lexed(candidate->filePath());
+            if (!defining)
+                return std::nullopt;
+            const int where = defining->lines.offsetOf(candidate->line(),
+                                                       candidate->column() + 1);
+            const int at = defining->tokenBeginningAt(where);
+            if (at < 0 || defining->tokens.at(at).kind() != T_IDENTIFIER
+                || defining->spelled(at) != ownName) {
+                return std::nullopt;
+            }
+
             // An entry counts columns from zero, and so does a link.
             found = Link(candidate->filePath(), candidate->line(), candidate->column());
         }

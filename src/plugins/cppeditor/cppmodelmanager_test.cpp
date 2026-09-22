@@ -2029,10 +2029,14 @@ void ModelManagerTest::testTheTagsADataFunctionWrites()
         "    Other::newRow(\"somebody else's\");\n"          // 17
         "}\n"                                                // 18
         "} // namespace NS\n"                                // 19
-        "void freeFunction()\n"                              // 20
-        "{\n"                                                // 21
-        "    QTest::newRow(\"in a free function\");\n"       // 22
-        "}\n");                                              // 23
+        "#define OPENS_A_BRACE namespace Unseen {\n"          // 20, and the
+        "template <class T> void addRows()\n"                // 21 brace in it
+        "{\n"                                                // 22 opens nothing
+        "#ifdef SOMETHING_UNSET\n"                           // 23
+        "    QTest::newRow(\"in a branch\");\n"              // 24
+        "#endif\n"                                           // 25
+        "    QTest::newRow(\"after a directive\");\n"        // 26
+        "}\n");                                              // 27
     QVERIFY(!source.isEmpty());
 
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -2059,7 +2063,8 @@ void ModelManagerTest::testTheTagsADataFunctionWrites()
                      "first in NS::Thing::rows_data at 14:5\n"
                      "unqualified in NS::Thing::rows_data at 15:5\n"
                      "format %1+ in NS::Thing::rows_data at 16:5\n"
-                     "in a free function in freeFunction at 22:5"));
+                     "in a branch in addRows at 24:5\n"
+                     "after a directive in addRows at 26:5"));
 
     // And no reading, which is the one thing the answer does not say.
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -2081,8 +2086,43 @@ void ModelManagerTest::testTheTagsADataFunctionWrites()
     const CodeModelQueries readAgain{CPlusPlus::Snapshot(), WorkingCopy()};
     readAgain.callsTo(inALambda, {"QTest::newRow"});
 #ifdef QTC_WITH_CXX_FRONTEND
-    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+    const int afterTheLambda = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheLambda > readBefore,
              "a call in a scope the tokens do not name was answered for without reading");
+#endif
+
+    // Nor is a block a macro opens: it reads like a function's body, so
+    // naming it after the macro would leave the answer looking complete.
+    const FilePath inAMacrosBlock = dir.createFile(
+        "in_a_macros_block.cpp",
+        "TEST_F(Suite, Case)\n"
+        "{\n"
+        "    QTest::newRow(\"in somebody's block\");\n"
+        "}\n");
+    QVERIFY(!inAMacrosBlock.isEmpty());
+    const CodeModelQueries readAThird{CPlusPlus::Snapshot(), WorkingCopy()};
+    readAThird.callsTo(inAMacrosBlock, {"QTest::newRow"});
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int afterTheBlock = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheBlock > afterTheLambda,
+             "a call in a block a macro opened was answered for without reading");
+#endif
+
+    // And neither is a file that writes a macro around the call itself:
+    // where the rows are is not something its tokens say any more.
+    const FilePath throughAMacro = dir.createFile(
+        "through_a_macro.cpp",
+        "#define ROW(tag) QTest::newRow(tag)\n"
+        "void rows_data()\n"
+        "{\n"
+        "    ROW(\"through a macro\");\n"
+        "}\n");
+    QVERIFY(!throughAMacro.isEmpty());
+    const CodeModelQueries readAFourth{CPlusPlus::Snapshot(), WorkingCopy()};
+    readAFourth.callsTo(throughAMacro, {"QTest::newRow"});
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > afterTheBlock,
+             "a file that writes a macro around the call was answered for without reading");
 #endif
 }
 
@@ -2157,8 +2197,29 @@ void ModelManagerTest::testTheIndexedDefinition()
     // it has not indexed yet is exactly that -- so the question is passed on.
     read.definitionOfFunctionAt(header, 8, 10);
 #ifdef QTC_WITH_CXX_FRONTEND
-    QVERIFY2(cxxFrontendReadingsMade() > readBefore,
+    const int afterTheMissingOne = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheMissingOne > readBefore,
              "a definition the index does not have was answered for without reading");
+#endif
+
+    // Nor is one whose file has moved on since it was indexed. An entry says
+    // where the definition stood when the file was last read for the index,
+    // and two lines typed in above it put it somewhere else -- so the place
+    // is checked against the file as it stands, which for a file somebody
+    // has open is the buffer. A link into the wrong line is worse than the
+    // reading this then declines to, which reads the file itself.
+    const QByteArray asIndexed = source.fileContents().value_or(QByteArray());
+    QVERIFY(!asIndexed.isEmpty());
+    WorkingCopy beingEdited;
+    beingEdited.insert(source, "\n\n" + asIndexed);
+    const CodeModelQueries readAgain{CPlusPlus::Snapshot(), beingEdited};
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int beforeTheEdited = cxxFrontendReadingsMade();
+#endif
+    readAgain.definitionOfFunctionAt(header, 6, 10);
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > beforeTheEdited,
+             "a place the file no longer has the function at was handed back");
 #endif
 }
 
@@ -2185,6 +2246,7 @@ void ModelManagerTest::testTheClassesHandedToARunner()
         "class tst_Three {};\n"
         "class tst_Four {};\n"
         "class tst_Five {};\n"
+        "class tst_Six {};\n"
         "int byValue(int);\n"
         "using namespace QTest;\n"
         "int main(int argc, char **argv)\n"
@@ -2193,6 +2255,7 @@ void ModelManagerTest::testTheClassesHandedToARunner()
         "    tst_Two *two = new tst_Two;\n"
         "    tst_Four four;\n"
         "    tst_Five five;\n"
+        "    tst_Six six;\n"
         "    QTest::qExec(&one, argc, argv);\n"   // the address of an object
         "    QTest::qExec(two, argc, argv);\n"    // a pointer that holds one
         "    QTest::qExec(new tst_Three, argc, argv);\n" // one made right there
@@ -2203,7 +2266,8 @@ void ModelManagerTest::testTheClassesHandedToARunner()
         "#else\n"                                 // is one class and not two
         "    QTest::qExec(&one, argc, argv);\n"
         "#endif\n"
-        "    byValue(argc);\n"
+        "    QTest::qExec(&six, argc, argv);\n"   // and one under a directive,
+        "    byValue(argc);\n"                    // whose "endif" is a name too
         "    return 0;\n"
         "}\n");
     QVERIFY(!source.isEmpty());
@@ -2218,7 +2282,7 @@ void ModelManagerTest::testTheClassesHandedToARunner()
     // one class: a caller that finds several takes the file for one that runs
     // several tests, and takes the checkbox off all of them.
     QCOMPARE(read.classesPassedTo(source, "QTest::qExec").join(", "),
-             QString("NS::tst_One, tst_Two, tst_Three, tst_Four"));
+             QString("NS::tst_One, tst_Two, tst_Three, tst_Four, tst_Six"));
     QCOMPARE(read.classesPassedTo(source, "byValue"), QStringList());
     QCOMPARE(read.classesPassedTo(source, "QTest::qExecNot"), QStringList());
 
@@ -2262,8 +2326,28 @@ void ModelManagerTest::testTheClassesHandedToARunner()
     const CodeModelQueries readOnce{CPlusPlus::Snapshot(), WorkingCopy()};
     readOnce.classesPassedTo(throughAMember, "QTest::qExec");
 #ifdef QTC_WITH_CXX_FRONTEND
-    QVERIFY2(cxxFrontendReadingsMade() > afterTheFirst,
+    const int afterTheMember = cxxFrontendReadingsMade();
+    QVERIFY2(afterTheMember > afterTheFirst,
              "a runner handed a member of something was answered for without reading");
+#endif
+
+    // And neither is a file that writes a macro around the call: where the
+    // runner is called is not something its tokens say any more.
+    const FilePath throughAMacro = dir.createFile(
+        "through_a_macro.cpp",
+        "#define RUN(test) QTest::qExec(test, argc, argv)\n"
+        "class tst_Run {};\n"
+        "int main(int argc, char **argv)\n"
+        "{\n"
+        "    tst_Run run;\n"
+        "    return RUN(&run);\n"
+        "}\n");
+    QVERIFY(!throughAMacro.isEmpty());
+    const CodeModelQueries readAgainOnce{CPlusPlus::Snapshot(), WorkingCopy()};
+    readAgainOnce.classesPassedTo(throughAMacro, "QTest::qExec");
+#ifdef QTC_WITH_CXX_FRONTEND
+    QVERIFY2(cxxFrontendReadingsMade() > afterTheMember,
+             "a file that writes a macro around the runner was answered for without reading");
 #endif
 }
 
