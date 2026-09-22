@@ -7,6 +7,7 @@
 #include "cppfunctiondecldeflink.h"
 #include "cppeditor_global.h"
 #include "cppworkingcopy.h"
+#include "includeresolution.h"
 #include "indexitem.h"
 #include "insertionpointlocator.h"
 #include "semantichighlighter.h"
@@ -15,6 +16,8 @@
 #include <cplusplus/declarationcomments.h>
 
 #include <texteditor/semantichighlighter.h>
+
+#include <projectexplorer/headerpath.h>
 
 #include <utils/filepath.h>
 #include <utils/link.h>
@@ -828,12 +831,18 @@ std::optional<QList<IndexItem::Ptr>> cxxFrontendIndexItems(const Utils::FilePath
 class CxxFrontendIndexInputs
 {
 public:
-    CPlusPlus::Snapshot builtinSnapshot;
     QStringList predefinedMacros;
 };
 
-// The inputs for a batch, read off \a builtinSnapshot.
-CxxFrontendIndexInputs cxxFrontendIndexInputs(const CPlusPlus::Snapshot &builtinSnapshot);
+// The inputs for a batch. Nothing of the built-in model is among them: a
+// reading finds its includes among the project part's header paths, so the
+// index needs no document that model has read.
+CxxFrontendIndexInputs cxxFrontendIndexInputs();
+
+// Where the includes of \a filePath are to be looked for, prepared as a
+// resolver walks them. Read off the project's data, so this belongs on the
+// thread that owns it rather than on a worker.
+ProjectExplorer::HeaderPaths cxxFrontendHeaderPaths(const Utils::FilePath &filePath);
 
 // One thing a file declares, as the project-wide index keeps it, written
 // flat: the entry it hangs under is named by its position in the list rather
@@ -897,8 +906,11 @@ public:
 //
 // Nothing where the model is off or cannot read the file, and then the
 // built-in walk makes the entries.
-std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendIndexInputs &inputs,
-                                                            const Utils::FilePath &filePath);
+std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
+    const CxxFrontendIndexInputs &inputs,
+    const Utils::FilePath &filePath,
+    const ProjectExplorer::HeaderPaths &headerPaths,
+    const std::shared_ptr<ResolvedNames> &resolvedNames);
 
 // The same entries as the tree an index keeps them in: one root per file with
 // what it declares hung under it, nested so that a walk can stop at an enum

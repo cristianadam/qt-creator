@@ -8,6 +8,7 @@
 #include "cppmodelmanager.h"
 #include "projectpart.h"
 #include "cppprojectfile.h"
+#include "includeresolution.h"
 
 #include <projectexplorer/projectmacro.h>
 
@@ -123,6 +124,108 @@ QStringList projectPredefinedMacros()
     QByteArray configuration = CppModelManager::codeModelConfiguration();
     configuration += ProjectExplorer::Macro::toByteArray(CppModelManager::definedMacros());
     return definesIn(configuration);
+}
+
+// Answers with the file an #include names, found the way a compiler finds
+// it: among the project part's header paths, a quoted name beside the file
+// that included it first.
+//
+// This is what lets the index read a file the built-in model has not read.
+// The resolver below it answers only for what that model already resolved,
+// and so cannot be asked about a file it has never seen -- which is why the
+// cxx index has had to follow the built-in indexer rather than stand in for
+// it. \a headerPaths must already be prepared (preparedHeaderPaths).
+CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderPaths &headerPaths,
+                                                  const WorkingCopy &workingCopy,
+                                                  const std::shared_ptr<ResolvedNames> &amongThePaths)
+{
+    // What each name has already been found to be, because a name is asked
+    // about far more often than there are files: reading one translation
+    // unit of this project asks some seventeen thousand times, and a walk
+    // that finds nothing has asked the disk about every one of fifty-odd
+    // header paths before it says so. Unmemoized, the walk came to two
+    // thirds of what indexing cost -- a hundred and eighty-eight million
+    // calls to isReadableFile() over three hundred files -- against an
+    // index that came out the same to within a third of a percent.
+    //
+    // Two tables because two questions. Where the header paths hold a name
+    // does not depend on who asked, so that one is handed in and shared by
+    // every reading of the batch; a quoted name is looked for beside the
+    // asking file first, so that one is remembered against the asker and
+    // belongs to this reading, which is one thread and needs no lock.
+    const auto beside = std::make_shared<QHash<QString, FilePath>>();
+
+    // And one in front of the shared table, because the shared one locks and
+    // this is asked some seventeen thousand times for each reading against
+    // a couple of thousand distinct names. This one belongs to the reading,
+    // so the lock behind it is reached once per name rather than once per
+    // question.
+    const auto hereAlready = std::make_shared<QHash<QString, FilePath>>();
+
+    // A caller with no table of its own gets one, rather than a reading on
+    // a worker thread dereferencing nothing.
+    const std::shared_ptr<ResolvedNames> shared = amongThePaths ? amongThePaths
+                                                                : std::make_shared<ResolvedNames>();
+
+    return [headerPaths, workingCopy, shared, beside, hereAlready](
+               const QString &name, bool isSystem, const QString &includedFrom)
+               -> std::optional<CxxFrontendSnapshot::Header> {
+        const auto isThere = [&workingCopy](const FilePath &path) {
+            return workingCopy.get(path) || path.isReadableFile();
+        };
+
+        FilePath resolved;
+        // Read off the name rather than by making a FilePath of it, this
+        // being on the hot path and most names being plainly relative. A
+        // backslash counts: Windows spells a root and a share that way, and
+        // taking such a name for a relative one would send it to the header
+        // paths, which do not hold it.
+        const bool absolute = name.startsWith('/') || name.startsWith('\\')
+                              || (name.size() > 2 && name.at(1) == ':' && name.at(0).isLetter());
+        if (absolute) {
+            const FilePath asWritten = FilePath::fromUserInput(name);
+            if (isThere(asWritten))
+                resolved = asWritten;
+        } else {
+            // A quoted name is looked for beside the file that included it
+            // before anywhere else, and where it is not there the standard
+            // has the search go on as though it had been written in angle
+            // brackets ("16.2 Source file inclusion").
+            if (!isSystem && !includedFrom.isEmpty()) {
+                const QString key = includedFrom + '\n' + name;
+                const auto known = beside->constFind(key);
+                if (known != beside->constEnd()) {
+                    resolved = *known;
+                } else {
+                    const FilePath nextDoor
+                        = FilePath::fromUserInput(includedFrom).resolvePath("../" + name);
+                    resolved = isThere(nextDoor) ? nextDoor : FilePath();
+                    beside->insert(key, resolved);
+                }
+            }
+            if (resolved.isEmpty()) {
+                const auto known = hereAlready->constFind(name);
+                if (known != hereAlready->constEnd()) {
+                    resolved = *known;
+                } else {
+                    resolved = shared->resolve(name, headerPaths, isThere);
+                    hereAlready->insert(name, resolved);
+                }
+            }
+        }
+        if (resolved.isEmpty())
+            return std::nullopt;
+
+        if (const std::optional<QByteArray> edited = workingCopy.source(resolved)) {
+            return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
+                                               QString::fromUtf8(*edited)};
+        }
+        const Result<QByteArray> contents = resolved.fileContents();
+        if (!contents)
+            return std::nullopt;
+        return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
+                                           QString::fromUtf8(*contents)};
+    };
 }
 
 // Answers with the file the built-in model resolved this include to, and its
@@ -1660,7 +1763,10 @@ namespace {
 // the same answer every time and one this must not ask for here. A worker
 // runs beside the indexer, and the indexer clears a document's source as
 // soon as it is done with it.
-HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePath &filePath)
+HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
+                             const FilePath &filePath,
+                             const ProjectExplorer::HeaderPaths &headerPaths,
+                             const std::shared_ptr<ResolvedNames> &resolvedNames)
 {
     const Result<QByteArray> contents = filePath.fileContents();
     if (!contents)
@@ -1668,7 +1774,10 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
 
     HoldingDocument holding;
     holding.owned = std::make_shared<CxxFrontendSnapshot>();
-    holding.owned->setHeaderResolver(resolverFor(inputs.builtinSnapshot, {}));
+    // Found among the project part's header paths rather than looked up in
+    // the built-in model's snapshot, so that a reading needs nothing of
+    // that model and the index need not follow its indexer.
+    holding.owned->setHeaderResolver(resolverAmong(headerPaths, {}, resolvedNames));
     holding.owned->setPredefinedMacros(inputs.predefinedMacros);
     // What every file in the unit declares, not only this one. A project's
     // headers are read into its sources anyway; reading them again one by
@@ -1693,9 +1802,21 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs, const FilePat
 
 } // namespace
 
-CxxFrontendIndexInputs cxxFrontendIndexInputs(const Snapshot &builtinSnapshot)
+CxxFrontendIndexInputs cxxFrontendIndexInputs()
 {
-    return {builtinSnapshot, projectPredefinedMacros()};
+    return {projectPredefinedMacros()};
+}
+
+ProjectExplorer::HeaderPaths cxxFrontendHeaderPaths(const FilePath &filePath)
+{
+    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+    if (parts.isEmpty())
+        return {};
+
+    // Prepared here, on the thread that owns the project's data: the
+    // preparation lists the directories under every framework path, and a
+    // worker would repeat that for each file of the part.
+    return preparedHeaderPaths(parts.first()->headerPaths);
 }
 
 QByteArray cxxFrontendProjectKey(const FilePath &filePath)
@@ -1729,8 +1850,11 @@ QByteArray cxxFrontendProjectKey(const FilePath &filePath)
     return hash.result().toHex();
 }
 
-std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendIndexInputs &inputs,
-                                                            const FilePath &filePath)
+std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
+    const CxxFrontendIndexInputs &inputs,
+    const FilePath &filePath,
+    const ProjectExplorer::HeaderPaths &headerPaths,
+    const std::shared_ptr<ResolvedNames> &resolvedNames)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
@@ -1746,7 +1870,8 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(const CxxFrontendInd
     // *preprocessed* text: every macro already expanded, so what one
     // declares would read as written by hand and stand wherever the line
     // markers put it.
-    const HoldingDocument holding = readForIndex(inputs, filePath);
+    const HoldingDocument holding = readForIndex(inputs, filePath, headerPaths,
+                                                resolvedNames);
     if (!holding.document)
         return std::nullopt;
 

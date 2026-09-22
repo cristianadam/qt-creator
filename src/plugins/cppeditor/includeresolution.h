@@ -7,6 +7,9 @@
 
 #include <utils/filepath.h>
 
+#include <QHash>
+#include <QMutex>
+
 #include <functional>
 
 namespace CppEditor::Internal {
@@ -39,5 +42,31 @@ Utils::FilePath resolveAmongHeaderPaths(
     const ProjectExplorer::HeaderPaths &headerPaths,
     const std::function<bool(const Utils::FilePath &)> &isThere,
     int from = 0);
+
+// What names have already been found among one list of header paths.
+//
+// Worth sharing between the readings of a batch, and this is the whole
+// reason the class exists: where the paths hold a name does not depend on
+// who asked, the files of a project part ask about the same few thousand
+// names, and one reading of this project asks some seventeen thousand
+// times. A walk that finds nothing has asked the disk about every one of
+// fifty-odd paths before it says so, which is why nowhere is remembered
+// too.
+//
+// Shared between the workers of a batch, so it locks. The walk itself runs
+// outside the lock: two workers may then do one name twice, which costs a
+// walk and cannot differ, where holding the lock across it would put every
+// worker behind whichever is reading the disk.
+class ResolvedNames
+{
+public:
+    Utils::FilePath resolve(const QString &name,
+                            const ProjectExplorer::HeaderPaths &headerPaths,
+                            const std::function<bool(const Utils::FilePath &)> &isThere);
+
+private:
+    QMutex m_mutex;
+    QHash<QString, Utils::FilePath> m_known;
+};
 
 } // namespace CppEditor::Internal

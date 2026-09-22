@@ -6,6 +6,7 @@
 #include <utils/qtcassert.h>
 
 #include <QDir>
+#include <QMutexLocker>
 #include <QFileInfo>
 
 using namespace ProjectExplorer;
@@ -82,6 +83,24 @@ FilePath resolveAmongHeaderPaths(const QString &name,
             return candidate;
     }
     return {};
+}
+
+FilePath ResolvedNames::resolve(const QString &name,
+                                const HeaderPaths &headerPaths,
+                                const std::function<bool(const FilePath &)> &isThere)
+{
+    {
+        QMutexLocker locker(&m_mutex);
+        const auto known = m_known.constFind(name);
+        if (known != m_known.constEnd())
+            return *known;
+    }
+
+    const FilePath resolved = resolveAmongHeaderPaths(name, headerPaths, isThere);
+
+    QMutexLocker locker(&m_mutex);
+    m_known.insert(name, resolved);
+    return resolved;
 }
 
 } // namespace CppEditor::Internal

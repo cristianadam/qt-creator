@@ -7,7 +7,11 @@
 #include "cppmodelmanager.h"
 #include "searchsymbols.h"
 
+#include "includeresolution.h"
+
 #include <cplusplus/CppDocument.h>
+
+#include <projectexplorer/headerpath.h>
 
 #include <QFutureWatcher>
 #include <QHash>
@@ -104,6 +108,14 @@ private:
     public:
         Utils::FilePath filePath;
         QByteArray projectKey;
+        // Where this file's includes are to be looked for, prepared: a
+        // reading finds them itself rather than asking the built-in model
+        // what it resolved.
+        ProjectExplorer::HeaderPaths headerPaths;
+        // And what the files before it already found among those paths.
+        // Shared by every request resolving against the same ones, a name's
+        // answer depending on the paths and nothing else.
+        std::shared_ptr<Internal::ResolvedNames> resolvedNames;
     };
 
     // What one file's entries came back as. The path travels with them

@@ -410,7 +410,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // Read once for the whole batch, and here rather than on the pool: this
     // is the thread the indexer reports to, and what these are read off is
     // built-in documents whose source it clears as it goes.
-    const CxxFrontendIndexInputs inputs = cxxFrontendIndexInputs(CppModelManager::snapshot());
+    const CxxFrontendIndexInputs inputs = cxxFrontendIndexInputs();
 
     // The store is kept across batches so that a header reached by a
     // thousand files is still read once, and this is where what it
@@ -423,10 +423,34 @@ void CppLocatorData::readPendingWithCxxFrontend()
 
     // Each file's project key worked out here, not on the pool: it is read
     // off the project's data, which belongs to this thread.
+    //
+    // The header paths come with it, and are remembered against that key
+    // for as long as the batch lasts: the key is a digest of the very paths
+    // and macros that decide them, so two files sharing it are two files of
+    // one part, and preparing them means listing the directories under
+    // every framework path.
     QList<Request> requests;
     requests.reserve(batch.size());
-    for (const FilePath &filePath : std::as_const(batch))
-        requests.append({filePath, cxxFrontendProjectKey(filePath)});
+    QHash<QByteArray, ProjectExplorer::HeaderPaths> pathsFor;
+    // And one table of what each name was found to be per part, shared by
+    // every reading of this batch that resolves against the same paths.
+    QHash<QByteArray, std::shared_ptr<Internal::ResolvedNames>> namesFor;
+    for (const FilePath &filePath : std::as_const(batch)) {
+        const QByteArray projectKey = cxxFrontendProjectKey(filePath);
+        const auto known = pathsFor.constFind(projectKey);
+        const ProjectExplorer::HeaderPaths headerPaths = known != pathsFor.constEnd()
+                                            ? *known
+                                            : *pathsFor.insert(projectKey,
+                                                               cxxFrontendHeaderPaths(filePath));
+        const auto names = namesFor.constFind(projectKey);
+        requests.append({filePath,
+                         projectKey,
+                         headerPaths,
+                         names != namesFor.constEnd()
+                             ? *names
+                             : *namesFor.insert(projectKey,
+                                              std::make_shared<Internal::ResolvedNames>())});
+    }
 
     const auto resultOf = [](const FilePath &filePath, const CxxFrontendIndexRead &read) {
         ReadResult result;
@@ -455,7 +479,8 @@ void CppLocatorData::readPendingWithCxxFrontend()
             }
 
             const std::optional<CxxFrontendIndexRead> read
-                = cxxFrontendReadForIndex(inputs, request.filePath);
+                = cxxFrontendReadForIndex(inputs, request.filePath, request.headerPaths,
+                                          request.resolvedNames);
             if (!read) {
                 ReadResult declined;
                 declined.covered.append(request.filePath);
