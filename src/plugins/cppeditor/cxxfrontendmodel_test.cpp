@@ -1971,6 +1971,54 @@ void CxxFrontendModelTest::testTheHeaderCacheIsWhatTheResolverReads()
     QCOMPARE(describes(*second, header), QStringList{"OnDisk"});
 }
 
+// And what a reading is stored under is a digest of those same bytes.
+//
+// The two used to be two reads at two moments -- the text through the table
+// above, the digest when the shard was written -- so a header written over
+// while the batch ran was described as it was and stored as it became. The
+// next session then found the file exactly as the shard said it should be,
+// took the stored reading, and showed what the file no longer declares.
+void CxxFrontendModelTest::testAReadingIsStoredUnderTheBytesItWasMadeFrom()
+{
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("thing.h", "class OnDisk {};\n");
+    const FilePath source = dir.createFile("one.cpp", "#include \"thing.h\"\nint a;\n");
+    QVERIFY(!header.isEmpty() && !source.isEmpty());
+
+    const ProjectExplorer::HeaderPaths paths{
+        ProjectExplorer::HeaderPath::makeUser(dir.filePath())};
+    const auto texts = std::make_shared<HeaderContents>();
+    const CxxFrontendIndexInputs inputs;
+
+    const std::optional<CxxFrontendIndexRead> read
+        = cxxFrontendReadForIndex(inputs, source, paths,
+                                  std::make_shared<ResolvedNames>(), texts);
+    QVERIFY(read);
+    QVERIFY(read->includedFiles.contains(header.toFSPathString()));
+
+    // Written over after the reading and before the shard: the moment the
+    // two reads used to straddle.
+    QVERIFY(header.writeFileContents("class Changed {};\n"));
+
+    CxxFrontendIndexCache cache(QStringList{"FOO 1"}, dir.filePath() / "store");
+    cache.store(source, "projectkey", *read, texts);
+
+    // A later session, with a table that has seen nothing: the header on
+    // disk is Changed and the shard describes OnDisk, so the shard is
+    // stale and the file has to be read afresh. Digested a second time it
+    // would say it was still good.
+    CxxFrontendIndexCache reopened(QStringList{"FOO 1"}, dir.filePath() / "store");
+    QVERIFY(!reopened.take(source, "projectkey"));
+
+    // And the same store does answer for a header that did not move, so
+    // what is being shown above is the digest and not a shard this cannot
+    // read at all.
+    QVERIFY(header.writeFileContents("class OnDisk {};\n"));
+    CxxFrontendIndexCache asItWas(QStringList{"FOO 1"}, dir.filePath() / "store");
+    QVERIFY(asItWas.take(source, "projectkey"));
+}
+
 void CxxFrontendModelTest::testTheStoreGivesBackWhatWasPutIn()
 {
     StoreFixture f;

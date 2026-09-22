@@ -13,6 +13,7 @@
 #include <QMutex>
 #include <QSet>
 
+#include <memory>
 #include <optional>
 
 namespace CppEditor::Internal {
@@ -52,8 +53,16 @@ public:
     // What was stored for \a filePath, where the file and every file read
     // into it are unchanged and \a projectKey is the one it was read under.
     // Nothing otherwise, and then the caller reads the file.
-    [[nodiscard]] std::optional<CxxFrontendIndexRead> take(const Utils::FilePath &filePath,
-                                                           const QByteArray &projectKey) const;
+    //
+    // \a texts is the batch's view of the disk, which is where the files
+    // are checked against: a header a reading has already taken its text
+    // from is not read a second time to be checked, and is checked as it
+    // was when that reading was made. A caller with no batch -- a query
+    // asked beside one -- hands none in, and then the files are read here.
+    [[nodiscard]] std::optional<CxxFrontendIndexRead> take(
+        const Utils::FilePath &filePath,
+        const QByteArray &projectKey,
+        const std::shared_ptr<HeaderContents> &texts = {}) const;
 
     // Only the files that went into the stored reading of \a filePath, each
     // checked the same way take() checks them and the file itself left out.
@@ -68,9 +77,17 @@ public:
         const Utils::FilePath &filePath, const QByteArray &projectKey) const;
 
     // Stores what reading \a filePath found. Overwrites whatever was there.
+    //
+    // \a texts is the table that reading read its headers through, and the
+    // digests kept in the shard are the ones it took of those very bytes.
+    // Without it the files are read a second time, at a second moment, and
+    // a header written over while the batch ran would be described as it
+    // was and stored as it became -- a shard that says it is fresh next
+    // session and holds what the file no longer declares.
     void store(const Utils::FilePath &filePath,
                const QByteArray &projectKey,
-               const CxxFrontendIndexRead &read);
+               const CxxFrontendIndexRead &read,
+               const std::shared_ptr<HeaderContents> &texts = {});
 
     // Forgets what each file's contents were, which is remembered only so
     // that a header reached by a thousand files is read once while a batch
@@ -100,15 +117,22 @@ private:
     // What a caller wants out of a shard: everything it holds, or only the
     // files that went into it.
     enum class Wanted { Everything, TheFilesOnly };
-    [[nodiscard]] std::optional<CxxFrontendIndexRead> readShard(const Utils::FilePath &filePath,
-                                                                const QByteArray &projectKey,
-                                                                Wanted wanted) const;
+    [[nodiscard]] std::optional<CxxFrontendIndexRead> readShard(
+        const Utils::FilePath &filePath,
+        const QByteArray &projectKey,
+        Wanted wanted,
+        const std::shared_ptr<HeaderContents> &texts) const;
 
     // A file's contents as a short digest, read once per batch. Digests
     // rather than a timestamp because a checkout rewrites timestamps without
     // changing a line, and because a file written twice within the clock's
     // resolution would otherwise keep a reading that is no longer true.
-    [[nodiscard]] QByteArray contentsOf(const QString &filePath) const;
+    //
+    // Taken from \a texts where a batch has one, that being the table its
+    // readings read the files through; the memo below is for a caller with
+    // no batch behind it.
+    [[nodiscard]] QByteArray contentsOf(const QString &filePath,
+                                        const std::shared_ptr<HeaderContents> &texts) const;
     [[nodiscard]] Utils::FilePath shardFor(const Utils::FilePath &filePath) const;
 
     // Where one file's entries live, under a digest of the entries

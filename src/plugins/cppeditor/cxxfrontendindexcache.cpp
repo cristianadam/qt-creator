@@ -45,19 +45,13 @@ const quint32 kMagic = 0x43585849; // "CXXI"
 // thing that may be thrown away rather than a thing to fill a disk with.
 const qint64 kDefaultMaximumBytes = 512ll * 1024 * 1024;
 
-// Enough of a digest to tell two files apart and short enough that a
-// thousand of them per shard is not what makes the store big. A collision
-// here would keep a reading that is no longer true, and eight bytes puts
-// that far below the chance of the disk being wrong.
-const int kDigestLength = 8;
-
-static QByteArray digestOf(const QByteArray &data)
-{
-    return QCryptographicHash::hash(data, QCryptographicHash::Sha1).left(kDigestLength);
-}
-
-// Enough of a digest to name what a file declares, and longer than the one
-// above because the two answer different questions. A content digest is only
+// A file's contents, the macros a store was written under and the path a
+// shard is named after are all told apart by shortDigest(), which lives
+// beside the table that reads the files: a file's contents and the digest
+// it is stored under have to come from one read of one set of bytes.
+//
+// Enough of a digest to name what a file declares, and longer than that
+// one because the two answer different questions. A content digest is only
 // ever compared with the digest of that same path's bytes, so a collision
 // takes one file's two versions agreeing; this one *names* a description
 // among every description in the store, which is the birthday problem over
@@ -117,7 +111,7 @@ CxxFrontendIndexCache::CxxFrontendIndexCache(const QStringList &macros,
                                              const FilePath &directory,
                                              qint64 maximumBytes)
     : m_directory(directory.isEmpty() ? Core::ICore::cacheResourcePath("cxx-index") : directory)
-    , m_macrosKey(digestOf(macros.join('\n').toUtf8()))
+    , m_macrosKey(shortDigest(macros.join('\n').toUtf8()))
     , m_maximumBytes(maximumBytes > 0 ? maximumBytes : kDefaultMaximumBytes)
     , m_startedAt(QDateTime::currentDateTime())
 {
@@ -130,7 +124,7 @@ Utils::FilePath CxxFrontendIndexCache::shardFor(const FilePath &filePath) const
     // directories do not write over each other.
     const QByteArray path = filePath.toFSPathString().toUtf8();
     return m_directory.pathAppended(filePath.fileName() + '.'
-                                    + QString::fromLatin1(digestOf(path).toHex()) + ".idx");
+                                    + QString::fromLatin1(shortDigest(path).toHex()) + ".idx");
 }
 
 FilePath CxxFrontendIndexCache::entriesFor(const QByteArray &key) const
@@ -276,8 +270,17 @@ std::optional<QList<CxxFrontendIndexEntry>> CxxFrontendIndexCache::readEntries(
     return entries;
 }
 
-QByteArray CxxFrontendIndexCache::contentsOf(const QString &filePath) const
+QByteArray CxxFrontendIndexCache::contentsOf(const QString &filePath,
+                                             const std::shared_ptr<HeaderContents> &texts) const
 {
+    // The batch's own view of the disk, where there is one: the files a
+    // reading was made from are in it already, digested as that reading
+    // read them, so this asks rather than reads. It stands for the memo
+    // below and lasts exactly as long -- one table for the question, on
+    // the side that reads the files.
+    if (texts)
+        return texts->digestOf(FilePath::fromUserInput(filePath)).value_or(QByteArray());
+
     {
         QMutexLocker locker(&m_mutex);
         const auto known = m_contents.constFind(filePath);
@@ -289,7 +292,7 @@ QByteArray CxxFrontendIndexCache::contentsOf(const QString &filePath) const
     // point of remembering it is that the reading happens once, not that
     // every other worker waits while it does.
     const Result<QByteArray> contents = FilePath::fromUserInput(filePath).fileContents();
-    const QByteArray digest = contents ? digestOf(*contents) : QByteArray();
+    const QByteArray digest = contents ? shortDigest(*contents) : QByteArray();
 
     QMutexLocker locker(&m_mutex);
     m_contents.insert(filePath, digest);
@@ -326,24 +329,31 @@ int CxxFrontendIndexCache::misses() const
     return m_misses;
 }
 
-std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(const FilePath &filePath,
-                                                                const QByteArray &projectKey) const
+std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::take(
+    const FilePath &filePath,
+    const QByteArray &projectKey,
+    const std::shared_ptr<HeaderContents> &texts) const
 {
-    return readShard(filePath, projectKey, Wanted::Everything);
+    return readShard(filePath, projectKey, Wanted::Everything, texts);
 }
 
 std::optional<QStringList> CxxFrontendIndexCache::includedFilesOf(
     const FilePath &filePath, const QByteArray &projectKey) const
 {
+    // No table: this is a question asked beside a batch rather than one of
+    // its readings, and what it checks the files against is its own memo.
     const std::optional<CxxFrontendIndexRead> read
-        = readShard(filePath, projectKey, Wanted::TheFilesOnly);
+        = readShard(filePath, projectKey, Wanted::TheFilesOnly, {});
     if (!read)
         return std::nullopt;
     return read->includedFiles;
 }
 
 std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::readShard(
-    const FilePath &filePath, const QByteArray &projectKey, Wanted wanted) const
+    const FilePath &filePath,
+    const QByteArray &projectKey,
+    Wanted wanted,
+    const std::shared_ptr<HeaderContents> &texts) const
 {
     const bool counts = wanted == Wanted::Everything;
     const auto miss = [this, counts]() -> std::optional<CxxFrontendIndexRead> {
@@ -414,10 +424,10 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::readShard(
     checked.reserve(fileCount);
     for (qint32 i = 0; i < fileCount; ++i) {
         const QString path = readPath(stream);
-        const QByteArray digest = readDigest(stream, kDigestLength);
+        const QByteArray digest = readDigest(stream, kShortDigestLength);
         if (stream.status() != QDataStream::Ok || path.isEmpty() || digest.isEmpty())
             return miss();
-        if (contentsOf(path) != digest)
+        if (contentsOf(path, texts) != digest)
             return miss();
         checked.append(path);
     }
@@ -525,7 +535,8 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::readShard(
 
 void CxxFrontendIndexCache::store(const FilePath &filePath,
                                   const QByteArray &projectKey,
-                                  const CxxFrontendIndexRead &read)
+                                  const CxxFrontendIndexRead &read,
+                                  const std::shared_ptr<HeaderContents> &texts)
 {
     if (!m_directory.ensureWritableDir())
         return;
@@ -559,14 +570,14 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
     placeOf.reserve(files.size());
     qint32 place = 0;
     for (const QString &path : std::as_const(files)) {
-        const QByteArray digest = contentsOf(path);
+        const QByteArray digest = contentsOf(path, texts);
         // A file that cannot be read now cannot be checked later, and a
         // shard that can never be used again is worse than none.
-        if (digest.size() != kDigestLength)
+        if (digest.size() != kShortDigestLength)
             return;
         placeOf.insert(path, place++);
         writePath(stream, path);
-        if (!writeDigest(stream, digest, kDigestLength))
+        if (!writeDigest(stream, digest, kShortDigestLength))
             return;
     }
 
@@ -709,7 +720,7 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
     // one.
     for (qint32 i = 0; i < fileCount; ++i) {
         readPath(stream);
-        readDigest(stream, kDigestLength);
+        readDigest(stream, kShortDigestLength);
         if (stream.status() != QDataStream::Ok)
             return std::nullopt;
     }

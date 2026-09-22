@@ -2031,6 +2031,14 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
     if (!contents)
         return {};
 
+    // What the batch is to say this file was, taken of the bytes about to
+    // be read rather than of a second read when the store writes: the file
+    // a reading is *of* stands first among the files that reading is
+    // checked against, and it is the one file the resolver never hands
+    // over.
+    if (headerTexts)
+        headerTexts->noteContents(filePath, *contents);
+
     HoldingDocument holding;
     holding.owned = std::make_shared<CxxFrontendSnapshot>();
     // Found among the project part's header paths rather than looked up in

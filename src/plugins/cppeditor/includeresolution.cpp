@@ -5,6 +5,7 @@
 
 #include <utils/qtcassert.h>
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QMutexLocker>
 #include <QFileInfo>
@@ -103,6 +104,11 @@ FilePath ResolvedNames::resolve(const QString &name,
     return resolved;
 }
 
+QByteArray shortDigest(const QByteArray &data)
+{
+    return QCryptographicHash::hash(data, QCryptographicHash::Sha1).left(kShortDigestLength);
+}
+
 HeaderContents::HeaderContents(qint64 maximumBytes)
     : m_maximumBytes(maximumBytes)
 {}
@@ -124,15 +130,66 @@ std::optional<QString> HeaderContents::textOf(const FilePath &filePath)
         return std::nullopt;
     const QString text = QString::fromUtf8(*contents);
 
+    // Taken of the very bytes this reading will be made from, and before
+    // the text is offered to anyone, so that no reading can be described
+    // from one version of a file and stored under the digest of another.
+    noteDigest(filePath, *contents);
+
     QMutexLocker locker(&m_mutex);
-    // Two readers may have read it at once, which costs a read and cannot
-    // differ. Counting the bytes of whichever is already there keeps the
-    // total honest.
-    if (!m_known.contains(filePath) && m_bytes + contents->size() <= m_maximumBytes) {
+    // Two readers may have read it at once, which costs a read. Whichever
+    // got there first is the answer -- the digest above is that one's, and
+    // a file written over in between would otherwise be handed to one
+    // reading as it became and to another as it was.
+    const auto known = m_known.constFind(filePath);
+    if (known != m_known.constEnd())
+        return *known;
+    if (m_bytes + contents->size() <= m_maximumBytes) {
         m_bytes += contents->size();
         m_known.insert(filePath, text);
     }
     return text;
+}
+
+std::optional<QByteArray> HeaderContents::digestOf(const FilePath &filePath)
+{
+    {
+        QMutexLocker locker(&m_mutex);
+        const auto known = m_digests.constFind(filePath);
+        if (known != m_digests.constEnd()) {
+            ++m_hits;
+            return *known;
+        }
+        ++m_misses;
+    }
+
+    // Outside the lock, as the text above is read outside it and for the
+    // same reason: whoever is at the disk must not hold every other worker
+    // behind them.
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents)
+        return std::nullopt;
+    return noteDigest(filePath, *contents);
+}
+
+void HeaderContents::noteContents(const FilePath &filePath, const QByteArray &contents)
+{
+    noteDigest(filePath, contents);
+}
+
+QByteArray HeaderContents::noteDigest(const FilePath &filePath, const QByteArray &contents)
+{
+    const QByteArray digest = shortDigest(contents);
+
+    QMutexLocker locker(&m_mutex);
+    // Whichever version of a file this batch saw first is the one it is
+    // described by, here as in the table above: a pool reaches a file in
+    // whatever order it likes, and what the store keeps must not depend on
+    // that.
+    const auto known = m_digests.constFind(filePath);
+    if (known != m_digests.constEnd())
+        return *known;
+    m_digests.insert(filePath, digest);
+    return digest;
 }
 
 qint64 HeaderContents::hits() const

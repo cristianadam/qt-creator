@@ -671,7 +671,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
             // a second session cheap; reading the file is the fallback, not
             // the other way round.
             if (const std::optional<CxxFrontendIndexRead> stored
-                = cache->take(request.filePath, request.projectKey)) {
+                = cache->take(request.filePath, request.projectKey, request.headerTexts)) {
                 return resultOf(request.filePath, *stored);
             }
 
@@ -684,7 +684,7 @@ void CppLocatorData::readPendingWithCxxFrontend()
                 return declined;
             }
 
-            cache->store(request.filePath, request.projectKey, *read);
+            cache->store(request.filePath, request.projectKey, *read, request.headerTexts);
             return resultOf(request.filePath, *read);
         }));
 #endif

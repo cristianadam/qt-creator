@@ -54,6 +54,7 @@ private slots:
     void testHighlightingReachesTheEditor();
     void testTheHeadersAreReadOnce();
     void testTheHeaderCacheIsWhatTheResolverReads();
+    void testAReadingIsStoredUnderTheBytesItWasMadeFrom();
     void testTheStoreGivesBackWhatWasPutIn();
     void testTheStoreForgetsWhenTheFileChanges();
     void testTheStoreForgetsWhenAnIncludedFileChanges();
