@@ -310,28 +310,42 @@ ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
 // The index does not come through here, its pool being sized already.
 //
 // See cxxFrontendReaderStackSize for what the budget is and why.
+// Runs \a read, declining rather than dying where the front end gives up.
+//
+// It throws on invariants of its own -- eighty-odd places call
+// cxx_runtime_error(), "no template declaration" among them -- and that is
+// something a reading may decline: what it was about to produce stays unset,
+// which every caller already reads as this front end having nothing to say.
+// Letting it out instead ends the process, on a worker as much as here: a
+// future rethrows what its task threw when its results are read, and the
+// event loop does not take one at all.
+void readDeclining(const std::function<void()> &read)
+{
+    try {
+        read();
+    } catch (const std::exception &thrown) {
+        qCWarning(cxxFrontendLog) << "the front end gave up on a reading:" << thrown.what();
+    } catch (...) {
+        qCWarning(cxxFrontendLog) << "the front end gave up on a reading";
+    }
+}
+
 void readOnAReaderStack(const std::function<void()> &read)
 {
-    const std::unique_ptr<QThread> reader(QThread::create([&read] {
-        // Caught here because an exception cannot cross a thread boundary:
-        // let out of one, it is std::terminate. The front end throws on
-        // invariants of its own -- eighty-odd places call
-        // cxx_runtime_error(), "no template declaration" among them -- and
-        // that is something a reading may decline rather than die of. What
-        // it was about to produce stays unset, which every caller already
-        // reads as this front end having nothing to say.
-        try {
-            read();
-        } catch (const std::exception &thrown) {
-            qCWarning(cxxFrontendLog) << "the front end gave up on a reading:"
-                                      << thrown.what();
-        } catch (...) {
-            qCWarning(cxxFrontendLog) << "the front end gave up on a reading";
-        }
+    // Whether the reading happened at all. A thread that cannot be started
+    // is one wait() returns from immediately, and then nothing has been read
+    // -- which a caller would otherwise take for a file this front end has
+    // nothing to say about.
+    bool ran = false;
+    const std::unique_ptr<QThread> reader(QThread::create([&read, &ran] {
+        ran = true;
+        readDeclining(read);
     }));
     reader->setStackSize(cxxFrontendReaderStackSize);
     reader->start();
     reader->wait();
+    if (!ran)
+        qCWarning(cxxFrontendLog) << "no thread to read on; nothing was read";
 }
 
 } // namespace
@@ -2012,9 +2026,14 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
     holding.owned->setChecksTypes(false);
     // Not readOnAReaderStack(): the index reads on a pool of its own that
     // carries that stack already, and a thread per file over a project is a
-    // cost the readings above do not have.
-    holding.document = holding.owned->process(filePath.toFSPathString(),
-                                              QString::fromUtf8(*contents));
+    // cost the readings above do not have. It declines the same way they do,
+    // though -- a file that trips an invariant is one file of a project, and
+    // ending the session over it during background indexing is worse than
+    // indexing the rest.
+    readDeclining([&] {
+        holding.document = holding.owned->process(filePath.toFSPathString(),
+                                                  QString::fromUtf8(*contents));
+    });
     return holding;
 }
 

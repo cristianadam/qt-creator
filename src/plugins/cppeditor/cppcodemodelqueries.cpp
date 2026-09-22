@@ -863,12 +863,29 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
 
 FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
 {
+    // The reading passed in first, which is the other way round from every
+    // other question here, and for two reasons.
+    //
+    // A closure is not something the two front ends answer differently:
+    // it is which files the preprocessor read, and a pass that has read
+    // the file knows them. So where that reading has the file its answer
+    // is as good, and it costs a walk over documents it holds already --
+    // where reading the file to find out costs a parse of it and every
+    // header it reaches, seconds for a file that includes a Qt module.
+    //
+    // And it is the answer to trust where the two differ. This model
+    // resolves includes against the header paths of one project part,
+    // where a pass resolved them as the file was really built, so a
+    // closure read here can come back short of one already known.
+    if (d->snapshot.contains(filePath))
+        return Utils::toList(d->snapshot.allIncludesForDocument(filePath));
+
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<FilePaths> reached = d->model->allIncludesFor(filePath))
         return *reached;
 #endif
 
-    return Utils::toList(d->snapshot.allIncludesForDocument(filePath));
+    return {};
 }
 
 QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(

@@ -213,6 +213,15 @@ void Manager::initialize()
     ProjectManager *sessionManager = ProjectManager::instance();
     connect(sessionManager, &ProjectManager::projectAdded,
             this, [this](Project *project) {
+        // Nothing to draw for a pane nobody has opened, and nothing worth
+        // drawing while the indexer is running -- the parser reads each of
+        // the project's files to say what it declares, which is a parse of
+        // the file where the cxx front end is the one answering. Enabling
+        // the pane and the indexer finishing each reset the parser, and
+        // that is where a project added meanwhile is picked up.
+        if (!state() || d->disableCodeParser)
+            return;
+
         const FilePath projectPath = project->projectFilePath();
         const QString projectName = project->displayName();
         const FilePaths projectFiles = project->files(Project::SourceFiles);

@@ -148,13 +148,17 @@ void ClassViewParserTest::testTreeFollowsAFileThatChanges()
     const FilePath project = root / "project.files";
     driven.parser.addProject(project, "Test", {source}, {});
     QVERIFY(driven.tree);
-    QCOMPARE(rowsUnder(rowNamed(driven.tree, "Test")), QStringList{"Before"});
+    ParserTreeItem::ConstPtr drawn = rowNamed(driven.tree, "Test");
+    QVERIFY(drawn);
+    QCOMPARE(rowsUnder(drawn), QStringList{"Before"});
 
     QVERIFY(source.writeFileContents("class After {};\n"));
     driven.parser.updateDocuments({source}, {});
 
     QVERIFY(driven.tree);
-    QCOMPARE(rowsUnder(rowNamed(driven.tree, "Test")), QStringList{"After"});
+    drawn = rowNamed(driven.tree, "Test");
+    QVERIFY(drawn);
+    QCOMPARE(rowsUnder(drawn), QStringList{"After"});
 }
 
 QObject *createClassViewParserTest()

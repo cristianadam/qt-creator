@@ -318,8 +318,17 @@ void Parser::removeFiles(const FilePaths &fileList)
         d->m_documentCache.remove(filePath);
         d->m_fileRevision.remove(filePath);
         d->m_projectCache.remove(filePath);
-        for (auto it = d->m_projectCache.begin(); it != d->m_projectCache.end(); ++it)
-            it.value().fileNames.remove(filePath);
+        for (auto it = d->m_projectCache.begin(); it != d->m_projectCache.end(); ++it) {
+            if (!it.value().fileNames.remove(filePath))
+                continue;
+
+            // The tree it holds is of a set of files this one is no longer
+            // in, and no revision moved to say so -- a file that is gone
+            // reports nothing read again. Told here instead, which is where
+            // the set changes.
+            it.value().tree = {};
+            it.value().treeRevision = 0;
+        }
     }
     requestCurrentState();
 }
@@ -333,6 +342,7 @@ void Parser::resetData(const QHash<FilePath, QPair<QString, FilePaths>> &project
 {
     d->m_projectCache.clear();
     d->m_documentCache.clear();
+    d->m_fileRevision.clear();
     d->m_workingCopy = workingCopy;
     d->m_snapshot = CppEditor::CppModelManager::snapshot();
 
@@ -364,8 +374,10 @@ void Parser::removeProject(const FilePath &projectPath)
         return;
 
     const QSet<FilePath> &filesInProject = it.value().fileNames;
-    for (const FilePath &fileInProject : filesInProject)
+    for (const FilePath &fileInProject : filesInProject) {
         d->m_documentCache.remove(fileInProject);
+        d->m_fileRevision.remove(fileInProject);
+    }
 
     d->m_projectCache.erase(it);
 
