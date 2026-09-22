@@ -294,10 +294,36 @@ dumper.value_members(lone, True)
 expect('a printed value memory does not hold', dumper.type_fields_cache.get(lone.typeid, None), None)
 expect('and the type is not tried again', lone.typeid in dumper.type_layout_rejected, True)
 memory[0x030:0x034] = (1).to_bytes(4, 'little')
+kindType = FakeType('Kind', TypeCode.Enum, 4)
 withEnum = dumper.fromNativeValue(FakeValue('e', FakeType('WithEnum', size=4), address=0x3030, members=[
-    FakeValue('kind', FakeType('Kind', TypeCode.Enum, 4), address=0x3030, text='V2 (0n1)')]))
+    FakeValue('kind', kindType, address=0x3030, text='V2 (0n1)')]))
 dumper.value_members(withEnum, True)
-expect('an enum member', dumper.type_fields_cache.get(withEnum.typeid, None), None)
+fields = dumper.type_fields_cache.get(withEnum.typeid, None)
+expect('an enum member whose printed number memory holds',
+       [(f.name, f.bitpos, f.bitsize) for f in fields] if fields else None, [('kind', 0, 32)])
+memory[0x050:0x054] = (0x11).to_bytes(4, 'little')     # kind:4 = 1, with a bit set next to it
+enumBits = dumper.fromNativeValue(FakeValue('b', FakeType('EnumBits', size=4), address=0x3050, members=[
+    FakeValue('kind', kindType, address=0x3050, text='V2 (0n1)')]))
+dumper.value_members(enumBits, True)
+expect('an enum bitfield', dumper.type_fields_cache.get(enumBits.typeid, None), None)
+
+print('')
+print('--- the display of an enum read from memory is asked for once per value ---')
+enumCasts = []
+
+
+def fake_enum_cast(expression):
+    enumCasts.append(expression)
+    return FakeValue('*', kindType, text='V2 (0n1)')
+
+
+_cdbext.parseAndEvaluate = fake_enum_cast
+memory[0x060:0x064] = (1).to_bytes(4, 'little')
+memory[0x070:0x074] = (1).to_bytes(4, 'little')
+displays = [dumper.value_display(dumper.value_members(dumper.createValue(address, 'WithEnum'), True)[0])
+            for address in (0x3060, 0x3070)]
+expect('the engine text, with the 0n taken off', displays, ['V2 (1)', 'V2 (1)'])
+expect('one cast expression for both values', enumCasts, ['(Kind)1'])
 
 # A module with vtables and their RTTI locators, and a heap with objects
 # pointing at them. The addresses are what couldBePointer() lets through.

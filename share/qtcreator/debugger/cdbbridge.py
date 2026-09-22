@@ -48,6 +48,14 @@ def native_msvc_type_name(typename):
     return name
 
 
+def enum_text_value(text):
+    # The number in what the engine prints for an enum: 'Invalid (0)' or
+    # '0n5 (No matching enumerant)', after enumValue() took the '0n' off the
+    # parenthesized form.
+    match = re.search(r'\((-?\d+)\)', text) or re.match(r'(?:0n)?(-?\d+)', text)
+    return None if match is None else int(match.group(1))
+
+
 class FakeVoidType(cdbext.Type):
     def __init__(self, name, dumper):
         cdbext.Type.__init__(self)
@@ -139,6 +147,10 @@ class Dumper(DumperBase):
         # serves, see vtable_owner(). Kept for one fetch: a module load may
         # move the tables.
         self.vtable_owners = {}
+        # (enum type name, value) -> the engine's text for it. Asking is a
+        # cast expression added to the symbol group; the answer holds for as
+        # long as the process lives.
+        self.enum_displays = {}
 
     def resetStats(self):
         DumperBase.resetStats(self)
@@ -338,9 +350,9 @@ class Dumper(DumperBase):
         # give away all but a bitfield alone in its unit, and that one is caught
         # by comparing what the engine printed with what the memory holds - as
         # long as the bits around it are not all zero at that moment, which is the
-        # case this cannot see through. An enum member is left to the symbol group
-        # as well: its display comes from the engine's text, which the memory path
-        # would have to evaluate a cast for.
+        # case this cannot see through. An enum member's text carries the number
+        # the engine printed, which is checked the same way; from memory its
+        # display is a cast expression per enumerator value, asked once.
         typeid = value.typeid
         if typeid in self.type_fields_cache or typeid in self.type_layout_rejected:
             return
@@ -374,7 +386,6 @@ class Dumper(DumperBase):
             offset = member.laddress - address
             byte_size = (member.size + 7) // 8
             if (member.name.startswith('__vtcast_')
-                    or self.type_code(member.typeid) == TypeCode.Enum
                     or offset < 0 or offset + byte_size > size):
                 self.type_layout_rejected.add(typeid)
                 return
@@ -387,6 +398,13 @@ class Dumper(DumperBase):
                 if blob is None:
                     blob = bytes(self.value_data(value, size))
                 if blob[offset:offset + byte_size] != bytes(member.ldata):
+                    self.type_layout_rejected.add(typeid)
+                    return
+            elif member.ldisplay is not None and self.type_code(member.typeid) == TypeCode.Enum:
+                if blob is None:
+                    blob = bytes(self.value_data(value, size))
+                stored = int.from_bytes(blob[offset:offset + byte_size], byteorder=self.byteorder)
+                if enum_text_value(member.ldisplay) not in (stored, stored - (1 << (8 * byte_size))):
                     self.type_layout_rejected.add(typeid)
                     return
             fields.append(self.Field(name=member.name, typeid=member.typeid, bitsize=member.size,
@@ -407,10 +425,13 @@ class Dumper(DumperBase):
         return align
 
     def nativeTypeEnumDisplay(self, nativeType: cdbext.Type, intval: int, form) -> str:
-        value = self.nativeParseAndEvaluate('(%s)%d' % (nativeType.name(), intval))
-        if value is None:
-            return ''
-        return self.enumValue(value)
+        key = (nativeType.name(), intval)
+        display = self.enum_displays.get(key, None)
+        if display is None:
+            value = self.nativeParseAndEvaluate('(%s)%d' % (nativeType.name(), intval))
+            display = '' if value is None else self.enumValue(value)
+            self.enum_displays[key] = display
+        return display
 
     def enumExpression(self, enumType: str, enumValue: str) -> str:
         ns = self.qtNamespace()
