@@ -95,22 +95,23 @@ public:
     // for. Counted apart from the two above, which are the index's own.
     int cxxFrontendClosuresServed() const;
 
-    // Every file the index's reading of \a filePath reached through its
-    // includes, out of the store and without reading anything. Nothing where
-    // the store has no reading of that file that still holds.
+    // Every file \a filePath reaches through its includes, as the index has
+    // it and without reading anything. Nothing where the index knows no such
+    // file.
     //
-    // The store keeps this beside the entries because a reading has to be
-    // checked against every file that went into it; it is the same list
-    // clangd keeps as its IncludeGraph, and for the same reason. Offered
-    // here because a question about what a file includes can then be
-    // answered for a file nobody has open and no pass has parsed, which is
-    // otherwise a parse of it and every header it reaches.
+    // Answered by walking the include graph the index keeps -- a node per
+    // file with the files it includes itself, which is clangd's IncludeGraph
+    // and is kept for the same reason. A *header* can be asked about that
+    // way and not otherwise: it is never read on its own, so nothing has a
+    // reading of it, and asking a front end means parsing the file and every
+    // header it reaches. Where the graph has nothing, the store's own list
+    // for a file it holds a reading of still answers.
     //
-    // As stale as the store is, which is to say: it names what the file
-    // included when it was last indexed, and the digest of every one of them
-    // has just been checked. A file being edited is not asked about here --
-    // what is on disk is not what it says.
-    std::optional<Utils::FilePaths> storedIncludesFor(const Utils::FilePath &filePath) const;
+    // As stale as the index is, which is to say: it names what the file
+    // included when it was last read, and a file written since is read
+    // again. A file being edited is not asked about here -- what is on disk
+    // is not what it says.
+    std::optional<Utils::FilePaths> indexedIncludesFor(const Utils::FilePath &filePath) const;
 
 private:
     // The store, or nothing where none has been made yet.
@@ -189,6 +190,10 @@ private:
     public:
         Utils::FilePaths covered;
         QList<ReadFile> withEntries;
+        // Which files of the unit include which, kept so that what a header
+        // reaches can be answered without reading it. Turned into paths here
+        // rather than where it lands, this being the pool's work.
+        QList<std::pair<Utils::FilePath, Utils::FilePaths>> includes;
     };
 
     // Reads the files waiting for the cxx front end, as many at a time as
@@ -216,6 +221,13 @@ private:
 
     mutable QMutex m_infosByFileMutex;
     QHash<Utils::FilePath, IndexItem::Ptr> m_infosByFile;
+
+    // The include graph of everything read: a file and the files it includes
+    // itself, merged from every reading. Asked from whatever thread a
+    // question is on, so under a lock of its own -- and the smaller half of
+    // what the index costs, an edge being two paths already held.
+    mutable QMutex m_includeGraphMutex;
+    QHash<Utils::FilePath, Utils::FilePaths> m_includeGraph;
 
     // The files the cxx front end has yet to read, written from the indexer's
     // thread and read from this one, so under a lock of their own rather than

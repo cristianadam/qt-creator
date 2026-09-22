@@ -23,7 +23,11 @@ public:
     bool checkTypes = true;
 
     QHash<QString, std::shared_ptr<CxxFrontendDocument>> documents;
-    QHash<QString, QStringList> includedFiles;
+    // Per file processed, which files each file of its translation unit
+    // includes itself -- the graph, rather than the flat list of everything
+    // the unit reached, because a closure can be worked out from a graph for
+    // any file in it and a header is never processed on its own.
+    QHash<QString, QHash<QString, QStringList>> includeGraphs;
 
     // Where to ask what could be written, and in which file. A document
     // answers that only if it was asked before it was preprocessed, so the
@@ -36,7 +40,7 @@ public:
 
 void CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString &source)
 {
-    QStringList included;
+    QHash<QString, QStringList> graph;
 
     CxxFrontendDocument::Config config;
     config.predefinedMacros = predefinedMacros;
@@ -61,13 +65,17 @@ void CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString
         if (!header)
             return std::nullopt;
 
-        if (!included.contains(header->filePath))
-            included.append(header->filePath);
+        // Where the include was written, which is what makes this a graph:
+        // the engine says which file it is reading as it goes, and the file
+        // itself for the one line that has no includer.
+        QStringList &includes = graph[includedFrom.isEmpty() ? filePath : includedFrom];
+        if (!includes.contains(header->filePath))
+            includes.append(header->filePath);
         return CxxFrontendDocument::Config::Include{header->filePath, header->source};
     };
 
     documents.insert(filePath, std::make_shared<CxxFrontendDocument>(source, filePath, config));
-    includedFiles.insert(filePath, included);
+    includeGraphs.insert(filePath, graph);
 }
 
 CxxFrontendSnapshot::CxxFrontendSnapshot()
@@ -140,13 +148,15 @@ QStringList CxxFrontendSnapshot::files() const
 
 QStringList CxxFrontendSnapshot::allIncludesFor(const QString &filePath) const
 {
+    const QHash<QString, QStringList> graph = d->includeGraphs.value(filePath);
+
     QStringList result;
     QSet<QString> seen{filePath};
     QStringList pending{filePath};
 
     while (!pending.isEmpty()) {
         const QString current = pending.takeFirst();
-        for (const QString &included : d->includedFiles.value(current)) {
+        for (const QString &included : graph.value(current)) {
             if (seen.contains(included))
                 continue;
             seen.insert(included);
@@ -157,6 +167,11 @@ QStringList CxxFrontendSnapshot::allIncludesFor(const QString &filePath) const
 
     result.sort();
     return result;
+}
+
+QHash<QString, QStringList> CxxFrontendSnapshot::includeGraphFor(const QString &filePath) const
+{
+    return d->includeGraphs.value(filePath);
 }
 
 CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QString &filePath,

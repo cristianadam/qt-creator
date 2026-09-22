@@ -929,6 +929,15 @@ public:
     // entries were read *through*, so a change to any of them can change
     // them, and the store has to know it.
     QStringList includedFiles;
+
+    // And how they are reached: each file of the unit that includes
+    // anything, and what it includes itself.
+    //
+    // The list above is this walked from the file read, and is kept beside
+    // it because that is what has to be checked. This is here so that the
+    // same question can be answered about a *header* -- which is never read
+    // on its own, so nothing else ever says what one reaches.
+    QHash<QString, QStringList> directIncludes;
 };
 
 // Reads \a filePath and says what it declares.

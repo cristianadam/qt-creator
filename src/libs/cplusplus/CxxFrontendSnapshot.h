@@ -89,6 +89,18 @@ public:
     // excluded.
     [[nodiscard]] QStringList allIncludesFor(const QString &filePath) const;
 
+    // The graph the walk above is over: each file of \a filePath's
+    // translation unit that includes anything, and what it includes, as
+    // written and in that order.
+    //
+    // For a caller that wants to walk it later, from a file other than the
+    // one processed: a header is never processed on its own -- it is read
+    // into every unit that includes it -- so what *it* reaches can only be
+    // answered from the graph of a unit it is in. That is the shape clangd
+    // keeps as its IncludeGraph, a node per file with its direct includes,
+    // and for the same reason.
+    [[nodiscard]] QHash<QString, QStringList> includeGraphFor(const QString &filePath) const;
+
     // Where the name used at a position in \a filePath was declared, which
     // may be in one of its headers.
     //

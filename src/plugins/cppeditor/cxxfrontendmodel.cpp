@@ -2126,6 +2126,7 @@ std::optional<CxxFrontendIndexRead> cxxFrontendReadForIndex(
 
     CxxFrontendIndexRead read;
     read.includedFiles = holding.owned->allIncludesFor(filePath.toFSPathString());
+    read.directIncludes = holding.owned->includeGraphFor(filePath.toFSPathString());
 
     // The file read is always first, so that a caller that wants only it
     // need not search, and so that a file declaring nothing still comes

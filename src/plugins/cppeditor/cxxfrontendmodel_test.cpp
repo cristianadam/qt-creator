@@ -1828,7 +1828,8 @@ bool sameAs(const CxxFrontendIndexRead &left, const CxxFrontendIndexRead &right)
             }
         }
     }
-    return left.includedFiles == right.includedFiles;
+    return left.includedFiles == right.includedFiles
+           && left.directIncludes == right.directIncludes;
 }
 
 // A store of its own in \a dir, so that a row neither reads nor writes the
@@ -1844,6 +1845,10 @@ public:
     {
         read = aReading();
         read.includedFiles = QStringList{header.toFSPathString()};
+        // And how it is reached, which a shard keeps as places in the list
+        // above rather than as paths.
+        read.directIncludes.insert(source.toFSPathString(),
+                                   QStringList{header.toFSPathString()});
     }
 
     // Puts the reading in and hands back a store that has not looked at any
@@ -1964,6 +1969,12 @@ void CxxFrontendModelTest::testTheStoreKeepsOneCopyOfWhatAFileDeclares()
     QVERIFY(!other.isEmpty());
     CxxFrontendIndexRead second = f.read;
     second.files.first().filePath = other;
+    // Its own reading of the header, as the other source's would be: a
+    // shard names the files it includes by their place in its own list, so
+    // an edge from a file that is not in this unit is no edge at all.
+    second.directIncludes.clear();
+    second.directIncludes.insert(other.toFSPathString(),
+                                 QStringList{f.header.toFSPathString()});
     f.cache->store(f.source, "projectkey", f.read);
     f.cache->store(other, "projectkey", second);
 

@@ -1773,16 +1773,6 @@ void ModelManagerTest::testTheIndexFollowsAChangedFile()
     QVERIFY2(!indexHolds("writtenBefore"), "the index kept what the file no longer says");
 }
 
-// What a file includes, answered out of the index's store: no pass has read
-// it here and no reading is made, and the answer is still right.
-//
-// This is what clangd does with every cross-file question -- one parse per
-// translation unit ever, and queries served from what that parse was
-// distilled into. The store keeps the closure beside the entries because a
-// stored reading has to be checked against every file that went into it, so
-// it is already there; what this pins is that the question is answered from
-// it rather than by reading the file, which for a file that includes a Qt
-// module is seconds.
 static bool theCxxFrontendModelIsInUse()
 {
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -1794,38 +1784,74 @@ static bool theCxxFrontendModelIsInUse()
 #endif
 }
 
-void ModelManagerTest::testTheStoredIncludeClosure()
+// What a file includes, answered out of the index: no pass has read it here
+// and no reading is made, and the answer is still right.
+//
+// This is what clangd does with every cross-file question -- one parse per
+// translation unit ever, and queries served from what that parse was
+// distilled into. A *header* is the case that needs more than the store: a
+// shard is written per translation unit and a header is never one, being read
+// into every unit that includes it. So what a header reaches comes from the
+// include graph the index keeps, a node per file with the files it includes
+// itself, which is clangd's IncludeGraph and is here for the reason clangd
+// has it. A framework's scan asks this of every file of a project, headers
+// and all, and reading one is a parse of it and everything it reaches.
+void ModelManagerTest::testTheIncludeClosureOfAHeader()
 {
     if (!theCxxFrontendModelIsInUse())
-        QSKIP("Only this model's index has a store to answer from");
+        QSKIP("Only this model's index keeps an include graph");
 
     TemporaryDir dir;
     QVERIFY(dir.isValid());
-    const FilePath header = dir.createFile("reached.h", "class Reached {};\n");
-    const FilePath source = dir.createFile("unit.cpp", "#include \"reached.h\"\n"
+    // Two headers deep, so that what comes back is a walk of the graph
+    // rather than the one include the middle header writes.
+    const FilePath leaf = dir.createFile("leaf.h", "class Leaf {};\n");
+    const FilePath middle = dir.createFile("middle.h", "#include \"leaf.h\"\n"
+                                                       "class Middle {};\n");
+    // And one the graph knows of but which includes nothing, since an empty
+    // answer is an answer: a leaf must not read as a file the index has
+    // never heard of.
+    const FilePath source = dir.createFile("unit.cpp", "#include \"middle.h\"\n"
                                                        "class Unit {};\n");
-    QVERIFY(!header.isEmpty() && !source.isEmpty());
+    QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty());
 
     CppLocatorData * const locatorData = CppModelManager::locatorData();
     QVERIFY(locatorData);
 
-    // Indexed, which is what puts a reading of it in the store.
+    // Only the source is indexed -- the headers are covered by its reading,
+    // which is the whole point.
     QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
     QVERIFY(QTest::qWaitFor([locatorData] {
         return locatorData->cxxFrontendFilesOutstanding() == 0;
     }, 60000));
 
-    // Asked with no reading of its own to fall back on: an empty snapshot,
-    // so the built-in answer cannot be the one that comes back, and an empty
-    // working copy, so the file counts as one nobody is editing.
+    // An empty snapshot, so the built-in answer cannot be the one that comes
+    // back, and an empty working copy, so the files count as ones nobody is
+    // editing.
+#ifdef QTC_WITH_CXX_FRONTEND
+    const int readBefore = cxxFrontendReadingsMade();
+#endif
     const int servedBefore = locatorData->cxxFrontendClosuresServed();
     const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
-    QCOMPARE(read.includeClosureOf(source), FilePaths({header}));
+    // Sorted, because what order a closure comes back in is nobody's
+    // contract: a walk of the graph answers in the order the includes are
+    // written, and the front ends answer out of a set.
+    QCOMPARE(Utils::sorted(read.includeClosureOf(source)), Utils::sorted(FilePaths({middle, leaf})));
+    QCOMPARE(read.includeClosureOf(middle), FilePaths({leaf}));
+    QCOMPARE(read.includeClosureOf(leaf), FilePaths());
 
-    // And out of the store rather than by reading the file, which is the
-    // whole point and the one thing the answer alone does not say.
-    QVERIFY2(locatorData->cxxFrontendClosuresServed() > servedBefore,
-             "the closure was read rather than taken from the store");
+    // And nothing was read to say so, which is the only thing that
+    // distinguishes this from a front end answering the question: a reading
+    // gives the same three answers, at a parse of a file and its headers
+    // each.
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
+    // Nor was a shard opened for it. The store can answer for a file it
+    // holds a reading of, and a header is one only where nothing covered it;
+    // what says the graph is what answered is that the store was not asked.
+    QCOMPARE(locatorData->cxxFrontendClosuresServed(), servedBefore);
 }
 
 // What a test class declares, answered out of the index and the class's own

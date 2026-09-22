@@ -260,6 +260,15 @@ void CppLocatorData::readProjectWithCxxFrontend(ProjectExplorer::Project *projec
         // needs more than this.
         m_coveredThisRun.clear();
         m_describedThisRun.clear();
+        {
+            // And what the files of the project were found to include: the
+            // project has been configured afresh, so an include may resolve
+            // somewhere else now. Only here, where a whole project is about
+            // to be read again -- a pass over one edited file would
+            // otherwise throw away the graph of everything else.
+            QMutexLocker graph(&m_includeGraphMutex);
+            m_includeGraph.clear();
+        }
         // Nothing waits to be covered here -- only units are queued, and
         // each covers its own closure -- so there is nothing for the
         // Objective-C sweep to rescue, and it walks the built-in snapshot,
@@ -607,6 +616,14 @@ void CppLocatorData::readPendingWithCxxFrontend()
         result.covered.append(filePath);
         for (const QString &included : read.includedFiles)
             result.covered.append(FilePath::fromUserInput(included));
+        result.includes.reserve(read.directIncludes.size());
+        for (auto it = read.directIncludes.cbegin(); it != read.directIncludes.cend(); ++it) {
+            FilePaths included;
+            included.reserve(it.value().size());
+            for (const QString &path : it.value())
+                included.append(FilePath::fromUserInput(path));
+            result.includes.append({FilePath::fromUserInput(it.key()), included});
+        }
         result.withEntries.reserve(read.files.size());
         for (const CxxFrontendIndexRead::File &file : read.files) {
             if (!file.entries.isEmpty()) {
@@ -663,6 +680,38 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
                 continue;
             m_coveredThisRun.insert(covered);
             m_awaitingCoverage.remove(covered);
+        }
+
+        // And how the unit's files reach each other.
+        //
+        // Every file the reading covered gets an entry, empty where it
+        // includes nothing: what says the index knows a file is that it has
+        // one, and a header at the leaf of the graph has as good an answer
+        // -- nothing -- as any other.
+        //
+        // Where two units disagree about a header -- one reads it under a
+        // macro that brings in another include, the other does not -- the
+        // longer list is kept, the way the fuller description of what a file
+        // declares is. Not "the later one": a batch comes back in whatever
+        // order its readings finish, and the index must not depend on that.
+        {
+            QMutexLocker graph(&m_includeGraphMutex);
+            for (const FilePath &covered : result.covered) {
+                if (!m_removedSinceRead.contains(covered))
+                    m_includeGraph.insert(covered.intern(), {});
+            }
+            for (const auto &[file, included] : result.includes) {
+                if (m_removedSinceRead.contains(file))
+                    continue;
+                const auto known = m_includeGraph.constFind(file);
+                if (known != m_includeGraph.constEnd() && known->size() >= included.size())
+                    continue;
+                FilePaths interned;
+                interned.reserve(included.size());
+                for (const FilePath &path : included)
+                    interned.append(path.intern());
+                m_includeGraph.insert(file.intern(), interned);
+            }
         }
 
         for (const ReadFile &read : result.withEntries) {
@@ -769,9 +818,30 @@ CxxFrontendIndexCache *CppLocatorData::storeIfMade() const
 #endif
 }
 
-std::optional<FilePaths> CppLocatorData::storedIncludesFor(const FilePath &filePath) const
+std::optional<FilePaths> CppLocatorData::indexedIncludesFor(const FilePath &filePath) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The graph first, which answers for every file a reading covered --
+    // the headers among them as much as the file that was read.
+    {
+        QMutexLocker locker(&m_includeGraphMutex);
+        if (m_includeGraph.contains(filePath)) {
+            FilePaths reached;
+            QSet<FilePath> seen{filePath};
+            FilePaths pending{filePath};
+            while (!pending.isEmpty()) {
+                const FilePath current = pending.takeLast();
+                for (const FilePath &included : m_includeGraph.value(current)) {
+                    if (!Utils::insert(seen, included))
+                        continue;
+                    reached.append(included);
+                    pending.append(included);
+                }
+            }
+            return reached;
+        }
+    }
+
     CxxFrontendIndexCache * const store = storeIfMade();
     if (!store)
         return std::nullopt;
@@ -870,6 +940,12 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
             m_describedThisRun.remove(file);
             m_removedSinceRead.insert(file);
         }
+    }
+
+    {
+        QMutexLocker graph(&m_includeGraphMutex);
+        for (const FilePath &file : files)
+            m_includeGraph.remove(file);
     }
 
     QMutexLocker locker(&m_infosByFileMutex);

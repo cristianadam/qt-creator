@@ -1803,8 +1803,8 @@ public:
 
         if (!workingCopy.get(filePath)) {
             if (CppLocatorData * const index = CppModelManager::locatorData()) {
-                if (const std::optional<FilePaths> stored = index->storedIncludesFor(filePath))
-                    return stored;
+                if (const std::optional<FilePaths> known = index->indexedIncludesFor(filePath))
+                    return known;
             }
         }
         return std::nullopt;

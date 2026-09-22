@@ -20,7 +20,7 @@ namespace CppEditor::Internal {
 
 // Bumped whenever what is written changes shape, so that a store written by
 // an older Qt Creator is passed over rather than misread.
-const quint32 kFormat = 5;
+const quint32 kFormat = 6;
 const quint32 kMagic = 0x43585849; // "CXXI"
 
 // What the store may take on disk before the readings written longest ago
@@ -424,6 +424,33 @@ std::optional<CxxFrontendIndexRead> CxxFrontendIndexCache::readShard(
     // The first is the file itself, which is not one of its own includes.
     read.includedFiles = checked.mid(1);
 
+    // And how they reach each other, by their places in that list.
+    qint32 edgeCount = 0;
+    stream >> edgeCount;
+    // An includer costs eight bytes at the very least: four for its place
+    // and four for how many files it includes.
+    if (edgeCount < 0 || edgeCount > raw.size() / 8)
+        return miss();
+    for (qint32 e = 0; e < edgeCount; ++e) {
+        qint32 from = 0;
+        qint32 toCount = 0;
+        stream >> from >> toCount;
+        if (stream.status() != QDataStream::Ok || from < 0 || from >= checked.size())
+            return miss();
+        if (toCount <= 0 || toCount > checked.size())
+            return miss();
+        QStringList included;
+        included.reserve(toCount);
+        for (qint32 i = 0; i < toCount; ++i) {
+            qint32 to = 0;
+            stream >> to;
+            if (stream.status() != QDataStream::Ok || to < 0 || to >= checked.size())
+                return miss();
+            included.append(checked.at(to));
+        }
+        read.directIncludes.insert(checked.at(from), included);
+    }
+
     // And that is the whole answer for a caller asking what the file
     // includes. Reading the descriptions as well would deserialize the
     // index of every file in the unit and keep it in m_entriesByKey, which
@@ -543,6 +570,37 @@ void CxxFrontendIndexCache::store(const FilePath &filePath,
             return;
     }
 
+    // How those files reach each other, as places in the list above rather
+    // than as paths: the graph names every file twice over, and a place is
+    // four bytes where a path is a hundred.
+    //
+    // Written before the descriptions because a caller asking what a file
+    // includes reads this far and stops. An include of a file that is not
+    // in the list is left out -- a header the unit could not find has no
+    // place and nothing to say about what it reaches.
+    QList<std::pair<qint32, QList<qint32>>> edges;
+    edges.reserve(read.directIncludes.size());
+    for (auto it = read.directIncludes.cbegin(); it != read.directIncludes.cend(); ++it) {
+        const auto from = placeOf.constFind(it.key());
+        if (from == placeOf.constEnd())
+            continue;
+        QList<qint32> to;
+        to.reserve(it.value().size());
+        for (const QString &included : it.value()) {
+            const auto place = placeOf.constFind(included);
+            if (place != placeOf.constEnd())
+                to.append(*place);
+        }
+        if (!to.isEmpty())
+            edges.append({*from, to});
+    }
+    stream << qint32(edges.size());
+    for (const auto &[from, to] : std::as_const(edges)) {
+        stream << from << qint32(to.size());
+        for (const qint32 place : to)
+            stream << place;
+    }
+
     // What each file declares goes beside the shard rather than in it, and
     // is named after itself: a header read into a thousand translation
     // units is described the same way by most of them, and the shard keeps
@@ -652,6 +710,28 @@ static std::optional<QSet<QByteArray>> keysOf(const FilePath &shard)
     for (qint32 i = 0; i < fileCount; ++i) {
         readPath(stream);
         readDigest(stream, kDigestLength);
+        if (stream.status() != QDataStream::Ok)
+            return std::nullopt;
+    }
+
+    // Past the graph as well, which stands between the files and what they
+    // describe: read as the keys below, its places would be nonsense and
+    // this would give up on a shard it can read perfectly well -- and one
+    // shard given up on leaves every entries file in the store uncounted.
+    qint32 edgeCount = 0;
+    stream >> edgeCount;
+    if (edgeCount < 0 || edgeCount > raw.size() / 8)
+        return std::nullopt;
+    for (qint32 e = 0; e < edgeCount; ++e) {
+        qint32 from = 0;
+        qint32 toCount = 0;
+        stream >> from >> toCount;
+        if (stream.status() != QDataStream::Ok || toCount <= 0 || toCount > fileCount)
+            return std::nullopt;
+        for (qint32 i = 0; i < toCount; ++i) {
+            qint32 to = 0;
+            stream >> to;
+        }
         if (stream.status() != QDataStream::Ok)
             return std::nullopt;
     }
