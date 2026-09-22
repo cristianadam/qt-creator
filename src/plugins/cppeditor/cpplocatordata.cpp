@@ -131,6 +131,12 @@ static IndexItem::Ptr entriesFor(const CPlusPlus::Document::Ptr &document)
     return search(document);
 }
 
+FilePaths CppLocatorData::filesWithEntries() const
+{
+    QMutexLocker locker(&m_infosByFileMutex);
+    return m_infosByFile.keys();
+}
+
 QList<IndexItem::Ptr> CppLocatorData::findSymbols(IndexItem::ItemType type,
                                                   const QString &symbolName) const
 {

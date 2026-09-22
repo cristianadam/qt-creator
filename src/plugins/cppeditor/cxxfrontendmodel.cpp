@@ -8,9 +8,11 @@
 #include "cppmodelmanager.h"
 #include "projectpart.h"
 #include "cppprojectfile.h"
+#include "cpplocatordata.h"
 #include "includeresolution.h"
 
 #include <projectexplorer/projectmacro.h>
+#include <projectexplorer/projectmanager.h>
 
 #include <cplusplus/Control.h>
 #include <cplusplus/CppDocument.h>
@@ -441,7 +443,20 @@ namespace {
 // The files to look in and the order to look in them, which is
 // SymbolFinder's order: nearest to \a referenceFile first, by how much of
 // the path and of the project part they have in common.
-FilePaths filesToSearch(const Snapshot &builtinSnapshot, const FilePath &referenceFile)
+//
+// Two sources, neither of them the built-in model's snapshot. That snapshot
+// holds every file that model has *parsed*, so asking it made this wait for
+// a pass over the project and made the answer depend on how far the pass had
+// got.
+//
+// A project's parts are there as soon as it is configured, they name the
+// files it builds rather than the ones something has read, and each part
+// hands over its own id -- where the snapshot had to be asked for every
+// file's project part one at a time. But a file belongs to no project at
+// all: one opened on its own, and every file in these tests. So the index's
+// own files come too, that being what the code model has read, and what
+// fills it is the model in use rather than the built-in parse.
+FilePaths filesToSearch(const FilePath &referenceFile)
 {
     const auto projectPartIdOf = [](const FilePath &filePath) {
         const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
@@ -449,8 +464,40 @@ FilePaths filesToSearch(const Snapshot &builtinSnapshot, const FilePath &referen
     };
 
     FileIterationOrder order(referenceFile, projectPartIdOf(referenceFile));
-    for (const Document::Ptr &document : builtinSnapshot)
-        order.insert(document->filePath(), projectPartIdOf(document->filePath()));
+    // A file may be built by two parts, and the order is a multiset: left to
+    // itself it would hand the file back twice and have it read twice.
+    QSet<FilePath> already;
+    for (ProjectExplorer::Project * const project : ProjectExplorer::ProjectManager::projects()) {
+        const ProjectInfo::ConstPtr info = CppModelManager::projectInfo(project);
+        if (!info)
+            continue;
+        for (const ProjectPart::ConstPtr &part : info->projectParts()) {
+            for (const ProjectFile &file : part->files) {
+                if (!file.active)
+                    continue;
+                if (already.contains(file.path))
+                    continue;
+                already.insert(file.path);
+                order.insert(file.path, part->id());
+            }
+        }
+    }
+    // And whatever the code model has read that no project lists. Their part
+    // is asked for one at a time, the way every file's used to be: a part
+    // lists the files it builds, and a header it reaches without being told
+    // to build is not among them, yet it belongs to that part all the same
+    // -- and the order these come back in is by how much of the part they
+    // share.
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        const FilePaths described = index->filesWithEntries();
+        for (const FilePath &filePath : described) {
+            if (already.contains(filePath))
+                continue;
+            already.insert(filePath);
+            order.insert(filePath, projectPartIdOf(filePath));
+        }
+    }
+
     return order.toFilePaths();
 }
 
@@ -470,15 +517,47 @@ FilePaths filesToSearch(const Snapshot &builtinSnapshot, const FilePath &referen
 // what that costs is the cost of that fix on this model.
 const int maxFilesRead = 8;
 
-// Whether \a filePath is worth reading at all when looking for \a name: the
-// built-in parse of it holds every identifier the file wrote, so a file that
-// never wrote this one cannot define it. The same rejection SymbolFinder
-// makes, and what keeps this from reading the project.
-bool mayWrite(const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &name)
+// Whether \a bytes write \a identifier as an identifier of its own, rather
+// than as part of a longer one: a file saying only "foobar" does not write
+// "foo". Anything a compiler would let into a name counts as part of one,
+// and so does any byte above ASCII, a name being allowed to hold them --
+// which errs towards rejecting a match that sits against one, and a match
+// against a letter is part of a longer name anyway.
+bool writesIdentifier(const QByteArray &bytes, const QByteArray &identifier)
 {
-    const Document::Ptr document = builtinSnapshot.document(filePath);
-    if (!document || !document->control())
-        return false;
+    const auto isPartOfAName = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+               || c == '_' || c == '$' || quint8(c) >= 0x80;
+    };
+
+    for (qsizetype at = bytes.indexOf(identifier); at >= 0;
+         at = bytes.indexOf(identifier, at + 1)) {
+        if (at > 0 && isPartOfAName(bytes.at(at - 1)))
+            continue;
+        const qsizetype after = at + identifier.size();
+        if (after < bytes.size() && isPartOfAName(bytes.at(after)))
+            continue;
+        return true;
+    }
+    return false;
+}
+
+// Whether \a filePath is worth reading at all when looking for \a name: a
+// file that never writes the name cannot define it. The same rejection
+// SymbolFinder makes, and what keeps this from reading the project.
+//
+// Read off the file. The built-in model had parsed it and its Control held
+// every identifier in it, which made this a lookup -- but it also meant
+// this could not judge a file that model had not read, and the point of
+// the exercise is to stop needing that parse. Coarser, in that a name
+// inside a comment or a string now passes: that costs a reading and cannot
+// give a wrong answer.
+//
+// From the disk rather than from what is being edited, which is what the
+// reading below it does too -- a filter that let through what its reader
+// cannot see, or held back what it can, would be the worse for it.
+bool mayWrite(const FilePath &filePath, const QString &name)
+{
     // What is looked for is the last part of the name: a file writes "f"
     // where it defines "C::f". A name with nothing in front of it is that
     // part already -- and taking two characters off the end of "::" without
@@ -486,7 +565,13 @@ bool mayWrite(const Snapshot &builtinSnapshot, const FilePath &filePath, const Q
     const int afterTheScopes = name.lastIndexOf("::");
     const QByteArray identifier = (afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2))
                                       .toUtf8();
-    return document->control()->findIdentifier(identifier.constData(), identifier.size());
+    if (identifier.isEmpty())
+        return false;
+
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents)
+        return false;
+    return writesIdentifier(*contents, identifier);
 }
 
 // What \a filePath defines, as this model reads it. A document of its own
@@ -535,10 +620,10 @@ std::optional<Link> definitionAmongTheProjectsFiles(const Snapshot &builtinSnaps
                                                     const QString &name, int parameterCount)
 {
     int read = 0;
-    for (const FilePath &candidate : filesToSearch(builtinSnapshot, startingFrom)) {
+    for (const FilePath &candidate : filesToSearch(startingFrom)) {
         if (candidate == startingFrom)
             continue;
-        if (!mayWrite(builtinSnapshot, candidate, name))
+        if (!mayWrite(candidate, name))
             continue;
         if (++read > maxFilesRead)
             return std::nullopt;
@@ -932,10 +1017,10 @@ BothSides bothSidesOf(const Snapshot &builtinSnapshot, const WorkingCopy &workin
 
     // A declaration whose definition this translation unit does not hold.
     int read = 0;
-    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+    for (const FilePath &candidate : filesToSearch(filePath)) {
         if (candidate == filePath)
             continue;
-        if (!mayWrite(builtinSnapshot, candidate, counterpart.name))
+        if (!mayWrite(candidate, counterpart.name))
             continue;
         if (++read > maxFilesRead)
             return {};
@@ -1735,10 +1820,10 @@ std::optional<Link> CxxFrontendReading::definitionOfFunctionIn(
         return Link();
 
     int read = 0;
-    for (const FilePath &candidate : filesToSearch(d->builtinSnapshot, filePath)) {
+    for (const FilePath &candidate : filesToSearch(filePath)) {
         if (candidate == filePath)
             continue;
-        if (!mayWrite(d->builtinSnapshot, candidate, counterpart.name))
+        if (!mayWrite(candidate, counterpart.name))
             continue;
         if (++read > maxFilesRead)
             return Link();
@@ -2247,10 +2332,10 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
     for (const CxxFrontendDocument::Extent &extent : own->partsOfClass(qualifiedName))
         parts.append({filePath, extent});
 
-    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+    for (const FilePath &candidate : filesToSearch(filePath)) {
         if (candidate == filePath)
             continue;
-        if (!mayWrite(builtinSnapshot, candidate, qualifiedName))
+        if (!mayWrite(candidate, qualifiedName))
             continue;
 
         const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, candidate, {}, {});
@@ -2649,14 +2734,14 @@ QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
     // The rest are in other files, and each file is read once and asked
     // about every name still outstanding: reading it is the expensive part,
     // and doing that once per name is what makes this unusable.
-    for (const FilePath &candidate : filesToSearch(builtinSnapshot, filePath)) {
+    for (const FilePath &candidate : filesToSearch(filePath)) {
         if (left.isEmpty())
             break;
         if (candidate == filePath)
             continue;
 
         const bool worthReading = Utils::anyOf(left, [&](int i) {
-            return mayWrite(builtinSnapshot, candidate, functions.at(i).name);
+            return mayWrite(candidate, functions.at(i).name);
         });
         if (!worthReading)
             continue;

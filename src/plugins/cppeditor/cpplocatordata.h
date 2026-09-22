@@ -66,6 +66,12 @@ public:
 
     QList<IndexItem::Ptr> findSymbols(IndexItem::ItemType type, const QString &symbolName) const;
 
+    // Every file the index holds a description of, which is every file the
+    // code model has read -- a project's own and whatever else has been
+    // opened or included. What a search for a definition has to look
+    // through, beyond the files a project lists.
+    Utils::FilePaths filesWithEntries() const;
+
     // How many files the cxx front end still has to read: waiting and being
     // read together. Zero once every file the indexer has reported has that
     // model's entries rather than the built-in reading's, and always zero
