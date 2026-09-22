@@ -272,6 +272,19 @@ public:
     // to read off one.
     QList<WrittenMacroUse> macroUsesIn(const Utils::FilePath &filePath) const;
 
+    // Every file \a filePath reaches through its includes -- the headers of
+    // its headers included, itself left out -- each as the file it was
+    // resolved to, once each and in no particular order.
+    //
+    // What a reader asking whether a file reaches some header at all needs:
+    // a test framework is known by the header its macros come from, however
+    // deep the include that brings it in. Unlike includesOf() below there is
+    // a front end to choose between here, a closure being what each model
+    // read rather than bookkeeping either could hand over: the cxx-frontend
+    // reading resolves its own includes, and the built-in answer is only as
+    // complete as what a pass has parsed.
+    Utils::FilePaths includeClosureOf(const Utils::FilePath &filePath) const;
+
     // A call to a function asked about, and the function it stands in: what
     // the tags a Qt test's data function writes are made of, and what a
     // runner call says the test is named.

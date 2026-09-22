@@ -1728,6 +1728,19 @@ public:
         return read.insert(filePath,
                            readWith(workingCopy, filePath, {}, {}))->document;
     }
+
+    // The snapshot the file was read into, which is what knows every file
+    // that reading reached; a document is one file's own.
+    std::shared_ptr<const CxxFrontendSnapshot> modelOf(const FilePath &filePath) const
+    {
+        if (!document(filePath))
+            return {};
+
+        // Looked up after the reading rather than through a pointer into the
+        // hash: reading another file rehashes it.
+        const HoldingDocument &held = read[filePath];
+        return held.owned ? held.owned : held.kept;
+    }
 };
 
 CxxFrontendReading::CxxFrontendReading(const WorkingCopy &workingCopy)
@@ -1764,6 +1777,20 @@ std::optional<QList<CxxFrontendDocument::MacroUse>> CxxFrontendReading::macroUse
     if (!document)
         return std::nullopt;
     return document->macroUses();
+}
+
+std::optional<FilePaths> CxxFrontendReading::allIncludesFor(const FilePath &filePath) const
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = d->modelOf(filePath);
+    if (!model)
+        return std::nullopt;
+
+    const QStringList reached = model->allIncludesFor(filePath.toFSPathString());
+    FilePaths includes;
+    includes.reserve(reached.size());
+    for (const QString &file : reached)
+        includes.append(FilePath::fromUserInput(file));
+    return includes;
 }
 
 std::optional<QList<CxxFrontendDocument::WrittenCall>> CxxFrontendReading::callsIn(

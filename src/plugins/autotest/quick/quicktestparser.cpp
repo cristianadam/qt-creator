@@ -64,7 +64,8 @@ static FilePaths activeBuildDirectories()
 }
 
 static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
-                                const CPlusPlus::Snapshot &snapshot)
+                                const CPlusPlus::Snapshot &snapshot,
+                                const CppParser &parser)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtQuickTest.framework/Headers", "QtQuickTest"})
@@ -83,7 +84,9 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
         }
     }
 
-    for (const FilePath &include : snapshot.allIncludesForDocument(doc->filePath())) {
+    // Asked only where what the file writes itself did not say so: off the
+    // cxx front end this reads the file and the headers it reaches.
+    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
         for (const QString &prefix : expectedHeaderPrefixes) {
             if (include.pathView().endsWith(QString("%1/quicktest.h").arg(prefix)))
                 return true;
@@ -410,7 +413,7 @@ bool QuickTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
         return false;
 
    CPlusPlus::Document::Ptr cppdoc = document(fileName);
-   if (cppdoc.isNull() || !includesQtQuickTest(cppdoc, m_cppSnapshot))
+   if (cppdoc.isNull() || !includesQtQuickTest(cppdoc, m_cppSnapshot, *this))
        return false;
 
    return handleQtQuickTest(promise, cppdoc, framework());

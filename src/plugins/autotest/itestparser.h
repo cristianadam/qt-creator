@@ -69,6 +69,11 @@ public:
 
     CPlusPlus::Document::Ptr document(const Utils::FilePath &fileName);
 
+    // Every file \a filePath reaches through its includes, off whichever
+    // front end has read it: what says whether a file reaches a framework's
+    // header at all, however deep the include that brings it in.
+    Utils::FilePaths includeClosureOf(const Utils::FilePath &filePath) const;
+
     static bool precompiledHeaderContains(const CPlusPlus::Snapshot &snapshot,
                                           const Utils::FilePath &filePath,
                                           const QString &headerFilePath);

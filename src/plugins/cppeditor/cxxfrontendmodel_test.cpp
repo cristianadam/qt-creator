@@ -879,6 +879,43 @@ void CxxFrontendModelTest::testTheMacroUsesOfAFile()
     QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
 }
 
+// Every file a file reaches through its includes, which is how a test
+// framework is recognized: the header its macros come from may be included
+// by a header of a header.
+void CxxFrontendModelTest::testTheIncludeClosureOfAFile()
+{
+    const Parsed parsed({{"inner.h", "int fromInner;\n"},
+                         {"outer.h", "#include \"inner.h\"\nint fromOuter;\n"},
+                         {"main.cpp", "#include \"outer.h\"\nint fromSource;\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    // Whichever front end answers: with a pass behind it the built-in model
+    // has the closure too, and both are asked the same question.
+    const CodeModelQueries read(CppEditor::Tests::TestCase::globalSnapshot(),
+                                CppModelManager::workingCopy());
+    FilePaths closure = read.includeClosureOf(parsed.mainFilePath());
+    FilePath::sort(closure);
+    QCOMPARE(closure, FilePaths({parsed.path("inner.h"), parsed.path("outer.h")}));
+
+    // And with no reading behind it at all, which is what the built-in model
+    // cannot do: nothing has parsed these files, so a snapshot has nothing
+    // to walk and only a front end that reads the file when asked answers.
+    if (!cxxFrontendModelRequested())
+        return;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath deep = dir.createFile("deep.h", "int fromDeep;\n");
+    const FilePath middle = dir.createFile("middle.h", "#include \"deep.h\"\n");
+    const FilePath unparsed = dir.createFile("unparsed.cpp", "#include \"middle.h\"\n");
+
+    const CodeModelQueries unread{CPlusPlus::Snapshot(), WorkingCopy()};
+    FilePaths reached = unread.includeClosureOf(unparsed);
+    FilePath::sort(reached);
+    QCOMPARE(reached, FilePaths({deep, middle}));
+}
+
 // And the other direction needs no search at all: a file being edited beside
 // its header holds both sides.
 void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()

@@ -36,7 +36,9 @@ TestTreeItem *QtTestParseResult::createTestTreeItem() const
     return item;
 }
 
-static bool includesQtTest(const CPlusPlus::Document::Ptr &doc, const CPlusPlus::Snapshot &snapshot)
+static bool includesQtTest(const CPlusPlus::Document::Ptr &doc,
+                           const CPlusPlus::Snapshot &snapshot,
+                           const CppParser &parser)
 {
     static QStringList expectedHeaderPrefixes = HostOsInfo::isMacHost()
             ? QStringList({"QtTest.framework/Headers", "QtTest"}) : QStringList({"QtTest"});
@@ -54,8 +56,9 @@ static bool includesQtTest(const CPlusPlus::Document::Ptr &doc, const CPlusPlus:
         }
     }
 
-    const QSet<FilePath> allIncludes = snapshot.allIncludesForDocument(doc->filePath());
-    for (const FilePath &include : allIncludes) {
+    // Asked only where what the file writes itself did not say so: off the
+    // cxx front end this reads the file and the headers it reaches.
+    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
         for (const QString &prefix : expectedHeaderPrefixes) {
         if (include.pathView().endsWith(QString("%1/qtest.h").arg(prefix)))
             return true;
@@ -430,7 +433,7 @@ bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     if (doc.isNull())
         return false;
     const TestCases &oldTestCases = m_testCases.value(fileName);
-    if ((!includesQtTest(doc, m_cppSnapshot) || !qtTestLibDefined(fileName))
+    if ((!includesQtTest(doc, m_cppSnapshot, *this) || !qtTestLibDefined(fileName))
         && oldTestCases.isEmpty()) {
         return false;
     }

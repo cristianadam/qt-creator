@@ -4,6 +4,7 @@
 #include "itestparser.h"
 
 #include <coreplugin/editormanager/editormanager.h>
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <projectexplorer/projectmanager.h>
 #include <utils/textfileformat.h>
@@ -139,6 +140,11 @@ void CppParser::release()
 CPlusPlus::Document::Ptr CppParser::document(const FilePath &fileName)
 {
     return selectedForBuilding(fileName) ? m_cppSnapshot.document(fileName) : nullptr;
+}
+
+FilePaths CppParser::includeClosureOf(const FilePath &filePath) const
+{
+    return CppEditor::CodeModelQueries(m_cppSnapshot, m_workingCopy).includeClosureOf(filePath);
 }
 
 } // namespace Autotest

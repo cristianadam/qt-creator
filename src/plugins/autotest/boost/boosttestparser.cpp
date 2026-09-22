@@ -51,7 +51,8 @@ TestTreeItem *BoostTestParseResult::createTestTreeItem() const
 
 
 static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
-                              const CPlusPlus::Snapshot &snapshot)
+                              const CPlusPlus::Snapshot &snapshot,
+                              const CppParser &parser)
 {
     static const QRegularExpression boostTestHpp("^.*/boost/test/.*\\.hpp$");
     for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
@@ -59,7 +60,9 @@ static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
             return true;
     }
 
-    for (const FilePath &include : snapshot.allIncludesForDocument(doc->filePath())) {
+    // Asked only where what the file writes itself did not say so: off the
+    // cxx front end this reads the file and the headers it reaches.
+    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
         if (boostTestHpp.match(include.path()).hasMatch())
             return true;
     }
@@ -100,8 +103,10 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesBoostTest(doc, m_cppSnapshot) || !hasBoostTestMacros(doc))
+    if (doc.isNull() || !includesBoostTest(doc, m_cppSnapshot, *this)
+        || !hasBoostTestMacros(doc)) {
         return false;
+    }
 
     const QList<CppEditor::ProjectPart::ConstPtr> projectParts
             = CppEditor::CppModelManager::projectPart(fileName);

@@ -46,7 +46,8 @@ static bool isCatchMacro(const QString &macroName)
 }
 
 static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
-                                const CPlusPlus::Snapshot &snapshot)
+                                const CPlusPlus::Snapshot &snapshot,
+                                const CppParser &parser)
 {
     static const QStringList catchHeaders{"catch.hpp", // v2
                                           "catch_all.hpp", // v3 - new approach
@@ -61,7 +62,9 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
         }
     }
 
-    for (const FilePath &include : snapshot.allIncludesForDocument(doc->filePath())) {
+    // Asked only where what the file writes itself did not say so: off the
+    // cxx front end this reads the file and the headers it reaches.
+    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
         for (const QString &catchHeader : catchHeaders) {
             if (include.endsWith(catchHeader))
                 return true;
@@ -95,7 +98,7 @@ bool CatchTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesCatchHeader(doc, m_cppSnapshot))
+    if (doc.isNull() || !includesCatchHeader(doc, m_cppSnapshot, *this))
         return false;
 
     const QString &filePath = doc->filePath().toUserOutput();

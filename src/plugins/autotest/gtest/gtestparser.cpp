@@ -39,7 +39,8 @@ TestTreeItem *GTestParseResult::createTestTreeItem() const
 }
 
 static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
-                          const CPlusPlus::Snapshot &snapshot)
+                          const CPlusPlus::Snapshot &snapshot,
+                          const CppParser &parser)
 {
     static const QString gtestH("gtest/gtest.h");
     for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
@@ -47,7 +48,9 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
             return true;
     }
 
-    for (const FilePath &include : snapshot.allIncludesForDocument(doc->filePath())) {
+    // Asked only where what the file writes itself did not say so: off the
+    // cxx front end this reads the file and the headers it reaches.
+    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
         if (include.path().endsWith(gtestH))
             return true;
     }
@@ -74,7 +77,7 @@ bool GTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                   const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesGTest(doc, m_cppSnapshot))
+    if (doc.isNull() || !includesGTest(doc, m_cppSnapshot, *this))
         return false;
 
     const QByteArray &fileContent = getFileContent(fileName);

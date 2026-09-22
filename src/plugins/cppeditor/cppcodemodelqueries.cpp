@@ -20,6 +20,7 @@
 #include <cplusplus/Symbols.h>
 #include <cplusplus/TypeOfExpression.h>
 
+#include <utils/algorithm.h>
 #include <utils/textutils.h>
 
 #include <QTextCursor>
@@ -858,6 +859,16 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     QList<WrittenDeclaration> declarations;
     collectDeclarations(doc->globalNamespace(), filePath, -1, &declarations);
     return declarations;
+}
+
+FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (const std::optional<FilePaths> reached = d->model->allIncludesFor(filePath))
+        return *reached;
+#endif
+
+    return Utils::toList(d->snapshot.allIncludesForDocument(filePath));
 }
 
 QList<CodeModelQueries::WrittenMacroUse> CodeModelQueries::macroUsesIn(

@@ -558,6 +558,15 @@ public:
     std::optional<QList<CPlusPlus::CxxFrontendDocument::MacroUse>> macroUsesIn(
         const Utils::FilePath &filePath) const;
 
+    // Every file the reading of \a filePath reached through its includes,
+    // the headers of its headers included and \a filePath itself left out,
+    // each as the file it was resolved to.
+    //
+    // Answered off the reading rather than off what some other model
+    // resolved: a translation unit is the file with its headers read into
+    // it, so this is the list of files that went into it.
+    std::optional<Utils::FilePaths> allIncludesFor(const Utils::FilePath &filePath) const;
+
     // Every call \a filePath makes to any of \a functionNames, with what
     // each argument says where it is a string literal.
     std::optional<QList<CPlusPlus::CxxFrontendDocument::WrittenCall>> callsIn(
