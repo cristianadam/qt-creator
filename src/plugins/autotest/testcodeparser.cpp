@@ -320,13 +320,31 @@ static QSet<FilePath> filesOfApplicationTargets(Project *project, const CPlusPlu
     }
     // the source belonging to a header of the closure is not part of it, but can hold the test the
     // header only declares - do not follow its includes, they lead away from the application target
+
+    // Keyed on the directory as the file system really has it. An include
+    // resolves to the path with the symlinks followed, where a project lists
+    // its files as it was told them -- on macOS a project under /var is read
+    // as /private/var, the one being a link to the other. Two spellings of
+    // one directory put a header and its source in different buckets, and
+    // then the test a library declares is never looked for.
+    QHash<FilePath, FilePath> realDirectories;
+    const auto stemOf = [&realDirectories](const FilePath &file) {
+        const FilePath directory = file.parentDir();
+        auto known = realDirectories.constFind(directory);
+        if (known == realDirectories.constEnd()) {
+            const FilePath real = directory.canonicalPath();
+            known = realDirectories.insert(directory, real.isEmpty() ? directory : real);
+        }
+        return *known / file.completeBaseName();
+    };
+
     QMultiHash<FilePath, FilePath> projectFilesByStem;
     const QSet<FilePath> &projectFiles = info->sourceFiles();
     for (const FilePath &file : projectFiles)
-        projectFilesByStem.insert(file.parentDir() / file.completeBaseName(), file);
+        projectFilesByStem.insert(stemOf(file), file);
     QSet<FilePath> counterparts;
     for (const FilePath &file : std::as_const(result)) {
-        const FilePath stem = file.parentDir() / file.completeBaseName();
+        const FilePath stem = stemOf(file);
         for (auto it = projectFilesByStem.constFind(stem);
              it != projectFilesByStem.constEnd() && it.key() == stem; ++it) {
             if (it.value() != file)
