@@ -3,6 +3,8 @@
 
 #include "cppsourceprocessor.h"
 
+#include "includeresolution.h"
+
 #include "cppeditortr.h"
 #include "cppmodelmanager.h"
 #include "cpptoolsreuse.h"
@@ -17,7 +19,6 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
-#include <QDir>
 #include <QLoggingCategory>
 
 /*!
@@ -107,52 +108,12 @@ void CppSourceProcessor::setWorkingCopy(const WorkingCopy &workingCopy)
 
 void CppSourceProcessor::setHeaderPaths(const HeaderPaths &headerPaths)
 {
-    m_headerPaths.clear();
-
-    for (const auto &path : headerPaths) {
-         if (path.type == HeaderPathType::Framework )
-            addFrameworkPath(path);
-        else
-            m_headerPaths.append({path.path, path.type});
-    }
+    m_headerPaths = preparedHeaderPaths(headerPaths);
 }
 
 void CppSourceProcessor::setLanguageFeatures(const LanguageFeatures languageFeatures)
 {
     m_languageFeatures = languageFeatures;
-}
-
-// Add the given framework path, and expand private frameworks.
-//
-// Example:
-//  <framework-path>/ApplicationServices.framework
-// has private frameworks in:
-//  <framework-path>/ApplicationServices.framework/Frameworks
-// if the "Frameworks" folder exists inside the top level framework.
-void CppSourceProcessor::addFrameworkPath(const HeaderPath &frameworkPath)
-{
-    QTC_ASSERT(frameworkPath.type == HeaderPathType::Framework, return);
-
-    // The algorithm below is a bit too eager, but that's because we're not getting
-    // in the frameworks we're linking against. If we would have that, then we could
-    // add only those private frameworks.
-    const HeaderPath cleanFrameworkPath = HeaderPath::makeFramework(frameworkPath.path);
-    if (!m_headerPaths.contains(cleanFrameworkPath))
-        m_headerPaths.append(cleanFrameworkPath);
-
-    const QDir frameworkDir(cleanFrameworkPath.path.path());
-    const QStringList filter = QStringList("*.framework");
-    const QList<QFileInfo> frameworks = frameworkDir.entryInfoList(filter);
-    for (const QFileInfo &framework : frameworks) {
-        if (!framework.isDir())
-            continue;
-        const QFileInfo privateFrameworks(framework.absoluteFilePath(),
-                                          QLatin1String("Frameworks"));
-        if (privateFrameworks.exists() && privateFrameworks.isDir()) {
-            addFrameworkPath(HeaderPath::makeFramework(
-                FilePath::fromUserInput(privateFrameworks.absoluteFilePath())));
-        }
-    }
 }
 
 void CppSourceProcessor::setTodo(const QSet<FilePath> &files)
@@ -260,26 +221,11 @@ FilePath CppSourceProcessor::resolveFile(const FilePath &filePath, IncludeType t
 FilePath CppSourceProcessor::resolveFile_helper(const FilePath &filePath,
                                                 HeaderPaths::Iterator headerPathsIt)
 {
-    const QString fileName = filePath.path();
-    auto headerPathsEnd = m_headerPaths.end();
-    const int index = fileName.indexOf(QLatin1Char('/'));
-    for (; headerPathsIt != headerPathsEnd; ++headerPathsIt) {
-        if (!headerPathsIt->path.isEmpty()) {
-            FilePath path;
-            if (headerPathsIt->type == HeaderPathType::Framework) {
-                if (index == -1)
-                    continue;
-                path = headerPathsIt->path.pathAppended(fileName.left(index)
-                       + QLatin1String(".framework/Headers/") + fileName.mid(index + 1));
-            } else {
-                path = headerPathsIt->path /  fileName;
-            }
-            if (m_workingCopy.get(path) || checkFile(path))
-                return path;
-        }
-    }
-
-    return {};
+    return resolveAmongHeaderPaths(
+        filePath.path(),
+        m_headerPaths,
+        [this](const FilePath &path) { return m_workingCopy.get(path) || checkFile(path); },
+        int(headerPathsIt - m_headerPaths.begin()));
 }
 
 void CppSourceProcessor::macroAdded(const CPlusPlus::Macro &macro)

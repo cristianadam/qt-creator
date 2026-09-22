@@ -51,8 +51,6 @@ public:
     void setGlobalSnapshot(const CPlusPlus::Snapshot &snapshot) { m_globalSnapshot = snapshot; }
 
 private:
-    void addFrameworkPath(const ProjectExplorer::HeaderPath &frameworkPath);
-
     CPlusPlus::Document::Ptr switchCurrentDocument(CPlusPlus::Document::Ptr doc);
 
     bool getFileContents(const Utils::FilePath &absoluteFilePath, QByteArray *contents,

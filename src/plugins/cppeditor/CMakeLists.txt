@@ -90,6 +90,7 @@ add_qtc_plugin(CppEditor
     functionutils.cpp functionutils.h
     generatedcodemodelsupport.cpp generatedcodemodelsupport.h
     headerpathfilter.cpp headerpathfilter.h
+    includeresolution.cpp includeresolution.h
     includeutils.cpp includeutils.h
     indexitem.cpp indexitem.h
     insertionpointlocator.cpp insertionpointlocator.h

@@ -226,6 +226,8 @@ QtcPlugin {
         "generatedcodemodelsupport.h",
         "headerpathfilter.cpp",
         "headerpathfilter.h",
+        "includeresolution.cpp",
+        "includeresolution.h",
         "includeutils.cpp",
         "includeutils.h",
         "indexitem.cpp",
