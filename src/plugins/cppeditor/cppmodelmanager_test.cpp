@@ -34,6 +34,7 @@
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QThreadPool>
+#include <QTimer>
 #include <QtConcurrent>
 
 #include <numeric>
@@ -1795,8 +1796,30 @@ void ModelManagerTest::testIndexingCost()
     connect(CppModelManager::instance(), &CppModelManager::sourceFilesRefreshed,
             &context, [&refreshed] { refreshed = true; });
 
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+
     QElapsedTimer timer;
     timer.start();
+
+    // When the other model's index is complete, watched for rather than
+    // waited on: where the project's own file list drives it, it finishes
+    // before the built-in pass does and the wait below would never see it.
+    //
+    // A clock is read here to *timestamp* an event, not to wait for one --
+    // nothing is asserted on this, and the waits either side of it are on
+    // the state itself.
+    qint64 cxxElapsed = -1;
+    bool cxxBegun = false;
+    QTimer watch;
+    watch.setInterval(5);
+    connect(&watch, &QTimer::timeout, &context, [&] {
+        if (locatorData->cxxFrontendCacheHits() + locatorData->cxxFrontendCacheMisses() > 0)
+            cxxBegun = true;
+        if (cxxElapsed < 0 && cxxBegun && locatorData->cxxFrontendFilesOutstanding() == 0)
+            cxxElapsed = timer.elapsed();
+    });
+    watch.start();
 
     ProjectOpenerAndCloser projectMgr;
     const ProjectInfo::ConstPtr projectInfo = projectMgr.open(projectFile, kit);
@@ -1811,10 +1834,9 @@ void ModelManagerTest::testIndexingCost()
     // pool as the indexer reports each file -- so the index is not complete
     // when it arrives, and timing to it alone would credit this model with
     // work it has not finished.
-    CppLocatorData * const locatorData = CppModelManager::locatorData();
-    QVERIFY(locatorData);
     QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 3600000);
     const qint64 indexElapsed = timer.elapsed();
+    watch.stop();
 
 
     // What a session would pay to have the whole index out of the store with
@@ -1932,11 +1954,12 @@ void ModelManagerTest::testIndexingCost()
                    .arg(typing.elapsed());
     }
 
-    qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms "
-                                 "stored=%4 read=%5")
+    qInfo().noquote() << QString("IndexingCost: files=%1 builtin=%2ms index=%3ms cxx=%4ms "
+                                 "stored=%5 read=%6")
                              .arg(projectInfo->sourceFiles().size())
                              .arg(builtinElapsed)
                              .arg(indexElapsed)
+                             .arg(cxxElapsed)
                              .arg(locatorData->cxxFrontendCacheHits())
                              .arg(locatorData->cxxFrontendCacheMisses());
 }

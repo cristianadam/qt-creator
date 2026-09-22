@@ -99,6 +99,21 @@ public slots:
     void onSourceFilesRefreshed(const QSet<Utils::FilePath> &files,
                                 CppModelManager::RefreshOrigin origin);
 
+    // Reads every translation unit \a project builds, taken from the
+    // project's own data rather than waited for a file at a time.
+    //
+    // The index otherwise rides on the built-in indexer: it is that model
+    // reporting a parsed document which puts a file here at all, so the
+    // index cannot run without a pass that parses the whole project first
+    // -- which is the thing it is meant to make unnecessary. A project's
+    // parts already say which files it builds and how, so nothing has to be
+    // parsed to find out.
+    //
+    // Behind QTC_CXX_FRONTEND_DRIVER while what else needs the built-in
+    // model is still being unpicked. Where it is set, a reported document
+    // queues nothing and this is the only way in.
+    void readProjectWithCxxFrontend(ProjectExplorer::Project *project);
+
 private:
     // One file to read, with what its project part contributes to reading
     // it -- worked out where the project's data belongs and carried to the

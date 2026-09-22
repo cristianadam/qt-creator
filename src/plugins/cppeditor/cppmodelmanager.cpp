@@ -929,6 +929,11 @@ void CppModelManager::initCppTools()
     // them with. This is how it learns there is not.
     connect(m_instance, &CppModelManager::sourceFilesRefreshed,
             &d->m_locatorData, &CppLocatorData::onSourceFilesRefreshed);
+    // A project's parts say which files it builds and how, which is all the
+    // other model needs to read them: it can then start without waiting for
+    // the built-in indexer to have parsed them first.
+    connect(m_instance, &CppModelManager::projectPartsUpdated,
+            &d->m_locatorData, &CppLocatorData::readProjectWithCxxFrontend);
 
     // Set up builtin filters
     setLocatorFilter(std::make_unique<CppAllSymbolsFilter>());

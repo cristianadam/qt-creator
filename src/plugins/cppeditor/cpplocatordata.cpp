@@ -6,6 +6,9 @@
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
+#include "cppprojectfile.h"
+#include "projectinfo.h"
+#include "projectpart.h"
 #endif
 
 #include <utils/hostosinfo.h>
@@ -144,6 +147,79 @@ QList<IndexItem::Ptr> CppLocatorData::findSymbols(IndexItem::ItemType type,
     return matches;
 }
 
+#ifdef QTC_WITH_CXX_FRONTEND
+// Whether the project's own file list drives the index, rather than the
+// built-in indexer reporting a document at a time.
+//
+// A switch while the rest of what needs the built-in model is unpicked, so
+// that both ways round are in one binary and can be measured against each
+// other.
+static bool cxxFrontendDriverRequested()
+{
+    static const bool requested = qtcEnvironmentVariableIsSet("QTC_CXX_FRONTEND_DRIVER");
+    return requested;
+}
+#endif
+
+void CppLocatorData::readProjectWithCxxFrontend(ProjectExplorer::Project *project)
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (!cxxFrontendModelRequested() || !cxxFrontendDriverRequested())
+        return;
+
+    const ProjectInfo::ConstPtr info = CppModelManager::projectInfo(project);
+    if (!info)
+        return;
+
+    // What the project builds as a translation unit, said by the project
+    // rather than worked out: a part's files carry the kind each was
+    // classified as, so nothing here asks the mime database, and a file
+    // written into another -- moc_foo.cpp inside mocs_compilation.cpp -- is
+    // not among them because the project does not build it on its own.
+    //
+    // Objective-C is left out rather than declined further down: this front
+    // end does not read it, and what one includes is answered for by the
+    // built-in walk.
+    FilePaths units;
+    for (const ProjectPart::ConstPtr &part : info->projectParts()) {
+        for (const ProjectFile &file : part->files) {
+            if (!file.active)
+                continue;
+            if (file.kind != ProjectFile::CSource && file.kind != ProjectFile::CXXSource)
+                continue;
+            units.append(file.path);
+        }
+    }
+    if (units.isEmpty())
+        return;
+
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        // A fresh run: the project's data has changed, so what a reading
+        // said before may be about the project as it was configured then.
+        m_coveredThisRun.clear();
+        m_describedThisRun.clear();
+        // Nothing waits to be covered here -- only units are queued, and
+        // each covers its own closure -- so there is nothing for the
+        // Objective-C sweep to rescue, and it walks the built-in snapshot,
+        // which is what this is getting away from.
+        m_objectiveCSwept = true;
+        // The batch is the whole project, so there is no later pass whose
+        // end could release anything.
+        m_indexerDone = true;
+        for (const FilePath &unit : std::as_const(units))
+            m_pending.insert(unit);
+        if (m_readScheduled)
+            return;
+        m_readScheduled = true;
+    }
+    QMetaObject::invokeMethod(this, [this] { readPendingWithCxxFrontend(); },
+                              Qt::QueuedConnection);
+#else
+    Q_UNUSED(project)
+#endif
+}
+
 void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
 {
     if (document->filePath().suffix() == "moc")
@@ -167,6 +243,12 @@ void CppLocatorData::onDocumentUpdated(const CPlusPlus::Document::Ptr &document)
     // what comes back replaces the entries above. Until it does, the file has
     // the built-in reading's entries rather than none.
     if (!cxxFrontendModelRequested())
+        return;
+
+    // Where the project's own file list drives the index, a document being
+    // reported says nothing this needs: every unit the project builds was
+    // queued when its parts arrived.
+    if (cxxFrontendDriverRequested())
         return;
 
     // Not a file at all. The configuration document is where the built-in
