@@ -15,6 +15,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QPromise>
 #include <QSet>
 #include <QThreadPool>
 
@@ -203,6 +204,16 @@ private:
     void coverWhatObjectiveCBrings();
     void takeCxxFrontendResults(int begin, int end);
 
+    // The progress of a run, shown and -- more to the point -- published
+    // under the same task id the built-in pass uses, so that everything
+    // waiting for "the index is being built" hears about this one too.
+    // Counted over the whole run rather than a task per batch: a run is many
+    // batches, and a consumer that reacts to the last of them ending would
+    // start while the next is about to begin.
+    void showIndexingProgress(int queued);
+    void advanceIndexingProgress(int read);
+    void finishIndexingProgress();
+
     mutable QMutex m_infosByFileMutex;
     QHash<Utils::FilePath, IndexItem::Ptr> m_infosByFile;
 
@@ -244,6 +255,14 @@ private:
     bool m_readScheduled = false;
     QThreadPool m_cxxFrontendPool;
     QFutureWatcher<ReadResult> m_cxxFrontendWatcher;
+
+    // What the progress of a run is reported through. Not behind the front
+    // end's define, so that this class is one size wherever it is compiled --
+    // the header is included from outside the plugin.
+    QPromise<void> m_indexingProgress;
+    bool m_indexingShown = false;
+    int m_filesQueuedThisRun = 0;
+    int m_filesReadThisRun = 0;
 
     // What each file's reading came to last time. Made when the first batch
     // runs, since where it lives and what it is checked against are only

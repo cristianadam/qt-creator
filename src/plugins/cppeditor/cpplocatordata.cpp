@@ -3,6 +3,9 @@
 
 #include "cpplocatordata.h"
 
+#include "cppeditorconstants.h"
+#include "cppeditortr.h"
+
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
@@ -10,6 +13,8 @@
 #include "projectinfo.h"
 #include "projectpart.h"
 #endif
+
+#include <coreplugin/progressmanager/progressmanager.h>
 
 #include <utils/hostosinfo.h>
 #include <utils/stringtable.h>
@@ -106,6 +111,55 @@ CppLocatorData::~CppLocatorData()
     // it, so none may still be running when it goes.
     m_cxxFrontendWatcher.cancel();
     m_cxxFrontendWatcher.waitForFinished();
+    // And the progress item goes with it, rather than being left spinning
+    // for a run nothing is going to finish.
+    finishIndexingProgress();
+}
+
+// A run of the cxx index is under way, with \a queued files more to read.
+//
+// Under CppEditor's own indexing task id: what this builds is the index, and
+// a consumer that waits for one -- AutoTest's scan, the symbols filter, the
+// two hierarchy panes -- is waiting for this as much as for the built-in
+// pass. With the pass gone there is nothing else to tell them.
+void CppLocatorData::showIndexingProgress(int queued)
+{
+    if (!m_indexingShown) {
+        m_indexingProgress = QPromise<void>();
+        m_indexingProgress.start();
+        m_filesQueuedThisRun = 0;
+        m_filesReadThisRun = 0;
+        m_indexingShown = true;
+        // The same text the built-in pass shows, this being the same work
+        // said differently, so the two do not read as two kinds of thing.
+        Core::ProgressManager::addTask(m_indexingProgress.future(),
+                                       Tr::tr("Parsing C/C++ Files"),
+                                       Constants::TASK_INDEX);
+    }
+
+    // The total grows as batches are found: a run is the whole project, but
+    // it arrives a batch at a time and the headers left uncovered are only
+    // known at the end.
+    m_filesQueuedThisRun += queued;
+    m_indexingProgress.setProgressRange(0, m_filesQueuedThisRun);
+    m_indexingProgress.setProgressValue(m_filesReadThisRun);
+}
+
+void CppLocatorData::advanceIndexingProgress(int read)
+{
+    if (!m_indexingShown)
+        return;
+    m_filesReadThisRun += read;
+    m_indexingProgress.setProgressValue(std::min(m_filesReadThisRun, m_filesQueuedThisRun));
+}
+
+void CppLocatorData::finishIndexingProgress()
+{
+    if (!m_indexingShown)
+        return;
+    m_indexingShown = false;
+    m_indexingProgress.setProgressValue(m_filesQueuedThisRun);
+    m_indexingProgress.finish();
 }
 
 // What \a document declares, as the entries an index keeps.
@@ -496,6 +550,8 @@ void CppLocatorData::readPendingWithCxxFrontend()
         m_beingRead = batch.size();
     }
 
+    showIndexingProgress(batch.size());
+
     // Read once for the whole batch, and here rather than on the pool: this
     // is the thread the indexer reports to, and what these are read off is
     // built-in documents whose source it clears as it goes.
@@ -588,6 +644,8 @@ void CppLocatorData::readPendingWithCxxFrontend()
 
 void CppLocatorData::takeCxxFrontendResults(int begin, int end)
 {
+    advanceIndexingProgress(end - begin);
+
     // Both locks, pending first. Nothing takes them the other way round: the
     // two are held one after the other everywhere else.
     QMutexLocker pending(&m_pendingMutex);
@@ -660,9 +718,12 @@ void CppLocatorData::readWhatWasNotCovered()
         if (CxxFrontendIndexCache * const cache = storeIfMade())
             cache->forgetContents();
     }
-#else
-    Q_UNUSED(nothingLeft)
 #endif
+
+    // And the run is over where nothing is left to read, which is the moment
+    // whoever waited for the index can go ahead.
+    if (nothingLeft)
+        finishIndexingProgress();
 
     {
         QMutexLocker locker(&m_pendingMutex);
