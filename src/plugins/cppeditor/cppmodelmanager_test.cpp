@@ -7,6 +7,7 @@
 #include "builtineditordocumentparser.h"
 #include "cpplocatordata.h"
 #ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
 #endif
 #include "cpptoolstestcase.h"
@@ -32,6 +33,10 @@
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QThreadPool>
+#include <QtConcurrent>
+
+#include <numeric>
 #include <QScopeGuard>
 #include <QTest>
 
@@ -1811,6 +1816,71 @@ void ModelManagerTest::testIndexingCost()
     QTRY_VERIFY_WITH_TIMEOUT(locatorData->cxxFrontendFilesOutstanding() == 0, 3600000);
     const qint64 indexElapsed = timer.elapsed();
 
+
+    // What a session would pay to have the whole index out of the store with
+    // no built-in pass behind it, where QTC_INDEX_STOREONLY asks for it.
+    //
+    // This is the number the whole store exists for and the one thing the
+    // harness could not say: every measurement above rides on the built-in
+    // indexer, which parses every file of the project every session and has
+    // no store of its own. Here each of the project's translation units is
+    // asked of the store and nothing else -- every shard checked against a
+    // digest of each file it names, and not a line parsed.
+    if (qtcEnvironmentVariableIsSet("QTC_INDEX_STOREONLY")) {
+    // Timed on one thread and on as many as the index itself uses, because
+    // the second is what a session would really pay: the store is consulted
+    // on the pool, and in a warm run that work hides behind the built-in
+    // pass entirely.
+    const QStringList macros = cxxFrontendIndexInputs().predefinedMacros;
+        const QSet<FilePath> sources = projectInfo->sourceFiles();
+
+        // The keys first, so that what is timed below is the store and not
+        // the project's data, which belongs to this thread anyway.
+        QList<std::pair<FilePath, QByteArray>> asked;
+        asked.reserve(sources.size());
+        for (const FilePath &source : sources)
+            asked.append({source, cxxFrontendProjectKey(source)});
+
+        // And once more over a store whose digests are already remembered,
+        // which separates reading the shards from checking them: a shard
+        // names a thousand files and each has to be digested before it can
+        // be believed.
+        {
+            const CxxFrontendIndexCache twice(macros);
+            QThreadPool pool;
+            pool.setMaxThreadCount(6);
+            const auto sweep = [&] {
+                return QtConcurrent::blockingMapped(
+                    &pool, asked, [&twice](const std::pair<FilePath, QByteArray> &one) {
+                        return twice.take(one.first, one.second) ? 1 : 0;
+                    });
+            };
+            sweep();
+            QElapsedTimer again;
+            again.start();
+            sweep();
+            qInfo() << "StoreOnly: shards alone" << again.elapsed()
+                    << "ms on 6 readers, the digests already remembered";
+        }
+
+        for (const int readers : {1, 6}) {
+            const CxxFrontendIndexCache store(macros);
+            QThreadPool pool;
+            pool.setMaxThreadCount(readers);
+            QElapsedTimer fromStore;
+            fromStore.start();
+            const QList<int> described = QtConcurrent::blockingMapped(
+                &pool, asked, [&store](const std::pair<FilePath, QByteArray> &one) {
+                    const std::optional<CxxFrontendIndexRead> read
+                        = store.take(one.first, one.second);
+                    return read ? int(read->files.size()) : 0;
+                });
+            qInfo() << "StoreOnly:" << fromStore.elapsed() << "ms on" << readers
+                    << "readers, of" << sources.size() << "units, hits" << store.hits()
+                    << "misses" << store.misses() << "files described"
+                    << std::accumulate(described.begin(), described.end(), 0);
+        }
+    }
 
     // What typing costs the index, where QTC_INDEX_TYPING asks for it.
     //
