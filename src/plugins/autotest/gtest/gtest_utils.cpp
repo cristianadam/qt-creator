@@ -19,6 +19,11 @@ bool isGTestMacro(const QString &macro)
     return valid.contains(macro);
 }
 
+QStringList macroNames()
+{
+    return valid;
+}
+
 bool isGTestParameterized(const QString &macro)
 {
     return macro == QStringLiteral("TEST_P") || macro == QStringLiteral("TYPED_TEST_P");

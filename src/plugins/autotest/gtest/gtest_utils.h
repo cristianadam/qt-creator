@@ -4,10 +4,14 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 namespace Autotest::Internal::GTestUtils {
 
 bool isGTestMacro(const QString &macro);
+
+// The macros a test is written with, for asking a file which of them it uses.
+QStringList macroNames();
 bool isGTestParameterized(const QString &macro);
 bool isGTestTyped(const QString &macro);
 bool isValidGTestFilter(const QString &filterExpression);

@@ -7,6 +7,7 @@
 #include "gtestvisitors.h"
 #include "gtest_utils.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
 
@@ -40,7 +41,7 @@ TestTreeItem *GTestParseResult::createTestTreeItem() const
 
 static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
                           const CPlusPlus::Snapshot &snapshot,
-                          const CppParser &parser)
+                          const CppEditor::CodeModelQueries &queries)
 {
     static const QString gtestH("gtest/gtest.h");
     for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
@@ -50,7 +51,7 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
 
     // Asked only where what the file writes itself did not say so: off the
     // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
         if (include.path().endsWith(gtestH))
             return true;
     }
@@ -58,17 +59,15 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
     return CppParser::precompiledHeaderContains(snapshot, doc->filePath(), gtestH);
 }
 
-static bool hasGTestNames(const CPlusPlus::Document::Ptr &document)
+// Whether the file writes one of GTest's macros with the two arguments a
+// test is declared by. Read off the file's own tokens: which macro a file
+// used is what its text says, and a reading of it says no more.
+static bool hasGTestNames(const CppEditor::CodeModelQueries &queries, const FilePath &fileName)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
-        if (!macro.isFunctionLike())
-            continue;
-        if (GTestUtils::isGTestMacro(QLatin1String(macro.macro().name()))) {
-            const QList<CPlusPlus::Document::Block> args = macro.arguments();
-            if (args.size() != 2)
-                continue;
+    for (const CppEditor::CodeModelQueries::WrittenMacroUse &use
+         : queries.macroUsesIn(fileName, GTestUtils::macroNames())) {
+        if (use.arguments.size() == 2)
             return true;
-        }
     }
     return false;
 }
@@ -77,11 +76,16 @@ bool GTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                   const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesGTest(doc, m_cppSnapshot, *this))
+    if (doc.isNull())
+        return false;
+
+    // One reading for every question asked about this file.
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+    if (!includesGTest(doc, m_cppSnapshot, queries))
         return false;
 
     const QByteArray &fileContent = getFileContent(fileName);
-    if (!hasGTestNames(doc)) {
+    if (!hasGTestNames(queries, fileName)) {
         static const QRegularExpression regex("\\b(TEST(_[FP])?|TYPED_TEST(_P)?|(GTEST_TEST))");
         if (!regex.match(QString::fromUtf8(fileContent)).hasMatch())
             return false;

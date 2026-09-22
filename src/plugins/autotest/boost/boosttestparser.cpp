@@ -6,6 +6,7 @@
 #include "boostcodeparser.h"
 #include "boosttesttreeitem.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 
 #include <QMap>
@@ -26,9 +27,9 @@ static const QStringList relevant = {
     QStringLiteral("BOOST_FIXTURE_TEST_CASE_TEMPLATE"),
 };
 
-static bool isBoostTestMacro(const QString &macro)
+static QStringList macroNames()
 {
-    return relevant.contains(macro);
+    return relevant;
 }
 } // BoostTestUtils
 
@@ -52,7 +53,7 @@ TestTreeItem *BoostTestParseResult::createTestTreeItem() const
 
 static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
                               const CPlusPlus::Snapshot &snapshot,
-                              const CppParser &parser)
+                              const CppEditor::CodeModelQueries &queries)
 {
     static const QRegularExpression boostTestHpp("^.*/boost/test/.*\\.hpp$");
     for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
@@ -62,7 +63,7 @@ static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
 
     // Asked only where what the file writes itself did not say so: off the
     // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
         if (boostTestHpp.match(include.path()).hasMatch())
             return true;
     }
@@ -70,15 +71,12 @@ static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
     return CppParser::precompiledHeaderContains(snapshot, doc->filePath(), boostTestHpp);
 }
 
-static bool hasBoostTestMacros(const CPlusPlus::Document::Ptr &doc)
+// Whether the file writes one of Boost's test macros. Read off the file's
+// own tokens: which macro a file used is what its text says.
+static bool hasBoostTestMacros(const CppEditor::CodeModelQueries &queries,
+                               const FilePath &fileName)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : doc->macroUses()) {
-        if (!macro.isFunctionLike())
-            continue;
-        if (BoostTestUtils::isBoostTestMacro(QLatin1String(macro.macro().name())))
-            return true;
-    }
-    return false;
+    return !queries.macroUsesIn(fileName, BoostTestUtils::macroNames()).isEmpty();
 }
 
 static BoostTestParseResult *createParseResult(const QString &name, const FilePath &filePath,
@@ -103,8 +101,13 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesBoostTest(doc, m_cppSnapshot, *this)
-        || !hasBoostTestMacros(doc)) {
+    if (doc.isNull())
+        return false;
+
+    // One reading for every question asked about this file.
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+    if (!includesBoostTest(doc, m_cppSnapshot, queries)
+        || !hasBoostTestMacros(queries, fileName)) {
         return false;
     }
 

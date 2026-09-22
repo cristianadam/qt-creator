@@ -6,6 +6,7 @@
 #include "catchcodeparser.h"
 #include "catchtreeitem.h"
 
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/projectpart.h>
 
@@ -16,38 +17,41 @@ using namespace Utils;
 
 namespace Autotest::Internal {
 
-static bool isCatchTestCaseMacro(const QString &macroName)
-{
-    const QStringList validTestCaseMacros = {
-        QStringLiteral("TEST_CASE"), QStringLiteral("SCENARIO"),
-        QStringLiteral("TEMPLATE_TEST_CASE"), QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE"),
-        QStringLiteral("TEMPLATE_LIST_TEST_CASE"),
-        QStringLiteral("TEMPLATE_TEST_CASE_SIG"), QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_SIG"),
-        QStringLiteral("TEST_CASE_METHOD"), QStringLiteral("TEMPLATE_TEST_CASE_METHOD"),
-        QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_METHOD"),
-        QStringLiteral("TEST_CASE_METHOD"),
-        QStringLiteral("SCENARIO_METHOD"),
-        QStringLiteral("TEMPLATE_TEST_CASE_METHOD_SIG"),
-        QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_METHOD_SIG"),
-        QStringLiteral("TEMPLATE_TEST_CASE_METHOD"),
-        QStringLiteral("TEMPLATE_LIST_TEST_CASE_METHOD"),
-        QStringLiteral("METHOD_AS_TEST_CASE"), QStringLiteral("REGISTER_TEST_CASE")
-    };
-    return validTestCaseMacros.contains(macroName);
-}
+static const QStringList validTestCaseMacros = {
+    QStringLiteral("TEST_CASE"), QStringLiteral("SCENARIO"),
+    QStringLiteral("TEMPLATE_TEST_CASE"), QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE"),
+    QStringLiteral("TEMPLATE_LIST_TEST_CASE"),
+    QStringLiteral("TEMPLATE_TEST_CASE_SIG"), QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_SIG"),
+    QStringLiteral("TEST_CASE_METHOD"), QStringLiteral("TEMPLATE_TEST_CASE_METHOD"),
+    QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_METHOD"),
+    QStringLiteral("TEST_CASE_METHOD"),
+    QStringLiteral("SCENARIO_METHOD"),
+    QStringLiteral("TEMPLATE_TEST_CASE_METHOD_SIG"),
+    QStringLiteral("TEMPLATE_PRODUCT_TEST_CASE_METHOD_SIG"),
+    QStringLiteral("TEMPLATE_TEST_CASE_METHOD"),
+    QStringLiteral("TEMPLATE_LIST_TEST_CASE_METHOD"),
+    QStringLiteral("METHOD_AS_TEST_CASE"), QStringLiteral("REGISTER_TEST_CASE")
+};
 
-static bool isCatchMacro(const QString &macroName)
+static const QStringList validSectionMacros = {
+    QStringLiteral("SECTION"), QStringLiteral("WHEN")
+};
+
+// Every name one of these may be written under: Catch defines each of them
+// twice, once bare and once behind a CATCH_ of its own, and a file may use
+// either.
+static QStringList catchMacroNames()
 {
-    QString unprefixed = macroName.startsWith("CATCH_") ? macroName.mid(6) : macroName;
-    const QStringList validSectionMacros = {
-        QStringLiteral("SECTION"), QStringLiteral("WHEN")
-    };
-    return isCatchTestCaseMacro(unprefixed) || validSectionMacros.contains(unprefixed);
+    QStringList names;
+    for (const QString &macro : validTestCaseMacros + validSectionMacros)
+        names << macro << "CATCH_" + macro;
+    names.removeDuplicates();
+    return names;
 }
 
 static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
                                 const CPlusPlus::Snapshot &snapshot,
-                                const CppParser &parser)
+                                const CppEditor::CodeModelQueries &queries)
 {
     static const QStringList catchHeaders{"catch.hpp", // v2
                                           "catch_all.hpp", // v3 - new approach
@@ -64,7 +68,7 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
 
     // Asked only where what the file writes itself did not say so: off the
     // cxx front end this reads the file and the headers it reaches.
-    for (const FilePath &include : parser.includeClosureOf(doc->filePath())) {
+    for (const FilePath &include : queries.includeClosureOf(doc->filePath())) {
         for (const QString &catchHeader : catchHeaders) {
             if (include.endsWith(catchHeader))
                 return true;
@@ -78,33 +82,30 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
     return false;
 }
 
-static bool hasCatchNames(const CPlusPlus::Document::Ptr &document)
+// Whether the file writes one of Catch's macros with something in its
+// parentheses. Read off the file's own tokens, a use with no arguments not
+// being among what those report.
+static bool hasCatchNames(const CppEditor::CodeModelQueries &queries, const FilePath &fileName)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
-        if (!macro.isFunctionLike())
-            continue;
-
-        if (isCatchMacro(QLatin1String(macro.macro().name()))) {
-            const QList<CPlusPlus::Document::Block> args = macro.arguments();
-            if (args.size() < 1)
-                continue;
-            return true;
-        }
-    }
-    return false;
+    return !queries.macroUsesIn(fileName, catchMacroNames()).isEmpty();
 }
 
 bool CatchTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
     CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull() || !includesCatchHeader(doc, m_cppSnapshot, *this))
+    if (doc.isNull())
+        return false;
+
+    // One reading for every question asked about this file.
+    const CppEditor::CodeModelQueries queries(m_cppSnapshot, m_workingCopy);
+    if (!includesCatchHeader(doc, m_cppSnapshot, queries))
         return false;
 
     const QString &filePath = doc->filePath().toUserOutput();
     const QByteArray &fileContent = getFileContent(fileName);
 
-    if (!hasCatchNames(doc)) {
+    if (!hasCatchNames(queries, fileName)) {
         static const QRegularExpression regex("\\b(CATCH_)?"
                                               "(SCENARIO(_METHOD)?|(TEMPLATE_(PRODUCT_)?)?TEST_CASE(_METHOD)?|"
                                               "TEMPLATE_TEST_CASE(_METHOD)?_SIG|"
