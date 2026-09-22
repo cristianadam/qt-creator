@@ -15,6 +15,7 @@
 #include <cplusplus/LookupContext.h>
 
 #include <utils/async.h>
+#include <utils/environment.h>
 #include <utils/filepath.h>
 #include <utils/searchresultitem.h>
 #include <utils/stringutils.h>
@@ -153,8 +154,29 @@ static void indexFindErrors(QPromise<void> &promise, const ParseParams params)
     qDebug("FindErrorsIndexing: %s", qPrintable(elapsedTime));
 }
 
+// Whether the built-in model's pass over the project is to be skipped.
+//
+// An experiment, and the only way to find out what still depends on that
+// pass: it parses every file of the project every session, has no store of
+// its own, and the other model's index can now be built without it -- 194 ms
+// out of the store against the 6.4 s the pass takes on a 300-file slice of
+// this project. What it also does is fill the global snapshot, which a dozen
+// places outside this plugin look things up in, so it cannot simply go.
+//
+// Wants QTC_CXX_FRONTEND_DRIVER beside it, or nothing indexes at all.
+static bool builtinPassRequested()
+{
+    static const bool skipped = qtcEnvironmentVariableIsSet("QTC_NO_BUILTIN_INDEX_PASS");
+    return !skipped;
+}
+
 static void index(QPromise<void> &promise, const ParseParams params)
 {
+    if (!builtinPassRequested()) {
+        promise.setProgressValue(params.sourceFiles.size());
+        return;
+    }
+
     QScopedPointer<Internal::CppSourceProcessor> sourceProcessor(CppModelManager::createSourceProcessor());
     sourceProcessor->setHeaderPaths(params.headerPaths);
     sourceProcessor->setWorkingCopy(params.workingCopy);
