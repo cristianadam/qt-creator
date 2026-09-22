@@ -162,14 +162,13 @@ static DerivedFinder builtinDerivedFinder(const Snapshot &snapshot)
 // A file this model cannot read is read by the other one. This search looks
 // at every file that depends on the one declaring the class, so leaving one
 // out would lose whatever derives from it there.
-static DerivedFinder modelDerivedFinder(const Snapshot &snapshot,
-                                        const DerivedFinder &builtinFinder)
+static DerivedFinder modelDerivedFinder(const DerivedFinder &builtinFinder)
 {
     const auto read = std::make_shared<
         QHash<Utils::FilePath, std::optional<QList<CxxFrontendDocument::ClassWithBases>>>>();
 
-    return [snapshot, builtinFinder, read](const Utils::FilePath &filePath,
-                                           const QString &qualifiedName) {
+    return [builtinFinder, read](const Utils::FilePath &filePath,
+                                 const QString &qualifiedName) {
         const auto known = read->constFind(filePath);
         if (known == read->constEnd()) {
             read->insert(filePath,
@@ -197,7 +196,7 @@ static DerivedFinder derivedFinder(const Snapshot &snapshot)
     const DerivedFinder builtin = builtinDerivedFinder(snapshot);
 #ifdef QTC_WITH_CXX_FRONTEND
     if (cxxFrontendModelRequested())
-        return modelDerivedFinder(snapshot, builtin);
+        return modelDerivedFinder(builtin);
 #endif
     return builtin;
 }

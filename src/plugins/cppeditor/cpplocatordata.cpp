@@ -203,6 +203,16 @@ void CppLocatorData::readProjectWithCxxFrontend(ProjectExplorer::Project *projec
         QMutexLocker locker(&m_pendingMutex);
         // A fresh run: the project's data has changed, so what a reading
         // said before may be about the project as it was configured then.
+        //
+        // Both sets are the locator's, not one project's, while only this
+        // project's units are queued below -- so with two projects open, a
+        // reconfiguration of one drops the other's record of how fully each
+        // of its files was described without asking for any of it again,
+        // and a header the two share can then be overwritten by a thinner
+        // reading. It wants a set per project to fix properly, and that is
+        // not worth building while this whole path is behind a switch: the
+        // switch cannot be taken off until the built-in pass can go, which
+        // needs more than this.
         m_coveredThisRun.clear();
         m_describedThisRun.clear();
         // Nothing waits to be covered here -- only units are queued, and
@@ -633,6 +643,26 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
 
 void CppLocatorData::readWhatWasNotCovered()
 {
+    bool nothingLeft = false;
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        nothingLeft = m_pending.isEmpty() && m_awaitingCoverage.isEmpty();
+    }
+
+    // Nothing more to read, so let go of what the store remembered for the
+    // run: deserialized, the descriptions are the index over again, and
+    // they were only ever dropped when the *next* batch began -- which
+    // after the last one is never. With the whole project in one batch that
+    // is a second copy of the index kept for the rest of the session with
+    // nothing left to consult it.
+    //
+    // Told by there being nothing pending rather than by a pass being over,
+    // which this cannot know; and the two answers differ only in whether a
+    // later batch reads a description from disk again, the thing being a
+    // cache.
+    if (nothingLeft && m_cxxFrontendCache)
+        m_cxxFrontendCache->forgetContents();
+
     {
         QMutexLocker locker(&m_pendingMutex);
         // What is still waiting stays waiting while sources keep coming:

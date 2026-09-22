@@ -227,16 +227,14 @@ namespace {
 class ProcessFileOnTheModel
 {
     const WorkingCopy workingCopy;
-    const CPlusPlus::Snapshot snapshot;
     const Utils::FilePath declarationFile;
     const int declarationLine;
     const int declarationColumn;
 
 public:
-    ProcessFileOnTheModel(const WorkingCopy &workingCopy, const CPlusPlus::Snapshot &snapshot,
+    ProcessFileOnTheModel(const WorkingCopy &workingCopy,
                           CPlusPlus::Symbol *symbol)
         : workingCopy(workingCopy)
-        , snapshot(snapshot)
         , declarationFile(symbol->filePath())
         , declarationLine(symbol->line())
         , declarationColumn(symbol->column())
@@ -313,7 +311,7 @@ public:
         // front end tags anything, so the tags it hands over are simply not
         // looked at.
         if (cxxFrontendModelRequested()) {
-            const ProcessFileOnTheModel onTheModel(workingCopy, snapshot, symbol);
+            const ProcessFileOnTheModel onTheModel(workingCopy, symbol);
             if (const std::optional<QList<CPlusPlus::Usage>> found = onTheModel(filePath)) {
                 m_promise->suspendIfRequested();
                 return *found;

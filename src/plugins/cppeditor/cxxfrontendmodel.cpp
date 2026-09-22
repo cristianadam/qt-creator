@@ -12,7 +12,6 @@
 #include "includeresolution.h"
 
 #include <projectexplorer/projectmacro.h>
-#include <projectexplorer/projectmanager.h>
 
 #include <cplusplus/Control.h>
 #include <cplusplus/CppDocument.h>
@@ -250,7 +249,21 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
 // each, so a few megabytes for a project the size of this one.
 ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
 {
-    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+    // The same three places the editor's own parser looks, in the same order
+    // (ProjectPartChooser): the parts that build the file, then the parts
+    // that reach it through an include, then the fallback part a session
+    // without a project still has. Asking only the first left a file no
+    // project lists -- one opened on its own, a header no part names, the
+    // stragglers at the end of an indexing pass -- resolving no <...>
+    // include whatever, where the built-in model had answered for all of
+    // them through that same fallback.
+    QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+    if (parts.isEmpty())
+        parts = CppModelManager::projectPartFromDependencies(filePath);
+    if (parts.isEmpty()) {
+        if (const ProjectPart::ConstPtr fallback = CppModelManager::fallbackProjectPart())
+            parts.append(fallback);
+    }
     if (parts.isEmpty())
         return {};
     const ProjectExplorer::HeaderPaths &raw = parts.first()->headerPaths;
@@ -484,10 +497,12 @@ FilePaths filesToSearch(const FilePath &referenceFile)
     // A file may be built by two parts, and the order is a multiset: left to
     // itself it would hand the file back twice and have it read twice.
     QSet<FilePath> already;
-    for (ProjectExplorer::Project * const project : ProjectExplorer::ProjectManager::projects()) {
-        const ProjectInfo::ConstPtr info = CppModelManager::projectInfo(project);
-        if (!info)
-            continue;
+    // Asked of the code model rather than of ProjectManager, whose list of
+    // projects is a bare member the GUI thread writes to on open and close.
+    // This runs on a worker: the decl/def link search is handed to a pool
+    // (cppfunctiondecldeflink.cpp), so reading that list here would be a
+    // torn read of it, or a project pointer freed while it was in hand.
+    for (const ProjectInfo::ConstPtr &info : CppModelManager::projectInfos()) {
         for (const ProjectPart::ConstPtr &part : info->projectParts()) {
             for (const ProjectFile &file : part->files) {
                 if (!file.active)
@@ -570,25 +585,52 @@ bool writesIdentifier(const QByteArray &bytes, const QByteArray &identifier)
 // inside a comment or a string now passes: that costs a reading and cannot
 // give a wrong answer.
 //
-// From the disk rather than from what is being edited, which is what the
-// reading below it does too -- a filter that let through what its reader
-// cannot see, or held back what it can, would be the worse for it.
-bool mayWrite(const FilePath &filePath, const QString &name)
+// From the disk rather than from what is being edited, which matches
+// definitionIn() below but *not* readWith(), which prefers the working
+// copy. So a definition typed into another open document and not yet saved
+// is held back from the one reader that could have seen it -- where the
+// built-in Control held the working copy's identifiers. The file is the one
+// place both can agree on without the working copy being threaded through
+// five call sites, and asking CppModelManager for it per candidate rebuilds
+// it each time, which has been a bug here once already.
+// What a file has to write to define \a name: the last part of it, since a
+// file writes "f" where it defines "C::f". A name with nothing in front of
+// it is that part already -- and taking two characters off the end of "::"
+// without finding one is how this rejected every such name.
+QByteArray identifierOf(const QString &name)
 {
-    // What is looked for is the last part of the name: a file writes "f"
-    // where it defines "C::f". A name with nothing in front of it is that
-    // part already -- and taking two characters off the end of "::" without
-    // finding one is how this rejected every such name.
     const int afterTheScopes = name.lastIndexOf("::");
-    const QByteArray identifier = (afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2))
-                                      .toUtf8();
-    if (identifier.isEmpty())
+    return (afterTheScopes < 0 ? name : name.mid(afterTheScopes + 2)).toUtf8();
+}
+
+// Whether \a filePath is worth reading when looking for any of \a names.
+//
+// One read of the file for all of them. Asked per name it read the file per
+// name, which is the very thing the loop that calls it takes such care not
+// to do a level further up.
+bool mayWriteAny(const FilePath &filePath, const QStringList &names)
+{
+    QList<QByteArray> identifiers;
+    identifiers.reserve(names.size());
+    for (const QString &name : names) {
+        const QByteArray identifier = identifierOf(name);
+        if (!identifier.isEmpty())
+            identifiers.append(identifier);
+    }
+    if (identifiers.isEmpty())
         return false;
 
     const Result<QByteArray> contents = filePath.fileContents();
     if (!contents)
         return false;
-    return writesIdentifier(*contents, identifier);
+    return Utils::anyOf(identifiers, [&contents](const QByteArray &identifier) {
+        return writesIdentifier(*contents, identifier);
+    });
+}
+
+bool mayWrite(const FilePath &filePath, const QString &name)
+{
+    return mayWriteAny(filePath, {name});
 }
 
 // What \a filePath defines, as this model reads it. A document of its own
@@ -2750,10 +2792,11 @@ QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
         if (candidate == filePath)
             continue;
 
-        const bool worthReading = Utils::anyOf(left, [&](int i) {
-            return mayWrite(candidate, functions.at(i).name);
-        });
-        if (!worthReading)
+        QStringList outstanding;
+        outstanding.reserve(left.size());
+        for (const int i : std::as_const(left))
+            outstanding.append(functions.at(i).name);
+        if (!mayWriteAny(candidate, outstanding))
             continue;
 
         const HoldingDocument holding = readWith(workingCopy, candidate,

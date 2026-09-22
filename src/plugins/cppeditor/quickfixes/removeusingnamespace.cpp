@@ -477,7 +477,7 @@ std::optional<UsingDirectiveToRemove> modelUsingDirectiveAt(
     directive.range = {file->position(read->extent.startLine, read->extent.startColumn),
                        file->position(read->extent.endLine, read->extent.endColumn)};
     directive.isAtGlobalScope = read->isAtGlobalScope;
-    directive.read = [namespaceName = read->namespaceName, snapshot = interface.snapshot(),
+    directive.read = [namespaceName = read->namespaceName,
                       builtinReader](const CppRefactoringFilePtr &file, const Snapshot &fileSnapshot,
                                      int startSymbol, bool removeAllAtGlobalScope) {
         // A place is a line and a column to the model, and the sentinel
