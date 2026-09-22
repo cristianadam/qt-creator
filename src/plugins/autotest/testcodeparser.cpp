@@ -315,8 +315,14 @@ static QSet<FilePath> filesOfApplicationTargets(Project *project,
     // them: the closure is transitive already, so a file of the closure is
     // not asked about again. Walking it one direct include at a time needed
     // a document of every header, which only the built-in pass produces.
+    //
+    // Only where it is known, never by reading the file: this runs on the
+    // thread that draws and over every source of an application target, and
+    // a reading is a parse of a file and all its headers. A file nothing has
+    // read contributes nothing, which is what the walk did before as well --
+    // a file the snapshot had no document for had no includes to follow.
     for (const FilePath &file : std::as_const(ownFiles)) {
-        for (const FilePath &included : queries.includeClosureOf(file))
+        for (const FilePath &included : queries.includeClosureKnownFor(file).value_or(FilePaths()))
             result.insert(included);
     }
     // the source belonging to a header of the closure is not part of it, but can hold the test the
@@ -405,11 +411,13 @@ void TestCodeParser::scanForTests(const QSet<FilePath> &filePaths,
     Project *project = ProjectManager::startupProject();
     if (!project)
         return;
-    // One reading for every question this scan asks, as the parsers do with
-    // the file each of them processes.
-    const CppEditor::CodeModelQueries queries(CppEditor::CppModelManager::snapshot(),
-                                              CppEditor::CppModelManager::workingCopy());
     if (isFullParse) {
+        // One reading for every question the walk below asks. Made here
+        // rather than for every scan: taking a working copy is a pass over
+        // every open editor's contents, and a partial scan runs off the
+        // reparse timer at every pause in the typing.
+        const CppEditor::CodeModelQueries queries(CppEditor::CppModelManager::snapshot(),
+                                                  CppEditor::CppModelManager::workingCopy());
         m_applicationTargetFiles = filesOfApplicationTargets(project, queries);
         const QSet<FilePath> &targetFiles = m_applicationTargetFiles;
         if (targetFiles.isEmpty()) {

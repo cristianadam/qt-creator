@@ -68,17 +68,33 @@ static bool precompiledHeaderContains(
     if (projectParts.isEmpty())
         return false;
     const FilePaths precompiledHeaders = projectParts.first()->precompiledHeaders;
-    auto headerContains = [&](const FilePath &header){
-        LookupInfo info{header, cacheString};
-        auto it = s_pchLookupCache.find(info);
-        if (it == s_pchLookupCache.end()) {
-            it = s_pchLookupCache.insert(info,
-                         Utils::anyOf(queries.includeClosureOf(header), checker));
+    for (const FilePath &header : precompiledHeaders) {
+        const LookupInfo info{header, cacheString};
+        {
+            QMutexLocker l(s_cacheMutex());
+            const auto known = s_pchLookupCache.constFind(info);
+            if (known != s_pchLookupCache.constEnd()) {
+                if (*known)
+                    return true;
+                continue;
+            }
         }
-        return it.value();
-    };
-    QMutexLocker l(s_cacheMutex());
-    return Utils::anyOf(precompiledHeaders, headerContains);
+
+        // The closure outside the lock. A precompiled header brings in the
+        // world, and where no front end has read it the question is a parse
+        // of it -- under the lock that would be every parser thread of the
+        // scan waiting on one of them, once per pattern asked about. Two
+        // threads may work out the same answer meanwhile, which costs a
+        // lookup and cannot differ.
+        const bool contains = Utils::anyOf(queries.includeClosureOf(header), checker);
+        {
+            QMutexLocker l(s_cacheMutex());
+            s_pchLookupCache.insert(info, contains);
+        }
+        if (contains)
+            return true;
+    }
+    return false;
 }
 
 bool CppParser::precompiledHeaderContains(const CppEditor::CodeModelQueries &queries,

@@ -218,6 +218,11 @@ private:
     void showIndexingProgress(int queued);
     void advanceIndexingProgress(int read);
     void finishIndexingProgress();
+    // Whether the run has been called off -- by the progress item's own
+    // button, or by Qt Creator closing, which cancels every task of that id
+    // to stop the indexing. Stops it here too, rather than leaving the item
+    // on screen until a run nobody wants finishes by itself.
+    bool indexingWasCalledOff();
 
     mutable QMutex m_infosByFileMutex;
     QHash<Utils::FilePath, IndexItem::Ptr> m_infosByFile;
@@ -272,6 +277,8 @@ private:
     // end's define, so that this class is one size wherever it is compiled --
     // the header is included from outside the plugin.
     QPromise<void> m_indexingProgress;
+    // What says it has been cancelled: a promise has no signal of its own.
+    QFutureWatcher<void> m_indexingCancelled;
     bool m_indexingShown = false;
     int m_filesQueuedThisRun = 0;
     int m_filesReadThisRun = 0;

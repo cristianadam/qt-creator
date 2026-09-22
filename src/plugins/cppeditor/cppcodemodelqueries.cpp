@@ -2153,6 +2153,11 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
     return declarations;
 }
 
+std::optional<FilePaths> CodeModelQueries::includeClosureKnownFor(const FilePath &filePath) const
+{
+    return d->closureAlreadyKnown(filePath);
+}
+
 FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
 {
     if (const std::optional<FilePaths> known = d->closureAlreadyKnown(filePath))

@@ -309,6 +309,16 @@ public:
     // complete as what a pass has parsed.
     Utils::FilePaths includeClosureOf(const Utils::FilePath &filePath) const;
 
+    // The same, but only where it is already known -- from the reading
+    // passed in or from the index -- and nothing where saying would mean
+    // reading the file.
+    //
+    // For a caller that cannot pay a parse where the answer is missing: the
+    // question is asked of a whole project's files at once, or on the thread
+    // that draws, and an incomplete answer there costs less than a freeze.
+    std::optional<Utils::FilePaths> includeClosureKnownFor(
+        const Utils::FilePath &filePath) const;
+
     // A call to a function asked about, and the function it stands in: what
     // the tags a Qt test's data function writes are made of, and what a
     // runner call says the test is named.

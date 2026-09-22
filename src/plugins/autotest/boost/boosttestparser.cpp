@@ -102,13 +102,6 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
         return false;
     }
 
-    // What a suite is called is read off what the file's macros resolve to,
-    // which is the one question here that still wants a translation unit.
-    // Asked last, so a file that names no Boost test at all costs nothing.
-    const CPlusPlus::Document::Ptr doc = document(fileName);
-    if (doc.isNull())
-        return false;
-
     const QList<CppEditor::ProjectPart::ConstPtr> projectParts
             = CppEditor::CppModelManager::projectPart(fileName);
     if (projectParts.isEmpty()) // happens if shutting down while parsing
@@ -116,6 +109,21 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     const CppEditor::ProjectPart::ConstPtr projectPart = projectParts.first();
     const FilePath &projectFile = projectPart->projectFile;
     const QByteArray &fileContent = getFileContent(fileName);
+
+    // What a suite is called is read off what the file's macros resolve to,
+    // which is the one question here that still wants a translation unit.
+    // Asked last, so a file that names no Boost test at all costs nothing.
+    //
+    // The built-in pass's document where there is one, and one made here
+    // otherwise -- the way the GTest parser makes its own. What that costs
+    // is a preprocessing and a check of this file; what it does not have is
+    // headers the built-in model never read, so a decorator whose name comes
+    // from one of those is left unresolved rather than read wrongly.
+    CPlusPlus::Document::Ptr doc = document(fileName);
+    if (doc.isNull()) {
+        doc = m_cppSnapshot.preprocessedDocument(fileContent, fileName, false);
+        doc->check();
+    }
 
     BoostCodeParser codeParser(fileContent, projectPart->languageFeatures, doc, m_cppSnapshot);
     const BoostTestCodeLocationList foundTests = codeParser.findTests();

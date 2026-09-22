@@ -103,6 +103,8 @@ CppLocatorData::CppLocatorData()
             this, &CppLocatorData::takeCxxFrontendResults);
     connect(&m_cxxFrontendWatcher, &QFutureWatcher<ReadResult>::finished,
             this, &CppLocatorData::readWhatWasNotCovered);
+    connect(&m_indexingCancelled, &QFutureWatcher<void>::canceled,
+            this, [this] { indexingWasCalledOff(); });
 }
 
 CppLocatorData::~CppLocatorData()
@@ -135,6 +137,7 @@ void CppLocatorData::showIndexingProgress(int queued)
         Core::ProgressManager::addTask(m_indexingProgress.future(),
                                        Tr::tr("Parsing C/C++ Files"),
                                        Constants::TASK_INDEX);
+        m_indexingCancelled.setFuture(m_indexingProgress.future());
     }
 
     // The total grows as batches are found: a run is the whole project, but
@@ -151,6 +154,26 @@ void CppLocatorData::advanceIndexingProgress(int read)
         return;
     m_filesReadThisRun += read;
     m_indexingProgress.setProgressValue(std::min(m_filesReadThisRun, m_filesQueuedThisRun));
+}
+
+bool CppLocatorData::indexingWasCalledOff()
+{
+    if (!m_indexingShown || !m_indexingProgress.isCanceled())
+        return false;
+
+    // Nothing more is read: the batch running is asked to stop, and what was
+    // waiting for one is dropped. A file left unread is one the index has
+    // the built-in walk's entries for, which is where it was before this
+    // model read anything.
+    m_cxxFrontendWatcher.cancel();
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        m_pending.clear();
+        m_awaitingCoverage.clear();
+        m_readScheduled = false;
+    }
+    finishIndexingProgress();
+    return true;
 }
 
 void CppLocatorData::finishIndexingProgress()
@@ -431,6 +454,9 @@ void CppLocatorData::readPendingWithCxxFrontend()
     // reached from the indexer's own signal, and a model nobody asked for
     // must not so much as walk the snapshot.
     if (!cxxFrontendModelRequested())
+        return;
+
+    if (indexingWasCalledOff())
         return;
 
     if (m_cxxFrontendWatcher.isRunning()) {
