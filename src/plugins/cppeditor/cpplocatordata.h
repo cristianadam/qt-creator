@@ -113,6 +113,16 @@ public:
     // is not what it says.
     std::optional<Utils::FilePaths> indexedIncludesFor(const Utils::FilePath &filePath) const;
 
+    // The files \a filePath includes itself -- one node of that same graph,
+    // without the walk. Nothing where the index has never covered the file.
+    //
+    // Each included file once, in the order the includes are written. Where
+    // a file names the same header twice this is one entry short of the
+    // include *lines*, which is the one way it differs from what a built-in
+    // reading reports.
+    std::optional<Utils::FilePaths> indexedDirectIncludesFor(
+        const Utils::FilePath &filePath) const;
+
 private:
     // The store, or nothing where none has been made yet.
     Internal::CxxFrontendIndexCache *storeIfMade() const;

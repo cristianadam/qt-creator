@@ -165,14 +165,16 @@ CPPEDITOR_EXPORT QString nameResolvedAt(const Utils::FilePath &filePath,
 CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, int column);
 
 // The files \a filePath includes, each as the file it was resolved to, in the
-// order they are written -- a file included twice is there twice, the list
-// being what was written. Empty where nothing has read \a filePath.
+// order they are written. Empty where nothing has read \a filePath.
 //
-// There is no front end to choose between here: an include is resolved while
-// preprocessing, and the cxx-frontend model is handed the resolutions the
-// built-in reading made rather than making its own. So this is the model
-// manager's own bookkeeping, offered here so that a plugin wanting nothing
-// more than the include closure need not know a front end at all.
+// Answered off a built-in reading where the indexing pass left one, and off
+// the cxx index's include graph otherwise -- a node per file it covered, so
+// a header is answered for as readily as a source. The two differ in one
+// way: a reading reports the include *lines*, so a file naming the same
+// header twice is there twice, where the graph has it once.
+//
+// Nothing is read here. Whoever asks is drawing a diagram of a project's
+// files, and reading them to find out would be a parse apiece.
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
 // The files \a snapshot has read that include a header called \a fileName,

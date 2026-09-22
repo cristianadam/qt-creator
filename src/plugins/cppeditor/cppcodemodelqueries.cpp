@@ -1674,16 +1674,27 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
 
 FilePaths includesOf(const FilePath &filePath)
 {
-    const Document::Ptr doc = CppModelManager::snapshot().document(filePath);
-    if (!doc)
-        return {};
+    // A reading the built-in pass made first, which reports the include
+    // *lines* -- a file naming the same header twice is there twice -- and
+    // is what this has always answered.
+    if (const Document::Ptr doc = CppModelManager::snapshot().document(filePath)) {
+        const QList<Document::Include> resolved = doc->resolvedIncludes();
+        FilePaths includes;
+        includes.reserve(resolved.size());
+        for (const Document::Include &include : resolved)
+            includes.append(include.resolvedFileName());
+        return includes;
+    }
 
-    const QList<Document::Include> resolved = doc->resolvedIncludes();
-    FilePaths includes;
-    includes.reserve(resolved.size());
-    for (const Document::Include &include : resolved)
-        includes.append(include.resolvedFileName());
-    return includes;
+    // Then the cxx index's include graph, which has a node per file the
+    // index covered -- headers among them, which is what this is asked
+    // about most. Nothing is read here either way: whoever asks is drawing
+    // a diagram of a project's files and would be paying a parse per file.
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        if (const std::optional<FilePaths> known = index->indexedDirectIncludesFor(filePath))
+            return *known;
+    }
+    return {};
 }
 
 EnclosingFunction functionAround(const Snapshot &snapshot, const FilePath &filePath,

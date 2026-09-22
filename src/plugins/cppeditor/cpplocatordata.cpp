@@ -895,6 +895,20 @@ std::optional<FilePaths> CppLocatorData::indexedIncludesFor(const FilePath &file
 #endif
 }
 
+std::optional<FilePaths> CppLocatorData::indexedDirectIncludesFor(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    QMutexLocker locker(&m_includeGraphMutex);
+    const auto known = m_includeGraph.constFind(filePath);
+    if (known == m_includeGraph.constEnd())
+        return std::nullopt;
+    return *known;
+#else
+    Q_UNUSED(filePath)
+    return std::nullopt;
+#endif
+}
+
 int CppLocatorData::cxxFrontendClosuresServed() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND

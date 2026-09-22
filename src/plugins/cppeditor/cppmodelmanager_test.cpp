@@ -1889,6 +1889,43 @@ void ModelManagerTest::testTheIncludeClosureOfAHeader()
     QCOMPARE(locatorData->cxxFrontendClosuresServed(), servedBefore);
 }
 
+// The other question the same graph answers: what one file includes itself,
+// which is a node of it rather than a walk. That is what the model editor
+// draws its component dependencies from, and it asks it of headers -- so
+// without the graph it has nothing to say wherever the built-in indexing
+// pass has not run.
+void ModelManagerTest::testWhatOneFileIncludes()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index keeps an include graph");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // Two headers deep again, so that a walk of the graph and a node of it
+    // are told apart: the source reaches the leaf, and includes it not.
+    const FilePath leaf = dir.createFile("leaf.h", "class Leaf {};\n");
+    const FilePath middle = dir.createFile("middle.h", "#include \"leaf.h\"\n"
+                                                       "class Middle {};\n");
+    const FilePath source = dir.createFile("unit.cpp", "#include \"middle.h\"\n"
+                                                       "class Unit {};\n");
+    QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    QCOMPARE(locatorData->indexedDirectIncludesFor(source), FilePaths({middle}));
+    QCOMPARE(locatorData->indexedDirectIncludesFor(middle), FilePaths({leaf}));
+    // Covered and including nothing, which is an answer -- and a different
+    // one from a file the index has never heard of.
+    QCOMPARE(locatorData->indexedDirectIncludesFor(leaf), FilePaths());
+    QCOMPARE(locatorData->indexedDirectIncludesFor(dir.filePath() / "absent.h"), std::nullopt);
+}
+
 // What a test class declares, answered out of the index and the class's own
 // tokens: no pass has read the file, no translation unit is read, and the
 // answer is the one a reading gives.

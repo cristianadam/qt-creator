@@ -44,6 +44,7 @@ private slots:
     void testOptionalIndexing();
     void testTheIndexFollowsAChangedFile();
     void testTheIncludeClosureOfAHeader();
+    void testWhatOneFileIncludes();
     void testTheIndexedClassShape();
     void testTheClassesHandedToARunner();
     void testTheIndexedDefinition();
