@@ -347,11 +347,11 @@ std::optional<MovableDefinition> cxxMovableDefinition(const CppQuickFixInterface
 
     definition.writeSignature = [filePath = interface.filePath(), line = name.line,
                                  column = name.column](
-                                    const CppQuickFixOperation *op,
+                                    const CppQuickFixOperation *,
                                     const InsertionLocation &at,
                                     const CppRefactoringFilePtr &toFile) -> QString {
         const std::optional<QString> head
-            = cxxFrontendDefinitionHeadFor(op->snapshot(), filePath, line, column,
+            = cxxFrontendDefinitionHeadFor(filePath, line, column,
                                            toFile->filePath(), at.line(), at.column());
         return head ? *head : QString();
     };
@@ -605,14 +605,13 @@ static bool builtinDefinitionAt(const CppQuickFixInterface &interface, const Fil
 std::optional<DefinitionAndItsDeclaration> cxxDefinitionOf(
     const CppQuickFixInterface &interface, int line, int column)
 {
-    const std::optional<Link> other = cxxFrontendCounterpart(interface.snapshot(),
-                                                             interface.filePath(), line, column);
+    const std::optional<Link> other = cxxFrontendCounterpart(interface.filePath(), line, column);
     if (!other || !other->hasValidTarget())
         return {};
 
     // A link counts columns from zero and the model from one.
     const CxxFrontendFunctionDeclaration found
-        = cxxFrontendFunctionAt(interface.snapshot(), CppModelManager::workingCopy(),
+        = cxxFrontendFunctionAt(CppModelManager::workingCopy(),
                                 other->targetFilePath, other->target.line,
                                 other->target.column + 1)
               .value_or(CxxFrontendFunctionDeclaration());
@@ -648,14 +647,13 @@ std::optional<DefinitionAndItsDeclaration> cxxDefinitionOf(
 std::optional<DefinitionAndItsDeclaration> cxxDeclarationOf(
     const CppQuickFixInterface &interface, int line, int column)
 {
-    const std::optional<Link> other = cxxFrontendCounterpart(interface.snapshot(),
-                                                             interface.filePath(), line, column);
+    const std::optional<Link> other = cxxFrontendCounterpart(interface.filePath(), line, column);
     if (!other || !other->hasValidTarget())
         return {};
 
     // A link counts columns from zero and the model from one.
     const CxxFrontendFunctionDeclaration found
-        = cxxFrontendFunctionAt(interface.snapshot(), CppModelManager::workingCopy(),
+        = cxxFrontendFunctionAt(CppModelManager::workingCopy(),
                                 other->targetFilePath, other->target.line,
                                 other->target.column + 1)
               .value_or(CxxFrontendFunctionDeclaration());

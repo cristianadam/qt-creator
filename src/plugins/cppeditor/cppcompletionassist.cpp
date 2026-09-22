@@ -1536,8 +1536,7 @@ bool InternalCppCompletionAssistProcessor::hintFromCxxFrontendModel()
     Utils::Text::convertPosition(interface()->textDocument(), m_positionForProposal,
                                  &line, &column);
     const std::optional<CxxFrontendDocument::Completion> completion
-        = cxxFrontendCompletion(cppInterface()->snapshot(),
-                                interface()->filePath(),
+        = cxxFrontendCompletion(interface()->filePath(),
                                 interface()->textDocument()->toPlainText(),
                                 line,
                                 column + 1);
@@ -1585,8 +1584,7 @@ bool InternalCppCompletionAssistProcessor::completeFromCxxFrontendModel()
     Utils::Text::convertPosition(interface()->textDocument(), m_positionForProposal,
                                  &line, &column);
     const std::optional<CxxFrontendDocument::Completion> completion
-        = cxxFrontendCompletion(cppInterface()->snapshot(),
-                                interface()->filePath(),
+        = cxxFrontendCompletion(interface()->filePath(),
                                 interface()->textDocument()->toPlainText(),
                                 line,
                                 column + 1);

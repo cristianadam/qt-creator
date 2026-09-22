@@ -173,7 +173,7 @@ static DerivedFinder modelDerivedFinder(const Snapshot &snapshot,
         const auto known = read->constFind(filePath);
         if (known == read->constEnd()) {
             read->insert(filePath,
-                         cxxFrontendClassesIn(snapshot, CppModelManager::workingCopy(), filePath));
+                         cxxFrontendClassesIn(CppModelManager::workingCopy(), filePath));
         }
         const std::optional<QList<CxxFrontendDocument::ClassWithBases>> &classes
             = read->value(filePath);

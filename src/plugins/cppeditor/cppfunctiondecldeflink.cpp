@@ -613,7 +613,7 @@ static bool findLinkOnTheModel(const std::shared_ptr<FunctionDeclDefLink> &link,
     };
 
     const std::optional<CxxFrontendDeclDefLink> found
-        = cxxFrontendDeclDefLink(changes.snapshot(), source.document->filePath(),
+        = cxxFrontendDeclDefLink(source.document->filePath(),
                                  source.nameLine, source.nameColumn, source.workingCopy,
                                  textOf);
     if (!found)

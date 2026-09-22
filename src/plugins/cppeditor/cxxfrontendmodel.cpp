@@ -230,38 +230,56 @@ CxxFrontendSnapshot::HeaderResolver resolverAmong(const ProjectExplorer::HeaderP
     };
 }
 
-// Answers with the file the built-in model resolved this include to, and its
-// text. A name it did not resolve is not found here either, which is the same
-// answer the built-in model gave and so the same code being read.
-CxxFrontendSnapshot::HeaderResolver resolverFor(const Snapshot &builtinSnapshot,
-                                                const WorkingCopy &workingCopy)
+// The header paths of the part that builds \a filePath, prepared as a
+// resolver walks them.
+//
+// Remembered, because preparing them lists the directories under every
+// framework path: five milliseconds a time, measured, where an editor
+// looking for a definition reads up to eight files and would pay it for
+// each.
+//
+// Against a digest of the paths themselves, and neither of the two easier
+// keys. A part's id is a location and a display name, so it does not change
+// when a reconfiguration changes where an include is looked for -- which is
+// the one thing this has to notice. A part's address is worse: it is
+// refcounted, and a table under it would answer for whatever is allocated
+// there next.
+//
+// It holds one list per distinct set of paths, which a project of per-file
+// flags can make a great many of -- a hundred paths of some eighty bytes
+// each, so a few megabytes for a project the size of this one.
+ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
 {
-    return [builtinSnapshot, workingCopy](const QString &name, bool,
-                                          const QString &includedFrom)
-               -> std::optional<CxxFrontendSnapshot::Header> {
-        const Document::Ptr from
-            = builtinSnapshot.document(FilePath::fromUserInput(includedFrom));
-        if (!from)
-            return std::nullopt;
+    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
+    if (parts.isEmpty())
+        return {};
+    const ProjectExplorer::HeaderPaths &raw = parts.first()->headerPaths;
 
-        for (const Document::Include &include : from->resolvedIncludes()) {
-            if (include.unresolvedFileName() != name)
-                continue;
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    for (const ProjectExplorer::HeaderPath &path : raw) {
+        hash.addData(path.path.toFSPathString().toUtf8());
+        hash.addData(QByteArrayView("\0", 1));
+        hash.addData(QByteArray::number(int(path.type)));
+    }
+    const QByteArray key = hash.result();
 
-            const FilePath &resolved = include.resolvedFileName();
-            if (const std::optional<QByteArray> edited = workingCopy.source(resolved)) {
-                return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
-                                                   QString::fromUtf8(*edited)};
-            }
-            const Result<QByteArray> contents = resolved.fileContents();
-            if (!contents)
-                return std::nullopt;
-            return CxxFrontendSnapshot::Header{resolved.toFSPathString(),
-                                               QString::fromUtf8(*contents)};
-        }
-        return std::nullopt;
-    };
+    static QMutex mutex;
+    static QHash<QByteArray, ProjectExplorer::HeaderPaths> known;
+    {
+        QMutexLocker locker(&mutex);
+        const auto it = known.constFind(key);
+        if (it != known.constEnd())
+            return *it;
+    }
+
+    // Outside the lock: two callers may prepare one list twice, which costs
+    // a directory listing and cannot come out differently.
+    const ProjectExplorer::HeaderPaths prepared = preparedHeaderPaths(raw);
+    QMutexLocker locker(&mutex);
+    known.insert(key, prepared);
+    return prepared;
 }
+
 
 } // namespace
 
@@ -271,8 +289,7 @@ bool cxxFrontendModelRequested()
     return requested;
 }
 
-void updateCxxFrontendModel(const Snapshot &builtinSnapshot,
-                            const FilePath &filePath,
+void updateCxxFrontendModel(const FilePath &filePath,
                             const QByteArray &configFile,
                             const WorkingCopy &workingCopy)
 {
@@ -283,11 +300,11 @@ void updateCxxFrontendModel(const Snapshot &builtinSnapshot,
         return;
 
     // A snapshot of its own for each run rather than one kept across them: the
-    // built-in snapshot this resolves includes through is rebuilt too, and a
-    // document is only worth keeping as long as what it was read against
-    // still holds.
+    // project's header paths may be reconfigured under it, and a document is
+    // only worth keeping as long as what it was read against still holds.
     auto snapshot = std::make_shared<CxxFrontendSnapshot>();
-    snapshot->setHeaderResolver(resolverFor(builtinSnapshot, workingCopy));
+    snapshot->setHeaderResolver(
+        resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {}));
     snapshot->setPredefinedMacros(definesIn(configFile));
     snapshot->process(filePath.toFSPathString(), QString::fromUtf8(*onDisk));
 
@@ -578,15 +595,14 @@ bool mayWrite(const FilePath &filePath, const QString &name)
 // rather than the kept one: this is a file somebody is not editing, and what
 // is wanted of it is one answer, not a model to hold on to.
 std::optional<CxxFrontendDocument::Counterpart> definitionIn(
-    const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &name,
-    int parameterCount)
+    const FilePath &filePath, const QString &name, int parameterCount)
 {
     const Result<QByteArray> contents = filePath.fileContents();
     if (!contents)
         return std::nullopt;
 
     CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(resolverFor(builtinSnapshot, {}));
+    snapshot.setHeaderResolver(resolverAmong(preparedHeaderPathsFor(filePath), {}, {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument * const document
@@ -615,8 +631,7 @@ Link linkTo(const CxxFrontendDocument::Counterpart &counterpart)
 // skipping the ones whose parse never saw the name, each read by this model
 // until one of them defines it. Bounded, since the filter passes every file
 // that so much as calls the function and a click must not read the project.
-std::optional<Link> definitionAmongTheProjectsFiles(const Snapshot &builtinSnapshot,
-                                                    const FilePath &startingFrom,
+std::optional<Link> definitionAmongTheProjectsFiles(const FilePath &startingFrom,
                                                     const QString &name, int parameterCount)
 {
     int read = 0;
@@ -629,15 +644,14 @@ std::optional<Link> definitionAmongTheProjectsFiles(const Snapshot &builtinSnaps
             return std::nullopt;
 
         if (const std::optional<CxxFrontendDocument::Counterpart> definition
-            = definitionIn(builtinSnapshot, candidate, name, parameterCount)) {
+            = definitionIn(candidate, name, parameterCount)) {
             return linkTo(*definition);
         }
     }
     return std::nullopt;
 }
 
-std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
-                                           const FilePath &filePath, int line, int column)
+std::optional<Link> cxxFrontendCounterpart(const FilePath &filePath, int line, int column)
 {
     const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
     if (!model)
@@ -653,11 +667,11 @@ std::optional<Link> cxxFrontendCounterpart(const Snapshot &builtinSnapshot,
         return std::nullopt;
 
     // A declaration whose definition this translation unit does not hold.
-    return definitionAmongTheProjectsFiles(builtinSnapshot, filePath, counterpart.name,
+    return definitionAmongTheProjectsFiles(filePath, counterpart.name,
                                            counterpart.parameterCount);
 }
 
-Link cxxFrontendFollowSymbol(const Snapshot &builtinSnapshot, const FilePath &filePath,
+Link cxxFrontendFollowSymbol(const FilePath &filePath,
                              int line, int column, int linkTextStart, int linkTextEnd)
 {
     const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
@@ -717,7 +731,7 @@ Link cxxFrontendFollowSymbol(const Snapshot &builtinSnapshot, const FilePath &fi
         if (!definition.namesAFunction())
             return {};
         const std::optional<Link> elsewhere = definitionAmongTheProjectsFiles(
-            builtinSnapshot, filePath, definition.name, definition.parameterCount);
+            filePath, definition.name, definition.parameterCount);
         if (!elsewhere) {
                 return {};
         }
@@ -921,7 +935,7 @@ public:
 // Reads \a filePath with this model, taking \a editedFile's text from \a
 // editedText rather than from the working copy -- which is a parse behind
 // whatever somebody is typing right now.
-HoldingDocument readWith(const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+HoldingDocument readWith(const WorkingCopy &workingCopy,
                          const FilePath &filePath, const FilePath &editedFile,
                          const QString &editedText)
 {
@@ -936,8 +950,12 @@ HoldingDocument readWith(const Snapshot &builtinSnapshot, const WorkingCopy &wor
         return {};
     }
 
-    const CxxFrontendSnapshot::HeaderResolver through = resolverFor(builtinSnapshot,
-                                                                    workingCopy);
+    // Found among the part's header paths, the way a compiler finds it and
+    // the way the index does. Through the built-in model's snapshot before,
+    // which answered only for what that model had already resolved -- so
+    // this could not read a file it had not read first.
+    const CxxFrontendSnapshot::HeaderResolver through
+        = resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {});
     HoldingDocument holding;
     holding.owned = std::make_shared<CxxFrontendSnapshot>();
     holding.owned->setHeaderResolver(
@@ -988,7 +1006,7 @@ CxxFrontendDocument::Place placeIn(const CxxFrontendDocument &document,
 // file is looked for the way cxxFrontendCounterpart() looks for it and read
 // instead -- with the header's edited text in it, since that is the text
 // somebody is working on.
-BothSides bothSidesOf(const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+BothSides bothSidesOf(const WorkingCopy &workingCopy,
                       const FilePath &filePath, int line, int column,
                       const QString &editedText)
 {
@@ -1026,7 +1044,7 @@ BothSides bothSidesOf(const Snapshot &builtinSnapshot, const WorkingCopy &workin
             return {};
 
         BothSides sides;
-        sides.holding = readWith(builtinSnapshot, workingCopy, candidate, filePath,
+        sides.holding = readWith(workingCopy, candidate, filePath,
                                  editedText);
         if (!sides.holding.document)
             continue;
@@ -1433,14 +1451,14 @@ private:
 } // namespace
 
 std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
-    const Snapshot &builtinSnapshot, const FilePath &filePath, int line, int column,
+    const FilePath &filePath, int line, int column,
     const WorkingCopy &workingCopy, const CxxFrontendFileText &textOf)
 {
     const QTextDocument * const editedText = textOf(filePath);
     if (!editedText)
         return std::nullopt;
 
-    const BothSides sides = bothSidesOf(builtinSnapshot, workingCopy, filePath, line, column,
+    const BothSides sides = bothSidesOf(workingCopy, filePath, line, column,
                                         editedText->toPlainText());
     if (!sides.isValid())
         return std::nullopt;
@@ -1507,7 +1525,7 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
     const auto last = std::make_shared<LastReading>();
 
     link.readEditedDeclaration =
-        [builtinSnapshot, workingCopy, filePath, holdingFile, sourcePlace, targetPlace,
+        [workingCopy, filePath, holdingFile, sourcePlace, targetPlace,
          targetName, last](const EditedDeclarationRequest &request)
         -> std::shared_ptr<EditedDeclaration> {
         if (!request.isValid())
@@ -1520,7 +1538,7 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
         last->answered = true;
         last->declaration = {};
 
-        HoldingDocument holding = readWith(builtinSnapshot, workingCopy, holdingFile,
+        HoldingDocument holding = readWith(workingCopy, holdingFile,
                                            filePath, request.source);
         if (!holding.document)
             return {};
@@ -1544,7 +1562,7 @@ std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
 }
 
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const FilePath &filePath, int line, int column)
 {
     if (!cxxFrontendModelRequested())
@@ -1563,7 +1581,7 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
     if (!counterpart.namesAFunction())
         return std::nullopt;
     if (counterpart.isValid() && !counterpart.isDefinition) {
-        return cxxFrontendFunctionAt(builtinSnapshot, workingCopy,
+        return cxxFrontendFunctionAt(workingCopy,
                                      FilePath::fromUserInput(counterpart.filePath),
                                      counterpart.line, counterpart.column);
     }
@@ -1576,19 +1594,18 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
     if (beside.isEmpty() || !beside.exists())
         return CxxFrontendFunctionDeclaration();
 
-    const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, beside, {}, {});
+    const HoldingDocument holding = readWith(workingCopy, beside, {}, {});
     if (!holding.document)
         return std::nullopt;
     const CxxFrontendDocument::Counterpart declared
         = holding.document->declarationOf(counterpart.name, counterpart.parameterCount);
     if (!declared.isValid())
         return CxxFrontendFunctionDeclaration();
-    return cxxFrontendFunctionAt(builtinSnapshot, workingCopy, beside, declared.line,
-                                 declared.column);
+    return cxxFrontendFunctionAt(workingCopy, beside, declared.line, declared.column);
 }
 
 std::optional<QString> cxxFrontendDefinitionHeadFor(
-    const Snapshot &builtinSnapshot, const FilePath &filePath, int line, int column,
+    const FilePath &filePath, int line, int column,
     const FilePath &targetFilePath, int targetLine, int targetColumn)
 {
     const auto answer = [](const QString &head) -> std::optional<QString> {
@@ -1614,7 +1631,7 @@ std::optional<QString> cxxFrontendDefinitionHeadFor(
     // source file gives the translation unit both places are in; the
     // function's own place is then addressed by its file, since a header
     // read into a file keeps its own lines.
-    const HoldingDocument holding = readWith(builtinSnapshot, CppModelManager::workingCopy(),
+    const HoldingDocument holding = readWith(CppModelManager::workingCopy(),
                                              targetFilePath, {}, {});
     if (!holding.document)
         return std::nullopt;
@@ -1646,7 +1663,6 @@ std::optional<QString> cxxFrontendDeclarationHeadFor(
 class CxxFrontendReading::Private
 {
 public:
-    Snapshot builtinSnapshot;
     WorkingCopy workingCopy;
 
     // Kept rather than read again: a caller asks four questions about the
@@ -1668,13 +1684,12 @@ public:
         // declaration and then looking for it is. The working copy it was
         // handed is the one that has what was written.
         return read.insert(filePath,
-                           readWith(builtinSnapshot, workingCopy, filePath, {}, {}))->document;
+                           readWith(workingCopy, filePath, {}, {}))->document;
     }
 };
 
-CxxFrontendReading::CxxFrontendReading(const Snapshot &builtinSnapshot,
-                                       const WorkingCopy &workingCopy)
-    : d(new Private{builtinSnapshot, workingCopy, {}})
+CxxFrontendReading::CxxFrontendReading(const WorkingCopy &workingCopy)
+    : d(new Private{workingCopy, {}})
 {}
 
 CxxFrontendReading::~CxxFrontendReading() = default;
@@ -1829,7 +1844,7 @@ std::optional<Link> CxxFrontendReading::definitionOfFunctionIn(
             return Link();
 
         if (const std::optional<CxxFrontendDocument::Counterpart> definition
-            = definitionIn(d->builtinSnapshot, candidate, counterpart.name,
+            = definitionIn(candidate, counterpart.name,
                            counterpart.parameterCount)) {
             return linkTo(*definition);
         }
@@ -1894,14 +1909,10 @@ CxxFrontendIndexInputs cxxFrontendIndexInputs()
 
 ProjectExplorer::HeaderPaths cxxFrontendHeaderPaths(const FilePath &filePath)
 {
-    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
-    if (parts.isEmpty())
-        return {};
-
-    // Prepared here, on the thread that owns the project's data: the
-    // preparation lists the directories under every framework path, and a
-    // worker would repeat that for each file of the part.
-    return preparedHeaderPaths(parts.first()->headerPaths);
+    // Asked for here, on the thread that owns the project's data, rather
+    // than on a worker -- which is the whole reason this is a step of its
+    // own and not something a reading does for itself.
+    return preparedHeaderPathsFor(filePath);
 }
 
 QByteArray cxxFrontendProjectKey(const FilePath &filePath)
@@ -2273,7 +2284,7 @@ CxxFrontendFunctionDeclaration functionIn(const CxxFrontendDocument &document,
 } // namespace
 
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const FilePath &filePath, int line, int column)
 {
     // Asked outright, because this one reads a file the editor has not been
@@ -2290,7 +2301,7 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2314,7 +2325,7 @@ std::optional<CxxFrontendDocument::ClassToMove> cxxFrontendClassToMoveAt(
 }
 
 QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     const QString &qualifiedName)
 {
     QList<CxxFrontendClassPart> parts;
@@ -2338,7 +2349,7 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
         if (!mayWrite(candidate, qualifiedName))
             continue;
 
-        const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, candidate, {}, {});
+        const HoldingDocument holding = readWith(workingCopy, candidate, {}, {});
         if (!holding.document)
             continue;
         for (const CxxFrontendDocument::Extent &extent
@@ -2351,7 +2362,7 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
 }
 
 std::optional<QList<CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath)
+    const WorkingCopy &workingCopy, const FilePath &filePath)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
@@ -2361,7 +2372,7 @@ std::optional<QList<CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2386,8 +2397,7 @@ namespace {
 // written into where that is another file, since it holds both -- a
 // header is read into whatever includes it -- and the declaring file's
 // otherwise.
-HoldingDocument documentForTheType(const Snapshot &builtinSnapshot,
-                                   const WorkingCopy &workingCopy,
+HoldingDocument documentForTheType(const WorkingCopy &workingCopy,
                                    const CxxFrontendTypeRequest &request)
 {
     const FilePath &filePath = request.writtenIn.isEmpty() ? request.filePath
@@ -2397,7 +2407,7 @@ HoldingDocument documentForTheType(const Snapshot &builtinSnapshot,
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     return holding;
 }
 
@@ -2426,12 +2436,12 @@ CxxFrontendDocument::Type typeFor(const CxxFrontendDocument &document,
 } // namespace
 
 std::optional<CxxFrontendTypeFacts> cxxFrontendTypeFacts(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
-    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    const HoldingDocument holding = documentForTheType(workingCopy, request);
     if (!holding.document)
         return std::nullopt;
     const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
@@ -2449,12 +2459,12 @@ std::optional<CxxFrontendTypeFacts> cxxFrontendTypeFacts(
 }
 
 std::optional<QString> cxxFrontendTypeWritten(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request, const QString &name)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
-    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    const HoldingDocument holding = documentForTheType(workingCopy, request);
     if (!holding.document)
         return std::nullopt;
     const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
@@ -2468,12 +2478,12 @@ std::optional<QString> cxxFrontendTypeWritten(
 }
 
 std::optional<QString> cxxFrontendTypeWithoutTemplateParameters(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
-    const HoldingDocument holding = documentForTheType(builtinSnapshot, workingCopy, request);
+    const HoldingDocument holding = documentForTheType(workingCopy, request);
     if (!holding.document)
         return std::nullopt;
     const CxxFrontendDocument::Type type = typeFor(*holding.document, request);
@@ -2518,7 +2528,7 @@ std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationAt(
 }
 
 std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     int line, int column)
 {
     if (!cxxFrontendModelRequested())
@@ -2529,7 +2539,7 @@ std::optional<CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2566,7 +2576,7 @@ Class *builtinClassWrittenAt(const Document::Ptr &document,
 }
 
 std::optional<QList<CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassAt(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     int line, int column)
 {
     if (!cxxFrontendModelRequested())
@@ -2577,7 +2587,7 @@ std::optional<QList<CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassA
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2585,7 +2595,7 @@ std::optional<QList<CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassA
 }
 
 std::optional<QList<CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     const CxxFrontendDocument::Place &classPlace, const CxxFrontendDocument::Place &function)
 {
     if (!cxxFrontendModelRequested())
@@ -2596,7 +2606,7 @@ std::optional<QList<CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2625,7 +2635,7 @@ std::optional<CxxFrontendDocument::Virtuality> cxxFrontendVirtualityAt(
 }
 
 std::optional<QList<CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     const CxxFrontendDocument::Place &declaration)
 {
     if (!cxxFrontendModelRequested())
@@ -2636,7 +2646,7 @@ std::optional<QList<CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2644,7 +2654,7 @@ std::optional<QList<CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
 }
 
 std::optional<QList<CxxFrontendDocument::ClassWithBases>> cxxFrontendClassesIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath)
+    const WorkingCopy &workingCopy, const FilePath &filePath)
 {
     if (!cxxFrontendModelRequested())
         return std::nullopt;
@@ -2654,7 +2664,7 @@ std::optional<QList<CxxFrontendDocument::ClassWithBases>> cxxFrontendClassesIn(
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2678,7 +2688,7 @@ std::optional<CxxFrontendDocument::UsingDirective> cxxFrontendUsingDirectiveAt(
 }
 
 std::optional<CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     const QString &namespaceName, int afterLine, int afterColumn, bool everyOneAtGlobalScope)
 {
     if (!cxxFrontendModelRequested())
@@ -2692,7 +2702,7 @@ std::optional<CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn
     if (holding.kept)
         holding.document = holding.kept->document(filePath.toFSPathString());
     if (!holding.document)
-        holding = readWith(builtinSnapshot, workingCopy, filePath, {}, {});
+        holding = readWith(workingCopy, filePath, {}, {});
     if (!holding.document)
         return std::nullopt;
 
@@ -2701,7 +2711,7 @@ std::optional<CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn
 }
 
 QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
-    const Snapshot &builtinSnapshot, const WorkingCopy &workingCopy, const FilePath &filePath,
+    const WorkingCopy &workingCopy, const FilePath &filePath,
     const QList<CxxFrontendDocument::MemberFunction> &functions)
 {
     QList<CxxFrontendFunctionDeclaration> found(functions.size());
@@ -2746,7 +2756,7 @@ QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
         if (!worthReading)
             continue;
 
-        const HoldingDocument holding = readWith(builtinSnapshot, workingCopy, candidate,
+        const HoldingDocument holding = readWith(workingCopy, candidate,
                                                  {}, {});
         if (!holding.document)
             continue;
@@ -2848,7 +2858,7 @@ std::optional<QList<CxxFrontendLocal>> cxxFrontendLocalsAt(const FilePath &fileP
 }
 
 std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
-    const Snapshot &builtinSnapshot, const FilePath &filePath, const QString &source,
+    const FilePath &filePath, const QString &source,
     int line, int column)
 {
     if (!cxxFrontendModelRequested())
@@ -2858,7 +2868,8 @@ std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
     // the question in it, which is of no use to anybody else, and the
     // documents that are kept were read without one.
     CxxFrontendSnapshot snapshot;
-    snapshot.setHeaderResolver(resolverFor(builtinSnapshot, CppModelManager::workingCopy()));
+    snapshot.setHeaderResolver(
+        resolverAmong(preparedHeaderPathsFor(filePath), CppModelManager::workingCopy(), {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
     const CxxFrontendDocument *document

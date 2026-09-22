@@ -1085,7 +1085,7 @@ struct SurroundingDefinitionsOnTheModel
 };
 
 std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
-    const FilePath &filePath, int line, int column, const CppRefactoringChanges &changes)
+    const FilePath &filePath, int line, int column)
 {
     if (!cxxFrontendModel(filePath))
         return {};
@@ -1109,8 +1109,7 @@ std::optional<SurroundingDefinitionsOnTheModel> cxxSurroundingDefinitions(
         return {};
 
     const QList<CxxFrontendFunctionDeclaration> defined
-        = cxxFrontendDefinitionsOf(changes.snapshot(), CppModelManager::workingCopy(),
-                                   filePath, functions);
+        = cxxFrontendDefinitionsOf(CppModelManager::workingCopy(), filePath, functions);
     if (defined.size() != functions.size())
         return {};
 
@@ -1137,7 +1136,7 @@ static InsertionLocation nextToSurroundingDefinitions(const FilePath &filePath,
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<SurroundingDefinitionsOnTheModel> onTheModel
-        = cxxSurroundingDefinitions(filePath, line, column, changes)) {
+        = cxxSurroundingDefinitions(filePath, line, column)) {
         return placeNextToDefinitions(onTheModel->count, onTheModel->index, destinationFile,
                                       [&](int index) {
                                           return onTheModel->definitions.at(index);

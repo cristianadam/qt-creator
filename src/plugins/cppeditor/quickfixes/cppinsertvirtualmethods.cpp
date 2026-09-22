@@ -573,7 +573,7 @@ static QList<const Class *> baseClassesOf(const CppQuickFixInterface &interface,
 #ifdef QTC_WITH_CXX_FRONTEND
     if (clazz && !clazz->filePath().isEmpty()) {
         if (const std::optional<QList<CxxFrontendDocument::BaseClass>> bases
-            = cxxFrontendBasesOfTheClassAt(interface.snapshot(), CppModelManager::workingCopy(),
+            = cxxFrontendBasesOfTheClassAt(CppModelManager::workingCopy(),
                                            clazz->filePath(), clazz->line(), clazz->column())) {
             QList<const Class *> found;
             for (const CxxFrontendDocument::BaseClass &base : *bases) {
@@ -920,7 +920,7 @@ static std::optional<QList<OfferedFunction>> modelFunctionsOffered(
         // parameters and the same constness, which is what overriding one
         // amounts to.
         const std::optional<QList<CxxFrontendDocument::Place>> overrides
-            = cxxFrontendOverridesIn(interface.snapshot(), CppModelManager::workingCopy(), inFile,
+            = cxxFrontendOverridesIn(CppModelManager::workingCopy(), inFile,
                                      targetPlace,
                                      {member.filePath, member.line, member.column});
         if (!overrides)

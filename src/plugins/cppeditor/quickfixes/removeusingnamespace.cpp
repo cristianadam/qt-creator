@@ -488,7 +488,7 @@ std::optional<UsingDirectiveToRemove> modelUsingDirectiveAt(
             file->lineAndColumn(startSymbol, &line, &column);
 
         const std::optional<CxxFrontendDocument::UsingDirectives> read
-            = cxxFrontendUsingDirectivesIn(snapshot, CppModelManager::workingCopy(),
+            = cxxFrontendUsingDirectivesIn(CppModelManager::workingCopy(),
                                            file->filePath(), namespaceName, line, column,
                                            removeAllAtGlobalScope);
         if (!read)

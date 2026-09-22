@@ -176,7 +176,7 @@ static bool lookupBasesOnTheModel(CppClass *cppClass, Symbol *declaration,
     if (!declaration || declaration->filePath().isEmpty())
         return false;
     const std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> bases
-        = cxxFrontendBasesOfTheClassAt(snapshot, workingCopy,
+        = cxxFrontendBasesOfTheClassAt(workingCopy,
                                        declaration->filePath(), declaration->line(),
                                        declaration->column());
     if (!bases)

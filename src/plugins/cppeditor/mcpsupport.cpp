@@ -205,7 +205,7 @@ static std::optional<QList<CPlusPlus::Usage>> symbolUsagesOnTheModel(CPlusPlus::
             continue; // The file does not mention the name at all.
 
         const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
-            = cxxFrontendUsagesIn(snapshot, workingCopy, filePath, declaration);
+            = cxxFrontendUsagesIn(workingCopy, filePath, declaration);
         if (!places)
             return std::nullopt;
 
@@ -252,8 +252,7 @@ static QString qtMethodOf(CPlusPlus::CxxFrontendDocument::QtMethod method)
 static std::optional<QJsonArray> fileSymbolsOnTheModel(const Utils::FilePath &filePath)
 {
     const std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> symbols
-        = cxxFrontendSymbolsIn(CppModelManager::snapshot(), CppModelManager::workingCopy(),
-                               filePath);
+        = cxxFrontendSymbolsIn(CppModelManager::workingCopy(), filePath);
     if (!symbols)
         return std::nullopt;
 
@@ -285,8 +284,7 @@ static std::optional<QJsonObject> symbolInfoOnTheModel(const Utils::FilePath &fi
                                                        int column)
 {
     const std::optional<CPlusPlus::CxxFrontendDocument::Declaration> declaration
-        = cxxFrontendDeclarationIn(CppModelManager::snapshot(), CppModelManager::workingCopy(),
-                                   filePath, line, column);
+        = cxxFrontendDeclarationIn(CppModelManager::workingCopy(), filePath, line, column);
     if (!declaration)
         return std::nullopt;
 
@@ -317,7 +315,7 @@ static std::optional<QJsonObject> symbolInfoOnTheModel(const Utils::FilePath &fi
         result.insert("definition",
                       place(declaration->filePath, declaration->line, declaration->column));
     } else if (const std::optional<Utils::Link> other
-               = cxxFrontendCounterpart(CppModelManager::snapshot(), filePath, line, column)) {
+               = cxxFrontendCounterpart(filePath, line, column)) {
         result.insert("definition", place(other->targetFilePath.toFSPathString(),
                                           other->target.line, other->target.column + 1));
     }

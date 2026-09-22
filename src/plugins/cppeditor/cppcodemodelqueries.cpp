@@ -690,7 +690,7 @@ CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &
     d->snapshot = snapshot;
     d->workingCopy = workingCopy;
 #ifdef QTC_WITH_CXX_FRONTEND
-    d->model.emplace(snapshot, workingCopy);
+    d->model.emplace(workingCopy);
 #endif
 }
 

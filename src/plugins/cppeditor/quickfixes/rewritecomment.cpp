@@ -277,7 +277,7 @@ std::optional<int> declarationStartIn(const CppRefactoringFilePtr &targetFile, c
 {
 #ifdef QTC_WITH_CXX_FRONTEND
     if (const std::optional<CxxFrontendFunctionDeclaration> found = cxxFrontendFunctionAt(
-            CppModelManager::snapshot(), CppModelManager::workingCopy(), loc.targetFilePath,
+            CppModelManager::workingCopy(), loc.targetFilePath,
             loc.target.line, loc.target.column + 1)) {
         if (!found->isValid())
             return std::nullopt;
@@ -563,7 +563,7 @@ std::optional<WrittenFunction> functionAt(const CppQuickFixInterface &interface)
     const Utils::Text::Position at = Utils::Text::Position::fromPositionInDocument(
         file->document(), cursor.position());
     if (const std::optional<CxxFrontendFunctionDeclaration> found = cxxFrontendFunctionAt(
-            CppModelManager::snapshot(), CppModelManager::workingCopy(), file->filePath(),
+            CppModelManager::workingCopy(), file->filePath(),
             at.line, at.column + 1)) {
         if (!found->isValid())
             return std::nullopt;

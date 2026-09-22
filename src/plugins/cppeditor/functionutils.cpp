@@ -241,7 +241,7 @@ static std::optional<QList<Function *>> overridesOnTheModel(const Function *func
         return std::nullopt;
 
     const std::optional<QList<CPlusPlus::CxxFrontendDocument::Place>> places
-        = cxxFrontendOverridesIn(snapshot, CppModelManager::workingCopy(), cls->filePath(),
+        = cxxFrontendOverridesIn(CppModelManager::workingCopy(), cls->filePath(),
                                  {cls->filePath().toFSPathString(), cls->line(), cls->column()},
                                  {function->filePath().toFSPathString(), function->line(),
                                   function->column()});
@@ -394,7 +394,7 @@ void FunctionUtilsTest::testVirtualFunctions()
         // The source itself, with no marker in front of it: that model
         // counts lines from the text it is given.
         workingCopy.insert(document->filePath(), source);
-        updateCxxFrontendModel({}, document->filePath(), {}, workingCopy);
+        updateCxxFrontendModel(document->filePath(), {}, workingCopy);
     }
 #endif
     Control *control = document->translationUnit()->control();

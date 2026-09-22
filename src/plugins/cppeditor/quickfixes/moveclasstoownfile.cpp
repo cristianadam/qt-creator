@@ -337,12 +337,12 @@ std::optional<ClassToMove> builtinClassToMove(const CppQuickFixInterface &interf
 // listening for yet.
 PartsFinder modelPartsFinder(const CppQuickFixInterface &interface, const QString &qualifiedName)
 {
-    return [snapshot = interface.snapshot(), filePath = interface.filePath(), qualifiedName](
+    return [filePath = interface.filePath(), qualifiedName](
                const FileGetter &getFile, const PartsHandler &handler) {
-        const auto find = [snapshot, filePath, qualifiedName, getFile, handler] {
+        const auto find = [filePath, qualifiedName, getFile, handler] {
             QList<ClassPart> parts;
             for (const CxxFrontendClassPart &part : cxxFrontendPartsOfClass(
-                     snapshot, CppModelManager::workingCopy(), filePath, qualifiedName)) {
+                     CppModelManager::workingCopy(), filePath, qualifiedName)) {
                 const CppRefactoringFilePtr file = getFile(part.filePath);
                 QTC_ASSERT(file, continue);
                 parts.append(

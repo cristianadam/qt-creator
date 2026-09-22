@@ -349,10 +349,10 @@ FindTheDefinitions modelFindTheDefinitions(const CppQuickFixInterface &interface
                       .column = declaration.at.column});
     }
 
-    return [snapshot = interface.snapshot(), filePath = interface.filePath(), asked]
+    return [filePath = interface.filePath(), asked]
         (std::function<void(const Definitions &)> whenDone) {
         const QList<CxxFrontendFunctionDeclaration> defined = cxxFrontendDefinitionsOf(
-            snapshot, CppModelManager::workingCopy(), filePath, asked);
+            CppModelManager::workingCopy(), filePath, asked);
 
         Definitions definitions;
         for (int i = 0; i < defined.size(); ++i) {

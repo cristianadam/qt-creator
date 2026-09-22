@@ -104,7 +104,7 @@ public:
         if (cxxFrontendModelRequested()) {
             WorkingCopy workingCopy;
             workingCopy.insert(filePath, sourceWithoutCursorMarker);
-            updateCxxFrontendModel({}, filePath, {}, workingCopy);
+            updateCxxFrontendModel(filePath, {}, workingCopy);
         }
 #endif
 

@@ -224,7 +224,7 @@ void BuiltinEditorDocumentParser::updateImpl(const QPromise<void> &promise,
         // just resolved. Off unless asked for; see cxxfrontendmodel.h.
 #ifdef QTC_WITH_CXX_FRONTEND
         if (Internal::cxxFrontendModelRequested()) {
-            Internal::updateCxxFrontendModel(state.snapshot, filePath(), state.configFile,
+            Internal::updateCxxFrontendModel(filePath(), state.configFile,
                                              workingCopy);
         }
 #endif

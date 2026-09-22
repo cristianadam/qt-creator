@@ -245,7 +245,7 @@ public:
     std::optional<QList<CPlusPlus::Usage>> operator()(const Utils::FilePath &filePath) const
     {
         const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
-            = cxxFrontendUsagesIn(snapshot, workingCopy, filePath,
+            = cxxFrontendUsagesIn(workingCopy, filePath,
                                   {declarationFile.toFSPathString(), declarationLine,
                                    declarationColumn});
         if (!places)

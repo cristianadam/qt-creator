@@ -374,7 +374,7 @@ private:
             return std::nullopt;
 
         const std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> places
-            = Internal::cxxFrontendUsagesIn(m_snapshot, m_workingCopy,
+            = Internal::cxxFrontendUsagesIn(m_workingCopy,
                                             m_document->filePath(), first);
         if (!places)
             return std::nullopt;

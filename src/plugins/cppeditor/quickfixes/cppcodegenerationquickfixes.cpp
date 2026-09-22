@@ -408,7 +408,7 @@ public:
     QString name() const override
     {
         const std::optional<CxxFrontendDocument::Declaration> declared
-            = cxxFrontendDeclarationIn(m_readWith->snapshot(), CppModelManager::workingCopy(),
+            = cxxFrontendDeclarationIn(CppModelManager::workingCopy(),
                                        m_filePath, m_line, m_column);
         if (!declared || declared->name.isEmpty())
             return m_builtin->name();
@@ -422,8 +422,7 @@ public:
     bool isQObject() const override
     {
         const std::optional<QList<CxxFrontendDocument::BaseClass>> bases
-            = cxxFrontendBasesOfTheClassAt(m_readWith->snapshot(),
-                                           CppModelManager::workingCopy(),
+            = cxxFrontendBasesOfTheClassAt(CppModelManager::workingCopy(),
                                            m_filePath, m_line, m_column);
         if (!bases)
             return m_builtin->isQObject();
@@ -450,7 +449,7 @@ public:
         request.writtenAtLine = location.line();
         request.writtenAtColumn = location.column();
         const std::optional<QString> written = cxxFrontendTypeWritten(
-            m_readWith->snapshot(), CppModelManager::workingCopy(), request, {});
+            CppModelManager::workingCopy(), request, {});
         return written && !written->isEmpty() ? *written
                                               : m_builtin->writtenAt(file, location);
     }
@@ -571,14 +570,14 @@ public:
     QString asDeclarationOf(const QString &name) const override
     {
         const std::optional<QString> written = cxxFrontendTypeWritten(
-            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request, name);
+            CppModelManager::workingCopy(), m_request, name);
         return written ? *written : m_builtin->asDeclarationOf(name);
     }
 
     QString asTextWithoutTemplateParameters() const override
     {
         const std::optional<QString> written = cxxFrontendTypeWithoutTemplateParameters(
-            m_readWith->snapshot(), CppModelManager::workingCopy(), m_request);
+            CppModelManager::workingCopy(), m_request);
         return written ? *written : m_builtin->asTextWithoutTemplateParameters();
     }
 
@@ -596,8 +595,7 @@ private:
     const std::optional<CxxFrontendTypeFacts> &facts() const
     {
         if (!m_facts) {
-            m_facts.emplace(cxxFrontendTypeFacts(m_readWith->snapshot(),
-                                                 CppModelManager::workingCopy(), m_request));
+            m_facts.emplace(cxxFrontendTypeFacts(CppModelManager::workingCopy(), m_request));
         }
         return *m_facts;
     }
@@ -626,7 +624,7 @@ GeneratedType readTypeOfTheMember(const CppQuickFixInterface &interface,
         request.filePath = interface.filePath();
         request.line = line;
         request.column = column;
-        if (cxxFrontendTypeFacts(interface.snapshot(), CppModelManager::workingCopy(), request)) {
+        if (cxxFrontendTypeFacts(CppModelManager::workingCopy(), request)) {
             return GeneratedType(
                 std::make_shared<CxxTypeReading>(request, builtin, readWith));
         }

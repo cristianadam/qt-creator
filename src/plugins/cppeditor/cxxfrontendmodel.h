@@ -57,17 +57,16 @@ bool cxxFrontendModelRequested();
 // Runs \a filePath and everything it includes through the cxx-frontend model,
 // and keeps the result until the next call for that file.
 //
-// Includes are not resolved again: \a builtinSnapshot has just been built for
-// this file, and it records which path each include resolved to. Resolving
-// them a second way would mean a second answer, and the point of running the
-// two models side by side is that they read the same code. Contents come from
-// \a workingCopy, so that what is being typed is what is parsed, and from disk
-// for everything else.
+// Includes are found among the header paths of the part that builds the file,
+// the way a compiler finds them and the way the index does. Through the
+// built-in model's snapshot once, which recorded what each include had
+// resolved to -- so this could read nothing that model had not read first.
+// Contents come from \a workingCopy, so that what is being typed is what is
+// parsed, and from disk for everything else.
 //
 // \a configFile is the #define lines the project part contributes, which the
 // built-in model feeds in as a synthetic file.
-void updateCxxFrontendModel(const CPlusPlus::Snapshot &builtinSnapshot,
-                            const Utils::FilePath &filePath,
+void updateCxxFrontendModel(const Utils::FilePath &filePath,
                             const QByteArray &configFile,
                             const WorkingCopy &workingCopy);
 
@@ -100,8 +99,7 @@ void forgetCxxFrontendModel(const Utils::FilePath &filePath);
 // the using declaration itself.
 // The caller then answers the way it did before, so this can only add
 // answers, never change one.
-Utils::Link cxxFrontendFollowSymbol(const CPlusPlus::Snapshot &builtinSnapshot,
-                                    const Utils::FilePath &filePath, int line, int column,
+Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
                                     int linkTextStart, int linkTextEnd);
 
 // Answers CPlusPlus::commentsForDeclaration() off this model, for as long as
@@ -131,8 +129,7 @@ void useCxxFrontendComments(bool enabled);
 //
 // Nothing where the model has not read the file, where the position is on no
 // function, or where no file in the project defines it.
-std::optional<Utils::Link> cxxFrontendCounterpart(const CPlusPlus::Snapshot &builtinSnapshot,
-                                                  const Utils::FilePath &filePath,
+std::optional<Utils::Link> cxxFrontendCounterpart(const Utils::FilePath &filePath,
                                                   int line,
                                                   int column);
 
@@ -191,7 +188,7 @@ struct CxxFrontendDeclDefLink
 };
 
 std::optional<CxxFrontendDeclDefLink> cxxFrontendDeclDefLink(
-    const CPlusPlus::Snapshot &builtinSnapshot, const Utils::FilePath &filePath,
+    const Utils::FilePath &filePath,
     int line, int column, const WorkingCopy &workingCopy,
     const CxxFrontendFileText &textOf);
 
@@ -268,7 +265,7 @@ struct CxxFrontendFunctionDeclaration
 // typing. This one is asked by a fix somebody has already chosen, and about
 // the other side of a function, which is a file nobody is editing.
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
 // Where each of \a functions is defined, in the same order, with an invalid
@@ -279,7 +276,7 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendFunctionAt(
 // every name still outstanding. This file's own translation unit first, which
 // already holds a function defined in the header it is declared in.
 QList<CxxFrontendFunctionDeclaration> cxxFrontendDefinitionsOf(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath,
     const QList<CPlusPlus::CxxFrontendDocument::MemberFunction> &functions);
 
@@ -308,7 +305,7 @@ struct CxxFrontendClassPart
 // which identifiers it wrote, and a file that never wrote this name cannot
 // define a part of it.
 QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &qualifiedName);
 
 // What \a filePath declares, in the order it declares them, and nothing
@@ -319,7 +316,7 @@ QList<CxxFrontendClassPart> cxxFrontendPartsOfClass(
 // declared and defined in one file is one entry, which is what the outline
 // shows too.
 std::optional<QList<CPlusPlus::CxxFrontendDocument::Symbol>> cxxFrontendSymbolsIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath);
 
 // What the name at a position means: where it was declared, what kind of
@@ -343,7 +340,7 @@ std::optional<CPlusPlus::CxxFrontendDocument::Element> cxxFrontendElementAt(
 // per question is the cost, which is the trade for asking about a file the
 // editor is not running over.
 std::optional<CPlusPlus::CxxFrontendDocument::Declaration> cxxFrontendDeclarationIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
 // The class whose name is written at \a place, out of the file's own
@@ -373,7 +370,7 @@ CPlusPlus::Class *builtinClassWrittenAt(
 // not running over that file, since whoever asks this is drawing a hierarchy
 // rather than typing.
 std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> cxxFrontendBasesOfTheClassAt(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
 // The members of the class written at \a classPlace in \a filePath that
@@ -383,7 +380,7 @@ std::optional<QList<CPlusPlus::CxxFrontendDocument::BaseClass>> cxxFrontendBases
 // The file is read here and now unless the editor is running over it: the
 // classes deriving from one are in files nobody has open.
 std::optional<QList<CPlusPlus::CxxFrontendDocument::Place>> cxxFrontendOverridesIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const CPlusPlus::CxxFrontendDocument::Place &classPlace,
     const CPlusPlus::CxxFrontendDocument::Place &function);
 
@@ -409,7 +406,7 @@ std::optional<CPlusPlus::CxxFrontendDocument::Virtuality> cxxFrontendVirtualityA
 // in some other file as a rule, and that file is read into this one, so one
 // document answers it.
 std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> cxxFrontendUsagesIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const CPlusPlus::CxxFrontendDocument::Place &declaration);
 
 // Every class \a filePath writes, with what each of its bases resolves to,
@@ -419,7 +416,7 @@ std::optional<QList<CPlusPlus::CxxFrontendDocument::NamedPlace>> cxxFrontendUsag
 // The file is read here and now unless the editor is running over it: a
 // search for what derives from a class looks at files nobody has open.
 std::optional<QList<CPlusPlus::CxxFrontendDocument::ClassWithBases>> cxxFrontendClassesIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath);
 
 // The using directive written at a position, and nothing where this model
@@ -435,7 +432,7 @@ std::optional<CPlusPlus::CxxFrontendDocument::UsingDirective> cxxFrontendUsingDi
 // now: removing a directive from a header reaches every file that includes
 // it, and those are files nobody has open.
 std::optional<CPlusPlus::CxxFrontendDocument::UsingDirectives> cxxFrontendUsingDirectivesIn(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, const QString &namespaceName, int afterLine,
     int afterColumn, bool everyOneAtGlobalScope);
 
@@ -452,7 +449,7 @@ std::optional<CPlusPlus::CxxFrontendDocument::UsingDirectives> cxxFrontendUsingD
 // function is declared nowhere else, and then the definition is the only
 // place there is.
 std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const Utils::FilePath &filePath, int line, int column);
 
 // The head of a definition of the function whose name is written at \a line
@@ -471,7 +468,7 @@ std::optional<CxxFrontendFunctionDeclaration> cxxFrontendDeclarationOfFunctionAt
 // "template<...>", which it does not write. Declining rather than writing
 // half a definition is the rule for everything that moves text.
 std::optional<QString> cxxFrontendDefinitionHeadFor(
-    const CPlusPlus::Snapshot &builtinSnapshot, const Utils::FilePath &filePath,
+    const Utils::FilePath &filePath,
     int line, int column, const Utils::FilePath &targetFilePath,
     int targetLine, int targetColumn);
 
@@ -534,8 +531,7 @@ class CxxFrontendReading
 {
 public:
     // \a workingCopy has to be taken where the editor documents live.
-    CxxFrontendReading(const CPlusPlus::Snapshot &builtinSnapshot,
-                       const WorkingCopy &workingCopy);
+    CxxFrontendReading(const WorkingCopy &workingCopy);
     ~CxxFrontendReading();
 
     // The classes \a filePath writes that use \a className -- a member of
@@ -689,20 +685,20 @@ struct CxxFrontendTypeFacts
     QString declaredName;
 };
 std::optional<CxxFrontendTypeFacts> cxxFrontendTypeFacts(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request);
 
 // That same type written as a declaration of \a name, or alone where that
 // is empty -- a declarator is written around a name, so no amount of
 // putting the name after the type gets there.
 std::optional<QString> cxxFrontendTypeWritten(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request, const QString &name);
 
 // And written without the arguments of a template, which is how a caller
 // with a rule per type names the type it has a rule for.
 std::optional<QString> cxxFrontendTypeWithoutTemplateParameters(
-    const CPlusPlus::Snapshot &builtinSnapshot, const WorkingCopy &workingCopy,
+    const WorkingCopy &workingCopy,
     const CxxFrontendTypeRequest &request);
 
 std::optional<CPlusPlus::CxxFrontendDocument::MetaMethodCall> cxxFrontendMetaMethodCallAt(
@@ -948,14 +944,12 @@ std::optional<QList<TextEditor::HighlightingResult>> cxxFrontendHighlighting(
 // completion already runs on a worker thread, and it is why the answer is
 // not kept -- it belongs to one keystroke.
 //
-// \a builtinSnapshot is the snapshot the completion is running against, and
-// includes are resolved through it exactly as updateCxxFrontendModel does,
-// so both models read the same headers.
+// Includes are resolved exactly as updateCxxFrontendModel resolves them,
+// among the header paths of the part that builds the file.
 //
 // Nothing unless the model was asked for, or where the file cannot be read;
 // then the caller answers the way it did before.
 std::optional<CPlusPlus::CxxFrontendDocument::Completion> cxxFrontendCompletion(
-    const CPlusPlus::Snapshot &builtinSnapshot,
     const Utils::FilePath &filePath,
     const QString &source,
     int line,

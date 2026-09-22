@@ -49,7 +49,7 @@ static Document::Ptr createDocument(const FilePath &filePath, const QByteArray &
     if (cxxFrontendModelRequested()) {
         WorkingCopy workingCopy;
         workingCopy.insert(filePath, text);
-        updateCxxFrontendModel({}, filePath, {}, workingCopy);
+        updateCxxFrontendModel(filePath, {}, workingCopy);
     }
 #endif
 

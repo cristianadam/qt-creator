@@ -126,7 +126,7 @@ public:
             return;
 
         m_mainFilePath = m_dir.filePath() / mainFile;
-        updateCxxFrontendModel(CppEditor::Tests::TestCase::globalSnapshot(), m_mainFilePath, configFile,
+        updateCxxFrontendModel(m_mainFilePath, configFile,
                                workingCopy);
         m_model = cxxFrontendModel(m_mainFilePath);
     }
@@ -209,7 +209,7 @@ void CxxFrontendModelTest::testReadsWhatIsBeingTyped()
     workingCopy.insert(header, "int beingTyped;\n");
     workingCopy.insert(source, "#include \"h.h\"\nint alsoBeingTyped = beingTyped;\n");
 
-    updateCxxFrontendModel(CppEditor::Tests::TestCase::globalSnapshot(), source, {}, workingCopy);
+    updateCxxFrontendModel(source, {}, workingCopy);
     const std::shared_ptr<const CxxFrontendSnapshot> model = cxxFrontendModel(source);
     QVERIFY(model);
 
@@ -282,7 +282,7 @@ void CxxFrontendModelTest::testFollowsANameToItsDeclaration()
     // "here" is at column 12 counting from one, so 11 from zero, and the
     // cursor may be anywhere in it or just after it.
     for (const int column : {11, 13, 15}) {
-        const Link link = cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 2, column, 100, 110);
+        const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, column, 100, 110);
         QVERIFY2(link.hasValidTarget(), qPrintable(QString("column %1").arg(column)));
         QCOMPARE(link.targetFilePath, parsed.mainFilePath());
         QCOMPARE(link.target.line, 1);
@@ -308,13 +308,13 @@ void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
     QVERIFY(parsed.isValid());
 
     // A file the model never ran over.
-    QVERIFY(!cxxFrontendFollowSymbol({}, parsed.path("elsewhere.cpp"), 1, 0, 0, 0).hasValidTarget());
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.path("elsewhere.cpp"), 1, 0, 0, 0).hasValidTarget());
     // A position on no name at all.
-    QVERIFY(!cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 2, 8, 0, 0).hasValidTarget());
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 8, 0, 0).hasValidTarget());
     // A name from a header is not one of them: the header is read into this
     // file, so the model does answer, and what with is in
     // testResolvesANameDeclaredInAnInclude.
-    QVERIFY(cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
+    QVERIFY(cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
 }
 
 // The other side of a function, and the case the model cannot answer alone:
@@ -334,7 +334,7 @@ void CxxFrontendModelTest::testFindsTheDefinitionInAnotherFile()
     // own translation unit has no definition, so the search finds the one in
     // other.cpp.
     const std::optional<Link> definition = cxxFrontendCounterpart(
-        CppEditor::Tests::TestCase::globalSnapshot(), parsed.mainFilePath(), 2, 10);
+        parsed.mainFilePath(), 2, 10);
     QVERIFY(definition.has_value());
     QCOMPARE(definition->targetFilePath, parsed.path("other.cpp"));
     QCOMPARE(definition->target.line, 3);
@@ -353,8 +353,7 @@ void CxxFrontendModelTest::testFollowsADeclarationToItsDefinitionElsewhere()
     QVERIFY(parsed.isValid());
 
     // On "f" of "c->f(1)", which resolves to the declaration in the header.
-    const Link link = cxxFrontendFollowSymbol(CppEditor::Tests::TestCase::globalSnapshot(),
-                                              parsed.mainFilePath(), 3, 18, 0, 0);
+    const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 3, 18, 0, 0);
     QVERIFY(link.hasValidTarget());
     QCOMPARE(link.targetFilePath, parsed.path("other.cpp"));
     QCOMPARE(link.target.line, 3);
@@ -374,8 +373,7 @@ void CxxFrontendModelTest::testFollowsAFreeFunctionToItsDefinitionElsewhere()
 
     // On "loose" of "loose(1)", which resolves to the declaration in the
     // header.
-    const Link link = cxxFrontendFollowSymbol(CppEditor::Tests::TestCase::globalSnapshot(),
-                                              parsed.mainFilePath(), 3, 13, 0, 0);
+    const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 3, 13, 0, 0);
     QVERIFY(link.hasValidTarget());
     QCOMPARE(link.targetFilePath, parsed.path("other.cpp"));
     QCOMPARE(link.target.line, 3);
@@ -891,7 +889,7 @@ void CxxFrontendModelTest::testFindsTheDeclarationOfADefinition()
     QVERIFY(parsed.isValid());
 
     const std::optional<Link> declaration = cxxFrontendCounterpart(
-        CppEditor::Tests::TestCase::globalSnapshot(), parsed.mainFilePath(), 3, 9);
+        parsed.mainFilePath(), 3, 9);
     QVERIFY(declaration.has_value());
     QCOMPARE(declaration->targetFilePath, parsed.path("h.h"));
     QCOMPARE(declaration->target.line, 2);
@@ -906,8 +904,8 @@ void CxxFrontendModelTest::testNoCounterpartWhereThereIsNone()
     QVERIFY(parsed.isValid());
 
     const Snapshot snapshot = CppEditor::Tests::TestCase::globalSnapshot();
-    QVERIFY(!cxxFrontendCounterpart(snapshot, parsed.mainFilePath(), 2, 10).has_value());
-    QVERIFY(!cxxFrontendCounterpart(snapshot, parsed.mainFilePath(), 1, 8).has_value());
+    QVERIFY(!cxxFrontendCounterpart(parsed.mainFilePath(), 2, 10).has_value());
+    QVERIFY(!cxxFrontendCounterpart(parsed.mainFilePath(), 1, 8).has_value());
 }
 
 // A name a using declaration brought in: the built-in model answers with the
@@ -921,7 +919,7 @@ void CxxFrontendModelTest::testDeclinesANameFromAUsingDeclaration()
                         "main.cpp");
     QVERIFY(parsed.isValid());
 
-    QVERIFY(!cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 3, 11, 0, 0).hasValidTarget());
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 3, 11, 0, 0).hasValidTarget());
 }
 
 // The case that stopped follow symbol from using this: a class forward
@@ -936,11 +934,11 @@ void CxxFrontendModelTest::testDeclinesAForwardDeclaration()
     QVERIFY(parsed.isValid());
 
     // Foo, declared on line 1 and defined nowhere here.
-    QVERIFY(!cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 2, 0, 0, 0).hasValidTarget());
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 0, 0, 0).hasValidTarget());
 
     // Bar, defined on line 3, still answers -- so this is about the
     // declaration and not about classes.
-    const Link link = cxxFrontendFollowSymbol({}, parsed.mainFilePath(), 4, 0, 0, 0);
+    const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 4, 0, 0, 0);
     QVERIFY(link.hasValidTarget());
     QCOMPARE(link.target.line, 3);
 }

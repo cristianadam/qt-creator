@@ -386,7 +386,7 @@ std::optional<FoundLiteral> literalAt(const CppQuickFixInterface &interface)
         = cxxFrontendLiteralInAFunctionAt(interface.filePath(), at.line, at.column + 1);
         found && found->isValid()) {
         const std::optional<CxxFrontendFunctionDeclaration> enclosing = cxxFrontendFunctionAt(
-            interface.snapshot(), CppModelManager::workingCopy(), interface.filePath(),
+            CppModelManager::workingCopy(), interface.filePath(),
             at.line, at.column + 1);
         if (enclosing && enclosing->isValid() && enclosing->isDefinition) {
             FoundLiteral answer;
@@ -405,12 +405,11 @@ std::optional<FoundLiteral> literalAt(const CppQuickFixInterface &interface)
                                                             enclosing->parametersEndColumn);
             answer.literal.hasParameters = enclosing->hasParameters;
             answer.findTheOtherSide =
-                [snapshot = interface.snapshot(), filePath = interface.filePath(),
+                [filePath = interface.filePath(),
                  nameLine = enclosing->nameLine, nameColumn = enclosing->nameColumn]
                 (const CppRefactoringChanges &refactoring) -> OtherSide {
                 const std::optional<CxxFrontendFunctionDeclaration> declared
-                    = cxxFrontendDeclarationOfFunctionAt(snapshot,
-                                                         CppModelManager::workingCopy(),
+                    = cxxFrontendDeclarationOfFunctionAt(CppModelManager::workingCopy(),
                                                          filePath, nameLine, nameColumn);
                 if (!declared || !declared->isValid() || declared->isDefinition)
                     return {};

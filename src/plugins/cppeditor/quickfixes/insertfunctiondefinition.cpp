@@ -286,7 +286,7 @@ std::optional<MissingDefinition> cxxMissingDefinition(const CppQuickFixInterface
                                const CppQuickFixOperation *op, const InsertionLocation &at,
                                const CppRefactoringFilePtr &toFile) -> QString {
         const std::optional<QString> head
-            = cxxFrontendDefinitionHeadFor(op->snapshot(), filePath, line, column,
+            = cxxFrontendDefinitionHeadFor(filePath, line, column,
                                            toFile->filePath(), at.line(), at.column());
         return head ? *head : builtinHead(op, at, toFile);
     };

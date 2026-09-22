@@ -120,7 +120,7 @@ public:
             const FilePath editedPath = editingTheHeader ? headerPath : sourcePath;
             WorkingCopy workingCopy;
             workingCopy.insert(editedPath, editingTheHeader ? headerSource : sourceSource);
-            updateCxxFrontendModel(m_snapshot, editedPath, {}, workingCopy);
+            updateCxxFrontendModel(editedPath, {}, workingCopy);
         }
 #endif
 
