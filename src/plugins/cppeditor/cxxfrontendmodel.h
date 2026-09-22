@@ -54,6 +54,25 @@ namespace CppEditor::Internal {
 // work can be asked for directly -- which is how the test drives it.
 bool cxxFrontendModelRequested();
 
+// What the stack of a thread reading with this front end has to hold.
+//
+// The front end walks a file by recursion and bounds itself by counting its
+// own frames -- its constant evaluator allows 512 nested calls, a template
+// 256 nested instantiations -- but one of its frames is a score of C++ ones,
+// the visitors being large. That budget was written for a main thread's
+// eight megabytes; a pooled or plain secondary thread gets the half a
+// megabyte the system hands one, which is less than the budget allows, and
+// the same file that reads fine in an editor then overruns the guard page.
+//
+// So a reader is given what the code it runs was written against. It is
+// address space, not memory: only the pages a read touches are committed.
+//
+// The index sizes its own pool with this (cpplocatordata.cpp). A reading
+// asked for by a consumer can be on any thread at all -- AutoTest scans on
+// the global pool, the Class View parses on a plain QThread -- so it brings
+// its own thread rather than trusting the one it was called on.
+constexpr uint cxxFrontendReaderStackSize = 8 * 1024 * 1024;
+
 // Runs \a filePath and everything it includes through the cxx-frontend model,
 // and keeps the result until the next call for that file.
 //

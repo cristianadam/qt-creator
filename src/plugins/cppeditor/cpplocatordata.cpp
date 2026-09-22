@@ -69,20 +69,6 @@ static int cxxFrontendReaderCount()
     return std::clamp(byMemory, 1, byCores);
 }
 
-// What a reader's stack has to hold.
-//
-// The front end walks a file by recursion and bounds itself by counting its
-// own frames -- its constant evaluator allows 512 nested calls -- but one of
-// its frames is a score of C++ ones, the visitors being large. That budget
-// was written for the thread the editor reads on, which gets the eight
-// megabytes a main thread gets; a pooled thread gets the half a megabyte the
-// system hands a plain one, and the same file that reads fine in an editor
-// then overruns the guard page while being indexed.
-//
-// So a reader is given what the code it runs was written against. It is
-// address space, not memory: only the pages a read touches are committed.
-static constexpr uint cxxFrontendReaderStackSize = 8 * 1024 * 1024;
-
 // This is the one file that knows whether there is a cache type at all, so
 // it is where the deleting has to happen: with the front end built its
 // definition is above, and without it nothing ever made one to delete.
@@ -98,7 +84,12 @@ void Internal::CxxFrontendIndexCacheDeleter::operator()(CxxFrontendIndexCache *c
 CppLocatorData::CppLocatorData()
 {
     m_cxxFrontendPool.setMaxThreadCount(cxxFrontendReaderCount());
-    m_cxxFrontendPool.setStackSize(cxxFrontendReaderStackSize);
+#ifdef QTC_WITH_CXX_FRONTEND
+    // What the front end's own recursion was written against; see
+    // cxxfrontendmodel.h. Nothing reads on this pool with the front end left
+    // out, so there is nothing to size then.
+    m_cxxFrontendPool.setStackSize(Internal::cxxFrontendReaderStackSize);
+#endif
     // Measured as free (15.4s either way) and it keeps a project's worth of
     // reads from crowding out the work somebody is waiting on.
     m_cxxFrontendPool.setThreadPriority(QThread::LowPriority);

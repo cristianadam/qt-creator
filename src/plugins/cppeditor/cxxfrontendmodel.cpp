@@ -36,6 +36,7 @@
 #include <QTextDocument>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QThread>
 
 using namespace CPlusPlus;
 using namespace Utils;
@@ -293,6 +294,28 @@ ProjectExplorer::HeaderPaths preparedHeaderPathsFor(const FilePath &filePath)
     return prepared;
 }
 
+// Runs \a read on a thread with the stack the front end's own recursion was
+// written against.
+//
+// A reading has no say in which thread it is asked on -- AutoTest scans on
+// the global pool, the Class View parses on a plain QThread, the decl/def
+// link searches on a pool -- and all of those get the half a megabyte the
+// system hands a secondary thread, which is less than the front end's own
+// depth limits allow it to use. So a reading brings its own thread rather
+// than trusting the one it was called on.
+//
+// Against what it guards this costs nothing: a thread is made in
+// microseconds where reading a file and its headers is a third of a second.
+// The index does not come through here, its pool being sized already.
+//
+// See cxxFrontendReaderStackSize for what the budget is and why.
+void readOnAReaderStack(const std::function<void()> &read)
+{
+    const std::unique_ptr<QThread> reader(QThread::create(read));
+    reader->setStackSize(cxxFrontendReaderStackSize);
+    reader->start();
+    reader->wait();
+}
 
 } // namespace
 
@@ -319,7 +342,9 @@ void updateCxxFrontendModel(const FilePath &filePath,
     snapshot->setHeaderResolver(
         resolverAmong(preparedHeaderPathsFor(filePath), workingCopy, {}));
     snapshot->setPredefinedMacros(definesIn(configFile));
-    snapshot->process(filePath.toFSPathString(), QString::fromUtf8(*onDisk));
+    readOnAReaderStack([&] {
+        snapshot->process(filePath.toFSPathString(), QString::fromUtf8(*onDisk));
+    });
 
     models().set(filePath, snapshot);
 }
@@ -647,8 +672,10 @@ std::optional<CxxFrontendDocument::Counterpart> definitionIn(
     snapshot.setHeaderResolver(resolverAmong(preparedHeaderPathsFor(filePath), {}, {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
-    const CxxFrontendDocument * const document
-        = snapshot.process(filePath.toFSPathString(), QString::fromUtf8(*contents));
+    const CxxFrontendDocument *document = nullptr;
+    readOnAReaderStack([&] {
+        document = snapshot.process(filePath.toFSPathString(), QString::fromUtf8(*contents));
+    });
     if (!document)
         return std::nullopt;
 
@@ -1011,7 +1038,9 @@ HoldingDocument readWith(const WorkingCopy &workingCopy,
             return header;
         });
     holding.owned->setPredefinedMacros(projectPredefinedMacros());
-    holding.document = holding.owned->process(filePath.toFSPathString(), source);
+    readOnAReaderStack([&] {
+        holding.document = holding.owned->process(filePath.toFSPathString(), source);
+    });
     return holding;
 }
 
@@ -1964,6 +1993,9 @@ HoldingDocument readForIndex(const CxxFrontendIndexInputs &inputs,
     // the enums, the aliases, the functions defined here -- is declared
     // whether or not anything in a body type checks.
     holding.owned->setChecksTypes(false);
+    // Not readOnAReaderStack(): the index reads on a pool of its own that
+    // carries that stack already, and a thread per file over a project is a
+    // cost the readings above do not have.
     holding.document = holding.owned->process(filePath.toFSPathString(),
                                               QString::fromUtf8(*contents));
     return holding;
@@ -2942,8 +2974,11 @@ std::optional<CxxFrontendDocument::Completion> cxxFrontendCompletion(
         resolverAmong(preparedHeaderPathsFor(filePath), CppModelManager::workingCopy(), {}));
     snapshot.setPredefinedMacros(projectPredefinedMacros());
 
-    const CxxFrontendDocument *document
-        = snapshot.processForCompletion(filePath.toFSPathString(), source, line, column);
+    const CxxFrontendDocument *document = nullptr;
+    readOnAReaderStack([&] {
+        document = snapshot.processForCompletion(filePath.toFSPathString(), source,
+                                                 line, column);
+    });
     if (!document)
         return std::nullopt;
     return document->completion();

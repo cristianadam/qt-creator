@@ -37,6 +37,7 @@ private slots:
     void testTheCallsWithALiteral();
     void testTheMacroUsesOfAFile();
     void testTheIncludeClosureOfAFile();
+    void testReadsDeepTemplatesOnAnyThread();
     void testFindsTheDeclarationOfADefinition();
     void testNoCounterpartWhereThereIsNone();
     void testDeclinesANameFromAUsingDeclaration();

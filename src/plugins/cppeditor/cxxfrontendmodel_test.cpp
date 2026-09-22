@@ -33,6 +33,7 @@
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 
 using namespace CPlusPlus;
 using namespace Utils;
@@ -877,6 +878,51 @@ void CxxFrontendModelTest::testTheMacroUsesOfAFile()
     // What was written, each argument trimmed -- and nothing for the one
     // used without arguments, which has nothing to read.
     QCOMPARE(said.join(", "), QString("TWO(1, 2), RUN(tst_Thing)"));
+}
+
+// A file whose templates nest deeply is read whatever thread asked for it.
+//
+// The front end bounds its own recursion at 256 nested instantiations, and
+// one of those is a score of C++ frames -- a budget written for the eight
+// megabytes a main thread has. A plain secondary thread gets half of one
+// megabyte, which runs out at around a hundred and thirty, so a reading that
+// trusted the thread it was called on overran the guard page and took the
+// process with it. This is what AutoTest scanning with the model on did.
+//
+// Two hundred deep: past where half a megabyte gives out, well inside both
+// the front end's limit and the stack a reading brings.
+//
+// A chain of types rather than of values, which is what makes it nest: a
+// "static constexpr int value = Deep<N - 1>::value + 1" reads in eleven
+// milliseconds and does not overrun anything, each instantiation being
+// remembered and the next one asked for beside it rather than inside it.
+// Here Deep<N>'s own type cannot be had without Deep<N - 1>'s, so the
+// instantiations are one within another.
+void CxxFrontendModelTest::testReadsDeepTemplatesOnAnyThread()
+{
+    if (!cxxFrontendModelRequested())
+        QSKIP("Only this model reads a file when it is asked about one");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath source = dir.createFile(
+        "deep.cpp",
+        "template<int N> struct Deep { using type = typename Deep<N - 1>::type *; };\n"
+        "template<> struct Deep<0> { using type = int; };\n"
+        "Deep<200>::type deeplyInstantiated = nullptr;\n");
+
+    // Asked on a plain thread, which is the half a megabyte the system hands
+    // out -- what the Class View parses on, and what a pool thread gets.
+    QList<CppEditor::WrittenDeclaration> declarations;
+    const std::unique_ptr<QThread> asker(QThread::create([&] {
+        const CodeModelQueries read{CPlusPlus::Snapshot(), WorkingCopy()};
+        declarations = read.declarationsIn(source);
+    }));
+    asker->start();
+    QVERIFY(asker->wait(120000));
+
+    QCOMPARE(Utils::transform(declarations, &CppEditor::WrittenDeclaration::name),
+             QStringList({"Deep", "type", "Deep<0>", "type", "deeplyInstantiated"}));
 }
 
 // Every file a file reaches through its includes, which is how a test
