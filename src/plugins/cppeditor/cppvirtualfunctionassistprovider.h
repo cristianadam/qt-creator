@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "cppworkingcopy.h"
+
 #include "cppeditor_global.h"
 
 #include <texteditor/codeassist/genericproposal.h>
@@ -46,6 +48,13 @@ public:
         CPlusPlus::Class *staticClass = nullptr;
         QSharedPointer<CPlusPlus::TypeOfExpression> typeOfExpression; // Keeps instantiated symbols.
         CPlusPlus::Snapshot snapshot;
+
+        // What is being typed rather than what is on disk. Taken where the
+        // parameters are made, which is the GUI thread: the proposal is
+        // worked out on a worker, and the editor documents this is made of
+        // are not that thread's to read.
+        WorkingCopy workingCopy;
+
         int cursorPosition = -1;
         bool openInNextSplit = false;
     };

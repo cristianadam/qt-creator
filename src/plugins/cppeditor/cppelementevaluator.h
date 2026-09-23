@@ -149,7 +149,7 @@ public:
                      const CPlusPlus::LookupContext &context,
                      const WorkingCopy &workingCopy);
     void lookupDerived(const QFuture<void> &future, CPlusPlus::Symbol *declaration,
-                       const CPlusPlus::Snapshot &snapshot);
+                       const CPlusPlus::Snapshot &snapshot, const WorkingCopy &workingCopy);
 
     QList<CppClass> bases;
     QList<CppClass> derived;

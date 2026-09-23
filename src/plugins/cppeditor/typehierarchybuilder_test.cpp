@@ -6,6 +6,8 @@
 #include "cpptoolstestcase.h"
 #include "typehierarchybuilder.h"
 
+#include "cppmodelmanager.h"
+
 #include <cplusplus/Overview.h>
 #include <cplusplus/SymbolVisitor.h>
 #include <utils/algorithm.h>
@@ -100,7 +102,8 @@ public:
 
         // Generate and compare hierarchies
         const TypeHierarchy hierarchy
-                = TypeHierarchyBuilder::buildDerivedTypeHierarchy(clazz, snapshot);
+                = TypeHierarchyBuilder::buildDerivedTypeHierarchy(clazz, snapshot,
+                                                                  CppModelManager::workingCopy());
 
         const QString actualHierarchy = toString(hierarchy);
 //        Uncomment for updating/generating reference data:

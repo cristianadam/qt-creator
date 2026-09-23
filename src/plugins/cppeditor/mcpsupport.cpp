@@ -1063,7 +1063,8 @@ void registerMcpTools()
             const QFuture<void> future = futureInterface.future();
             CppClass cppClass(symbol);
             cppClass.lookupBases(future, symbol, context, CppModelManager::workingCopy());
-            cppClass.lookupDerived(future, symbol, context.snapshot());
+            cppClass.lookupDerived(future, symbol, context.snapshot(),
+                                   CppModelManager::workingCopy());
             futureInterface.reportFinished();
 
             return CallToolResult{}.isError(false).structuredContent(hierarchyToJson(cppClass));
@@ -2163,7 +2164,8 @@ void registerMcpTools()
             QJsonArray overrides;
             if (isVirtual) {
                 const QList<CPlusPlus::Function *> functions = FunctionUtils::overrides(
-                    function, functionsClass, functionsClass, snapshot);
+                    function, functionsClass, functionsClass, snapshot,
+                    CppModelManager::workingCopy());
                 for (const CPlusPlus::Function *f : functions)
                     overrides.append(functionToJson(f));
             }

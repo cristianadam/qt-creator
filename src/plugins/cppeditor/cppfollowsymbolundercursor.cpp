@@ -823,6 +823,7 @@ void FollowSymbolUnderCursor::findLink(
                     params.staticClass = helper.staticClassOfFunctionCallExpression();
                     params.typeOfExpression = typeOfExpression;
                     params.snapshot = snapshot;
+                    params.workingCopy = CppModelManager::workingCopy();
                     params.cursorPosition = cursor.position();
                     params.openInNextSplit = inNextSplit;
 

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "cppworkingcopy.h"
+
 #include <QList>
 #include <QObject>
 
@@ -27,10 +29,14 @@ public:
                                       const CPlusPlus::LookupContext &context,
                                       QList<const CPlusPlus::Function *> *firstVirtuals = nullptr);
 
+    // \a workingCopy is what is being typed rather than what is on disk,
+    // and is handed in because this runs off the GUI thread where the
+    // editor documents it is made of live.
     static QList<CPlusPlus::Function *> overrides(CPlusPlus::Function *function,
                                                   CPlusPlus::Class *functionsClass,
                                                   CPlusPlus::Class *staticClass,
-                                                  const CPlusPlus::Snapshot &snapshot);
+                                                  const CPlusPlus::Snapshot &snapshot,
+                                                  const WorkingCopy &workingCopy);
 };
 
 #ifdef WITH_TESTS

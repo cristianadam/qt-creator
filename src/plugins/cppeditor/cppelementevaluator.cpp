@@ -246,13 +246,13 @@ void CppClass::addBaseHierarchy(const QFuture<void> &future, const LookupContext
 }
 
 void CppClass::lookupDerived(const QFuture<void> &future, Symbol *declaration,
-                             const Snapshot &snapshot)
+                             const Snapshot &snapshot, const WorkingCopy &workingCopy)
 {
     snapshot.updateDependencyTable(future);
     if (future.isCanceled())
         return;
     addDerivedHierarchy(TypeHierarchyBuilder::buildDerivedTypeHierarchy(
-                        declaration, snapshot, future));
+                        declaration, snapshot, workingCopy, future));
 }
 
 // A class the hierarchy found, as the facts an element is made of. What a
@@ -435,7 +435,7 @@ static void createTypeHierarchy(QPromise<std::shared_ptr<CppElement>> &promise,
     cppClass->lookupBases(future, declaration, contextToUse, execData.workingCopy);
     if (promise.isCanceled())
         return;
-    cppClass->lookupDerived(future, declaration, execData.snapshot);
+    cppClass->lookupDerived(future, declaration, execData.snapshot, execData.workingCopy);
     if (promise.isCanceled())
         return;
     promise.addResult(cppClass);

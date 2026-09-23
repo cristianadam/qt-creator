@@ -176,17 +176,17 @@ static DerivedFinder builtinDerivedFinder(const Snapshot &snapshot)
 // A file this model cannot read is read by the other one. This search looks
 // at every file that depends on the one declaring the class, so leaving one
 // out would lose whatever derives from it there.
-static DerivedFinder modelDerivedFinder(const DerivedFinder &builtinFinder)
+static DerivedFinder modelDerivedFinder(const DerivedFinder &builtinFinder,
+                                        const WorkingCopy &workingCopy)
 {
     const auto read = std::make_shared<
         QHash<Utils::FilePath, std::optional<QList<CxxFrontendDocument::ClassWithBases>>>>();
 
-    return [builtinFinder, read](const Utils::FilePath &filePath,
-                                 const QString &qualifiedName) {
+    return [builtinFinder, read, workingCopy](const Utils::FilePath &filePath,
+                                             const QString &qualifiedName) {
         const auto known = read->constFind(filePath);
         if (known == read->constEnd()) {
-            read->insert(filePath,
-                         cxxFrontendClassesIn(CppModelManager::workingCopy(), filePath));
+            read->insert(filePath, cxxFrontendClassesIn(workingCopy, filePath));
         }
         const std::optional<QList<CxxFrontendDocument::ClassWithBases>> &classes
             = read->value(filePath);
@@ -205,21 +205,24 @@ static DerivedFinder modelDerivedFinder(const DerivedFinder &builtinFinder)
 #endif // QTC_WITH_CXX_FRONTEND
 
 // Which front end says what derives from a class.
-static DerivedFinder derivedFinder(const Snapshot &snapshot)
+static DerivedFinder derivedFinder(const Snapshot &snapshot, const WorkingCopy &workingCopy)
 {
     const DerivedFinder builtin = builtinDerivedFinder(snapshot);
 #ifdef QTC_WITH_CXX_FRONTEND
     if (cxxFrontendModelRequested())
-        return modelDerivedFinder(builtin);
+        return modelDerivedFinder(builtin, workingCopy);
+#else
+    Q_UNUSED(workingCopy)
 #endif
     return builtin;
 }
 
 TypeHierarchy TypeHierarchyBuilder::buildDerivedTypeHierarchy(Symbol *symbol,
-              const Snapshot &snapshot, const std::optional<QFuture<void>> &future)
+              const Snapshot &snapshot, const WorkingCopy &workingCopy,
+              const std::optional<QFuture<void>> &future)
 {
     TypeHierarchy hierarchy(hierarchyClassFor(symbol));
-    TypeHierarchyBuilder builder(derivedFinder(snapshot));
+    TypeHierarchyBuilder builder(derivedFinder(snapshot, workingCopy));
     builder.buildDerived(future, &hierarchy, snapshot);
     return hierarchy;
 }

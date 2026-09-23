@@ -307,7 +307,8 @@ static QList<Function *> overridesIn(const Function *function, Class *c, const N
 }
 
 QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsClass,
-                                           Class *staticClass, const Snapshot &snapshot)
+                                           Class *staticClass, const Snapshot &snapshot,
+                                           const WorkingCopy &workingCopy)
 {
     QList<Function *> result;
     QTC_ASSERT(function && functionsClass && staticClass, return result);
@@ -318,7 +319,7 @@ QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsC
 
     // Find overrides
     const TypeHierarchy &staticClassHierarchy
-            = TypeHierarchyBuilder::buildDerivedTypeHierarchy(staticClass, snapshot);
+            = TypeHierarchyBuilder::buildDerivedTypeHierarchy(staticClass, snapshot, workingCopy);
 
     QList<TypeHierarchy> l;
     if (functionsClass != staticClass)

@@ -6,6 +6,8 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Overview.h>
 
+#include "cppworkingcopy.h"
+
 #include <utils/filepath.h>
 #include <utils/link.h>
 #include <utils/utilsicons.h>
@@ -108,8 +110,12 @@ using DerivedFinder = std::function<QList<DerivedClass>(const Utils::FilePath &f
 class TypeHierarchyBuilder
 {
 public:
+    // \a workingCopy is what is being typed rather than what is on disk.
+    // Handed in because it has to be taken where the editor documents live,
+    // which is the GUI thread, and this walk is run on another one.
     static TypeHierarchy buildDerivedTypeHierarchy(CPlusPlus::Symbol *symbol,
                                                    const CPlusPlus::Snapshot &snapshot,
+                                                   const WorkingCopy &workingCopy,
                                                    const std::optional<QFuture<void>> &future = {});
     static CPlusPlus::LookupItem followTypedef(const CPlusPlus::LookupContext &context,
                                                const CPlusPlus::Name *symbolName,
