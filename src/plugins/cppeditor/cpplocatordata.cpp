@@ -728,10 +728,12 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
         // order its readings finish, and the index must not depend on that.
         {
             QMutexLocker graph(&m_includeGraphMutex);
+            bool graphChanged = false;
             for (const FilePath &covered : result.covered) {
-                if (!m_removedSinceRead.contains(covered))
+                if (!m_removedSinceRead.contains(covered)) {
                     m_includeGraph.insert(covered.intern(), {});
-                    m_includersOfFile.clear();
+                    graphChanged = true;
+                }
             }
             for (const auto &[file, included] : result.includes) {
                 if (m_removedSinceRead.contains(file))
@@ -744,8 +746,14 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
                 for (const FilePath &path : included)
                     interned.append(path.intern());
                 m_includeGraph.insert(file.intern(), interned);
-                m_includersOfFile.clear(); // turned round again on the next ask
+                graphChanged = true;
             }
+            // Once, and only where something moved: the map is the whole
+            // graph turned round, and it is turned round again on the next
+            // ask. Throwing it away per edge is what the misplaced line
+            // here used to do.
+            if (graphChanged)
+                m_includersOfFile.clear();
         }
 
         for (const ReadFile &read : result.withEntries) {
@@ -1064,7 +1072,8 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
         QMutexLocker graph(&m_includeGraphMutex);
         for (const FilePath &file : files)
             m_includeGraph.remove(file);
-            m_includersOfFile.clear();
+        // Once, after them all: it is the whole graph turned round.
+        m_includersOfFile.clear();
     }
 
     QMutexLocker locker(&m_infosByFileMutex);
