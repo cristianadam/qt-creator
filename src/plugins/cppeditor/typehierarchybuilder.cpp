@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "typehierarchybuilder.h"
-#include "cppcodemodelqueries.h"
 
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/SymbolVisitor.h>
@@ -255,7 +254,12 @@ static FilePaths filesDependingOn(const Snapshot &snapshot, Symbol *symbol)
         return {};
 
     const FilePath file = symbol->filePath();
-    return FilePaths{file} + CppEditor::filesDependingOn(snapshot, file);
+    // The snapshot's own answer, and not the index's beside it: every file
+    // this walk is handed is dropped again unless the snapshot has a
+    // document for it, so a file only the index knows about is a file this
+    // cannot look at. What would make the index worth asking here is
+    // reading those files, which is a parse apiece.
+    return FilePaths{file} + snapshot.filesDependingOn(file);
 }
 
 // The class written at \a line and \a column of \a document, which is how a

@@ -2137,7 +2137,10 @@ void ModelManagerTest::testWhichFilesReachAHeader()
                                                              "class ReachMiddle {};\n");
     const FilePath source = dir.createFile("reach_unit.cpp", "#include \"reach_middle.h\"\n"
                                                              "class ReachUnit {};\n");
-    const FilePath other = dir.createFile("reach_other.cpp", "class ReachOther {};\n");
+    // One that reaches the header directly, for the half of the answer a
+    // snapshot with an editor's file in it can give.
+    const FilePath other = dir.createFile("reach_other.cpp", "#include \"reach_leaf.h\"\n"
+                                                             "class ReachOther {};\n");
     QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty() && !other.isEmpty());
 
     CppLocatorData * const locatorData = CppModelManager::locatorData();
@@ -2150,9 +2153,9 @@ void ModelManagerTest::testWhichFilesReachAHeader()
     // Asked with an empty snapshot, which is what a session with no
     // built-in pass has: the answer is the index's.
     const FilePaths reachingLeaf = filesDependingOn(CPlusPlus::Snapshot(), leaf);
-    QCOMPARE(Utils::toSet(reachingLeaf), QSet<FilePath>({middle, source}));
+    QCOMPARE(Utils::toSet(reachingLeaf), QSet<FilePath>({middle, source, other}));
 
-    // One step up, and the file that includes nothing reaches nothing.
+    // One step up, and a file nothing includes is reached by nothing.
     QCOMPARE(filesDependingOn(CPlusPlus::Snapshot(), middle), FilePaths({source}));
     QCOMPARE(filesDependingOn(CPlusPlus::Snapshot(), other), FilePaths());
 
@@ -2162,6 +2165,21 @@ void ModelManagerTest::testWhichFilesReachAHeader()
              FilePaths());
     QCOMPARE(locatorData->indexedFilesDependingOn(dir.filePath() / "reach_absent.h"),
              std::nullopt);
+
+    // And both are asked, not whichever answers first. A snapshot holding
+    // one file that reaches the header -- which is what an open editor
+    // leaves behind where no pass has run over the project -- knows the
+    // header perfectly well and knows almost nothing of what reaches it.
+    CPlusPlus::Snapshot asIfOneEditorWereOpen;
+    const CPlusPlus::Snapshot whatWasParsed = CppModelManager::snapshot();
+    for (const FilePath &file : {other, leaf}) {
+        if (const CPlusPlus::Document::Ptr doc = whatWasParsed.document(file))
+            asIfOneEditorWereOpen.insert(doc);
+    }
+    QVERIFY(asIfOneEditorWereOpen.contains(leaf));
+    const FilePaths both = filesDependingOn(asIfOneEditorWereOpen, leaf);
+    QVERIFY(both.contains(source));  // the index's, past what the snapshot has
+    QVERIFY(both.contains(middle));
 }
 
 // What a test class declares, answered out of the index and the class's own

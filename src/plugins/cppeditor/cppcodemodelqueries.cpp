@@ -1691,14 +1691,24 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
 
 FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &filePath)
 {
+    FilePaths reaching;
     if (snapshot.contains(filePath))
-        return snapshot.filesDependingOn(filePath);
+        reaching = snapshot.filesDependingOn(filePath);
 
+    // Both, rather than the snapshot where it has the file. What the
+    // snapshot holds without a pass over the project is the open editors
+    // and what they include, so it has a header somebody opened and knows
+    // almost nothing that reaches it -- and "the snapshot knows this file"
+    // is no answer to "does it know what reaches it".
     if (CppLocatorData * const index = CppModelManager::locatorData()) {
-        if (const std::optional<FilePaths> reaching = index->indexedFilesDependingOn(filePath))
-            return *reaching;
+        if (const std::optional<FilePaths> indexed = index->indexedFilesDependingOn(filePath)) {
+            for (const FilePath &includer : *indexed) {
+                if (!reaching.contains(includer))
+                    reaching.append(includer);
+            }
+        }
     }
-    return {};
+    return reaching;
 }
 
 FilePaths includesOf(const FilePath &filePath)

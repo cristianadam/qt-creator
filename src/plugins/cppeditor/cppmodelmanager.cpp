@@ -2039,7 +2039,9 @@ QSet<QString> CppModelManager::dependingInternalTargets(const FilePath &file)
 {
     QSet<QString> result;
     const Snapshot snapshot = CppModelManager::snapshot();
-    QTC_ASSERT(snapshot.contains(file), return result);
+    // No assertion that the snapshot has the file: without a built-in pass
+    // over the project it holds the open editors and little else, and what
+    // reaches the file is asked of the index below in that case.
     bool wasHeader;
     const FilePath correspondingFile
             = correspondingHeaderOrSource(file, &wasHeader, CacheUsage::ReadOnly);

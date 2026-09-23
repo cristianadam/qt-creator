@@ -291,6 +291,7 @@ void CppLocatorData::readProjectWithCxxFrontend(ProjectExplorer::Project *projec
             // otherwise throw away the graph of everything else.
             QMutexLocker graph(&m_includeGraphMutex);
             m_includeGraph.clear();
+            m_includersOfFile.clear();
         }
         // Nothing waits to be covered here -- only units are queued, and
         // each covers its own closure -- so there is nothing for the
@@ -730,6 +731,7 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
             for (const FilePath &covered : result.covered) {
                 if (!m_removedSinceRead.contains(covered))
                     m_includeGraph.insert(covered.intern(), {});
+                    m_includersOfFile.clear();
             }
             for (const auto &[file, included] : result.includes) {
                 if (m_removedSinceRead.contains(file))
@@ -742,6 +744,7 @@ void CppLocatorData::takeCxxFrontendResults(int begin, int end)
                 for (const FilePath &path : included)
                     interned.append(path.intern());
                 m_includeGraph.insert(file.intern(), interned);
+                m_includersOfFile.clear(); // turned round again on the next ask
             }
         }
 
@@ -951,15 +954,19 @@ std::optional<FilePaths> CppLocatorData::indexedFilesDependingOn(const FilePath 
     if (!m_includeGraph.contains(filePath))
         return std::nullopt;
 
-    // The graph is what each file includes; this is the other direction,
-    // so it is turned round first. Once per ask rather than kept: what it
-    // is asked for is a search somebody started, where the index is asked
-    // for a file's own includes as often as an editor redraws.
-    QHash<FilePath, FilePaths> includers;
-    for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
-        for (const FilePath &included : it.value())
-            includers[included].append(it.key());
+    // The graph is what each file includes; this is the other direction, so
+    // it is turned round -- and kept turned round until the graph changes.
+    // The walk is over every edge there is, and this is asked per file by
+    // callers that look a project part up: rebuilding it for each of them,
+    // under the lock a batch of the index needs to report through, is how
+    // a search over a large project stops being a search.
+    if (m_includersOfFile.isEmpty()) {
+        for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
+            for (const FilePath &included : it.value())
+                m_includersOfFile[included].append(it.key());
+        }
     }
+    const QHash<FilePath, FilePaths> &includers = m_includersOfFile;
 
     FilePaths reached;
     QSet<FilePath> seen{filePath};
@@ -1057,6 +1064,7 @@ void CppLocatorData::onAboutToRemoveFiles(const FilePaths &files)
         QMutexLocker graph(&m_includeGraphMutex);
         for (const FilePath &file : files)
             m_includeGraph.remove(file);
+            m_includersOfFile.clear();
     }
 
     QMutexLocker locker(&m_infosByFileMutex);

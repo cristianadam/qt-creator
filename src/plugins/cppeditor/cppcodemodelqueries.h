@@ -201,14 +201,22 @@ CPPEDITOR_EXPORT Utils::FilePaths filesIncludingFileNamed(const CPlusPlus::Snaps
 // through headers of their own -- what a search for the uses of something
 // declared there has to look through.
 //
-// \a snapshot first, where it has the file: that is what a built-in
-// indexing pass left behind, and it is the answer this question has always
-// had. The cxx index's include graph otherwise, which is the only answer
-// where no such pass runs -- and where neither knows the file, nothing.
+// What either model knows, together. \a snapshot is what a built-in
+// indexing pass left behind, and the answer this question has always had;
+// the cxx index's include graph is the answer where no such pass runs.
 //
-// Snapshot::filesDependingOn() is the first of those on its own, and it is
-// not cheap: a snapshot is handed out with no dependency table, so the
-// first ask builds one of every file against every other.
+// Both and not the first that answers, because neither is complete on its
+// own and the ways they are incomplete do not overlap: without a pass the
+// snapshot holds the open editors and the files they include, so it has a
+// header somebody opened and knows next to nothing of what reaches it,
+// while the index holds a project's files and not what is open from
+// elsewhere. A file too many here costs a file searched; a file missing is
+// a use not found.
+//
+// Snapshot::filesDependingOn() is not cheap: a snapshot is handed out with
+// no dependency table, so the first ask builds one of every file against
+// every other -- and snapshot() hands out a copy, so every caller is the
+// first.
 CPPEDITOR_EXPORT Utils::FilePaths filesDependingOn(const CPlusPlus::Snapshot &snapshot,
                                                    const Utils::FilePath &filePath);
 

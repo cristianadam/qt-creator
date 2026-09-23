@@ -3,10 +3,10 @@
 
 #include "cppfindreferences.h"
 
+#include "cppcodemodelqueries.h"
 #include "cppcodemodelsettings.h"
 #include "cppeditorconstants.h"
 #include "cppeditortr.h"
-#include "cppcodemodelqueries.h"
 #include "cppmodelmanager.h"
 #include "cpptoolsreuse.h"
 #include "cppworkingcopy.h"

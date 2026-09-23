@@ -277,6 +277,11 @@ private:
     // what the index costs, an edge being two paths already held.
     mutable QMutex m_includeGraphMutex;
     QHash<Utils::FilePath, Utils::FilePaths> m_includeGraph;
+    // The same graph turned round -- what includes each file -- worked out
+    // on the first ask and emptied whenever the graph above changes. Under
+    // the same lock, and mutable because turning it round is answering a
+    // question rather than changing what is known.
+    mutable QHash<Utils::FilePath, Utils::FilePaths> m_includersOfFile;
 
     // The files the cxx front end has yet to read, written from the indexer's
     // thread and read from this one, so under a lock of their own rather than
