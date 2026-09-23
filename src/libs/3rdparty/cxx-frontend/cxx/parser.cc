@@ -206,7 +206,7 @@ struct Parser::UncheckedInitializerContext {
     ++p->uncheckedInitializerDepth_;
     savedBinderScope = p->binder_.scope();
     savedLexicalScope = p->lexicalScope_;
-    savedClosureNaming = p->binder_.closureNamingState();
+    p->binder_.beginClosureNamingRegion(savedClosureNaming);
     auto blockParent = savedBinderScope;
     if (blockParent && blockParent->isTemplateParameters()) {
       blockParent = p->control()->newFunctionParametersSymbol(
@@ -219,7 +219,7 @@ struct Parser::UncheckedInitializerContext {
   ~UncheckedInitializerContext() {
     if (!active) return;
     --p->uncheckedInitializerDepth_;
-    p->binder_.setClosureNamingState(std::move(savedClosureNaming));
+    p->binder_.endClosureNamingRegion(savedClosureNaming);
     p->binder_.setScope(savedBinderScope);
     p->lexicalScope_ = savedLexicalScope;
   }

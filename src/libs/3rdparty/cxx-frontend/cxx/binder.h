@@ -70,14 +70,24 @@ class Binder {
   [[nodiscard]] auto reportErrors() const -> bool;
   void setReportErrors(bool reportErrors);
 
+  // A stretch of text whose lambda naming is rolled back at its end. An
+  // unchecked initializer is parsed speculatively, so a lambda named
+  // inside one must not move the discriminators of the text around it on.
+  //
+  // What changed is recorded rather than what there was: the whole
+  // discriminator map used to be copied for every such stretch, and
+  // almost none of them name a lambda at all, so almost every one of
+  // these is now empty.
   struct ClosureNamingState {
+    using Undo = std::vector<std::pair<FunctionSymbol*, std::optional<int>>>;
+
     int lambdaCount = 0;
-    std::unordered_map<FunctionSymbol*, int> lambdaDiscriminators;
+    Undo undo;
+    Undo* outer = nullptr;  // the region this one is nested in, if any
   };
 
-  [[nodiscard]] auto closureNamingState() const -> ClosureNamingState;
-
-  void setClosureNamingState(ClosureNamingState state);
+  void beginClosureNamingRegion(ClosureNamingState& state);
+  void endClosureNamingRegion(ClosureNamingState& state);
 
   void error(SourceLocation loc, std::string message);
   void warning(SourceLocation loc, std::string message);
@@ -466,6 +476,9 @@ class Binder {
   bool retainsEnclosingTemplateLevels_ = false;
   bool reportErrors_ = true;
   std::unordered_map<FunctionSymbol*, int> lambdaDiscriminators_;
+  // Where to write down what the map looked like before a change, or
+  // nullptr outside any region that is going to be rolled back.
+  ClosureNamingState::Undo* closureUndo_ = nullptr;
   std::unordered_map<FunctionSymbol*, std::vector<DefaultArgumentInfo>>
       defaultArguments_;
 };

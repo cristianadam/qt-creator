@@ -46,13 +46,25 @@
 #include <format>
 
 namespace cxx {
-auto Binder::closureNamingState() const -> ClosureNamingState {
-  return {control()->closureNameCount(), lambdaDiscriminators_};
+void Binder::beginClosureNamingRegion(ClosureNamingState& state) {
+  state.lambdaCount = control()->closureNameCount();
+  state.outer = closureUndo_;
+  closureUndo_ = &state.undo;
 }
 
-void Binder::setClosureNamingState(ClosureNamingState state) {
+void Binder::endClosureNamingRegion(ClosureNamingState& state) {
+  closureUndo_ = state.outer;
   control()->setClosureNameCount(state.lambdaCount);
-  lambdaDiscriminators_ = std::move(state.lambdaDiscriminators);
+
+  // Backwards, so that a function whose discriminator moved more than once
+  // comes back to what it was when the region began rather than to what it
+  // was in the middle of it.
+  for (auto it = state.undo.rbegin(); it != state.undo.rend(); ++it) {
+    if (it->second)
+      lambdaDiscriminators_[it->first] = *it->second;
+    else
+      lambdaDiscriminators_.erase(it->first);
+  }
 }
 
 Binder::Binder(TranslationUnit* unit) : unit_(unit), traits(unit) {
@@ -1718,8 +1730,16 @@ void Binder::complete(LambdaExpressionAST* ast) {
     auto classSymbol = control()->newClassSymbol(parentScope, ast->lbracketLoc);
     classSymbol->setName(closureName);
     parentScope->addSymbol(classSymbol);
+    auto enclosingFunction = classSymbol->enclosingFunction();
+    if (closureUndo_) {
+      auto known = lambdaDiscriminators_.find(enclosingFunction);
+      closureUndo_->emplace_back(enclosingFunction,
+                                 known == lambdaDiscriminators_.end()
+                                     ? std::nullopt
+                                     : std::optional{known->second});
+    }
     classSymbol->setClosureDiscriminator(
-        lambdaDiscriminators_[classSymbol->enclosingFunction()]++);
+        lambdaDiscriminators_[enclosingFunction]++);
 
     auto operatorCallName = control()->getOperatorId(TokenKind::T_LPAREN);
     auto operatorFunc =
