@@ -322,14 +322,15 @@ QList<Function *> FunctionUtils::overrides(Function *function, Class *functionsC
 
     QList<TypeHierarchy> l;
     if (functionsClass != staticClass)
-        l.append(TypeHierarchy(functionsClass));
+        l.append(TypeHierarchy(hierarchyClassFor(functionsClass)));
     l.append(staticClassHierarchy);
 
     while (!l.isEmpty()) {
         // Add derived
         const TypeHierarchy hierarchy = l.takeFirst();
-        QTC_ASSERT(hierarchy.symbol(), continue);
-        Class *c = hierarchy.symbol()->asClass();
+        // What is looked at here is what the class declares, so this needs
+        // the class itself and not only where it stands.
+        Class * const c = classOf(snapshot, hierarchy.klass());
         QTC_ASSERT(c, continue);
 
         for (const TypeHierarchy &t : hierarchy.hierarchy()) {

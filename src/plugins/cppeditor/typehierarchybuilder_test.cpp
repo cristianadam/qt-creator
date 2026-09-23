@@ -25,14 +25,12 @@ namespace {
 
 QString toString(const TypeHierarchy &hierarchy, int indent = 0)
 {
-    Symbol *symbol = hierarchy.symbol();
     QString result = QString(indent, QLatin1Char(' '))
-        + Overview().prettyName(symbol->name()) + QLatin1Char('\n');
+        + hierarchy.klass().name + QLatin1Char('\n');
 
-    Overview oo;
     const QList<TypeHierarchy> sortedHierarchy = Utils::sorted(hierarchy.hierarchy(),
-            [&oo](const TypeHierarchy &h1, const TypeHierarchy &h2) -> bool {
-        return oo.prettyName(h1.symbol()->name()) < oo.prettyName(h2.symbol()->name());
+            [](const TypeHierarchy &h1, const TypeHierarchy &h2) -> bool {
+        return h1.klass().name < h2.klass().name;
     });
     for (const TypeHierarchy &childHierarchy : std::as_const(sortedHierarchy))
         result += toString(childHierarchy, indent + 2);

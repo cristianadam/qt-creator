@@ -255,11 +255,26 @@ void CppClass::lookupDerived(const QFuture<void> &future, Symbol *declaration,
                         declaration, snapshot, future));
 }
 
+// A class the hierarchy found, as the facts an element is made of. What a
+// class element shows is its name and where it is, so a place and a name
+// are the whole of it -- the type is not read, the tooltip being the
+// qualified name.
+static CppElementFacts factsOf(const HierarchyClass &klass)
+{
+    CppElementFacts facts;
+    facts.kind = CppElementFacts::Kind::Class;
+    facts.name = klass.name;
+    facts.qualifiedName = klass.qualifiedName;
+    facts.link = klass.link();
+    facts.iconType = klass.iconType;
+    return facts;
+}
+
 void CppClass::addDerivedHierarchy(const TypeHierarchy &hierarchy)
 {
     const QList<TypeHierarchy> derivedHierarchies = hierarchy.hierarchy();
     for (const TypeHierarchy &derivedHierarchy : derivedHierarchies) {
-        CppClass classSymbol(derivedHierarchy.symbol());
+        CppClass classSymbol{factsOf(derivedHierarchy.klass())};
         classSymbol.addDerivedHierarchy(derivedHierarchy);
         derived.append(classSymbol);
     }

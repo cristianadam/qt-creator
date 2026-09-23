@@ -3,6 +3,7 @@
 
 #include "typehierarchybuilder.h"
 
+#include <cplusplus/Icons.h>
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/SymbolVisitor.h>
 
@@ -106,12 +107,25 @@ bool DerivedHierarchyVisitor::visit(Class *symbol)
 
 TypeHierarchy::TypeHierarchy() = default;
 
-TypeHierarchy::TypeHierarchy(Symbol *symbol) : _symbol(symbol)
+TypeHierarchy::TypeHierarchy(const HierarchyClass &klass) : _class(klass)
 {}
 
-Symbol *TypeHierarchy::symbol() const
+const HierarchyClass &TypeHierarchy::klass() const
 {
-    return _symbol;
+    return _class;
+}
+
+HierarchyClass hierarchyClassFor(Symbol *symbol)
+{
+    if (!symbol)
+        return {};
+    Overview overview;
+    return {overview.prettyName(symbol->name()),
+            overview.prettyName(LookupContext::fullyQualifiedName(symbol)),
+            symbol->filePath(),
+            symbol->line(),
+            symbol->column(),
+            CPlusPlus::Icons::iconTypeForSymbol(symbol)};
 }
 
 const QList<TypeHierarchy> &TypeHierarchy::hierarchy() const
@@ -204,7 +218,7 @@ static DerivedFinder derivedFinder(const Snapshot &snapshot)
 TypeHierarchy TypeHierarchyBuilder::buildDerivedTypeHierarchy(Symbol *symbol,
               const Snapshot &snapshot, const std::optional<QFuture<void>> &future)
 {
-    TypeHierarchy hierarchy(symbol);
+    TypeHierarchy hierarchy(hierarchyClassFor(symbol));
     TypeHierarchyBuilder builder(derivedFinder(snapshot));
     builder.buildDerived(future, &hierarchy, snapshot);
     return hierarchy;
@@ -248,12 +262,11 @@ LookupItem TypeHierarchyBuilder::followTypedef(const LookupContext &context, con
     return matchingItem;
 }
 
-static FilePaths filesDependingOn(const Snapshot &snapshot, Symbol *symbol)
+static FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &file)
 {
-    if (!symbol)
+    if (file.isEmpty())
         return {};
 
-    const FilePath file = symbol->filePath();
     // The snapshot's own answer, and not the index's beside it: every file
     // this walk is handed is dropped again unless the snapshot has a
     // document for it, so a file only the index knows about is a file this
@@ -263,9 +276,9 @@ static FilePaths filesDependingOn(const Snapshot &snapshot, Symbol *symbol)
 }
 
 // The class written at \a line and \a column of \a document, which is how a
-// place handed back by either front end becomes the symbol the hierarchy
-// hands out.
-static Class *classWrittenAt(const Document::Ptr &document, const DerivedClass &derived)
+// place handed back by either front end becomes a symbol of the file's own
+// parse.
+static Class *classWrittenAt(const Document::Ptr &document, int line, int column)
 {
     class Find : public SymbolVisitor
     {
@@ -290,23 +303,31 @@ static Class *classWrittenAt(const Document::Ptr &document, const DerivedClass &
         const int _line;
         const int _column;
         Class *_found = nullptr;
-    } find(derived.line, derived.column);
+    } find(line, column);
 
     for (int i = 0; i < document->globalSymbolCount(); ++i)
         find.accept(document->globalSymbolAt(i));
     return find.found();
 }
 
+Class *classOf(const Snapshot &snapshot, const HierarchyClass &klass)
+{
+    const Document::Ptr doc = snapshot.document(klass.filePath);
+    if (!doc)
+        return nullptr;
+    return classWrittenAt(doc, klass.line, klass.column);
+}
+
 void TypeHierarchyBuilder::buildDerived(const std::optional<QFuture<void>> &future,
                                         TypeHierarchy *typeHierarchy,
                                         const Snapshot &snapshot)
 {
-    Symbol *symbol = typeHierarchy->_symbol;
-    if (!Utils::insert(_visited, symbol))
+    const HierarchyClass klass = typeHierarchy->_class;
+    if (klass.qualifiedName.isEmpty() || !Utils::insert(_visited, klass.link()))
         return;
 
-    const QString &symbolName = _overview.prettyName(LookupContext::fullyQualifiedName(symbol));
-    const FilePaths dependingFiles = filesDependingOn(snapshot, symbol);
+    const QByteArray ownName = klass.name.toUtf8();
+    const FilePaths dependingFiles = filesDependingOn(snapshot, klass.filePath);
 
     for (const FilePath &fileName : dependingFiles) {
         if (future && future->isCanceled())
@@ -315,17 +336,18 @@ void TypeHierarchyBuilder::buildDerived(const std::optional<QFuture<void>> &futu
 
         // A file that never wrote the name cannot name the class, which is
         // what keeps this from reading the project.
-        if (!doc || !symbol->identifier()
-            || !doc->control()->findIdentifier(symbol->identifier()->chars(),
-                                               symbol->identifier()->size())) {
+        if (!doc || ownName.isEmpty()
+            || !doc->control()->findIdentifier(ownName.constData(), ownName.size())) {
             continue;
         }
 
-        for (const DerivedClass &derived : _finder(fileName, symbolName)) {
-            Class * const derivedClass = classWrittenAt(doc, derived);
+        for (const DerivedClass &derived : _finder(fileName, klass.qualifiedName)) {
+            // Through the file's own parse, which is what says whether the
+            // class is written as a class or as a struct.
+            Class * const derivedClass = classWrittenAt(doc, derived.line, derived.column);
             if (!derivedClass)
                 continue;
-            TypeHierarchy derivedHierarchy(derivedClass);
+            TypeHierarchy derivedHierarchy(hierarchyClassFor(derivedClass));
             buildDerived(future, &derivedHierarchy, snapshot);
             if (future && future->isCanceled())
                 return;
