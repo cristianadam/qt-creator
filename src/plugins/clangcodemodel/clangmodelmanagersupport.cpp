@@ -20,6 +20,7 @@
 #include <coreplugin/vcsmanager.h>
 
 #include <cppeditor/clangdsettings.h>
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppeditorwidget.h>
 #include <cppeditor/cppmodelmanager.h>
@@ -769,16 +770,20 @@ void ClangModelManagerSupport::updateStaleIndexEntries()
 
         const QHash<QString, IndexFiles> indexedFiles = collectIndexedFiles(indexFolder);
         bool restartCodeModel = false;
-        const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
-        for (const CPlusPlus::Document::Ptr &document : snapshot) {
-            const FilePath sourceFile = document->filePath();
-            if (sourceFile.fileName() == "<configuration>")
-                continue;
 
-            if (!project->isKnownFile(sourceFile)) {
-                qCDebug(clangdIndexLog) << "Not in project:" << sourceFile.fileName();
+        // The project's own C++ files, rather than the documents the
+        // built-in front end happens to hold: that walk asked "what has an
+        // indexing pass parsed", which is every file of the project only
+        // for as long as there is such a pass.
+        //
+        // Every file it has, generated ones included -- clangd indexes a
+        // moc'd source as readily as a written one, and it is the index
+        // that is being checked here.
+        const CodeModelQueries queries(CppModelManager::snapshot(),
+                                       CppModelManager::workingCopy());
+        for (const FilePath &sourceFile : project->files(Project::AllFiles)) {
+            if (!ProjectFile::isCppFile(sourceFile))
                 continue;
-            }
 
             const auto indexFilesIt = indexedFiles.find(sourceFile.fileName());
             if (indexFilesIt == indexedFiles.end()) {
@@ -788,9 +793,22 @@ void ClangModelManagerSupport::updateStaleIndexEntries()
 
             const QDateTime sourceIndexedTime = indexFilesIt->minLastModifiedTime;
 
+            // What the file reaches, off whichever front end has read it,
+            // and nothing where neither has: this is every file of every
+            // project, asked on the thread that draws, so it must not be a
+            // question that reads the file to answer. A file nothing knows
+            // about is passed over here the same way one no pass had
+            // parsed was passed over before.
+            const std::optional<FilePaths> allIncludes
+                = queries.includeClosureKnownFor(sourceFile);
+            if (!allIncludes) {
+                qCDebug(clangdIndexLog) << "Nothing knows what this includes:"
+                                        << sourceFile.fileName();
+                continue;
+            }
+
             bool rescan = false;
-            const QSet<FilePath> allIncludes = snapshot.allIncludesForDocument(sourceFile);
-            for (const FilePath &includeFile : allIncludes) {
+            for (const FilePath &includeFile : *allIncludes) {
                 auto includeFileTimeIt = lastModifiedCache.find(includeFile);
                 if (includeFileTimeIt == lastModifiedCache.end()) {
                     includeFileTimeIt = lastModifiedCache.insert(includeFile,
