@@ -8,9 +8,8 @@
 #include "../autotesttr.h"
 #include "../itestframework.h"
 
-#include <cplusplus/Symbol.h>
+#include <cppeditor/cppcodemodelqueries.h>
 #include <cppeditor/cppmodelmanager.h>
-#include <cppeditor/symbolfinder.h>
 
 #include <projectexplorer/projectmanager.h>
 
@@ -476,21 +475,26 @@ bool QtTestTreeItem::isGroupable() const
 
 QVariant QtTestTreeItem::linkForTreeItem() const
 {
+    // Where the function this item stands for is defined, off whichever
+    // front end has the file. What this did instead -- take the built-in
+    // document, find the declaration in it, walk the snapshot for a
+    // matching definition -- is there only for as long as an indexing pass
+    // has parsed the file, and it did not survive there being no document:
+    // a null one was dereferenced rather than noticed, so a tree the cxx
+    // index filled crashed the moment an item in it was opened.
+    //
+    // The column is the code model's, which counts from one where an item
+    // counts from nought.
+    const CppEditor::CodeModelQueries queries(CppEditor::CppModelManager::snapshot(),
+                                              CppEditor::CppModelManager::workingCopy());
+    const Link definition
+        = queries.definitionOfWhatIsDeclaredAt(filePath(), line(), column() + 1);
+
     QVariant itemLink;
-    using namespace CPlusPlus;
-    const Snapshot snapshot = CppEditor::CppModelManager::instance()->snapshot();
-    const Document::Ptr doc = snapshot.document(filePath());
-    Symbol *symbol = doc->lastVisibleSymbolAt(line(), this->column() + 1);
-    if (auto decl = symbol->asDeclaration()) {
-        static CppEditor::SymbolFinder symbolFinder;
-        if (Symbol *definition = symbolFinder.findMatchingDefinition(decl, snapshot, true);
-                definition && definition->fileId()) {
-            itemLink.setValue(Link(FilePath::fromUtf8(definition->fileName()),
-                                   definition->line(), definition->column() - 1));
-        }
-    }
-    if (!itemLink.isValid()) // fallback in case we failed to find the definition
-        itemLink.setValue(Link(filePath(), line(), this->column()));
+    if (definition.hasValidTarget())
+        itemLink.setValue(definition);
+    else // fallback in case we failed to find the definition
+        itemLink.setValue(Link(filePath(), line(), column()));
     return itemLink;
 }
 

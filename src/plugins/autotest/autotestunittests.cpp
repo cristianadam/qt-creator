@@ -9,7 +9,9 @@
 #include "boost/boosttesttreeitem.h"
 #include "qtest/qttestframework.h"
 #include "qtest/qttestparser.h"
+#include "qtest/qttesttreeitem.h"
 
+#include <cppeditor/cppmodelmanager.h>
 #include <cppeditor/cpptoolstestcase.h>
 #include <cppeditor/projectinfo.h>
 
@@ -373,6 +375,7 @@ private slots:
     void testMainsWrittenIn_data();
     void testWrapperMacros();
     void testWrapperMacros_data();
+    void testTheLinkOfAnItemNothingParsed();
 };
 
 void QtTestParserTest::testMainsWrittenIn_data()
@@ -534,6 +537,42 @@ void QtTestParserTest::testMainsWrittenIn()
     const bool several = cases.size() > 1;
     for (const TestCase &testCase : cases)
         QCOMPARE(testCase.multipleTestCases, several);
+}
+
+// Where a test in the tree takes you, for a file no indexing pass has
+// parsed -- which is every file of a project where there is no such pass.
+//
+// It used to take the built-in document for the file and ask it what was
+// declared there, without looking at whether there was one: a tree the cxx
+// index filled crashed as soon as an item in it was opened.
+void QtTestParserTest::testTheLinkOfAnItemNothingParsed()
+{
+    CppEditor::Tests::TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const Utils::FilePath source = dir.createFile(
+        "tst_unparsed.cpp",
+        "class Thing : public QObject\n"
+        "{\n"
+        "private slots:\n"
+        "    void aTest();\n"
+        "};\n"
+        "void Thing::aTest() {}\n");
+    QVERIFY(!source.isEmpty());
+    QVERIFY(!CppEditor::CppModelManager::document(source));
+
+    QtTestTreeItem item(nullptr, "aTest", source, TestTreeItem::TestFunction);
+    item.setLine(4);
+    item.setColumn(9);
+
+    // Asked the way the tree asks it, which is the only way in: what a
+    // double click on a test follows is the item's LinkRole.
+    //
+    // The declaration's own place is where an item goes when the
+    // definition cannot be found -- and it is the answer here, no front
+    // end having read the file. What matters is that there is one.
+    const QVariant link = item.data(0, LinkRole);
+    QVERIFY(link.isValid());
+    QCOMPARE(link.value<Utils::Link>().targetFilePath, source);
 }
 
 QObject *createAutotestUnitTests()
