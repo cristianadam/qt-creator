@@ -123,6 +123,22 @@ public:
     std::optional<Utils::FilePaths> indexedDirectIncludesFor(
         const Utils::FilePath &filePath) const;
 
+    // The other way along the same graph: the files that include a header
+    // called \a fileName, by its name alone and wherever it stands.
+    //
+    // By name because the caller does not know where the file is -- what
+    // asks this is looking for whoever includes the header uic writes for
+    // a form, which is guessed at as "ui_<form>.h" and may be generated
+    // into any of a project's build directories.
+    //
+    // Only what the index has read, which is what the graph holds: a
+    // header that does not exist yet is included by a line that resolves
+    // to nothing, and an include that resolves to nothing is no edge. So a
+    // form whose header has never been generated is not found this way,
+    // and the built-in front end -- which records what a file wrote,
+    // resolved or not -- is the one that can still answer for it.
+    Utils::FilePaths indexedIncludersOfFileNamed(const QString &fileName) const;
+
 private:
     // The store, or nothing where none has been made yet.
     Internal::CxxFrontendIndexCache *storeIfMade() const;

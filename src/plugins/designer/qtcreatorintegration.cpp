@@ -576,7 +576,18 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     // first in case there are project subdirectories that contain identical file names.
     // The name only: we are guessing what uic will call the header rather
     // than knowing where it will put it.
-    const FilePaths docList = CppEditor::filesIncludingFileNamed(docTable, uicedName);
+    const FilePaths including = CppEditor::filesIncludingFileNamed(docTable, uicedName);
+
+    // The answer covers whatever the cxx index has read as well, which is
+    // every file of every open project: the form belongs to one of them,
+    // and a class of the same name in another is not the class behind it.
+    // The snapshot above was sifted that way already, up where it was made.
+    const FilePaths docList = uiProject
+        ? Utils::filtered(including, [uiProject](const FilePath &filePath) {
+              return ProjectManager::projectForFile(filePath) == uiProject;
+          })
+        : including;
+
     DocumentMap docMap;
     for (const FilePath &d : docList) {
         docMap.insert(qAbs(d.absolutePath().toUrlishString()

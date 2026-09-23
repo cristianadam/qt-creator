@@ -914,6 +914,33 @@ std::optional<FilePaths> CppLocatorData::indexedDirectIncludesFor(const FilePath
 #endif
 }
 
+FilePaths CppLocatorData::indexedIncludersOfFileNamed(const QString &fileName) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (fileName.isEmpty())
+        return {};
+
+    // A walk of the whole graph, which is the price of asking it backwards:
+    // it is a node per file with what that file includes, and nothing keys
+    // it the other way. In memory and over a few thousand entries, against
+    // a caller that asks once for a form somebody opened.
+    FilePaths includers;
+    QMutexLocker locker(&m_includeGraphMutex);
+    for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
+        for (const FilePath &included : it.value()) {
+            if (included.fileName() == fileName) {
+                includers.append(it.key());
+                break; // named once is named
+            }
+        }
+    }
+    return includers;
+#else
+    Q_UNUSED(fileName)
+    return {};
+#endif
+}
+
 int CppLocatorData::cxxFrontendClosuresServed() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND

@@ -177,8 +177,8 @@ CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, 
 // files, and reading them to find out would be a parse apiece.
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
-// The files \a snapshot has read that include a header called \a fileName,
-// once each, in no particular order.
+// The files that include a header called \a fileName, once each, in no
+// particular order.
 //
 // By the name it is included under rather than by a path, and whether or not
 // the include resolved to anything: a header uic writes is included by name
@@ -186,6 +186,14 @@ CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 // class behind a form is found. A reading is taken here rather than the model
 // manager's, because whoever asks means a particular set of files -- the
 // project a form belongs to, say.
+//
+// Both front ends answer: \a snapshot's own documents, and the files the cxx
+// index has read, which is every file of a project where no built-in pass
+// fills that snapshot. The index is project-wide and knows nothing of the
+// set \a snapshot stands for, so what comes back has to be sifted by a
+// caller that means one project's files. And the index knows an include by
+// the file it resolved to, so a header nothing has generated yet is found
+// through the snapshot alone.
 CPPEDITOR_EXPORT Utils::FilePaths filesIncludingFileNamed(const CPlusPlus::Snapshot &snapshot,
                                                           const QString &fileName);
 

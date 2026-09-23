@@ -1669,6 +1669,23 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
             break; // named once is named
         }
     }
+
+    // And the files the cxx index read, which is every file of the project
+    // where no pass fills the snapshot. Added rather than fallen back to:
+    // the snapshot handed in is whatever set of files the caller means, and
+    // the index knows nothing of that -- a caller that means one project's
+    // files sifts what comes back.
+    //
+    // The index knows an include by what it resolved to, so a header that
+    // has never been generated is not among these. That one the walk above
+    // answers for, and only for as long as something has parsed the file
+    // that writes the include.
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        for (const FilePath &includer : index->indexedIncludersOfFileNamed(fileName)) {
+            if (!files.contains(includer))
+                files.append(includer);
+        }
+    }
     return files;
 }
 

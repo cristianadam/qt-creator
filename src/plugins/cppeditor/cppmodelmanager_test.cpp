@@ -2010,6 +2010,43 @@ void ModelManagerTest::testWhatOneFileIncludes()
     QCOMPARE(locatorData->indexedDirectIncludesFor(dir.filePath() / "absent.h"), std::nullopt);
 }
 
+// Who writes an include of a header of this name, off the index as much as
+// off the snapshot.
+//
+// How the class behind a form is found: uic writes ui_<form>.h into a build
+// directory nobody here knows the path of, so the class is looked for among
+// the files that include a header of that name. Asked of the snapshot, that
+// question needs a pass to have parsed them.
+void ModelManagerTest::testWhoIncludesAHeaderOfThatName()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index keeps an include graph");
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.createFile("ui_form.h", "class Ui_Form {};\n");
+    const FilePath source = dir.createFile("form.cpp", "#include \"ui_form.h\"\n"
+                                                       "class Form {};\n");
+    const FilePath other = dir.createFile("other.cpp", "class Other {};\n");
+    QVERIFY(!header.isEmpty() && !source.isEmpty() && !other.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source, other}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked with an empty snapshot, which is what a session with no
+    // built-in pass has: whatever comes back is the index's answer.
+    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_form.h"), FilePaths({source}));
+
+    // A header of a name nobody includes is nobody's, and a file that
+    // includes nothing is not an answer to every question.
+    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_other.h"), FilePaths());
+}
+
 // What a test class declares, answered out of the index and the class's own
 // tokens: no pass has read the file, no translation unit is read, and the
 // answer is the one a reading gives.
