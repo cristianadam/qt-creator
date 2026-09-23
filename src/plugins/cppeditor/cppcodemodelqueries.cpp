@@ -2497,6 +2497,19 @@ Link CodeModelQueries::definitionOfWhatIsDeclaredAt(const FilePath &filePath,
                                                     int line, int column) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
+    // The index first, as definitionOfFunctionAt() asks it and for the same
+    // reason: where a function is defined is what an index is for, and the
+    // reading below is a parse of this file and, for a definition in
+    // another, a look into as many of that file's counterparts as the bound
+    // allows. It declines for anything that is not a function's own name,
+    // which is when the two below are asked.
+    if (Internal::cxxFrontendModelRequested()) {
+        if (const std::optional<Link> definition
+            = d->definitionFromTheIndex(filePath, line, column)) {
+            return *definition;
+        }
+    }
+
     // The other model answers for a function. A variable declared in one
     // file and defined in another is a question about the project that it
     // does not take, so that one is left to the front end that does.
@@ -2516,10 +2529,21 @@ Link CodeModelQueries::definitionOfWhatIsDeclaredAt(const FilePath &filePath,
         return {};
 
     SymbolFinder symbolFinder;
-    const Symbol * const definition
-        = symbol->type().type()->asFunctionType()
-              ? symbolFinder.findMatchingDefinition(symbol, d->snapshot, false)
-              : symbolFinder.findMatchingVarDefinition(symbol, d->snapshot);
+    if (symbol->type().type()->asFunctionType()) {
+        const Symbol * const definition
+            = symbolFinder.findMatchingDefinition(symbol, d->snapshot, false);
+        return definition ? definition->toLink() : Link();
+    }
+
+    // And a variable only, which is what is left of "declared in one place
+    // and defined in another". A class is not: it stands where it is
+    // written, and looking for it elsewhere walks every document whose
+    // control holds the name to say nothing. What arrives here that way is
+    // a test class in the Tests pane, opened as often as anything in it.
+    if (!symbol->asDeclaration())
+        return {};
+
+    const Symbol * const definition = symbolFinder.findMatchingVarDefinition(symbol, d->snapshot);
     return definition ? definition->toLink() : Link();
 }
 

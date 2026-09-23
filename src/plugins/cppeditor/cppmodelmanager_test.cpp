@@ -2419,6 +2419,18 @@ void ModelManagerTest::testTheIndexedDefinition()
     QCOMPARE(cxxFrontendReadingsMade(), readBefore);
 #endif
 
+    // The same short cut for the question that does not insist on standing
+    // at the name -- what a test in the Tests pane is opened by. Without
+    // it the answer is the same and a reading is what it costs: this file
+    // parsed, and then as many of the files whose names look like its
+    // counterparts as the bound allows.
+    const Link declared = read.definitionOfWhatIsDeclaredAt(header, 6, 10);
+    QCOMPARE(declared.targetFilePath, source);
+    QCOMPARE(declared.target.line, 3);
+#ifdef QTC_WITH_CXX_FRONTEND
+    QCOMPARE(cxxFrontendReadingsMade(), readBefore);
+#endif
+
     // A function nothing defines is not answered for out of the index: that
     // it holds no definition is no proof that the project has none -- a file
     // it has not indexed yet is exactly that -- so the question is passed on.
