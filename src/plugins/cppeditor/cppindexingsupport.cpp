@@ -175,14 +175,18 @@ QSet<FilePath> filesTheBuiltinPassReads(const QSet<FilePath> &all, bool passRequ
 {
     if (passRequested)
         return all;
-    QSet<FilePath> objC;
+    QSet<FilePath> theirs;
     for (const FilePath &filePath : all) {
-        if (ProjectFile::isObjC(filePath)
-            && !ProjectFile::isHeader(ProjectFile::classify(filePath))) {
-            objC.insert(filePath);
-        }
+        // Classified once: asking goes to the mime database, which stats
+        // the file and reads into one whose name it cannot place.
+        const ProjectFile::Kind kind = ProjectFile::classify(filePath);
+        if (!ProjectFile::isSource(kind))
+            continue;
+        if (kind == ProjectFile::CSource || kind == ProjectFile::CXXSource)
+            continue;
+        theirs.insert(filePath);
     }
-    return objC;
+    return theirs;
 }
 
 static void index(QPromise<void> &promise, const ParseParams params)
@@ -193,9 +197,17 @@ static void index(QPromise<void> &promise, const ParseParams params)
         promise.setProgressValue(params.sourceFiles.size());
         return;
     }
-    if (!builtinPassRequested()) {
-        qCDebug(indexerLog) << "Built-in pass skipped except for"
-                            << toRead.sourceFiles.size() << "Objective-C sources";
+
+    // The files this is not reading are as done as they are going to get,
+    // and the progress says so rather than sitting at nothing while the
+    // few that are read go by. What those few bring with them -- an
+    // Objective-C source reaches a thousand of AppKit's headers -- is not
+    // counted either way, here as in a full pass.
+    const int notRead = params.sourceFiles.size() - toRead.sourceFiles.size();
+    if (notRead > 0) {
+        promise.setProgressValue(notRead);
+        qCDebug(indexerLog) << "Built-in pass skipped except for" << toRead.sourceFiles.size()
+                            << "sources the cxx front end does not read";
     }
 
     QScopedPointer<Internal::CppSourceProcessor> sourceProcessor(CppModelManager::createSourceProcessor());
@@ -251,7 +263,7 @@ static void index(QPromise<void> &promise, const ParseParams params)
         sourceProcessor->setHeaderPaths(headerPaths);
         sourceProcessor->run(filePath);
 
-        promise.setProgressValue(files.size() - sourceProcessor->todo().size());
+        promise.setProgressValue(notRead + files.size() - sourceProcessor->todo().size());
 
         if (isSourceFile)
             sourceProcessor->resetEnvironment();

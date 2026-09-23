@@ -6,6 +6,7 @@
 #include "baseeditordocumentprocessor.h"
 #include "builtineditordocumentparser.h"
 #include "cppcodemodelqueries.h"
+#include "cppindexingsupport.h"
 #include "cpplocatordata.h"
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendindexcache.h"
@@ -340,29 +341,34 @@ void ModelManagerTest::testReadingOneNamedFileApart()
     QCOMPARE(CppModelManager::snapshot().size(), held);
 }
 
-// What the built-in pass still reads where it is skipped, which is
-// Objective-C and nothing else.
+// What the built-in pass still reads where it is skipped: the sources the
+// other model does not read, and nothing else.
 //
-// The cxx front end's index declines an Objective-C file outright rather
-// than making something wrong of it, so with the pass gone as well nothing
-// would describe one at all -- and a project of mixed languages would go
-// half indexed without anything saying so.
+// The cxx front end's index declines those outright rather than making
+// something wrong of them, so with the pass gone as well nothing would
+// describe them -- and a project of mixed languages would go half indexed
+// without anything saying so.
 void ModelManagerTest::testWhatTheBuiltinPassStillReads()
 {
     const QSet<FilePath> all{"/p/plain.cpp", "/p/plain.h", "/p/thing.mm", "/p/other.m",
-                             "/p/thing.h", "/p/c_only.c"};
+                             "/p/thing.h", "/p/c_only.c", "/p/kernel.cu", "/p/notes.txt"};
 
     // Running: everything it was given, which is what it always read.
     QCOMPARE(filesTheBuiltinPassReads(all, true), all);
 
-    // Skipped: the Objective-C sources. Not the headers -- which language a
-    // header is read as is the source that includes it saying so, and
-    // thing.h is as likely to be C++ as Objective-C++.
+    // Skipped: every C-family source but C and C++ -- Objective-C here,
+    // and CUDA, which the index passes over just as silently.
     QCOMPARE(filesTheBuiltinPassReads(all, false),
-             QSet<FilePath>({"/p/thing.mm", "/p/other.m"}));
+             QSet<FilePath>({"/p/thing.mm", "/p/other.m", "/p/kernel.cu"}));
 
-    // And a project with none of them leaves the pass with nothing to do,
-    // which is what the experiment is for.
+    // Not the headers: which language one is read as is the source that
+    // includes it saying so, and taking them here would take plain.h --
+    // every C++ header of the project -- along with thing.h.
+    // Nor anything that is no source at all, a project listing more than
+    // it compiles.
+
+    // And a project of C++ alone leaves the pass with nothing to do, which
+    // is what the experiment is for.
     QVERIFY(filesTheBuiltinPassReads({"/p/plain.cpp", "/p/plain.h"}, false).isEmpty());
 }
 

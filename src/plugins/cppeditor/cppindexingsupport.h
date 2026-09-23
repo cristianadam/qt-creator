@@ -19,14 +19,16 @@ namespace CppEditor::Internal {
 //
 // All of them where the pass is running, which is \a passRequested. Where it
 // is skipped -- the experiment behind QTC_NO_BUILTIN_INDEX_PASS -- the
-// Objective-C sources and nothing else: the cxx front end's index declines
-// those outright rather than making something wrong of them, so with the
-// pass gone as well nothing would describe them at all. No locator entry, no
-// class in the Class View, no test found in one.
+// sources the other model does not read, which is every C-family source
+// that is not C or C++: Objective-C, Objective-C++, CUDA, OpenCL. The cxx
+// front end declines those outright rather than making something wrong of
+// them, and its driver queues C and C++ sources alone, so with the pass gone
+// as well nothing would describe them. No locator entry, no class in the
+// Class View, no test found in one, and nothing saying why.
 //
-// Headers are not among them either way. Which language a header is read as
-// is the including source saying so, and a header of an Objective-C source
-// is read with it.
+// Sources only. A header is read with whatever includes it -- which language
+// it is read as is that source saying so -- and taking headers here would
+// take every C++ header in the project with them.
 CPPEDITOR_EXPORT QSet<Utils::FilePath> filesTheBuiltinPassReads(
     const QSet<Utils::FilePath> &all, bool passRequested);
 
