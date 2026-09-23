@@ -35,7 +35,11 @@ class DiagnosticsClient {
 
   DiagnosticsClient() = default;
 
-  virtual ~DiagnosticsClient();
+  // Defined here, not out of line: the parser makes a recording client on
+  // the stack for every lookahead it installs -- millions per translation
+  // unit -- and destroying one should not cost a call into another
+  // translation unit to run a destructor that does nothing.
+  virtual ~DiagnosticsClient() = default;
 
   virtual void report(const Diagnostic& diagnostic);
 

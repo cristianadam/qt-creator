@@ -33,8 +33,6 @@
 
 namespace cxx {
 
-DiagnosticsClient::~DiagnosticsClient() = default;
-
 auto reportOutsideImmediateContext(TranslationUnit* unit,
                                    const std::vector<Diagnostic>& diagnostics)
     -> bool {

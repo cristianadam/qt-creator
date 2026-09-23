@@ -389,21 +389,11 @@ auto Symbol::hasEnclosingSymbol(Symbol* symbol) const -> bool {
   return false;
 }
 
-auto Symbol::kind() const -> SymbolKind { return kind_; }
-
-auto Symbol::name() const -> const Name* { return name_; }
-
 void Symbol::setName(const Name* name) { name_ = name; }
-
-auto Symbol::type() const -> const Type* { return type_; }
 
 void Symbol::setType(const Type* type) { type_ = type; }
 
-auto Symbol::location() const -> SourceLocation { return location_; }
-
 void Symbol::setLocation(SourceLocation location) { location_ = location; }
-
-auto Symbol::parent() const -> ScopeSymbol* { return parent_; }
 
 auto Symbol::abiTags() const -> std::span<const Identifier* const> {
   if (!abiTags_) return {};
