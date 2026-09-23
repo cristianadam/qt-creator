@@ -309,6 +309,37 @@ void ModelManagerTest::testReadingOneNamedFile()
     QCOMPARE(CppModelManager::snapshot().size(), held);
 }
 
+// The same reading kept to the caller, which is what a caller listening to
+// the model has to have: publishing tells AutoTest's scan that a file it is
+// scanning has just been parsed, and the scan starts again.
+void ModelManagerTest::testReadingOneNamedFileApart()
+{
+    TestCase testCase;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath header = dir.filePath() / "apart.h";
+    QVERIFY(header.writeFileContents("class FromTheHeader {};\n"));
+    const FilePath source = dir.filePath() / "apart.cpp";
+    QVERIFY(source.writeFileContents("#include \"apart.h\"\nint fromTheSource;\n"));
+
+    QVERIFY(!CppModelManager::document(source));
+    const int held = CppModelManager::snapshot().size();
+
+    const CPlusPlus::Snapshot read = CppModelManager::parsedApart(source);
+    QVERIFY(read.document(source));
+
+    // The headers it was read through as well, which is the whole point of
+    // handing back the reading rather than the document: resolving a name
+    // written in the file is a walk of these.
+    QVERIFY(read.document(header));
+
+    // And the model is as it was -- nothing published, nothing to hear.
+    QVERIFY(!CppModelManager::document(source));
+    QVERIFY(!CppModelManager::document(header));
+    QCOMPARE(CppModelManager::snapshot().size(), held);
+}
+
 /// Check: Frameworks headers are resolved.
 void ModelManagerTest::testFrameworkHeaders()
 {

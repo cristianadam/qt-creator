@@ -166,7 +166,24 @@ public:
     /// good part of a second and some megabytes, on the thread that calls it. A caller
     /// that wants an answer for many files wants the index instead -- see
     /// CodeModelQueries, which answers off whichever front end has the file.
+    ///
     static Document::Ptr parsedDocument(const Utils::FilePath &filePath);
+
+    /// \return The same reading, kept to the caller: the document for \a filePath and
+    ///         every file it was read through, published nowhere. An empty snapshot
+    ///         where the file is not one to read.
+    ///
+    /// The files and not just the document, because what a caller does with one is
+    /// resolve names in it, and that is a walk of what it was read through: a document
+    /// on its own knows the namespace an include declared no better than the file's
+    /// own text does.
+    ///
+    /// For a caller that is itself listening to what the model publishes: AutoTest's
+    /// scan reparses a file the moment it hears the model has a document for it, so a
+    /// scan that published as it went would be scanning its own wake. It costs the
+    /// sharing -- what the model already holds is still read *from*, but nothing new
+    /// is kept, so the next file that reaches the same headers reads them again.
+    static CPlusPlus::Snapshot parsedApart(const Utils::FilePath &filePath);
 
     static bool replaceDocument(Document::Ptr newDoc);
 

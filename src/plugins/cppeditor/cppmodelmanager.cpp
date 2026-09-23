@@ -1049,7 +1049,13 @@ Document::Ptr CppModelManager::document(const FilePath &filePath)
 static QSet<FilePath> filteredFilesRemoved(const QSet<FilePath> &files,
                                            const CppCodeModelSettingsData &settings);
 
-Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
+// Reads \a filePath the way the indexing pass reads one file, and hands back
+// everything that reading took -- the file and the headers it reached.
+// Publishing it to the model is the source processor's callback, so \a publish
+// false is a processor made with none.
+//
+// An empty snapshot where the file is not one to read.
+static Snapshot readOneFile(const FilePath &filePath, bool publish)
 {
     // What the model has already, unless the file has moved on since it was
     // read -- the same comparison timeStampModifiedFiles() makes for a
@@ -1059,18 +1065,12 @@ Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
     // before, for the rest of the session. A document with no time of its
     // own was made from an editor's buffer rather than from disk, and that
     // one is the better answer whatever the disk says.
-    const Document::Ptr already = document(filePath);
-    if (already && (already->lastModified().isNull()
-                    || already->lastModified() == filePath.lastModified())) {
-        return already;
-    }
-
     // Nothing to read is nothing to say, and it has to be said here:
     // CppSourceProcessor's "could not read it" exit is written for a file
     // included *from* another, so at the top level it falls through and
     // publishes a document under an empty path -- which then stands in the
     // snapshot for every file nobody can read.
-    if (!workingCopy().get(filePath) && !filePath.isReadableFile())
+    if (!CppModelManager::workingCopy().get(filePath) && !filePath.isReadableFile())
         return {};
 
     // And nothing this front end reads is nothing to parse. A file with no
@@ -1099,12 +1099,15 @@ Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
     // The pass's choice of part, too, and not the editor's: parts.first()
     // where a file is in several, and the fallback paths where it is in
     // none, which is most headers.
-    const QList<ProjectPart::ConstPtr> parts = projectPart(filePath);
+    const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
     const ProjectPart::ConstPtr part = parts.isEmpty() ? ProjectPart::ConstPtr() : parts.first();
 
-    const std::unique_ptr<CppSourceProcessor> processor(createSourceProcessor());
-    processor->setWorkingCopy(workingCopy());
-    processor->setHeaderPaths(part ? part->headerPaths : headerPaths());
+    const std::unique_ptr<CppSourceProcessor> processor(
+        publish ? CppModelManager::createSourceProcessor()
+                : new CppSourceProcessor(CppModelManager::snapshot(),
+                                         [](const Document::Ptr &) {}));
+    processor->setWorkingCopy(CppModelManager::workingCopy());
+    processor->setHeaderPaths(part ? part->headerPaths : CppModelManager::headerPaths());
     processor->setLanguageFeatures(
         part ? part->languageFeatures
              : ProjectFile::isC(ProjectFile::classify(filePath))
@@ -1120,13 +1123,47 @@ Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
     // one that has changed since -- reusing what it said before is the
     // answer this exists to avoid.
     processor->removeFromCache(filePath);
-    processor->run(configurationFileName());
+    processor->run(CppModelManager::configurationFileName());
     processor->run(filePath);
+    return processor->snapshot();
+}
 
-    // From the model rather than from the processor: what it read went
-    // through replaceDocument(), which is where a document newer than this
-    // one wins -- the editor may have parsed the same file while this ran.
+Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
+{
+    // What the model has already, unless the file has moved on since it was
+    // read -- the same comparison timeStampModifiedFiles() makes for a
+    // session coming back to a project. Where the pass is off nothing else
+    // ever reads a file again that is not open in an editor, so a caller
+    // that has just written the file would otherwise be handed what it said
+    // before, for the rest of the session. A document with no time of its
+    // own was made from an editor's buffer rather than from disk, and that
+    // one is the better answer whatever the disk says.
+    const Document::Ptr already = document(filePath);
+    if (already && (already->lastModified().isNull()
+                    || already->lastModified() == filePath.lastModified())) {
+        return already;
+    }
+
+    readOneFile(filePath, true);
+
+    // From the model rather than from what was read: it went through
+    // replaceDocument(), which is where a document newer than this one wins
+    // -- the editor may have parsed the same file while this ran.
     return document(filePath);
+}
+
+Snapshot CppModelManager::parsedApart(const FilePath &filePath)
+{
+    // What the model has, where it has it: the snapshot holds the file and
+    // the headers it was read through, which is the same thing a reading
+    // here would hand back.
+    const Document::Ptr already = document(filePath);
+    if (already && (already->lastModified().isNull()
+                    || already->lastModified() == filePath.lastModified())) {
+        return snapshot();
+    }
+
+    return readOneFile(filePath, false);
 }
 
 /// Replace the document in the snapshot.

@@ -15,6 +15,7 @@ private slots:
     void testPathsAreClean();
     void testLanguageFeaturesWithoutAParse();
     void testReadingOneNamedFile();
+    void testReadingOneNamedFileApart();
     void testFrameworkHeaders();
     void testRefreshAlsoIncludesOfProjectFiles();
     void testRefreshSeveralTimes();

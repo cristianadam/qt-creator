@@ -110,22 +110,36 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     const FilePath &projectFile = projectPart->projectFile;
     const QByteArray &fileContent = getFileContent(fileName);
 
-    // What a suite is called is read off what the file's macros resolve to,
-    // which is the one question here that still wants a translation unit.
-    // Asked last, so a file that names no Boost test at all costs nothing.
+    // What the decorators a file writes settle is read off what their names
+    // resolve to -- "disabled" as boost::unit_test::decorator::disabled,
+    // through whatever namespace alias or using declaration the file wrote
+    // -- and that is the one question here that still wants a translation
+    // unit. Asked last, so a file that names no Boost test at all costs
+    // nothing.
     //
-    // The built-in pass's document where there is one, and one made here
-    // otherwise -- the way the GTest parser makes its own. What that costs
-    // is a preprocessing and a check of this file; what it does not have is
-    // headers the built-in model never read, so a decorator whose name comes
-    // from one of those is left unresolved rather than read wrongly.
+    // The built-in pass's reading where there is one, and one made here
+    // otherwise: the file read with its project part's header paths, so
+    // that Boost's own headers are among what the name is looked up in.
+    // Kept to this scan -- publishing it would tell the scan that the file
+    // it is scanning has just been parsed, and the scan would start again.
+    //
+    // The whole reading and not just the document, because the lookup walks
+    // the files it was read through. What the reading costs is a parse of
+    // this file and those headers, per file that writes a Boost test.
+    CPlusPlus::Snapshot lookIn = m_cppSnapshot;
     CPlusPlus::Document::Ptr doc = document(fileName);
     if (doc.isNull()) {
+        lookIn = CppEditor::CppModelManager::parsedApart(fileName);
+        doc = lookIn.document(fileName);
+    }
+    if (doc.isNull()) {
+        // Nothing could read it: the file's own text, which says what the
+        // macros are but resolves no name at all.
         doc = m_cppSnapshot.preprocessedDocument(fileContent, fileName, false);
         doc->check();
     }
 
-    BoostCodeParser codeParser(fileContent, projectPart->languageFeatures, doc, m_cppSnapshot);
+    BoostCodeParser codeParser(fileContent, projectPart->languageFeatures, doc, lookIn);
     const BoostTestCodeLocationList foundTests = codeParser.findTests();
     if (foundTests.isEmpty())
         return false;
