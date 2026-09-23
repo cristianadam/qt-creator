@@ -7,6 +7,7 @@
 #include "cppchecksymbols.h"
 #include "cppeditorconstants.h"
 #include "cppeditortr.h"
+#include "cppprojectfile.h"
 #include "cppsourceprocessor.h"
 #include "searchsymbols.h"
 
@@ -170,28 +171,48 @@ static bool builtinPassRequested()
     return !skipped;
 }
 
+QSet<FilePath> filesTheBuiltinPassReads(const QSet<FilePath> &all, bool passRequested)
+{
+    if (passRequested)
+        return all;
+    QSet<FilePath> objC;
+    for (const FilePath &filePath : all) {
+        if (ProjectFile::isObjC(filePath)
+            && !ProjectFile::isHeader(ProjectFile::classify(filePath))) {
+            objC.insert(filePath);
+        }
+    }
+    return objC;
+}
+
 static void index(QPromise<void> &promise, const ParseParams params)
 {
-    if (!builtinPassRequested()) {
+    ParseParams toRead = params;
+    toRead.sourceFiles = filesTheBuiltinPassReads(params.sourceFiles, builtinPassRequested());
+    if (toRead.sourceFiles.isEmpty()) {
         promise.setProgressValue(params.sourceFiles.size());
         return;
     }
+    if (!builtinPassRequested()) {
+        qCDebug(indexerLog) << "Built-in pass skipped except for"
+                            << toRead.sourceFiles.size() << "Objective-C sources";
+    }
 
     QScopedPointer<Internal::CppSourceProcessor> sourceProcessor(CppModelManager::createSourceProcessor());
-    sourceProcessor->setHeaderPaths(params.headerPaths);
-    sourceProcessor->setWorkingCopy(params.workingCopy);
+    sourceProcessor->setHeaderPaths(toRead.headerPaths);
+    sourceProcessor->setWorkingCopy(toRead.workingCopy);
 
     ProjectFiles sources;
     ProjectFiles headers;
-    classifyFiles(params.sourceFiles, &headers, &sources);
+    classifyFiles(toRead.sourceFiles, &headers, &sources);
 
-    for (const FilePath &file : std::as_const(params.sourceFiles))
+    for (const FilePath &file : std::as_const(toRead.sourceFiles))
         sourceProcessor->removeFromCache(file);
 
     const int sourceCount = sources.size();
     ProjectFiles files = sources + headers;
 
-    sourceProcessor->setTodo(params.sourceFiles);
+    sourceProcessor->setTodo(toRead.sourceFiles);
 
     const FilePath &conf = CppModelManager::configurationFileName();
     bool processingHeaders = false;

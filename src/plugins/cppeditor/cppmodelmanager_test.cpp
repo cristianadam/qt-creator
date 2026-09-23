@@ -340,6 +340,32 @@ void ModelManagerTest::testReadingOneNamedFileApart()
     QCOMPARE(CppModelManager::snapshot().size(), held);
 }
 
+// What the built-in pass still reads where it is skipped, which is
+// Objective-C and nothing else.
+//
+// The cxx front end's index declines an Objective-C file outright rather
+// than making something wrong of it, so with the pass gone as well nothing
+// would describe one at all -- and a project of mixed languages would go
+// half indexed without anything saying so.
+void ModelManagerTest::testWhatTheBuiltinPassStillReads()
+{
+    const QSet<FilePath> all{"/p/plain.cpp", "/p/plain.h", "/p/thing.mm", "/p/other.m",
+                             "/p/thing.h", "/p/c_only.c"};
+
+    // Running: everything it was given, which is what it always read.
+    QCOMPARE(filesTheBuiltinPassReads(all, true), all);
+
+    // Skipped: the Objective-C sources. Not the headers -- which language a
+    // header is read as is the source that includes it saying so, and
+    // thing.h is as likely to be C++ as Objective-C++.
+    QCOMPARE(filesTheBuiltinPassReads(all, false),
+             QSet<FilePath>({"/p/thing.mm", "/p/other.m"}));
+
+    // And a project with none of them leaves the pass with nothing to do,
+    // which is what the experiment is for.
+    QVERIFY(filesTheBuiltinPassReads({"/p/plain.cpp", "/p/plain.h"}, false).isEmpty());
+}
+
 /// Check: Frameworks headers are resolved.
 void ModelManagerTest::testFrameworkHeaders()
 {
