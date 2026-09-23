@@ -944,6 +944,42 @@ FilePaths CppLocatorData::indexedIncludersOfFileNamed(const QString &fileName) c
 #endif
 }
 
+std::optional<FilePaths> CppLocatorData::indexedFilesDependingOn(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    QMutexLocker locker(&m_includeGraphMutex);
+    if (!m_includeGraph.contains(filePath))
+        return std::nullopt;
+
+    // The graph is what each file includes; this is the other direction,
+    // so it is turned round first. Once per ask rather than kept: what it
+    // is asked for is a search somebody started, where the index is asked
+    // for a file's own includes as often as an editor redraws.
+    QHash<FilePath, FilePaths> includers;
+    for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
+        for (const FilePath &included : it.value())
+            includers[included].append(it.key());
+    }
+
+    FilePaths reached;
+    QSet<FilePath> seen{filePath};
+    FilePaths pending{filePath};
+    while (!pending.isEmpty()) {
+        const FilePath current = pending.takeLast();
+        for (const FilePath &includer : includers.value(current)) {
+            if (!Utils::insert(seen, includer))
+                continue;
+            reached.append(includer);
+            pending.append(includer);
+        }
+    }
+    return reached;
+#else
+    Q_UNUSED(filePath)
+    return std::nullopt;
+#endif
+}
+
 int CppLocatorData::cxxFrontendClosuresServed() const
 {
 #ifdef QTC_WITH_CXX_FRONTEND

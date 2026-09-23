@@ -139,6 +139,21 @@ public:
     // resolved or not -- is the one that can still answer for it.
     Utils::FilePaths indexedIncludersOfFileNamed(const QString &fileName) const;
 
+    // Every file that reaches \a filePath through its includes, directly or
+    // through headers of its own -- the question a reader asks before
+    // searching for what a symbol declared there is used by.
+    //
+    // Nothing where the index has never covered the file, which is not the
+    // same as nothing reaching it: a caller then has to ask whoever has.
+    //
+    // The graph read backwards again, and transitively this time, which is
+    // a walk of every edge. Against CPlusPlus::Snapshot::filesDependingOn(),
+    // which builds a table of every file against every other -- and builds
+    // it afresh for each caller, a snapshot being handed out with an empty
+    // one.
+    std::optional<Utils::FilePaths> indexedFilesDependingOn(
+        const Utils::FilePath &filePath) const;
+
 private:
     // The store, or nothing where none has been made yet.
     Internal::CxxFrontendIndexCache *storeIfMade() const;

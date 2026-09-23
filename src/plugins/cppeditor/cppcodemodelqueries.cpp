@@ -1689,6 +1689,18 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
     return files;
 }
 
+FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &filePath)
+{
+    if (snapshot.contains(filePath))
+        return snapshot.filesDependingOn(filePath);
+
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        if (const std::optional<FilePaths> reaching = index->indexedFilesDependingOn(filePath))
+            return *reaching;
+    }
+    return {};
+}
+
 FilePaths includesOf(const FilePath &filePath)
 {
     // A reading the built-in pass made first, which reports the include

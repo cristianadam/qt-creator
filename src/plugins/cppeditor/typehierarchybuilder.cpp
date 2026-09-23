@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "typehierarchybuilder.h"
+#include "cppcodemodelqueries.h"
 
 #include <cplusplus/LookupContext.h>
 #include <cplusplus/SymbolVisitor.h>
@@ -254,7 +255,7 @@ static FilePaths filesDependingOn(const Snapshot &snapshot, Symbol *symbol)
         return {};
 
     const FilePath file = symbol->filePath();
-    return FilePaths{file} + snapshot.filesDependingOn(file);
+    return FilePaths{file} + CppEditor::filesDependingOn(snapshot, file);
 }
 
 // The class written at \a line and \a column of \a document, which is how a

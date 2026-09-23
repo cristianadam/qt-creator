@@ -197,6 +197,21 @@ CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 CPPEDITOR_EXPORT Utils::FilePaths filesIncludingFileNamed(const CPlusPlus::Snapshot &snapshot,
                                                           const QString &fileName);
 
+// The files that reach \a filePath through their includes, directly or
+// through headers of their own -- what a search for the uses of something
+// declared there has to look through.
+//
+// \a snapshot first, where it has the file: that is what a built-in
+// indexing pass left behind, and it is the answer this question has always
+// had. The cxx index's include graph otherwise, which is the only answer
+// where no such pass runs -- and where neither knows the file, nothing.
+//
+// Snapshot::filesDependingOn() is the first of those on its own, and it is
+// not cheap: a snapshot is handed out with no dependency table, so the
+// first ask builds one of every file against every other.
+CPPEDITOR_EXPORT Utils::FilePaths filesDependingOn(const CPlusPlus::Snapshot &snapshot,
+                                                   const Utils::FilePath &filePath);
+
 class CPPEDITOR_EXPORT CodeModelQueries
 {
 public:

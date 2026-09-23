@@ -2118,6 +2118,52 @@ void ModelManagerTest::testWhoIncludesAHeaderOfThatName()
              FilePaths());
 }
 
+// Which files reach a header, off the index: what a search for the uses of
+// something declared in it has to look through, and what
+// Snapshot::filesDependingOn() answers only for the files a pass parsed.
+void ModelManagerTest::testWhichFilesReachAHeader()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index keeps an include graph");
+
+    TestCase testCase;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // Two deep, so that a walk of the graph is told from one step of it:
+    // the source reaches the leaf and includes it not.
+    const FilePath leaf = dir.createFile("reach_leaf.h", "class ReachLeaf {};\n");
+    const FilePath middle = dir.createFile("reach_middle.h", "#include \"reach_leaf.h\"\n"
+                                                             "class ReachMiddle {};\n");
+    const FilePath source = dir.createFile("reach_unit.cpp", "#include \"reach_middle.h\"\n"
+                                                             "class ReachUnit {};\n");
+    const FilePath other = dir.createFile("reach_other.cpp", "class ReachOther {};\n");
+    QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty() && !other.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source, other}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked with an empty snapshot, which is what a session with no
+    // built-in pass has: the answer is the index's.
+    const FilePaths reachingLeaf = filesDependingOn(CPlusPlus::Snapshot(), leaf);
+    QCOMPARE(Utils::toSet(reachingLeaf), QSet<FilePath>({middle, source}));
+
+    // One step up, and the file that includes nothing reaches nothing.
+    QCOMPARE(filesDependingOn(CPlusPlus::Snapshot(), middle), FilePaths({source}));
+    QCOMPARE(filesDependingOn(CPlusPlus::Snapshot(), other), FilePaths());
+
+    // A file the index never covered is not "reached by nothing": it is no
+    // answer at all, and the caller is left to ask whoever has it.
+    QCOMPARE(filesDependingOn(CPlusPlus::Snapshot(), dir.filePath() / "reach_absent.h"),
+             FilePaths());
+    QCOMPARE(locatorData->indexedFilesDependingOn(dir.filePath() / "reach_absent.h"),
+             std::nullopt);
+}
+
 // What a test class declares, answered out of the index and the class's own
 // tokens: no pass has read the file, no translation unit is read, and the
 // answer is the one a reading gives.
