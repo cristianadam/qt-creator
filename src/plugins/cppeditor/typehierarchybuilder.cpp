@@ -22,20 +22,11 @@ using namespace Utils;
 namespace CppEditor::Internal {
 namespace {
 
-QString unqualifyName(const QString &qualifiedName)
-{
-    const int index = qualifiedName.lastIndexOf(QLatin1String("::"));
-    if (index == -1)
-        return qualifiedName;
-    return qualifiedName.right(qualifiedName.size() - index - 2);
-}
-
 class DerivedHierarchyVisitor : public SymbolVisitor
 {
 public:
     explicit DerivedHierarchyVisitor(const QString &qualifiedName, QHash<QString, QHash<QString, QString>> &cache)
         : _qualifiedName(qualifiedName)
-        , _unqualifiedName(unqualifyName(qualifiedName))
         , _cache(cache)
     {}
 
@@ -51,7 +42,6 @@ private:
 
     LookupContext _context;
     QString _qualifiedName;
-    QString _unqualifiedName;
     Overview _overview;
     // full scope name to base symbol name to fully qualified base symbol name
     QHash<QString, QHash<QString, QString>> &_cache;
