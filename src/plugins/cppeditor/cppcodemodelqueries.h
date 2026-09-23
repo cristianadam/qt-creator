@@ -331,6 +331,21 @@ public:
     ClassWithPrivateSlots classWithPrivateSlots(const Utils::FilePath &filePath,
                                                 const QString &className) const;
 
+    // Whether \a filePath writes \a name anywhere -- as an identifier of its
+    // own, so not as part of a longer one and not inside a comment or a
+    // string.
+    //
+    // The filter a search over a project's files puts in front of the dear
+    // question: a file that never writes the name cannot say anything about
+    // the thing it names, and asking a front end instead is a parse of that
+    // file and every header it reaches.
+    //
+    // Off the identifiers a built-in reading interned where there is one,
+    // and off the file's own tokens otherwise -- a lex, which is what makes
+    // this affordable for a file no pass has read. False where the file
+    // cannot be read: nothing can be found in it either way.
+    bool writesTheName(const Utils::FilePath &filePath, const QString &name) const;
+
     // A use of a function-like macro, and what it was handed as written. A
     // macro whose definition nobody here has still says what it was given,
     // which is how QTEST_MAIN(tst_Simple) names the class a test runs.

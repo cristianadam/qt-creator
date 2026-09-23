@@ -14,6 +14,7 @@ class TypeHierarchyBuilderTest : public QObject
 private slots:
     void test_data();
     void test();
+    void testWithNoIndexingPass();
 };
 
 } // namespace CppEditor::Internal

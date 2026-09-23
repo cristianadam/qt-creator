@@ -6587,6 +6587,10 @@ QList<CxxFrontendDocument::ClassWithBases> CxxFrontendDocument::classesWithTheir
         written.qualifiedName = qualifiedNameOf(specifier->symbol);
         if (written.qualifiedName.isEmpty())
             continue;
+        written.name = specifier->symbol->name()
+                           ? fromStd(cxx::to_string(specifier->symbol->name()))
+                           : QString();
+        written.icon = iconTypeOf(specifier->symbol, specifier->classKey);
         const cxx::SourcePosition position = d->unit.tokenStartPosition(name);
         written.place = {d->fileName, int(position.line), int(position.column)};
         for (const auto &base : specifier->symbol->baseClasses()) {

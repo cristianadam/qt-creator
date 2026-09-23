@@ -6,6 +6,7 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Overview.h>
 
+#include "cppcodemodelqueries.h"
 #include "cppworkingcopy.h"
 
 #include <utils/filepath.h>
@@ -91,21 +92,14 @@ HierarchyClass hierarchyClassFor(CPlusPlus::Symbol *symbol);
 // HierarchyClass instead.
 CPlusPlus::Class *classOf(const CPlusPlus::Snapshot &snapshot, const HierarchyClass &klass);
 
-// One class that derives from the one being asked about: what it is called
-// and where it writes its name, so that whichever front end found it, the
-// class itself can be picked out of the file's own parse again.
-struct DerivedClass
-{
-    QString qualifiedName;
-    int line = 0;   // one-based, as every front end counts them
-    int column = 0;
-};
-
 // Which classes in \a filePath derive from the class called \a qualifiedName.
 // What either front end answers, and the only part of this that needs one:
 // the walk over the files, the recursion and the cache know no tree.
-using DerivedFinder = std::function<QList<DerivedClass>(const Utils::FilePath &filePath,
-                                                        const QString &qualifiedName)>;
+//
+// In the tree's own terms, so that a front end that found a class in a file
+// nothing else has read has said the whole of what the tree needs.
+using DerivedFinder = std::function<QList<HierarchyClass>(const Utils::FilePath &filePath,
+                                                          const QString &qualifiedName)>;
 
 class TypeHierarchyBuilder
 {
@@ -122,11 +116,19 @@ public:
                                                CPlusPlus::Scope *enclosingScope,
                                                std::set<const CPlusPlus::Symbol *> typedefs = {});
 private:
-    explicit TypeHierarchyBuilder(const DerivedFinder &finder) : _finder(finder) {}
+    TypeHierarchyBuilder(const DerivedFinder &finder, const CPlusPlus::Snapshot &snapshot,
+                         const WorkingCopy &workingCopy)
+        : _finder(finder), _queries(snapshot, workingCopy)
+    {}
     void buildDerived(const std::optional<QFuture<void>> &future, TypeHierarchy *typeHierarchy,
                       const CPlusPlus::Snapshot &snapshot);
 
     const DerivedFinder _finder;
+
+    // Held for the whole walk: the filter it answers reads a file's own
+    // tokens where no reading has it, and the files a hierarchy asks about
+    // overlap heavily from one class to the next.
+    CodeModelQueries _queries;
     QSet<Utils::Link> _visited;
     CPlusPlus::Overview _overview;
 };

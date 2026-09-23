@@ -7,6 +7,10 @@
 #include "typehierarchybuilder.h"
 
 #include "cppmodelmanager.h"
+#include "cpplocatordata.h"
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
 
 #include <cplusplus/Overview.h>
 #include <cplusplus/SymbolVisitor.h>
@@ -226,6 +230,68 @@ void TypeHierarchyBuilderTest::test()
     QFETCH(QString, expectedHierarchy);
 
     TypeHierarchyBuilderTestCase(documents, expectedHierarchy);
+}
+
+// What derives from a class, out of files no built-in indexing pass has
+// read: the index says which of them reach the one the class is written
+// in, the files' own tokens say which of those even write its name, and
+// what is left is read.
+//
+// The snapshot here holds the header alone, which is what a session with no
+// pass has once somebody opens it -- every derived class is in a file it has
+// no document for, and every one of them used to be dropped.
+void TypeHierarchyBuilderTest::testWithNoIndexingPass()
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (!cxxFrontendModelRequested())
+        QSKIP("Only that model reads a file the snapshot has no document for");
+#else
+    QSKIP("Only that model reads a file the snapshot has no document for");
+#endif
+
+    CppEditor::Tests::TestCase testCase;
+    QVERIFY(testCase.succeededSoFar());
+
+    CppEditor::Tests::TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const FilePath base = dir.createFile("thbase.h", "class ThBase {};\n");
+    // Two deep, so that the walk is told from one step of it, and one file
+    // that reaches the header without deriving from anything in it.
+    const FilePath middle = dir.createFile("thmiddle.h", "#include \"thbase.h\"\n"
+                                                         "struct ThMiddle : public ThBase {};\n");
+    const FilePath leaf = dir.createFile("thleaf.h", "#include \"thmiddle.h\"\n"
+                                                     "class ThLeaf : public ThMiddle {};\n");
+    const FilePath bystander = dir.createFile("thbystander.h", "#include \"thbase.h\"\n"
+                                                               "class ThBystander {};\n");
+    QVERIFY(!base.isEmpty() && !middle.isEmpty() && !leaf.isEmpty() && !bystander.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({base, middle, leaf, bystander}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    const Snapshot parsed = CppModelManager::snapshot();
+    const Document::Ptr baseDocument = parsed.document(base);
+    QVERIFY(baseDocument);
+    Class * const clazz = FindFirstClassInDocument()(baseDocument);
+    QVERIFY(clazz);
+
+    // The header on its own, as one open editor would leave it.
+    Snapshot asIfOneEditorWereOpen;
+    asIfOneEditorWereOpen.insert(baseDocument);
+
+    const TypeHierarchy hierarchy = TypeHierarchyBuilder::buildDerivedTypeHierarchy(
+        clazz, asIfOneEditorWereOpen, CppModelManager::workingCopy());
+    QCOMPARE(toString(hierarchy), QString::fromLatin1("ThBase\n  ThMiddle\n    ThLeaf\n"));
+
+    // And the icon is the model's own answer, not a default: ThMiddle is
+    // written as a struct and ThLeaf as a class.
+    QCOMPARE(hierarchy.hierarchy().size(), 1);
+    QCOMPARE(hierarchy.hierarchy().first().klass().iconType, Utils::CodeModelIcon::Struct);
+    QCOMPARE(hierarchy.hierarchy().first().hierarchy().first().klass().iconType,
+             Utils::CodeModelIcon::Class);
 }
 
 } // namespace CppEditor::Internal

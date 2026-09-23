@@ -43,7 +43,7 @@ public:
 
     bool visit(Class *) override;
 
-    const QList<DerivedClass> &derived() { return _derived; }
+    const QList<HierarchyClass> &derived() { return _derived; }
     const QSet<QString> otherBases() { return _otherBases; }
 
 private:
@@ -56,7 +56,7 @@ private:
     // full scope name to base symbol name to fully qualified base symbol name
     QHash<QString, QHash<QString, QString>> &_cache;
     QSet<QString> _otherBases;
-    QList<DerivedClass> _derived;
+    QList<HierarchyClass> _derived;
 };
 
 void DerivedHierarchyVisitor::execute(const Document::Ptr &doc,
@@ -94,8 +94,7 @@ bool DerivedHierarchyVisitor::visit(Class *symbol)
         }
 
         if (_qualifiedName == fullBaseName) {
-            _derived.append({_overview.prettyName(LookupContext::fullyQualifiedName(symbol)),
-                             symbol->line(), symbol->column()});
+            _derived.append(hierarchyClassFor(symbol));
         } else {
             _otherBases.insert(fullBaseName);
         }
@@ -151,10 +150,10 @@ static DerivedFinder builtinDerivedFinder(const Snapshot &snapshot)
     return [snapshot, cache](const Utils::FilePath &filePath, const QString &qualifiedName) {
         const Document::Ptr doc = snapshot.document(filePath);
         if (!doc)
-            return QList<DerivedClass>();
+            return QList<HierarchyClass>();
         if (cache->otherBases.contains(filePath)
             && !cache->otherBases.value(filePath).contains(qualifiedName)) {
-            return QList<DerivedClass>();
+            return QList<HierarchyClass>();
         }
 
         DerivedHierarchyVisitor visitor(qualifiedName, cache->bases);
@@ -193,10 +192,13 @@ static DerivedFinder modelDerivedFinder(const DerivedFinder &builtinFinder,
         if (!classes)
             return builtinFinder(filePath, qualifiedName);
 
-        QList<DerivedClass> derived;
+        QList<HierarchyClass> derived;
         for (const CxxFrontendDocument::ClassWithBases &written : *classes) {
-            if (written.bases.contains(qualifiedName))
-                derived.append({written.qualifiedName, written.place.line, written.place.column});
+            if (!written.bases.contains(qualifiedName))
+                continue;
+            derived.append({written.name, written.qualifiedName,
+                            Utils::FilePath::fromUserInput(written.place.filePath),
+                            written.place.line, written.place.column, written.icon});
         }
         return derived;
     };
@@ -222,7 +224,7 @@ TypeHierarchy TypeHierarchyBuilder::buildDerivedTypeHierarchy(Symbol *symbol,
               const std::optional<QFuture<void>> &future)
 {
     TypeHierarchy hierarchy(hierarchyClassFor(symbol));
-    TypeHierarchyBuilder builder(derivedFinder(snapshot, workingCopy));
+    TypeHierarchyBuilder builder(derivedFinder(snapshot, workingCopy), snapshot, workingCopy);
     builder.buildDerived(future, &hierarchy, snapshot);
     return hierarchy;
 }
@@ -265,17 +267,17 @@ LookupItem TypeHierarchyBuilder::followTypedef(const LookupContext &context, con
     return matchingItem;
 }
 
-static FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &file)
+// Every file that reaches the one the class is written in, itself first.
+//
+// What either model knows, now that a file the snapshot has no document for
+// is one this walk can still look at: the reading that finds the derived
+// classes in it reads the file itself, and the filter in front of it reads
+// the file's own tokens.
+static FilePaths filesThatReach(const Snapshot &snapshot, const FilePath &file)
 {
     if (file.isEmpty())
         return {};
-
-    // The snapshot's own answer, and not the index's beside it: every file
-    // this walk is handed is dropped again unless the snapshot has a
-    // document for it, so a file only the index knows about is a file this
-    // cannot look at. What would make the index worth asking here is
-    // reading those files, which is a parse apiece.
-    return FilePaths{file} + snapshot.filesDependingOn(file);
+    return FilePaths{file} + CppEditor::filesDependingOn(snapshot, file);
 }
 
 // The class written at \a line and \a column of \a document, which is how a
@@ -329,28 +331,19 @@ void TypeHierarchyBuilder::buildDerived(const std::optional<QFuture<void>> &futu
     if (klass.qualifiedName.isEmpty() || !Utils::insert(_visited, klass.link()))
         return;
 
-    const QByteArray ownName = klass.name.toUtf8();
-    const FilePaths dependingFiles = filesDependingOn(snapshot, klass.filePath);
+
+    const FilePaths dependingFiles = filesThatReach(snapshot, klass.filePath);
 
     for (const FilePath &fileName : dependingFiles) {
         if (future && future->isCanceled())
             return;
-        const Document::Ptr doc = snapshot.document(fileName);
-
-        // A file that never wrote the name cannot name the class, which is
+        // A file that never writes the name cannot name the class, which is
         // what keeps this from reading the project.
-        if (!doc || ownName.isEmpty()
-            || !doc->control()->findIdentifier(ownName.constData(), ownName.size())) {
+        if (!_queries.writesTheName(fileName, klass.name))
             continue;
-        }
 
-        for (const DerivedClass &derived : _finder(fileName, klass.qualifiedName)) {
-            // Through the file's own parse, which is what says whether the
-            // class is written as a class or as a struct.
-            Class * const derivedClass = classWrittenAt(doc, derived.line, derived.column);
-            if (!derivedClass)
-                continue;
-            TypeHierarchy derivedHierarchy(hierarchyClassFor(derivedClass));
+        for (const HierarchyClass &derived : _finder(fileName, klass.qualifiedName)) {
+            TypeHierarchy derivedHierarchy(derived);
             buildDerived(future, &derivedHierarchy, snapshot);
             if (future && future->isCanceled())
                 return;

@@ -1845,6 +1845,14 @@ public:
     //
     // What is being typed rather than what is on disk where somebody has the
     // file open, the same way a reparse takes it.
+    // Bounded, and that is worth knowing before adding a reader here. Most
+    // of them ask about a handful of files and the memo is pure gain, but
+    // the hierarchy walk asks whether each of a project's files writes a
+    // name -- and a Lexed holds the file's text. Past the bound the memo
+    // begins again, so what a later ask costs is a lex and never a wrong
+    // answer. What is handed out stays alive on its own.
+    static constexpr int kLexedCharBound = 16 * 1024 * 1024;
+
     std::shared_ptr<const Lexed> lexed(const FilePath &filePath) const
     {
         const auto known = lexedFiles.constFind(filePath);
@@ -1859,8 +1867,13 @@ public:
         else
             return *lexedFiles.insert(filePath, {});
 
-        return *lexedFiles.insert(filePath,
-                                  std::make_shared<const Lexed>(QString::fromUtf8(contents)));
+        if (lexedChars > kLexedCharBound) {
+            lexedFiles.clear();
+            lexedChars = 0;
+        }
+        const QString text = QString::fromUtf8(contents);
+        lexedChars += int(text.size());
+        return *lexedFiles.insert(filePath, std::make_shared<const Lexed>(text));
     }
 
     // What \a filePath includes, the headers of its headers among them, out
@@ -2069,6 +2082,7 @@ public:
 
     mutable QHash<FilePath, Document::Ptr> reparsed;
     mutable QHash<FilePath, std::shared_ptr<const Lexed>> lexedFiles;
+    mutable int lexedChars = 0;  // of text held above, against kLexedCharBound
 };
 
 CodeModelQueries::CodeModelQueries(const Snapshot &snapshot, const WorkingCopy &workingCopy)
@@ -2250,6 +2264,27 @@ QList<WrittenDeclaration> CodeModelQueries::declarationsIn(const FilePath &fileP
 std::optional<FilePaths> CodeModelQueries::includeClosureKnownFor(const FilePath &filePath) const
 {
     return d->closureAlreadyKnown(filePath);
+}
+
+bool CodeModelQueries::writesTheName(const FilePath &filePath, const QString &name) const
+{
+    if (name.isEmpty())
+        return false;
+
+    // What a reading already worked out, which is free where there is one.
+    if (const Document::Ptr doc = d->snapshot.document(filePath)) {
+        const QByteArray utf8 = name.toUtf8();
+        return doc->control()->findIdentifier(utf8.constData(), utf8.size());
+    }
+
+    const std::shared_ptr<const Lexed> tokens = d->lexed(filePath);
+    if (!tokens)
+        return false;
+    for (int i = 0; i < tokens->tokens.size(); ++i) {
+        if (tokens->tokens.at(i).kind() == T_IDENTIFIER && tokens->spelled(i) == name)
+            return true;
+    }
+    return false;
 }
 
 FilePaths CodeModelQueries::directIncludesOf(const FilePath &filePath) const

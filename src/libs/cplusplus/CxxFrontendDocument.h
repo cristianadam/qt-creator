@@ -1565,9 +1565,14 @@ public:
     // the whole reason the bases are written out rather than named.
     struct ClassWithBases
     {
-        QString qualifiedName;
+        QString name;          // its own name, with nothing in front of it
+        QString qualifiedName; // written out in full
         Place place;       // where the class writes its name, in this file
         QStringList bases; // written out in full
+
+        // What is drawn beside it, which is not the same for a class, a
+        // struct and a union.
+        Utils::CodeModelIcon::Type icon = Utils::CodeModelIcon::Class;
     };
     QList<ClassWithBases> classesWithTheirBases() const;
 
