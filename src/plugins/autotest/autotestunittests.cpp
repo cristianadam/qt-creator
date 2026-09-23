@@ -308,10 +308,30 @@ void AutotestUnitTests::testCodeParserBoostTest()
     expectedSuitesAndTests.insert(pathConstructor("Suite1", "tests/deco/deco"), 4);
     expectedSuitesAndTests.insert(pathConstructor("SuiteOuter", "tests/deco/deco"), 6); // 2 sub suites + 4 tests
 
-    QMap<QString, int> foundNamesAndSets = m_model->boostTestSuitesAndTests();
-    QCOMPARE(expectedSuitesAndTests.size(), foundNamesAndSets.size());
-    for (auto it = expectedSuitesAndTests.cbegin(); it != expectedSuitesAndTests.cend(); ++it)
-        QCOMPARE(*it, foundNamesAndSets.value(it.key()));
+    // A key is a suite's name and the project file it was found through,
+    // and the two project managers spell that path differently on macOS: a
+    // temporary directory is under /var, which is a symlink, and qbs hands
+    // back what it resolves to where qmake hands back what it was given.
+    // The same file either way, so both sides are compared as what they
+    // resolve to.
+    const auto asResolved = [](const QMap<QString, int> &suites) {
+        QMap<QString, int> resolved;
+        for (auto it = suites.cbegin(), end = suites.cend(); it != end; ++it) {
+            const int bar = it.key().indexOf('|');
+            const FilePath path = FilePath::fromUserInput(it.key().mid(bar + 1));
+            resolved.insert(it.key().left(bar + 1) + path.canonicalPath().toUrlishString(),
+                            it.value());
+        }
+        return resolved;
+    };
+
+    const QMap<QString, int> expected = asResolved(expectedSuitesAndTests);
+    const QMap<QString, int> foundNamesAndSets = asResolved(m_model->boostTestSuitesAndTests());
+    // Found first, expected second, which is the way round QCOMPARE names
+    // them: the row says what is missing and this is where it says it.
+    QCOMPARE(foundNamesAndSets.size(), expected.size());
+    for (auto it = expected.cbegin(); it != expected.cend(); ++it)
+        QCOMPARE(foundNamesAndSets.value(it.key()), *it);
 
     // What the decorators a file writes settle, which the counts above are
     // blind to: reading them is a lookup -- the decorator's name resolved at
