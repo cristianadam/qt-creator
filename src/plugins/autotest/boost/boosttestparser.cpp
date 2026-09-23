@@ -129,14 +129,29 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
     CPlusPlus::Snapshot lookIn = m_cppSnapshot;
     CPlusPlus::Document::Ptr doc = document(fileName);
     if (doc.isNull()) {
-        lookIn = CppEditor::CppModelManager::parsedApart(fileName);
-        doc = lookIn.document(fileName);
+        CPlusPlus::Snapshot alreadyRead;
+        {
+            QMutexLocker locker(&m_readMutex);
+            alreadyRead = m_read;
+        }
+        const CPlusPlus::Snapshot read
+            = CppEditor::CppModelManager::parsedApart(fileName, alreadyRead);
+        if (const CPlusPlus::Document::Ptr readDoc = read.document(fileName)) {
+            lookIn = read;
+            doc = readDoc;
+            QMutexLocker locker(&m_readMutex);
+            for (auto it = read.begin(), end = read.end(); it != end; ++it)
+                m_read.insert(it.value());
+        }
     }
     if (doc.isNull()) {
         // Nothing could read it: the file's own text, which says what the
-        // macros are but resolves no name at all.
+        // macros are and resolves no name at all. Into the snapshot the
+        // lookup walks, or that walk finds no document for the file and
+        // the fallback answers nothing rather than answering little.
         doc = m_cppSnapshot.preprocessedDocument(fileContent, fileName, false);
         doc->check();
+        lookIn.insert(doc);
     }
 
     BoostCodeParser codeParser(fileContent, projectPart->languageFeatures, doc, lookIn);
@@ -179,6 +194,15 @@ bool BoostTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
         }
     }
     return true;
+}
+
+void BoostTestParser::release()
+{
+    {
+        QMutexLocker locker(&m_readMutex);
+        m_read = CPlusPlus::Snapshot();
+    }
+    CppParser::release();
 }
 
 } // namespace Autotest::Internal

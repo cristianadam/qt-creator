@@ -1049,22 +1049,40 @@ Document::Ptr CppModelManager::document(const FilePath &filePath)
 static QSet<FilePath> filteredFilesRemoved(const QSet<FilePath> &files,
                                            const CppCodeModelSettingsData &settings);
 
+// Whether the model already has \a filePath as the file now stands.
+//
+// The same comparison timeStampModifiedFiles() makes for a session coming
+// back to a project. Where the built-in pass is off nothing else ever reads
+// a file again that is not open in an editor, so a caller that has just
+// written the file would otherwise be handed what it said before, for the
+// rest of the session. A document with no time of its own was made from an
+// editor's buffer rather than from disk, and that one is the better answer
+// whatever the disk says.
+static Document::Ptr documentAsTheFileStands(const FilePath &filePath)
+{
+    const Document::Ptr already = CppModelManager::document(filePath);
+    if (already && (already->lastModified().isNull()
+                    || already->lastModified() == filePath.lastModified())) {
+        return already;
+    }
+    return {};
+}
+
 // Reads \a filePath the way the indexing pass reads one file, and hands back
 // everything that reading took -- the file and the headers it reached.
 // Publishing it to the model is the source processor's callback, so \a publish
 // false is a processor made with none.
 //
+// \a settings decides what is too big to read and what is not to be read at
+// all, and is handed in because asking a *project* for its own settings makes
+// one on first use, parented to that project -- which a caller on a worker
+// thread must not do.
+//
 // An empty snapshot where the file is not one to read.
-static Snapshot readOneFile(const FilePath &filePath, bool publish)
+static Snapshot readOneFile(const FilePath &filePath, bool publish,
+                            const CppCodeModelSettingsData &settings,
+                            const Snapshot &alsoRead = {})
 {
-    // What the model has already, unless the file has moved on since it was
-    // read -- the same comparison timeStampModifiedFiles() makes for a
-    // session coming back to a project. Where the pass is off nothing else
-    // ever reads a file again that is not open in an editor, so a caller
-    // that has just written the file would otherwise be handed what it said
-    // before, for the rest of the session. A document with no time of its
-    // own was made from an editor's buffer rather than from disk, and that
-    // one is the better answer whatever the disk says.
     // Nothing to read is nothing to say, and it has to be said here:
     // CppSourceProcessor's "could not read it" exit is written for a file
     // included *from* another, so at the top level it falls through and
@@ -1085,8 +1103,6 @@ static Snapshot readOneFile(const FilePath &filePath, bool publish)
     // pass would have left" stays true where it would have left none --
     // and a caller naming a sixty-megabyte generated source must not
     // freeze the thread it asked on.
-    const CppCodeModelSettingsData settings
-        = CppCodeModelSettings::settingsForProject(ProjectManager::projectForFile(filePath));
     if (filteredFilesRemoved({filePath}, settings).isEmpty())
         return {};
 
@@ -1102,10 +1118,21 @@ static Snapshot readOneFile(const FilePath &filePath, bool publish)
     const QList<ProjectPart::ConstPtr> parts = CppModelManager::projectPart(filePath);
     const ProjectPart::ConstPtr part = parts.isEmpty() ? ProjectPart::ConstPtr() : parts.first();
 
+    // The source processor keeps every document's source and syntax tree
+    // for whoever gets it; the publishing callback lets go of them once the
+    // model has the symbols, and this one has to do the same. What a caller
+    // here does with a reading is resolve names in it, which is a walk of
+    // symbols -- and a Boost test file's headers with their trees kept is
+    // hundreds of megabytes, times the readers of a scan.
+    Snapshot readFrom = CppModelManager::snapshot();
+    for (auto it = alsoRead.begin(), end = alsoRead.end(); it != end; ++it)
+        readFrom.insert(it.value());
+
     const std::unique_ptr<CppSourceProcessor> processor(
         publish ? CppModelManager::createSourceProcessor()
-                : new CppSourceProcessor(CppModelManager::snapshot(),
-                                         [](const Document::Ptr &) {}));
+                : new CppSourceProcessor(readFrom, [](const Document::Ptr &doc) {
+                                             doc->releaseSourceAndAST();
+                                         }));
     processor->setWorkingCopy(CppModelManager::workingCopy());
     processor->setHeaderPaths(part ? part->headerPaths : CppModelManager::headerPaths());
     processor->setLanguageFeatures(
@@ -1130,21 +1157,14 @@ static Snapshot readOneFile(const FilePath &filePath, bool publish)
 
 Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
 {
-    // What the model has already, unless the file has moved on since it was
-    // read -- the same comparison timeStampModifiedFiles() makes for a
-    // session coming back to a project. Where the pass is off nothing else
-    // ever reads a file again that is not open in an editor, so a caller
-    // that has just written the file would otherwise be handed what it said
-    // before, for the rest of the session. A document with no time of its
-    // own was made from an editor's buffer rather than from disk, and that
-    // one is the better answer whatever the disk says.
-    const Document::Ptr already = document(filePath);
-    if (already && (already->lastModified().isNull()
-                    || already->lastModified() == filePath.lastModified())) {
+    if (const Document::Ptr already = documentAsTheFileStands(filePath))
         return already;
-    }
 
-    readOneFile(filePath, true);
+    // The project's own settings, which is what the pass would have used --
+    // this one is called from the thread the projects live on.
+    readOneFile(filePath, true,
+                CppCodeModelSettings::settingsForProject(
+                    ProjectManager::projectForFile(filePath)));
 
     // From the model rather than from what was read: it went through
     // replaceDocument(), which is where a document newer than this one wins
@@ -1152,18 +1172,20 @@ Document::Ptr CppModelManager::parsedDocument(const FilePath &filePath)
     return document(filePath);
 }
 
-Snapshot CppModelManager::parsedApart(const FilePath &filePath)
+Snapshot CppModelManager::parsedApart(const FilePath &filePath, const Snapshot &alsoRead)
 {
     // What the model has, where it has it: the snapshot holds the file and
     // the headers it was read through, which is the same thing a reading
     // here would hand back.
-    const Document::Ptr already = document(filePath);
-    if (already && (already->lastModified().isNull()
-                    || already->lastModified() == filePath.lastModified())) {
+    if (documentAsTheFileStands(filePath))
         return snapshot();
-    }
 
-    return readOneFile(filePath, false);
+    // The global settings rather than the project's: this is called from
+    // whatever thread a scan runs on, and asking a project for its settings
+    // makes them on first use, parented to the project. What a project
+    // overrides is therefore not honoured here -- the size limit and the
+    // ignore pattern are the global ones.
+    return readOneFile(filePath, false, CppCodeModelSettings::global().data(), alsoRead);
 }
 
 /// Replace the document in the snapshot.

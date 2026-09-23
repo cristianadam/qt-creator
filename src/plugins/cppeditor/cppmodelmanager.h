@@ -180,10 +180,16 @@ public:
     ///
     /// For a caller that is itself listening to what the model publishes: AutoTest's
     /// scan reparses a file the moment it hears the model has a document for it, so a
-    /// scan that published as it went would be scanning its own wake. It costs the
-    /// sharing -- what the model already holds is still read *from*, but nothing new
-    /// is kept, so the next file that reaches the same headers reads them again.
-    static CPlusPlus::Snapshot parsedApart(const Utils::FilePath &filePath);
+    /// scan that published as it went would be scanning its own wake.
+    ///
+    /// \a alsoRead is what such a caller has read already, and it is what keeps the
+    /// sharing that not publishing gives up: hand back what came out of the last
+    /// reading and the headers it holds are reused rather than parsed again, which
+    /// over a suite of Boost tests is the difference between reading Boost once and
+    /// reading it per file. The reading checks each of them against the macros it is
+    /// reading under, as it does for what the model holds.
+    static CPlusPlus::Snapshot parsedApart(const Utils::FilePath &filePath,
+                                           const CPlusPlus::Snapshot &alsoRead = {});
 
     static bool replaceDocument(Document::Ptr newDoc);
 
