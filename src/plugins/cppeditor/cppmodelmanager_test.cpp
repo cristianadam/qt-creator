@@ -2248,6 +2248,71 @@ void ModelManagerTest::testWhatTheIncludedFilesFilterOffers()
     QCOMPARE(filesIncludedBy(queries, {source}, cancelled.future()), FilePaths());
 }
 
+// Who writes an include of this very file -- one step of the graph read
+// backwards, which is what the Include Hierarchy pane draws under
+// "Included by".
+//
+// It walked every document of the snapshot, so with no built-in pass it
+// found the open editors and nothing else.
+void ModelManagerTest::testWhoIncludesThisFile()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index keeps an include graph");
+
+    TestCase testCase;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // Two deep, so that one step is told from the whole walk: the source
+    // reaches the leaf and does not include it.
+    const FilePath leaf = dir.createFile("includer_leaf.h", "class IncluderLeaf {};\n");
+    const FilePath middle = dir.createFile("includer_middle.h", "#include \"includer_leaf.h\"\n"
+                                                                "class IncluderMiddle {};\n");
+    const FilePath source = dir.createFile("includer_unit.cpp", "// a line in front of it\n"
+                                                                "#include \"includer_middle.h\"\n"
+                                                                "class IncluderUnit {};\n");
+    QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked with an empty snapshot, which is what a session with no
+    // built-in pass has: the answer is the index's.
+    const QList<WrittenInclude> ofMiddle = filesIncluding(CPlusPlus::Snapshot(), middle);
+    QCOMPARE(ofMiddle.size(), 1);
+    QCOMPARE(ofMiddle.first().file, source);
+    // And without the line the include stands on: the graph records which
+    // file reached which, not where it said so.
+    QCOMPARE(ofMiddle.first().line, 0);
+
+    // One step, not the walk: the source reaches the leaf but the middle
+    // header is what includes it.
+    const QList<WrittenInclude> ofLeaf = filesIncluding(CPlusPlus::Snapshot(), leaf);
+    QCOMPARE(ofLeaf.size(), 1);
+    QCOMPARE(ofLeaf.first().file, middle);
+
+    // A file the index covered that nobody includes is included by nobody,
+    // and so is one it has never heard of.
+    QVERIFY(filesIncluding(CPlusPlus::Snapshot(), source).isEmpty());
+    QVERIFY(filesIncluding(CPlusPlus::Snapshot(), dir.filePath() / "includer_absent.h").isEmpty());
+
+    // Where a reading has the includer, the line comes with it -- and the
+    // file is not named twice for being known to both.
+    CPlusPlus::Snapshot asIfTheSourceWereOpen;
+    const CPlusPlus::Snapshot whatWasParsed = CppModelManager::snapshot();
+    if (const CPlusPlus::Document::Ptr doc = whatWasParsed.document(source))
+        asIfTheSourceWereOpen.insert(doc);
+    QVERIFY(asIfTheSourceWereOpen.contains(source));
+    const QList<WrittenInclude> withTheLine = filesIncluding(asIfTheSourceWereOpen, middle);
+    QCOMPARE(withTheLine.size(), 1);
+    QCOMPARE(withTheLine.first().file, source);
+    QCOMPARE(withTheLine.first().line, 2);  // the include is on the second line
+}
+
 // What a test class declares, answered out of the index and the class's own
 // tokens: no pass has read the file, no translation unit is read, and the
 // answer is the one a reading gives.

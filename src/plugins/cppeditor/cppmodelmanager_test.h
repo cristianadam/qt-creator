@@ -51,6 +51,7 @@ private slots:
     void testWhoIncludesAHeaderOfThatName();
     void testWhichFilesReachAHeader();
     void testWhatTheIncludedFilesFilterOffers();
+    void testWhoIncludesThisFile();
     void testTheIndexedClassShape();
     void testTheClassesHandedToARunner();
     void testTheIndexedDefinition();

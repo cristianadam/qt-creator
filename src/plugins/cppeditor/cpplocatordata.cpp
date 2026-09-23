@@ -955,6 +955,41 @@ FilePaths CppLocatorData::indexedIncludersOfFileNamed(const QString &fileName) c
 #endif
 }
 
+// The graph is what each file includes; this is the other direction, so it
+// is turned round -- and kept turned round until the graph changes. The walk
+// is over every edge there is, and this is asked per file by callers that
+// look a project part up: rebuilding it for each of them, under the lock a
+// batch of the index needs to report through, is how a search over a large
+// project stops being a search.
+//
+// m_includeGraphMutex is held by the caller, and what comes back lives only
+// for as long as that lock does.
+const QHash<FilePath, FilePaths> &CppLocatorData::includersOfFile() const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (m_includersOfFile.isEmpty()) {
+        for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
+            for (const FilePath &included : it.value())
+                m_includersOfFile[included].append(it.key());
+        }
+    }
+#endif
+    return m_includersOfFile;
+}
+
+std::optional<FilePaths> CppLocatorData::indexedDirectIncludersOf(const FilePath &filePath) const
+{
+#ifdef QTC_WITH_CXX_FRONTEND
+    QMutexLocker locker(&m_includeGraphMutex);
+    if (!m_includeGraph.contains(filePath))
+        return std::nullopt;
+    return includersOfFile().value(filePath);
+#else
+    Q_UNUSED(filePath)
+    return std::nullopt;
+#endif
+}
+
 std::optional<FilePaths> CppLocatorData::indexedFilesDependingOn(const FilePath &filePath) const
 {
 #ifdef QTC_WITH_CXX_FRONTEND
@@ -962,19 +997,7 @@ std::optional<FilePaths> CppLocatorData::indexedFilesDependingOn(const FilePath 
     if (!m_includeGraph.contains(filePath))
         return std::nullopt;
 
-    // The graph is what each file includes; this is the other direction, so
-    // it is turned round -- and kept turned round until the graph changes.
-    // The walk is over every edge there is, and this is asked per file by
-    // callers that look a project part up: rebuilding it for each of them,
-    // under the lock a batch of the index needs to report through, is how
-    // a search over a large project stops being a search.
-    if (m_includersOfFile.isEmpty()) {
-        for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
-            for (const FilePath &included : it.value())
-                m_includersOfFile[included].append(it.key());
-        }
-    }
-    const QHash<FilePath, FilePaths> &includers = m_includersOfFile;
+    const QHash<FilePath, FilePaths> &includers = includersOfFile();
 
     FilePaths reached;
     QSet<FilePath> seen{filePath};

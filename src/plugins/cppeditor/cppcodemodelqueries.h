@@ -177,6 +177,12 @@ CPPEDITOR_EXPORT QString classAround(const Utils::FilePath &filePath, int line, 
 // files, and reading them to find out would be a parse apiece.
 CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 
+// The same, off the reading handed in rather than the model manager's own
+// -- which is a copy of a hash of every document it holds, so a caller
+// asking about file after file pays that per file.
+CPPEDITOR_EXPORT Utils::FilePaths includesOf(const CPlusPlus::Snapshot &snapshot,
+                                             const Utils::FilePath &filePath);
+
 // The files that include a header called \a fileName, once each, in no
 // particular order.
 //
@@ -196,6 +202,30 @@ CPPEDITOR_EXPORT Utils::FilePaths includesOf(const Utils::FilePath &filePath);
 // through the snapshot alone.
 CPPEDITOR_EXPORT Utils::FilePaths filesIncludingFileNamed(const CPlusPlus::Snapshot &snapshot,
                                                           const QString &fileName);
+
+// Where a file writes an include: the file, and the line the include
+// stands on -- 0 where that is not known.
+struct WrittenInclude
+{
+    Utils::FilePath file;
+    int line = 0;
+};
+
+// The files that include \a filePath themselves, each with the line it
+// writes the include on.
+//
+// What either model knows, together, for the same reason filesDependingOn()
+// below asks both: without a built-in pass \a snapshot holds the open
+// editors and the files they include, and the index holds a project's files
+// and not what is open from elsewhere.
+//
+// The line is the snapshot's to give. The index's include graph records
+// which file reached which and not where the line stands, so a file only it
+// knows comes back with line 0 -- which is where a reader following the
+// entry lands. Better than the entry not being there at all, which is what
+// a session with no pass had.
+CPPEDITOR_EXPORT QList<WrittenInclude> filesIncluding(const CPlusPlus::Snapshot &snapshot,
+                                                      const Utils::FilePath &filePath);
 
 // The files that reach \a filePath through their includes, directly or
 // through headers of their own -- what a search for the uses of something

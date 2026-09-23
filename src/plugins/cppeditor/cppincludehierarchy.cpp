@@ -4,6 +4,7 @@
 #include "cppincludehierarchy.h"
 
 #include "baseeditordocumentprocessor.h"
+#include "cppcodemodelqueries.h"
 #include "cppeditorconstants.h"
 #include "cppeditordocument.h"
 #include "cppeditortr.h"
@@ -67,28 +68,26 @@ using FileAndLines = QList<FileAndLine>;
 static FileAndLines findIncluders(const FilePath &filePath)
 {
     FileAndLines result;
-    const Snapshot snapshot = globalSnapshot();
-    for (auto cit = snapshot.begin(), citEnd = snapshot.end(); cit != citEnd; ++cit) {
-        const FilePath filePathFromSnapshot = cit.key();
-        Document::Ptr doc = cit.value();
-        const QList<Document::Include> resolvedIncludes = doc->resolvedIncludes();
-        for (const auto &includeFile : resolvedIncludes) {
-            const FilePath includedFilePath = includeFile.resolvedFileName();
-            if (includedFilePath == filePath)
-                result.append(FileAndLine(filePathFromSnapshot, int(includeFile.line())));
-        }
-    }
+    // Off whichever model has read the files: the snapshot's own documents,
+    // and the cxx index's include graph, which is what a session with no
+    // built-in indexing pass has instead. A file only the index knows comes
+    // back without the line its include stands on.
+    const QList<WrittenInclude> includers = filesIncluding(globalSnapshot(), filePath);
+    for (const WrittenInclude &includer : includers)
+        result.append(FileAndLine(includer.file, includer.line));
     return result;
 }
 
 static FileAndLines findIncludes(const FilePath &filePath, const Snapshot &snapshot)
 {
     FileAndLines result;
-    if (Document::Ptr doc = snapshot.document(filePath)) {
-        const QList<Document::Include> resolvedIncludes = doc->resolvedIncludes();
-        for (const auto &includeFile : resolvedIncludes)
-            result.append(FileAndLine(includeFile.resolvedFileName(), 0));
-    }
+    // The reading handed in first -- it is the open editor's own parse
+    // where there is one, which is what the pane wants -- and then the
+    // index, for a file no pass has read. The line is 0 either way: this
+    // direction has never recorded one.
+    const FilePaths includes = includesOf(snapshot, filePath);
+    for (const FilePath &include : includes)
+        result.append(FileAndLine(include, 0));
     return result;
 }
 

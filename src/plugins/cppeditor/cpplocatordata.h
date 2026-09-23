@@ -139,6 +139,21 @@ public:
     // resolved or not -- is the one that can still answer for it.
     Utils::FilePaths indexedIncludersOfFileNamed(const QString &fileName) const;
 
+    // The files that write an include of \a filePath themselves -- one step
+    // of the graph read backwards, where indexedFilesDependingOn() below is
+    // the whole walk.
+    //
+    // Nothing where the index has never covered \a filePath, which is not
+    // the same as nothing including it: a file the index covered and nobody
+    // includes is an empty list.
+    //
+    // The line each include is written on is not among them. The graph
+    // holds which file reached which, not where the line stands, so a
+    // caller that wants to put a cursor on the include has to have that
+    // from a reading.
+    std::optional<Utils::FilePaths> indexedDirectIncludersOf(
+        const Utils::FilePath &filePath) const;
+
     // Every file that reaches \a filePath through its includes, directly or
     // through headers of its own -- the question a reader asks before
     // searching for what a symbol declared there is used by.
@@ -157,6 +172,11 @@ public:
 private:
     // The store, or nothing where none has been made yet.
     Internal::CxxFrontendIndexCache *storeIfMade() const;
+
+    // The include graph turned round, built where it is first wanted and
+    // kept until the graph changes. m_includeGraphMutex is the caller's to
+    // hold, and what comes back lives only for as long as it does.
+    const QHash<Utils::FilePath, Utils::FilePaths> &includersOfFile() const;
 
 public:
 

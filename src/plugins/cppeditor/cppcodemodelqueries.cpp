@@ -1689,6 +1689,42 @@ FilePaths filesIncludingFileNamed(const Snapshot &snapshot, const QString &fileN
     return files;
 }
 
+QList<WrittenInclude> filesIncluding(const Snapshot &snapshot, const FilePath &filePath)
+{
+    QList<WrittenInclude> including;
+    QSet<FilePath> seen;
+    for (const Document::Ptr &doc : snapshot) {
+        const QList<Document::Include> includes = doc->resolvedIncludes();
+        for (const Document::Include &include : includes) {
+            if (include.resolvedFileName() != filePath)
+                continue;
+            // Where the include stands, which is what a reader following
+            // this wants the cursor on. A file naming the same header twice
+            // is here once, at the first line that names it.
+            including.append({doc->filePath(), int(include.line())});
+            seen.insert(doc->filePath());
+            break;
+        }
+    }
+
+    // And the index's, which is every file of a project where no built-in
+    // pass fills that snapshot. Added rather than fallen back to: neither
+    // is complete on its own, and a snapshot without a pass holds whatever
+    // the open editors reach.
+    //
+    // Without a line: the graph says which file reached which and not where
+    // the line stands.
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        if (const std::optional<FilePaths> indexed = index->indexedDirectIncludersOf(filePath)) {
+            for (const FilePath &includer : *indexed) {
+                if (!seen.contains(includer))
+                    including.append({includer, 0});
+            }
+        }
+    }
+    return including;
+}
+
 FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &filePath)
 {
     FilePaths reaching;
@@ -1713,10 +1749,18 @@ FilePaths filesDependingOn(const Snapshot &snapshot, const FilePath &filePath)
 
 FilePaths includesOf(const FilePath &filePath)
 {
+    // The model manager's own reading, which is a copy of a hash of every
+    // document it holds -- so a caller with a reading of its own, or one
+    // asking about file after file, wants the overload below instead.
+    return includesOf(CppModelManager::snapshot(), filePath);
+}
+
+FilePaths includesOf(const Snapshot &snapshot, const FilePath &filePath)
+{
     // A reading the built-in pass made first, which reports the include
     // *lines* -- a file naming the same header twice is there twice -- and
     // is what this has always answered.
-    if (const Document::Ptr doc = CppModelManager::snapshot().document(filePath)) {
+    if (const Document::Ptr doc = snapshot.document(filePath)) {
         const QList<Document::Include> resolved = doc->resolvedIncludes();
         FilePaths includes;
         includes.reserve(resolved.size());
