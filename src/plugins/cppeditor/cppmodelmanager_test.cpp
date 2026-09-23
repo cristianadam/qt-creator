@@ -6,8 +6,10 @@
 #include "baseeditordocumentprocessor.h"
 #include "builtineditordocumentparser.h"
 #include "cppcodemodelqueries.h"
+#include "cppincludesfilter.h"
 #include "cppindexingsupport.h"
 #include "cpplocatordata.h"
+#include "cppworkingcopy.h"
 #ifdef QTC_WITH_CXX_FRONTEND
 #include "cxxfrontendindexcache.h"
 #include "cxxfrontendmodel.h"
@@ -2180,6 +2182,70 @@ void ModelManagerTest::testWhichFilesReachAHeader()
     const FilePaths both = filesDependingOn(asIfOneEditorWereOpen, leaf);
     QVERIFY(both.contains(source));  // the index's, past what the snapshot has
     QVERIFY(both.contains(middle));
+}
+
+// What the "All Included C/C++ Files" filter has to offer, which is every
+// file a project's own files reach through their includes.
+//
+// It walked the snapshot a file at a time, so without a built-in pass it
+// offered what the open editors reach and nothing else.
+void ModelManagerTest::testWhatTheIncludedFilesFilterOffers()
+{
+    if (!theCxxFrontendModelIsInUse())
+        QSKIP("Only this model's index keeps an include graph");
+
+    TestCase testCase;
+
+    TemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // Two deep again: a closure is what the file reaches, not what it names.
+    const FilePath leaf = dir.createFile("offered_leaf.h", "class OfferedLeaf {};\n");
+    const FilePath middle = dir.createFile("offered_middle.h", "#include \"offered_leaf.h\"\n"
+                                                               "class OfferedMiddle {};\n");
+    const FilePath source = dir.createFile("offered_unit.cpp", "#include \"offered_middle.h\"\n"
+                                                               "class OfferedUnit {};\n");
+    const FilePath lonely = dir.createFile("offered_lonely.cpp", "class OfferedLonely {};\n");
+    QVERIFY(!leaf.isEmpty() && !middle.isEmpty() && !source.isEmpty() && !lonely.isEmpty());
+
+    CppLocatorData * const locatorData = CppModelManager::locatorData();
+    QVERIFY(locatorData);
+    QVERIFY(CppEditor::Tests::TestCase::parseFiles({source, lonely}));
+    QVERIFY(QTest::qWaitFor([locatorData] {
+        return locatorData->cxxFrontendFilesOutstanding() == 0;
+    }, 60000));
+
+    // Asked through a reading that holds nothing, which is what a session
+    // with no built-in pass hands the filter: the answer is the index's.
+    const CodeModelQueries queries{CPlusPlus::Snapshot(), WorkingCopy()};
+
+    // Made rather than default-constructed: QFuture's default constructor
+    // hands back a *cancelled* one, so every ask below would come back
+    // empty and mean nothing.
+    QFutureInterface<void> running;
+    running.reportStarted();
+    const QFuture<void> notCancelled = running.future();
+
+    const FilePaths offered = filesIncludedBy(queries, {source}, notCancelled);
+    QCOMPARE(Utils::toSet(offered), QSet<FilePath>({middle, leaf}));
+
+    // A file that includes nothing offers nothing, and neither does one the
+    // index has never covered -- the filter cannot tell those apart and has
+    // no reason to.
+    QCOMPARE(filesIncludedBy(queries, {lonely}, notCancelled), FilePaths());
+    QCOMPARE(filesIncludedBy(queries, {dir.filePath() / "offered_absent.cpp"}, notCancelled),
+             FilePaths());
+
+    // Each file once, however many of the files asked about reach it.
+    const FilePaths twice = filesIncludedBy(queries, {source, middle}, notCancelled);
+    QCOMPARE(twice.count(leaf), 1);
+    QCOMPARE(Utils::toSet(twice), QSet<FilePath>({middle, leaf}));
+
+    // A cancelled search hands back nothing rather than half an answer: the
+    // filter caches what it is given.
+    QFutureInterface<void> cancelled;
+    cancelled.reportStarted();
+    cancelled.reportCanceled();
+    QCOMPARE(filesIncludedBy(queries, {source}, cancelled.future()), FilePaths());
 }
 
 // What a test class declares, answered out of the index and the class's own

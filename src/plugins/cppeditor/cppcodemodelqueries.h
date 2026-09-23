@@ -342,6 +342,21 @@ public:
     // complete as what a pass has parsed.
     Utils::FilePaths includeClosureOf(const Utils::FilePath &filePath) const;
 
+    // The files \a filePath includes itself, off whichever model has it:
+    // the reading passed in, and the index's include graph where that
+    // reading has never heard of the file. Empty where neither has.
+    //
+    // What a caller walking a whole project's includes needs, and why this
+    // is here rather than the free includesOf() below being used: that one
+    // takes a fresh copy of the model manager's snapshot per call, which is
+    // a hash of every document it holds.
+    //
+    // One step, so that such a walk can keep one set of the files it has
+    // been to. Asking for each file's whole closure instead re-walks what
+    // the closures share, which for a project's sources is nearly all of
+    // it.
+    Utils::FilePaths directIncludesOf(const Utils::FilePath &filePath) const;
+
     // The same, but only where it is already known -- from the reading
     // passed in or from the index -- and nothing where saying would mean
     // reading the file.

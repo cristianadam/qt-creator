@@ -2208,6 +2208,22 @@ std::optional<FilePaths> CodeModelQueries::includeClosureKnownFor(const FilePath
     return d->closureAlreadyKnown(filePath);
 }
 
+FilePaths CodeModelQueries::directIncludesOf(const FilePath &filePath) const
+{
+    // The same rule as the free includesOf() above, off the reading held
+    // here rather than off a fresh copy of the model manager's -- which is
+    // what a caller walking a whole project's includes needs, that copy
+    // being a hash of every document it has.
+    if (const Document::Ptr doc = d->snapshot.document(filePath))
+        return doc->includedFiles();
+
+    if (CppLocatorData * const index = CppModelManager::locatorData()) {
+        if (const std::optional<FilePaths> known = index->indexedDirectIncludesFor(filePath))
+            return *known;
+    }
+    return {};
+}
+
 FilePaths CodeModelQueries::includeClosureOf(const FilePath &filePath) const
 {
     if (const std::optional<FilePaths> known = d->closureAlreadyKnown(filePath))

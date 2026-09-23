@@ -3,6 +3,7 @@
 
 #include "cppincludesfilter.h"
 
+#include "cppcodemodelqueries.h"
 #include "cppeditorconstants.h"
 #include "cppeditortr.h"
 #include "cppmodelmanager.h"
@@ -20,14 +21,17 @@ using namespace Utils;
 
 namespace CppEditor::Internal {
 
-static FilePaths generateFilePaths(const QFuture<void> &future,
-                                   const CPlusPlus::Snapshot &snapshot,
-                                   const std::unordered_set<FilePath> &inputFilePaths)
+FilePaths filesIncludedBy(const CodeModelQueries &queries,
+                          const std::unordered_set<FilePath> &inputFilePaths,
+                          const QFuture<void> &future)
 {
     FilePaths results;
     std::unordered_set<FilePath> resultsCache;
     std::unordered_set<FilePath> queuedPaths = inputFilePaths;
 
+    // One walk with one set of the files it has been to, rather than each
+    // file's whole closure asked for in turn: a project's sources share
+    // nearly all of their closures, and asking per file re-walks that.
     while (!queuedPaths.empty()) {
         if (future.isCanceled())
             return {};
@@ -35,10 +39,7 @@ static FilePaths generateFilePaths(const QFuture<void> &future,
         const auto iterator = queuedPaths.cbegin();
         const FilePath filePath = *iterator;
         queuedPaths.erase(iterator);
-        const CPlusPlus::Document::Ptr doc = snapshot.document(filePath);
-        if (!doc)
-            continue;
-        const FilePaths includedFiles = doc->includedFiles();
+        const FilePaths includedFiles = queries.directIncludesOf(filePath);
         for (const FilePath &includedFile : includedFiles) {
             if (resultsCache.emplace(includedFile).second) {
                 queuedPaths.emplace(includedFile);
@@ -91,10 +92,14 @@ CppIncludesFilter::CppIncludesFilter()
             if (entry)
                 inputFilePaths.insert(entry->filePath());
         }
-        const CPlusPlus::Snapshot snapshot = CppModelManager::snapshot();
-        return [snapshot, inputFilePaths](const QFuture<void> &future) {
+        // Made here because a working copy is what the editors hold, which
+        // is this thread's to read -- and kept alive by the lambda below,
+        // which runs elsewhere.
+        const auto queries = std::make_shared<CodeModelQueries>(
+            CppModelManager::snapshot(), CppModelManager::workingCopy());
+        return [queries, inputFilePaths](const QFuture<void> &future) {
             // This body runs in non-main thread
-            return generateFilePaths(future, snapshot, inputFilePaths);
+            return filesIncludedBy(*queries, inputFilePaths, future);
         };
     };
     m_cache.setGeneratorProvider(generatorProvider);
