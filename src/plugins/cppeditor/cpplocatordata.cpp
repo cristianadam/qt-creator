@@ -922,13 +922,16 @@ FilePaths CppLocatorData::indexedIncludersOfFileNamed(const QString &fileName) c
 
     // A walk of the whole graph, which is the price of asking it backwards:
     // it is a node per file with what that file includes, and nothing keys
-    // it the other way. In memory and over a few thousand entries, against
-    // a caller that asks once for a form somebody opened.
+    // it the other way. Every file a reading covered has a node, system
+    // headers and all, so over a project the size of this one that is tens
+    // of thousands of them and some hundreds of thousands of edges --
+    // compared, not copied, and for a caller that asks once for a form
+    // somebody opened.
     FilePaths includers;
     QMutexLocker locker(&m_includeGraphMutex);
     for (auto it = m_includeGraph.cbegin(), end = m_includeGraph.cend(); it != end; ++it) {
         for (const FilePath &included : it.value()) {
-            if (included.fileName() == fileName) {
+            if (included.fileNameView() == fileName) {
                 includers.append(it.key());
                 break; // named once is named
             }

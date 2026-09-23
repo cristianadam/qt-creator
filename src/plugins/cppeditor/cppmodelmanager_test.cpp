@@ -2022,12 +2022,18 @@ void ModelManagerTest::testWhoIncludesAHeaderOfThatName()
     if (!theCxxFrontendModelIsInUse())
         QSKIP("Only this model's index keeps an include graph");
 
+    // Held so that what this leaves in the index goes when it does: the
+    // question below is asked by *name* over one graph for the whole
+    // session, so a row that leaves a node behind answers the next one.
+    TestCase testCase;
+
     TemporaryDir dir;
     QVERIFY(dir.isValid());
-    const FilePath header = dir.createFile("ui_form.h", "class Ui_Form {};\n");
-    const FilePath source = dir.createFile("form.cpp", "#include \"ui_form.h\"\n"
-                                                       "class Form {};\n");
-    const FilePath other = dir.createFile("other.cpp", "class Other {};\n");
+    // Named for this row alone, for the same reason.
+    const FilePath header = dir.createFile("ui_whoincludes.h", "class Ui_WhoIncludes {};\n");
+    const FilePath source = dir.createFile("whoincludes.cpp", "#include \"ui_whoincludes.h\"\n"
+                                                              "class WhoIncludes {};\n");
+    const FilePath other = dir.createFile("whoincludes_other.cpp", "class Other {};\n");
     QVERIFY(!header.isEmpty() && !source.isEmpty() && !other.isEmpty());
 
     CppLocatorData * const locatorData = CppModelManager::locatorData();
@@ -2040,11 +2046,13 @@ void ModelManagerTest::testWhoIncludesAHeaderOfThatName()
 
     // Asked with an empty snapshot, which is what a session with no
     // built-in pass has: whatever comes back is the index's answer.
-    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_form.h"), FilePaths({source}));
+    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_whoincludes.h"),
+             FilePaths({source}));
 
     // A header of a name nobody includes is nobody's, and a file that
     // includes nothing is not an answer to every question.
-    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_other.h"), FilePaths());
+    QCOMPARE(filesIncludingFileNamed(CPlusPlus::Snapshot(), "ui_whoincludes_other.h"),
+             FilePaths());
 }
 
 // What a test class declares, answered out of the index and the class's own

@@ -37,6 +37,7 @@
 
 #include <qtsupport/qtkitaspect.h>
 
+#include <utils/algorithm.h>
 #include <utils/mimeutils.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
@@ -532,7 +533,7 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
                                           const QStringList &parameterNames,
                                           QString *errorMessage)
 {
-    using DocumentMap = QMap<int, FilePath>;
+    using DocumentMap = QMultiMap<int, FilePath>;
 
     const FilePath currentUiFile = activeEditor()->document()->filePath();
 #if 0
@@ -578,16 +579,23 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     // than knowing where it will put it.
     const FilePaths including = CppEditor::filesIncludingFileNamed(docTable, uicedName);
 
-    // The answer covers whatever the cxx index has read as well, which is
-    // every file of every open project: the form belongs to one of them,
-    // and a class of the same name in another is not the class behind it.
-    // The snapshot above was sifted that way already, up where it was made.
-    const FilePaths docList = uiProject
-        ? Utils::filtered(including, [uiProject](const FilePath &filePath) {
-              return ProjectManager::projectForFile(filePath) == uiProject;
-          })
-        : including;
+    // The answer covers whatever the cxx index has read as well, and that
+    // is every file of every open project -- where the snapshot above was
+    // sifted, up where it was made, to the set this is allowed to look in.
+    // So the same sieve goes over what comes back, and it matters: a class
+    // found in another project is one a slot would be *written into*.
+    const FilePaths docList = Utils::filtered(including, [&](const FilePath &filePath) {
+        if (uiProject)
+            return ProjectManager::projectForFile(filePath) == uiProject;
+        // A form in no project at all: what was looked in was the files
+        // being edited, and nothing else is any more related to it.
+        return bool(CppEditor::CppModelManager::workingCopy().get(filePath));
+    });
 
+    // A multi map: the key is no distance, only how far apart two paths
+    // are at the first character that differs, so unrelated candidates
+    // collide -- and a plain map would then keep whichever was inserted
+    // last and drop the class that was being looked for.
     DocumentMap docMap;
     for (const FilePath &d : docList) {
         docMap.insert(qAbs(d.absolutePath().toUrlishString()
