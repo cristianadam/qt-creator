@@ -759,6 +759,30 @@ ClangdClient *ClangModelManagerSupport::clientWithBuildConfiguration(const Build
 void ClangModelManagerSupport::updateStaleIndexEntries()
 {
     QHash<FilePath, QDateTime> lastModifiedCache;
+
+    // One reading of the code model for the whole sweep, rather than one
+    // per project: building it copies the snapshot and walks every open
+    // editor for what is being typed in it, and none of that is a
+    // project's own.
+    const CodeModelQueries queries(CppModelManager::snapshot(),
+                                   CppModelManager::workingCopy());
+
+    // Which files of a project to ask about, taken off the project tree
+    // rather than worked out per file: a node was classified when the
+    // project was read, where ProjectFile::isCppFile() asks the mime
+    // database, which for a name it cannot place opens the file to look
+    // inside. Over every file of every project that is thousands of reads
+    // before the first question is asked.
+    //
+    // Loose on purpose -- a project's Python source is a Source node too.
+    // What a file really is gets settled by the index lookup below, which
+    // knows the name of everything clangd indexed and nothing else.
+    const auto cxxNodes = [](const Node *node) {
+        const FileNode * const fileNode = node->asFileNode();
+        return fileNode && (fileNode->fileType() == FileType::Source
+                            || fileNode->fileType() == FileType::Header);
+    };
+
     for (Project * const project : ProjectManager::projects()) {
         const FilePath jsonDbDir = getJsonDbDir(project);
         if (jsonDbDir.isEmpty())
@@ -771,20 +795,13 @@ void ClangModelManagerSupport::updateStaleIndexEntries()
         const QHash<QString, IndexFiles> indexedFiles = collectIndexedFiles(indexFolder);
         bool restartCodeModel = false;
 
-        // The project's own C++ files, rather than the documents the
-        // built-in front end happens to hold: that walk asked "what has an
-        // indexing pass parsed", which is every file of the project only
-        // for as long as there is such a pass.
-        //
-        // Every file it has, generated ones included -- clangd indexes a
-        // moc'd source as readily as a written one, and it is the index
-        // that is being checked here.
-        const CodeModelQueries queries(CppModelManager::snapshot(),
-                                       CppModelManager::workingCopy());
-        for (const FilePath &sourceFile : project->files(Project::AllFiles)) {
-            if (!ProjectFile::isCppFile(sourceFile))
-                continue;
-
+        // The project's own files, rather than the documents the built-in
+        // front end happens to hold: that walk asked "what has an indexing
+        // pass parsed", which is every file of the project only for as
+        // long as there is such a pass. Generated files included -- clangd
+        // indexes a moc'd source as readily as a written one, and it is
+        // the index that is being checked here.
+        for (const FilePath &sourceFile : project->files(cxxNodes)) {
             const auto indexFilesIt = indexedFiles.find(sourceFile.fileName());
             if (indexFilesIt == indexedFiles.end()) {
                 qCDebug(clangdIndexLog) << "No index files for:" << sourceFile.fileName();
@@ -794,11 +811,17 @@ void ClangModelManagerSupport::updateStaleIndexEntries()
             const QDateTime sourceIndexedTime = indexFilesIt->minLastModifiedTime;
 
             // What the file reaches, off whichever front end has read it,
-            // and nothing where neither has: this is every file of every
-            // project, asked on the thread that draws, so it must not be a
-            // question that reads the file to answer. A file nothing knows
-            // about is passed over here the same way one no pass had
-            // parsed was passed over before.
+            // and nothing where neither has. Not includeClosureOf(), which
+            // parses the file where nothing knows: this is asked of every
+            // file of every project, on the thread that draws, and a file
+            // nothing knows about is passed over here the same way one no
+            // pass had parsed was passed over before.
+            //
+            // It is not free either -- where the answer is not in memory
+            // it comes off the index's store, a compressed reading per
+            // file -- but the action is a sweep of a whole project that
+            // somebody asked for, and it already stats every header of
+            // every file below.
             const std::optional<FilePaths> allIncludes
                 = queries.includeClosureKnownFor(sourceFile);
             if (!allIncludes) {
