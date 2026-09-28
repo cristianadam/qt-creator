@@ -32,9 +32,15 @@
 #include <utils/qtcprocess.h>
 #include <utils/terminalhooks.h>
 
+#include <QCompleter>
 #include <QDesktopServices>
 #include <QDir>
 #include <QSettings>
+#include <QStringListModel>
+
+#ifdef WITH_TESTS
+#include <QTest>
+#endif
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -188,6 +194,59 @@ private:
     FilePath m_workspaceDir;
 };
 
+static QStringList boardTargetsFromWestOutput(const QString &output)
+{
+    QStringList targets;
+    for (const QString &line : output.split('\n')) {
+        const int separator = line.indexOf(';');
+        if (separator <= 0)
+            continue;
+        const QString name = line.left(separator).trimmed();
+        targets.append(name);
+        const QStringList qualifiers = line.mid(separator + 1).split(',', Qt::SkipEmptyParts);
+        for (const QString &qualifier : qualifiers)
+            targets.append(name + '/' + qualifier.trimmed());
+    }
+    return targets;
+}
+
+class BoardList final : public QObject
+{
+public:
+    void update()
+    {
+        const FilePath west = settings().westFilePath();
+        const FilePath ws = settings().workspaceDir();
+        if (m_process || (west == m_west && ws == m_workspaceDir) || !west.isExecutableFile())
+            return;
+        m_west = west;
+        m_workspaceDir = ws;
+
+        m_process.reset(new Process);
+        m_process->setCommand({west, {"boards", "-f", "{name};{qualifiers}"}});
+        m_process->setWorkingDirectory(ws);
+        connect(m_process.get(), &Process::done, this, [this] {
+            if (m_process->result() == ProcessResult::FinishedWithSuccess)
+                m_model.setStringList(boardTargetsFromWestOutput(m_process->cleanedStdOut()));
+            m_process.release()->deleteLater();
+        });
+        m_process->start();
+    }
+
+    QStringListModel m_model;
+
+private:
+    std::unique_ptr<Process> m_process;
+    FilePath m_west;
+    FilePath m_workspaceDir;
+};
+
+static BoardList &boardList()
+{
+    static BoardList theBoardList;
+    return theBoardList;
+}
+
 static QString boardFromWestConfig(const FilePath &workspaceDir)
 {
     if (workspaceDir.isEmpty())
@@ -213,6 +272,10 @@ public:
         m_board.setDisplayStyle(StringAspect::LineEditDisplay);
         m_board.setPlaceHolderText(Tr::tr("For example, qemu_x86"));
         m_board.setDefaultValue(boardFromWestConfig(settings().workspaceDir()));
+        auto completer = new QCompleter(&boardList().m_model, this);
+        completer->setCaseSensitivity(Qt::CaseInsensitive);
+        completer->setFilterMode(Qt::MatchContains);
+        m_board.setCompleter(completer);
 
         m_sysbuild.setSettingsKey("Zephyr.WestBuildStep.Sysbuild");
         m_sysbuild.setLabelText(Tr::tr("Sysbuild:"));
@@ -258,6 +321,7 @@ public:
 
         setDisplayName(Tr::tr("West Build"));
 
+        boardList().update();
         updateDetails();
 
         m_board.addOnChanged(this, updateDetails);
@@ -605,6 +669,33 @@ void setupWestBuildSteps()
     QObject::connect(ProjectManager::instance(), &ProjectManager::projectAdded,
                      ProjectManager::instance(), connectProject);
 }
+
+#ifdef WITH_TESTS
+
+class WestBoardsTest final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testBoardTargets()
+    {
+        const QString output = "west: warning, something\n"
+                               "qemu_cortex_m3;ti_lm3s6965\n"
+                               "nrf5340dk;nrf5340/cpuapp,nrf5340/cpunet\n"
+                               "board_without_qualifiers;\n";
+        const QStringList expected = {"qemu_cortex_m3", "qemu_cortex_m3/ti_lm3s6965",
+                                      "nrf5340dk", "nrf5340dk/nrf5340/cpuapp",
+                                      "nrf5340dk/nrf5340/cpunet", "board_without_qualifiers"};
+        QCOMPARE(boardTargetsFromWestOutput(output), expected);
+    }
+};
+
+QObject *createWestBoardsTest()
+{
+    return new WestBoardsTest;
+}
+
+#endif // WITH_TESTS
 
 } // namespace Zephyr::Internal
 
