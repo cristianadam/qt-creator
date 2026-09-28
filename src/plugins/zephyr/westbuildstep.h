@@ -11,12 +11,14 @@ class QString;
 QT_END_NAMESPACE
 
 namespace ProjectExplorer { class BuildConfiguration; }
+namespace Utils { class CommandLine; }
 
 namespace Zephyr::Internal {
 
 void setupWestBuildSteps();
 
 QString westBoard(const ProjectExplorer::BuildConfiguration *bc);
+Utils::CommandLine westConfigureCommand(const ProjectExplorer::BuildConfiguration *bc);
 
 #ifdef WITH_TESTS
 QObject *createWestBoardsTest();

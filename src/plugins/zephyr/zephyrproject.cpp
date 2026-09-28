@@ -3,10 +3,13 @@
 
 #include "zephyrproject.h"
 
+#include "westbuildstep.h"
 #include "zephyrconstants.h"
+#include "zephyrsettings.h"
 #include "zephyrtr.h"
 
 #include <coreplugin/icontext.h>
+#include <coreplugin/messagemanager.h>
 
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildinfo.h>
@@ -24,6 +27,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/commandline.h>
+#include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
 
 #include <QJsonArray>
@@ -237,6 +241,11 @@ public:
 
     void triggerParsing() final
     {
+        if (m_configureProcess) {
+            m_reparseAfterConfigure = true;
+            return;
+        }
+
         ParseGuard guard = guardParsingRun();
         const FilePath root = projectDirectory();
 
@@ -263,13 +272,96 @@ public:
             newRoot->addNestedNode(std::make_unique<FileNode>(f, FileNode::fileTypeForFileName(f)));
         setRootProjectNode(std::move(newRoot));
 
-        updateCppCodeModel();
+        const FilePath buildDir = buildConfiguration()->buildDirectory();
+        if (!compileDatabaseFile(buildDir, root.fileName()).exists() && startConfigure(buildDir)) {
+            m_configureGuard = std::move(guard);
+            return;
+        }
 
+        finishParsing(guard);
+    }
+
+private:
+    void finishParsing(ParseGuard &guard)
+    {
+        updateCppCodeModel();
         guard.markAsSuccess();
         emitBuildSystemUpdated();
     }
 
-private:
+    // Without a build there are no compile commands for the code model. The
+    // CMake part of "west build" produces them.
+    bool startConfigure(const FilePath &buildDir)
+    {
+        // Once per build directory, so a failing configuration is not repeated
+        // on every reparse.
+        if (m_configuredBuildDir == buildDir)
+            return false;
+        const CommandLine configure = westConfigureCommand(buildConfiguration());
+        if (configure.executable().isEmpty())
+            return false;
+        m_configuredBuildDir = buildDir;
+
+        runConfigureStep(configure, [this, buildDir, west = configure.executable()] {
+            // <zephyr/kernel.h> includes headers that the build generates, not the
+            // configuration. Ninja's "<source>^" builds what one source needs.
+            const FilePath source = firstApplicationSource(buildDir);
+            if (source.isEmpty()) {
+                finishConfigure();
+                return;
+            }
+            runConfigureStep({west, {"build", "-d", buildDir.nativePath(),
+                                     "-o", source.nativePath() + '^'}},
+                             [this] { finishConfigure(); });
+        });
+        return true;
+    }
+
+    FilePath firstApplicationSource(const FilePath &buildDir) const
+    {
+        const FilePath dbFile = compileDatabaseFile(buildDir, projectDirectory().fileName());
+        const CompileDatabase db = parseCompileDatabase(dbFile.fileContents().value_or(""),
+                                                        buildDir);
+        for (const CompileGroup &group : db.groups) {
+            if (group.target == "app" && !group.files.isEmpty())
+                return group.files.first();
+        }
+        return {};
+    }
+
+    void runConfigureStep(const CommandLine &cmd, const std::function<void()> &onSuccess)
+    {
+        const FilePath ws = settings().workspaceDir();
+        m_configureProcess = new Process(this);
+        m_configureProcess->setCommand(cmd);
+        m_configureProcess->setWorkingDirectory(ws.isEmpty() ? projectDirectory() : ws);
+        m_configureProcess->setEnvironment(buildConfiguration()->environment());
+        connect(m_configureProcess, &Process::done, this, [this, onSuccess] {
+            const bool success = m_configureProcess->result() == ProcessResult::FinishedWithSuccess;
+            if (!success) {
+                Core::MessageManager::writeSilently(m_configureProcess->exitMessage() + '\n'
+                                                    + m_configureProcess->allOutput());
+            }
+            m_configureProcess->deleteLater();
+            m_configureProcess = nullptr;
+            if (success)
+                onSuccess();
+            else
+                finishConfigure();
+        });
+        m_configureProcess->start();
+    }
+
+    void finishConfigure()
+    {
+        ParseGuard guard = std::move(m_configureGuard);
+        finishParsing(guard);
+        if (m_reparseAfterConfigure) {
+            m_reparseAfterConfigure = false;
+            requestDelayedParse();
+        }
+    }
+
     void updateCppCodeModel()
     {
         if (!m_cppCodeModelUpdater)
@@ -324,6 +416,10 @@ private:
     }
 
     std::unique_ptr<ProjectUpdater> m_cppCodeModelUpdater;
+    Process *m_configureProcess = nullptr;
+    ParseGuard m_configureGuard;
+    FilePath m_configuredBuildDir;
+    bool m_reparseAfterConfigure = false;
 };
 
 // ZephyrBuildConfiguration
