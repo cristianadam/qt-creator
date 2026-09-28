@@ -123,6 +123,28 @@ public:
         m_board.setPlaceHolderText(Tr::tr("For example, qemu_x86"));
         m_board.setDefaultValue(boardFromWestConfig(settings().workspaceDir()));
 
+        m_sysbuild.setSettingsKey("Zephyr.WestBuildStep.Sysbuild");
+        m_sysbuild.setLabelText(Tr::tr("Sysbuild:"));
+        m_sysbuild.setLabelPlacement(BoolAspect::LabelPlacement::InExtraLabel);
+        m_sysbuild.setToolTip(Tr::tr("Build the application together with its bootloader "
+                                     "and other images."));
+
+        m_optimization.setSettingsKey("Zephyr.WestBuildStep.Optimization");
+        m_optimization.setLabelText(Tr::tr("Optimization:"));
+        m_optimization.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+        m_optimization.setUseDataAsSavedValue();
+        m_optimization.addOption({Tr::tr("Project Default"), {}, QString()});
+        m_optimization.addOption({Tr::tr("Debug"), {}, QString("CONFIG_DEBUG_OPTIMIZATIONS")});
+        m_optimization.addOption({Tr::tr("Size"), {}, QString("CONFIG_SIZE_OPTIMIZATIONS")});
+        m_optimization.addOption({Tr::tr("Speed"), {}, QString("CONFIG_SPEED_OPTIMIZATIONS")});
+        m_optimization.addOption({Tr::tr("None"), {}, QString("CONFIG_NO_OPTIMIZATIONS")});
+
+        m_extraConfFiles.setSettingsKey("Zephyr.WestBuildStep.ExtraConfFiles");
+        m_extraConfFiles.setLabelText(Tr::tr("Extra Kconfig fragments:"));
+
+        m_extraOverlays.setSettingsKey("Zephyr.WestBuildStep.ExtraOverlays");
+        m_extraOverlays.setLabelText(Tr::tr("Extra devicetree overlays:"));
+
         m_extraArgs.setSettingsKey("Zephyr.WestBuildStep.ExtraArgs");
         m_extraArgs.setLabelText(Tr::tr("Extra arguments:"));
         m_extraArgs.setDisplayStyle(StringAspect::LineEditDisplay);
@@ -148,12 +170,20 @@ public:
         updateDetails();
 
         m_board.addOnChanged(this, updateDetails);
+        m_sysbuild.addOnChanged(this, updateDetails);
+        m_optimization.addOnChanged(this, updateDetails);
+        m_extraConfFiles.addOnChanged(this, updateDetails);
+        m_extraOverlays.addOnChanged(this, updateDetails);
         m_extraArgs.addOnChanged(this, updateDetails);
 
         using namespace Layouting;
         return Form {
             noMargin,
             m_board, br,
+            m_sysbuild, br,
+            m_optimization, br,
+            m_extraConfFiles, br,
+            m_extraOverlays, br,
             m_extraArgs
         }.emerge();
     }
@@ -182,11 +212,24 @@ private:
             cmd.addArg("--source-dir");
             cmd.addArg(projectDir.nativePath());
         }
+        if (m_sysbuild())
+            cmd.addArg("--sysbuild");
+        for (const FilePath &file : m_extraConfFiles())
+            cmd.addArg("--extra-conf=" + file.nativePath());
+        for (const FilePath &file : m_extraOverlays())
+            cmd.addArg("--extra-dtc-overlay=" + file.nativePath());
+        const QString optimization = m_optimization.itemValue().toString();
+        if (!optimization.isEmpty())
+            cmd.addArg("--cmake-opt=-D" + optimization + "=y");
         cmd.addArgs(m_extraArgs(), CommandLine::Raw);
         return cmd;
     }
 
     StringAspect m_board{this};
+    BoolAspect m_sysbuild{this};
+    SelectionAspect m_optimization{this};
+    FilePathListAspect m_extraConfFiles{this};
+    FilePathListAspect m_extraOverlays{this};
     StringAspect m_extraArgs{this};
 };
 
@@ -299,13 +342,19 @@ public:
     WestCleanStep(BuildStepList *bsl, Id id)
         : AbstractProcessStep(bsl, id)
     {
+        m_pristine.setSettingsKey("Zephyr.WestCleanStep.Pristine");
+        m_pristine.setLabelText(Tr::tr("Pristine:"));
+        m_pristine.setLabelPlacement(BoolAspect::LabelPlacement::InExtraLabel);
+        m_pristine.setToolTip(Tr::tr("Remove the whole build directory contents, including "
+                                     "the CMake cache, instead of only the build products."));
+
         setCommandLineProvider([this] {
             CommandLine cmd{settings().westFilePath()};
             cmd.addArg("build");
             cmd.addArg("-d");
             cmd.addArg(buildConfiguration()->buildDirectory().nativePath());
             cmd.addArg("-t");
-            cmd.addArg("clean");
+            cmd.addArg(m_pristine() ? QString("pristine") : QString("clean"));
             return cmd;
         });
         setWorkingDirectoryProvider([this]() -> FilePath {
@@ -314,6 +363,25 @@ public:
         });
         setUseEnglishOutput();
     }
+
+    QWidget *createConfigWidget() final
+    {
+        auto updateDetails = [this] {
+            ProcessParameters param;
+            setupProcessParameters(&param);
+            setSummaryText(param.summary(displayName()));
+        };
+
+        setDisplayName(Tr::tr("West Clean"));
+        updateDetails();
+        m_pristine.addOnChanged(this, updateDetails);
+
+        using namespace Layouting;
+        return Form { noMargin, m_pristine }.emerge();
+    }
+
+private:
+    BoolAspect m_pristine{this};
 };
 
 class WestCleanStepFactory final : public BuildStepFactory
