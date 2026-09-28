@@ -351,8 +351,7 @@ public:
 
     QString board() const { return m_board(); }
 
-private:
-    CommandLine westCommand() const
+    CommandLine westCommand(bool cmakeOnly = false) const
     {
         const FilePath projectDir = project()->projectDirectory();
         const FilePath ws = settings().workspaceDir();
@@ -378,10 +377,13 @@ private:
         const QString optimization = m_optimization.itemValue().toString();
         if (!optimization.isEmpty())
             cmd.addArg("--cmake-opt=-D" + optimization + "=y");
+        if (cmakeOnly)
+            cmd.addArg("--cmake-only");
         cmd.addArgs(m_extraArgs(), CommandLine::Raw);
         return cmd;
     }
 
+private:
     StringAspect m_board{this};
     BoolAspect m_sysbuild{this};
     SelectionAspect m_optimization{this};
@@ -406,6 +408,13 @@ QString westBoard(const BuildConfiguration *bc)
     if (BuildStep *step = bc->buildSteps()->firstStepWithId(Constants::WEST_BUILD_STEP_ID))
         return static_cast<WestBuildStep *>(step)->board();
     return boardFromWestConfig(settings().workspaceDir());
+}
+
+CommandLine westConfigureCommand(const BuildConfiguration *bc)
+{
+    if (BuildStep *step = bc->buildSteps()->firstStepWithId(Constants::WEST_BUILD_STEP_ID))
+        return static_cast<WestBuildStep *>(step)->westCommand(true);
+    return {};
 }
 
 static FilePath qmlProjectExporterFromKit(const Kit *kit)
