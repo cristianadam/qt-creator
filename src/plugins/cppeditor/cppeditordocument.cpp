@@ -24,6 +24,8 @@
 
 #include <cplusplus/ASTPath.h>
 
+#include <projectexplorer/buildsystem.h>
+#include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
@@ -58,6 +60,14 @@ using namespace Utils;
 namespace CppEditor {
 
 using namespace Internal;
+
+// Until the first parse is done, the project cannot tell the code model about the file.
+static bool isInProjectBeingParsed(const FilePath &filePath)
+{
+    const Project *project = ProjectManager::projectForFile(filePath);
+    const BuildSystem *buildSystem = project ? project->activeBuildSystem() : nullptr;
+    return buildSystem && (buildSystem->isWaitingForParse() || buildSystem->isParsing());
+}
 
 static InfoBarEntry createInfoBarEntry(const FilePath &filePath)
 {
@@ -660,7 +670,9 @@ BaseEditorDocumentProcessor *CppEditorDocument::Private::processor()
         connect(m_processor.data(), &BaseEditorDocumentProcessor::projectPartInfoUpdated, q,
                 [this](const ProjectPartInfo &info) {
                     const bool hasProjectPart = !(info.hints & ProjectPartInfo::IsFallbackMatch);
-                    q->minimizableInfoBars()->setInfoVisible(NO_PROJECT_CONFIGURATION, !hasProjectPart);
+                    q->minimizableInfoBars()->setInfoVisible(
+                        NO_PROJECT_CONFIGURATION,
+                        !hasProjectPart && !isInProjectBeingParsed(q->filePath()));
                     updateInfoBarEntryIfVisible();
                     m_parseContextModel.update(info);
                     const bool isAmbiguous = info.hints & ProjectPartInfo::IsAmbiguousMatch;
