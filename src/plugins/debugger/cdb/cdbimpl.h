@@ -134,6 +134,11 @@ public:
     std::function<QString(const Utils::FilePath &)> moduleForSourceFile;
 };
 
+QByteArray cdbEnvironmentScript(const Utils::Environment &env,
+                                const Utils::Environment &deviceEnvironment,
+                                const Utils::FilePath &workingDirectory,
+                                QStringList *skippedKeys = nullptr);
+
 class DEBUGGER_EXPORT CdbImpl final : public DebuggerEngineInterface
 {
     Q_OBJECT
@@ -147,7 +152,8 @@ private:
     friend class DebuggerUnitTests;
 #endif
 
-    Utils::Result<Utils::FilePath> stageInitScript(const QString &commands);
+    Utils::Result<Utils::FilePath> stageScript(const QByteArray &contents);
+    void removeStagedScripts();
     Utils::Result<> setupProcess();
     void start() final;
     void shutdownInferior(ShutdownMode mode) final;
@@ -261,6 +267,7 @@ private:
     CdbImplStartData m_startData;
     Utils::Process m_cdbProc;
     Utils::FilePath m_initScriptFile;
+    Utils::FilePath m_environmentScriptFile;
     QTimer m_watchdog;
 
     QString m_extensionCommandPrefix = "!qtcreatorcdbext.";

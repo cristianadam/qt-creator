@@ -361,10 +361,7 @@ CdbImpl::CdbImpl(const CdbImplStartData &startData)
     });
     connect(&m_cdbProc, &Process::done, this, [this] {
         m_watchdog.stop();
-        if (!m_initScriptFile.isEmpty()) {
-            m_initScriptFile.removeFile();
-            m_initScriptFile.clear();
-        }
+        removeStagedScripts();
         // A session that ends before it ever opened never came up, whatever the
         // process made of it: a debugger that cannot be run at all and one that
         // runs and gives up are the same failure from here.
@@ -390,9 +387,45 @@ CdbImpl::~CdbImpl()
         m_cdbProc.kill();
 }
 
-// cdb reads its startup script where it runs itself, so the script is staged
+// A batch file setting the environment and the working directory of a cdb on a device. It is
+// UTF-8, which cmd.exe reads in the console code page, so that is 65001 while it runs. Inside
+// the quotes of 'set "KEY=value"' only '%' is special, and a '"' would end the quoting.
+// Keys of the device environment that are unset or disabled in env are cleared.
+QByteArray cdbEnvironmentScript(const Environment &env,
+                                const Environment &deviceEnvironment,
+                                const FilePath &workingDirectory,
+                                QStringList *skippedKeys)
+{
+    const auto escaped = [](QString text) { return text.replace('%', "%%"); };
+    QString script = "@echo off\r\n"
+                     "for /f \"tokens=2 delims=:.\" %%c in ('chcp') do set /a QTC_OLD_CP=%%c\r\n"
+                     "chcp 65001 > nul\r\n";
+    const auto set = [&](const QString &key, const QString &value) {
+        if (key.trimmed().isEmpty() || key.contains('=') || key.contains('"')
+            || value.contains('"') || value.contains('\n')) {
+            if (skippedKeys && !value.isEmpty())
+                skippedKeys->append(key);
+            return;
+        }
+        script += "set \"" + escaped(key) + '=' + escaped(value) + "\"\r\n";
+    };
+    env.forEachEntry([&](const QString &key, const QString &value, bool enabled) {
+        set(key, enabled ? env.expandVariables(value) : QString());
+    });
+    deviceEnvironment.forEachEntry([&](const QString &key, const QString &, bool) {
+        if (!env.hasKey(key))
+            set(key, {});
+    });
+    if (!workingDirectory.isEmpty())
+        script += "cd /d \"" + escaped(workingDirectory.nativePath()) + "\"\r\n";
+    script += "chcp %QTC_OLD_CP% > nul\r\n"
+              "set QTC_OLD_CP=\r\n";
+    return script.toUtf8();
+}
+
+// cdb reads its startup scripts where it runs itself, so they are staged
 // next to the inferior.
-Result<Utils::FilePath> CdbImpl::stageInitScript(const QString &commands)
+Result<Utils::FilePath> CdbImpl::stageScript(const QByteArray &contents)
 {
     FilePath dir;
     if (std::holds_alternative<ProcessRunData>(m_startData.inferiorStartData)) {
@@ -404,11 +437,21 @@ Result<Utils::FilePath> CdbImpl::stageInitScript(const QString &commands)
         dir = m_startData.debuggerRunData.command.executable().parentDir();
     const FilePath scriptFile
         = dir / ("qtc-cdb-" + QUuid::createUuid().toString(QUuid::Id128) + ".cmd");
-    if (const Result<qint64> res = scriptFile.writeFileContents(commands.toLocal8Bit()); !res) {
+    if (const Result<qint64> res = scriptFile.writeFileContents(contents); !res) {
         return ResultError(Tr::tr("Cannot write the debugger startup script \"%1\": %2")
                                .arg(scriptFile.toUserOutput(), res.error()));
     }
     return scriptFile;
+}
+
+void CdbImpl::removeStagedScripts()
+{
+    for (FilePath *file : {&m_initScriptFile, &m_environmentScriptFile}) {
+        if (!file->isEmpty()) {
+            file->removeFile();
+            file->clear();
+        }
+    }
 }
 
 Result<> CdbImpl::setupProcess()
@@ -456,8 +499,8 @@ Result<> CdbImpl::setupProcess()
     const QString idleCommand = ".idle_cmd " + m_extensionCommandPrefix + "idle";
     cdbCommand.addArgs({"-lines", "-G"});
     if (loadExtensionByPath) {
-        const Result<FilePath> scriptFile
-            = stageInitScript(".load " + extension.nativePath() + '\n' + idleCommand + '\n');
+        const Result<FilePath> scriptFile = stageScript(
+            (".load " + extension.nativePath() + '\n' + idleCommand + '\n').toLocal8Bit());
         if (!scriptFile)
             return ResultError(scriptFile.error());
         m_initScriptFile = *scriptFile;
@@ -526,11 +569,12 @@ Result<> CdbImpl::setupProcess()
         const auto &coreData = std::get<AttachToCoreData>(m_startData.inferiorStartData);
         cdbCommand.addArgs({"-z", coreData.coreFile.nativePath()});
     }
-    m_cdbProc.setCommand(cdbCommand);
-    if (runData.workingDirectory.isDir())
-        m_cdbProc.setWorkingDirectory(runData.workingDirectory);
+    const FilePath workingDirectory = runData.workingDirectory.isDir()
+                                          ? runData.workingDirectory : FilePath();
+    const Environment deviceEnvironment
+        = cdbExecutable.deviceEnvironmentWithError().value_or(Environment());
     Environment env = runData.environment.hasChanges() ? runData.environment
-                                                       : Environment::systemEnvironment();
+                                                       : deviceEnvironment;
     env.set("_NT_DEBUGGER_EXTENSION_PATH", m_startData.extensionDir.nativePath());
     if (!env.hasKey(Constants::NO_DEBUG_HEAP))
         env.set(Constants::NO_DEBUG_HEAP, m_startData.enableHeapDebugging ? "0" : "1");
@@ -542,7 +586,31 @@ Result<> CdbImpl::setupProcess()
                 env.set(key, "0");
         }
     }
-    m_cdbProc.setEnvironment(env);
+    if (cdbExecutable.isLocal()) {
+        m_cdbProc.setCommand(cdbCommand);
+        if (!workingDirectory.isEmpty())
+            m_cdbProc.setWorkingDirectory(workingDirectory);
+        m_cdbProc.setEnvironment(env);
+        return ResultOk;
+    }
+    // The device process interface does not inject an environment into a process in
+    // ProcessMode::Writer. Set it from a batch file in a cmd.exe running cdb, which
+    // leaves the command stream alone.
+    QStringList skippedKeys;
+    const Result<FilePath> scriptFile
+        = stageScript(cdbEnvironmentScript(env, deviceEnvironment, workingDirectory, &skippedKeys));
+    if (!scriptFile)
+        return ResultError(scriptFile.error());
+    m_environmentScriptFile = *scriptFile;
+    if (!skippedKeys.isEmpty()) {
+        emit message("Cannot pass these environment variables to the debugger on the device: "
+                         + skippedKeys.join(", "),
+                     LogWarning);
+    }
+    const QString cdbCall = "call \"" + m_environmentScriptFile.nativePath() + "\" & \""
+                            + cdbExecutable.nativePath() + "\" " + cdbCommand.arguments();
+    m_cdbProc.setCommand({cdbExecutable.withNewPath("cmd.exe"),
+                          "/d /v:off /s /c \"" + cdbCall + '"', CommandLine::Raw});
     return ResultOk;
 }
 
@@ -581,6 +649,7 @@ void CdbImpl::handleInitialSessionIdle()
 void CdbImpl::start()
 {
     if (const Result<> res = setupProcess(); !res) {
+        removeStagedScripts();
         emit message(res.error(), LogError);
         emit inferiorEvent(InferiorEvent::EngineSetupFailed);
         return;

@@ -267,16 +267,26 @@ void CdbEngine::handleSetupFailure(const QString &errorMessage)
     notifyEngineSetupFailed();
 }
 
-// Writes the cdb startup command script next to the inferior on the device and returns its
-// path, or an empty path (after reporting the failure) when it cannot be staged.
-FilePath CdbEngine::stageInitScript(const DebuggerRunParameters &sp, const QString &commands)
+void CdbEngine::removeStagedScripts()
+{
+    for (FilePath *file : {&m_initScriptFile, &m_environmentScriptFile}) {
+        if (!file->isEmpty()) {
+            file->removeFile();
+            file->clear();
+        }
+    }
+}
+
+// Writes a script for starting cdb next to the inferior on the device and returns its path,
+// or an empty path (after reporting the failure) when it cannot be staged.
+FilePath CdbEngine::stageScript(const DebuggerRunParameters &sp, const QByteArray &contents)
 {
     FilePath dir = sp.inferior().workingDirectory;
     if (dir.isEmpty())
         dir = sp.inferior().command.executable().parentDir();
     const FilePath scriptFile
         = dir / ("qtc-cdb-" + QUuid::createUuid().toString(QUuid::Id128) + ".cmd");
-    if (const Result<qint64> res = scriptFile.writeFileContents(commands.toLocal8Bit()); !res) {
+    if (const Result<qint64> res = scriptFile.writeFileContents(contents); !res) {
         handleSetupFailure(Tr::tr("Cannot write the debugger startup script \"%1\": %2")
                                .arg(scriptFile.toUserOutput(), res.error()));
         return {};
@@ -375,12 +385,11 @@ void CdbEngine::setupEngine()
     CommandLine debugger{sp.debugger().command};
     const bool isRemote = sp.startMode() == AttachToRemoteServer;
     // "-a<name>" only takes a bare DLL name, which cdb resolves through
-    // _NT_DEBUGGER_EXTENSION_PATH. That variable cannot be relied on for a cdb on a device:
-    // the process runs in ProcessMode::Writer, for which the device process interface does not
-    // inject an environment (a shell wrapper would corrupt the command stream). Load the
-    // extension by its absolute device path instead. ".load" needs the full path and consumes
-    // the rest of the line, so it cannot share the single "-c" string with ".idle_cmd"; use a
-    // startup script ("-cf"), which takes one command per line.
+    // _NT_DEBUGGER_EXTENSION_PATH. For a cdb on a device, load the extension by its absolute
+    // device path instead, which does not depend on the environment reaching it through the
+    // batch file staged below. ".load" needs the full path and consumes the rest of the line,
+    // so it cannot share the single "-c" string with ".idle_cmd"; use a startup script ("-cf"),
+    // which takes one command per line.
     const bool loadExtensionByPath = !cdbCommand.isLocal();
     if (isRemote) // Must be first
         debugger.addArgs({"-remote", sp.remoteChannel()});
@@ -393,11 +402,11 @@ void CdbEngine::setupEngine()
     // Source line info/No terminal breakpoint / Pull extension
     debugger.addArgs({"-lines", "-G"});
     if (loadExtensionByPath) {
-        const FilePath scriptFile = stageInitScript(
-            sp, ".load " + extensionDir.pathAppended(m_extensionFileName).nativePath() + '\n'
-                    + idleCommand + '\n');
+        const FilePath scriptFile = stageScript(
+            sp, (".load " + extensionDir.pathAppended(m_extensionFileName).nativePath() + '\n'
+                 + idleCommand + '\n').toLocal8Bit());
         if (scriptFile.isEmpty())
-            return; // stageInitScript() reported the failure.
+            return; // stageScript() reported the failure.
         m_initScriptFile = scriptFile;
         debugger.addArgs({"-cf", scriptFile.nativePath()});
     } else {
@@ -451,6 +460,7 @@ void CdbEngine::setupEngine()
         break;
     default:
         handleSetupFailure(QString("Internal error: Unsupported start mode %1.").arg(sp.startMode()));
+        removeStagedScripts();
         return;
     }
 
@@ -461,8 +471,10 @@ void CdbEngine::setupEngine()
 
     m_autoBreakPointCorrection = false;
 
+    const Environment deviceEnvironment
+        = cdbCommand.deviceEnvironmentWithError().value_or(Environment());
     Environment inferiorEnvironment = sp.inferior().environment.hasChanges()
-            ? sp.inferior().environment : Environment::systemEnvironment();
+            ? sp.inferior().environment : deviceEnvironment;
 
     // Make sure that QTestLib uses OutputDebugString for logging.
     const QString qtLoggingToConsoleKey = QStringLiteral("QT_LOGGING_TO_CONSOLE");
@@ -484,11 +496,35 @@ void CdbEngine::setupEngine()
         const QString value = s.enableHeapDebugging() ? "0" : "1";
         inferiorEnvironment.set(Debugger::Constants::NO_DEBUG_HEAP, value);
     }
-    m_process.setEnvironment(inferiorEnvironment);
-    if (!sp.inferior().workingDirectory.isEmpty())
-        m_process.setWorkingDirectory(sp.inferior().workingDirectory);
-
-    m_process.setCommand(debugger);
+    if (cdbCommand.isLocal()) {
+        m_process.setEnvironment(inferiorEnvironment);
+        if (!sp.inferior().workingDirectory.isEmpty())
+            m_process.setWorkingDirectory(sp.inferior().workingDirectory);
+        m_process.setCommand(debugger);
+    } else {
+        // The device process interface does not inject an environment into a process in
+        // ProcessMode::Writer. Set it from a batch file in a cmd.exe running cdb, which
+        // leaves the command stream alone.
+        QStringList skippedKeys;
+        const FilePath scriptFile = stageScript(
+            sp, cdbEnvironmentScript(inferiorEnvironment, deviceEnvironment,
+                                     sp.inferior().workingDirectory, &skippedKeys));
+        if (scriptFile.isEmpty()) {
+            removeStagedScripts();
+            return; // stageScript() reported the failure.
+        }
+        m_environmentScriptFile = scriptFile;
+        if (!skippedKeys.isEmpty()) {
+            showMessage("Cannot pass these environment variables to the debugger on the device: "
+                            + skippedKeys.join(", "),
+                        LogWarning);
+        }
+        const QString cdbCall = "call \"" + scriptFile.nativePath() + "\" & \""
+                                + debugger.executable().nativePath() + "\" "
+                                + debugger.arguments();
+        m_process.setCommand({cdbCommand.withNewPath("cmd.exe"),
+                              "/d /v:off /s /c \"" + cdbCall + '"', CommandLine::Raw});
+    }
     m_process.start();
 }
 
@@ -785,10 +821,7 @@ void CdbEngine::abortDebuggerProcess()
 
 void CdbEngine::processDone()
 {
-    if (!m_initScriptFile.isEmpty()) {
-        m_initScriptFile.removeFile();
-        m_initScriptFile.clear();
-    }
+    removeStagedScripts();
 
     if (m_process.result() == ProcessResult::StartFailed) {
         handleSetupFailure(m_process.exitMessage());
