@@ -37,16 +37,21 @@ public:
     int engineId(const WatchItem *item) const;
 
 private:
+#ifdef WITH_TESTS
+    friend class DebuggerUnitTests;
+#endif
+
     void selectObjectsInTree(const QList<int> &debugIds);
     void addObjectWatch(int objectDebugId);
 
     void reloadEngines();
-    void fetchObject(int debugId);
+    quint32 fetchObject(int debugId);
 
     void updateState();
     void onResult(quint32 queryId, const QVariant &value, const QByteArray &type);
     void newObject(int engineId, int objectId, int parentId);
     void onValueChanged(int debugId, const QByteArray &propertyName, const QVariant &value);
+    void applyValueChanges();
 
     void queryEngineContext();
     void updateObjectTree(const QmlDebug::ContextReference &contexts, int engineId = -1);
@@ -66,6 +71,9 @@ private:
 
     bool isConnected() const;
     void clearObjectTree();
+    void removeObjectWatch(int objectDebugId);
+    void removeObjectWatches();
+    void addDelegateWatch(const QString &iname, int objectDebugId);
 
     void toolsClientStateChanged(QmlDebug::QmlDebugClient::State state);
 
@@ -95,10 +103,15 @@ private:
     QHash<int, QString> m_debugIdToIname;
     QHash<int, QmlDebug::FileReference> m_debugIdLocations;
 
-    QList<int> m_objectWatches;
+    QHash<int, quint32> m_objectWatches; // debug id -> watch query id
     QList<int> m_fetchDataIds;
     QSet<int> m_knownDelegateIds;
+    QHash<quint32, int> m_delegateQueryIds; // fetch query id -> delegate debug id
+    QHash<int, QSet<int>> m_delegateWatches; // delegate debug id -> watched ids below it
+    QHash<int, QHash<QString, QVariant>> m_valueChanges; // debug id -> property -> value
     QTimer m_delayQueryTimer;
+    QTimer m_valueChangeTimer;
+    QTimer m_updateLocalsTimer;
 
     // toolbar
     Core::Context m_inspectorToolsContext;
