@@ -7,11 +7,16 @@
 
 QT_BEGIN_NAMESPACE
 class QObject;
+class QString;
 QT_END_NAMESPACE
+
+namespace ProjectExplorer { class BuildConfiguration; }
 
 namespace Zephyr::Internal {
 
 void setupWestBuildSteps();
+
+QString westBoard(const ProjectExplorer::BuildConfiguration *bc);
 
 #ifdef WITH_TESTS
 QObject *createWestBoardsTest();
