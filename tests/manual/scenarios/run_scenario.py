@@ -25,6 +25,7 @@ import http.client
 import json
 import os
 import re
+import secrets
 import shlex
 import subprocess
 import sys
@@ -57,11 +58,26 @@ SuppressedWarnings=TakeUITour, LinkWithQtInstallation
 # affected by editing modes that reinterpret keystrokes.
 LAUNCH_NOLOAD = ["FakeVim"]
 
+# The McpServer offers its ui_* tools only to those who switch them on, and the
+# runner drives Creator with nothing else. A launched Creator gets them even
+# without the preseed, an attached one needs them enabled in its preferences.
+UI_TOOLS = [
+    "activate_menu_item", "activate_mode", "answer_message_box", "call_action",
+    "click_item", "click_tab", "click_widget", "find_actions", "find_items",
+    "find_menu_item", "find_widgets", "get_message_boxes", "get_pointer_position",
+    "list_windows", "mouse_event", "press_keys", "read_general_messages",
+    "read_output_pane", "screenshot", "select_combo_item", "set_demo_pace",
+    "set_item_expanded", "show_caption", "type_text", "widget_exists",
+]
 
-def write_default_settings(settings_dir):
+
+def write_settings(settings_dir, preseed):
     ini = Path(settings_dir) / "QtProject" / "QtCreator.ini"
     ini.parent.mkdir(parents=True, exist_ok=True)
-    ini.write_text(DEFAULT_SETTINGS, encoding="utf-8")
+    text = DEFAULT_SETTINGS + "\n" if preseed else ""
+    text += "[McpServer]\n" + "".join(
+        "EnabledTools\\ui_{}=true\n".format(tool) for tool in UI_TOOLS)
+    ini.write_text(text, encoding="utf-8")
 
 
 def find_font():
@@ -80,9 +96,10 @@ class McpClient:
     connection without stalling the others.
     """
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, token=None):
         self.host = host
         self.port = port
+        self.token = token
         self.session_id = None
 
     def _rpc(self, obj):
@@ -91,6 +108,8 @@ class McpClient:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
+        if self.token:
+            headers["Authorization"] = "Bearer " + self.token
         if self.session_id:
             headers["mcp-session-id"] = self.session_id
         conn.request("POST", "/", json.dumps(obj), headers)
@@ -943,6 +962,10 @@ def main():
                          "--set workspace=/home/me/tmp. A var is written {NAME} in the "
                          "scenario and is how a machine-specific path or kit name stays "
                          "out of the file.")
+    ap.add_argument("--token", default=os.environ.get("QTC_MCP_TOKEN"),
+                    help="Authentication token of the attached Creator's MCP server, "
+                         "shown in its preferences (default: $QTC_MCP_TOKEN). A "
+                         "launched Creator is given one of the runner's own.")
     ap.add_argument("--qtcreator", help="Path to a Qt Creator binary to launch "
                     "(otherwise attach to --port)")
     ap.add_argument("--timeout", type=float, default=60,
@@ -1006,8 +1029,8 @@ def main():
         settings = scratch / "settings"
         settings.mkdir()
         launch = [args.qtcreator, "-settingspath", str(settings)]
+        write_settings(settings, not args.no_preseed)
         if not args.no_preseed:
-            write_default_settings(settings)
             for plugin in LAUNCH_NOLOAD:
                 launch += ["-noload", plugin]
         for plugin in args.noload:
@@ -1015,7 +1038,9 @@ def main():
         for plugin in args.load:
             launch += ["-load", plugin]
         # McpServer is loaded last so it survives a user "-noload all".
-        launch += ["-load", "McpServer", "-mcp-port", str(args.port)]
+        args.token = secrets.token_hex(16)
+        launch += ["-load", "McpServer", "-mcp-port", str(args.port),
+                   "-mcp-token", args.token]
         child = subprocess.Popen(launch)
 
     exit_code = 0
@@ -1031,7 +1056,7 @@ def main():
         if not wait_for_port(args.host, args.port, args.timeout, child):
             raise ScenarioError("MCP port {} did not open within {}s"
                                 .format(args.port, args.timeout))
-        client = McpClient(args.host, args.port)
+        client = McpClient(args.host, args.port, args.token)
         client.initialize()
         runner = Runner(client, scenario, out_dir, scratch, variables)
 
