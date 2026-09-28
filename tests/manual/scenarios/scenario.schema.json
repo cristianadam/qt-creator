@@ -18,6 +18,14 @@
             "description": "Placeholders the scenario's strings use as {name}, so a machine-specific path or kit name stays out of the file. Overridden per run with --set name=value. A value may itself use {scratch}.",
             "additionalProperties": { "type": ["string", "number", "boolean"] }
         },
+        "settings": {
+            "type": "object",
+            "description": "Settings groups written into the settings of a Creator the runner launches, e.g. a tool path the scenario needs. Values may use {name} vars. An attached Creator is not changed.",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": { "type": ["string", "number", "boolean"] }
+            }
+        },
         "setup": {
             "type": "object",
             "additionalProperties": false,
@@ -428,6 +436,102 @@
                             "type": "string",
                             "description": "A path to remove recursively, so a scenario can start from nothing. Removing what is not there succeeds. Supports vars."
                         }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["describe", "breakpoint"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "describe": { "$ref": "#/definitions/describeField" },
+                        "caption": { "$ref": "#/definitions/captionField" },
+                        "breakpoint": {
+                            "description": "Sets a breakpoint at a file and line.",
+                            "type": "object",
+                            "required": ["file", "line"],
+                            "additionalProperties": false,
+                            "properties": {
+                                "file": { "type": "string", "description": "Absolute path of the source file." },
+                                "line": { "type": "integer", "description": "1-based line number." }
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["describe", "debug"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "describe": { "$ref": "#/definitions/describeField" },
+                        "caption": { "$ref": "#/definitions/captionField" },
+                        "debug": {
+                            "description": "Starts debugging the startup project and waits until it stops, at a breakpoint or at main. It does not build first.",
+                            "oneOf": [
+                                { "type": "boolean" },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                        "break_at_main": { "type": "boolean", "description": "Stop at main." },
+                                        "timeout": { "type": "number", "description": "Seconds to wait for the stop. Default 120." }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["describe", "debug_step"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "describe": { "$ref": "#/definitions/describeField" },
+                        "caption": { "$ref": "#/definitions/captionField" },
+                        "debug_step": {
+                            "description": "Steps and waits until the debugger stops again.",
+                            "enum": ["over", "into", "out"]
+                        },
+                        "timeout": { "type": "number", "description": "Seconds to wait for the stop. Default 30." }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["describe", "locals"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "describe": { "$ref": "#/definitions/describeField" },
+                        "caption": { "$ref": "#/definitions/captionField" },
+                        "locals": {
+                            "description": "Reads the locals of the current frame into the tutorial and checks the expected ones.",
+                            "oneOf": [
+                                { "type": "boolean" },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                        "expect": {
+                                            "type": "object",
+                                            "description": "Local name to a text its value must contain.",
+                                            "additionalProperties": { "type": ["string", "number"] }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["describe", "debug_stop"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "describe": { "$ref": "#/definitions/describeField" },
+                        "caption": { "$ref": "#/definitions/captionField" },
+                        "debug_stop": {
+                            "description": "Ends the debug session and waits until it is gone.",
+                            "type": "boolean"
+                        },
+                        "timeout": { "type": "number", "description": "Seconds to wait. Default 30." }
                     }
                 },
                 {

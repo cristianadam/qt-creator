@@ -130,6 +130,9 @@ Top level:
 - `name` - title, also the default output subdirectory.
 - `intent` - one paragraph; appears as a blockquote in the tutorial.
 - `vars` - placeholders the steps use as `{name}` (see below).
+- `settings` - settings groups (`Zephyr: {WorkspaceDir: ...}`) written into
+  the settings of a Creator the runner launches, for the tool paths a
+  scenario needs. Values use vars. An attached Creator is left as it is.
 - `setup.open` - a file path to open first (supports `{scratch}`).
 - `steps` - a list; each step has a `describe` (the tutorial sentence) plus
   exactly one action key.
@@ -163,6 +166,11 @@ Action keys mirror the MCP tool names. Each step has exactly one:
 | `build`             | Builds the startup project and fails on a build error; `timeout:` seconds (default 300). |
 | `run`               | Runs it. Dispatched, not awaited (see below). |
 | `wait_for_output`   | `text:` plus `pane:` (default Application Output) and `timeout:`; polls the pane until a line contains the text. Only what the dispatched run itself wrote counts. |
+| `breakpoint`        | `file:` and `line:`, set through the debugger. |
+| `debug`             | Starts debugging the startup project (without building it) and waits for the stop; `break_at_main:`, `timeout:` seconds (default 120). |
+| `debug_step`        | `over`, `into` or `out`, then waits for the next stop. |
+| `locals`            | Reads the current frame's locals into the tutorial; `expect:` maps a name to a text its value must contain. |
+| `debug_stop`        | Ends the debug session and waits until it is gone. |
 | `remove`            | A path to remove recursively, so a scenario can start from nothing. Removing what is not there succeeds. |
 
 `{scratch}` in any string expands to a fresh per-run temporary directory, so a
@@ -203,7 +211,8 @@ honest: it fails the moment the line means something else.
 There is deliberately no `sleep`: wait only on observable conditions
 (`wait_for`, `wait_for_output`). See `about-dialog.yaml` for a small complete
 example and `cmake-project.yaml` for a whole development story - detected
-device and kit, the wizard, an edit, a build and a run.
+device and kit, the wizard, an edit, a build and a run. `zephyr-project.yaml`
+tells the same story for an embedded target and ends in the debugger.
 
 `harmonyos-project.yaml` is that same story for a HarmonyOS device, and is the
 exception to the rule that a scenario runs anywhere: it needs a HarmonyOS SDK,

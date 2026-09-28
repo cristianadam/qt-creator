@@ -71,12 +71,15 @@ UI_TOOLS = [
 ]
 
 
-def write_settings(settings_dir, preseed):
+def write_settings(settings_dir, preseed, extra):
     ini = Path(settings_dir) / "QtProject" / "QtCreator.ini"
     ini.parent.mkdir(parents=True, exist_ok=True)
     text = DEFAULT_SETTINGS + "\n" if preseed else ""
     text += "[McpServer]\n" + "".join(
         "EnabledTools\\ui_{}=true\n".format(tool) for tool in UI_TOOLS)
+    for group, values in extra.items():
+        text += "\n[{}]\n".format(group) + "".join(
+            "{}={}\n".format(key, value) for key, value in values.items())
     ini.write_text(text, encoding="utf-8")
 
 
@@ -637,6 +640,82 @@ class Runner:
                     note="Dispatched (the application keeps running; wait_for_output "
                          "observes it).")
 
+    def do_breakpoint(self, step):
+        spec = self.subst(step["breakpoint"])
+        args = {"type": "fileAndLine", "file": spec["file"], "line": int(spec["line"])}
+        r = self.call_or_fail("debugger_add_breakpoint", args, step["describe"]) or {}
+        if not r.get("success"):
+            raise ScenarioError("step {}: breakpoint at {}:{} was not set: {}".format(
+                self.step_no, spec["file"], spec["line"], r.get("error")))
+        where = "{}:{}".format(os.path.basename(spec["file"]), spec["line"])
+        self.record(step["describe"], "breakpoint " + json.dumps(args),
+                    note="Breakpoint set at " + where, tool="breakpoint",
+                    check={"at": where})
+
+    def _await_pause(self, describe, timeout):
+        # The frame is filled in once the stack arrives, a round trip after
+        # the engine reports the stop, so a pause without it is not settled.
+        deadline = time.monotonic() + timeout
+        r = {}
+        while time.monotonic() < deadline:
+            r = self.call_or_fail("debugger_get_status", {}, describe) or {}
+            if r.get("is_paused") and r.get("current_position"):
+                return r["current_position"]
+            time.sleep(0.2)
+        raise ScenarioError("step {}: the debugger did not stop within {}s ({})".format(
+            self.step_no, timeout, r.get("state")))
+
+    def _record_position(self, step, call_line, pos, tool):
+        where = "{}:{}".format(os.path.basename(pos.get("file", "?")), pos.get("line"))
+        note = "Stopped in {} at {}.".format(pos.get("function", "?"), where)
+        self.record(step["describe"], call_line, note=note, tool=tool,
+                    check={"function": pos.get("function"), "at": where})
+
+    def do_debug(self, step):
+        spec = self.subst(step["debug"]) if isinstance(step["debug"], dict) else {}
+        timeout = float(spec.pop("timeout", 120))
+        self.call_or_fail("debugger_start", spec, step["describe"])
+        pos = self._await_pause(step["describe"], timeout)
+        self._record_position(step, "debug " + json.dumps(spec), pos, "debug")
+
+    def do_debug_step(self, step):
+        kind = step["debug_step"]
+        tool = {"over": "debugger_step_over", "into": "debugger_step_in",
+                "out": "debugger_step_out"}[kind]
+        # The engine leaves the stopped state before the step call returns,
+        # so the pause waited for below is the one the step ends in.
+        self.call_or_fail(tool, {}, step["describe"])
+        pos = self._await_pause(step["describe"], float(step.get("timeout", 30)))
+        self._record_position(step, "debug_step " + kind, pos, "debug_step")
+
+    def do_locals(self, step):
+        spec = self.subst(step["locals"]) if isinstance(step["locals"], dict) else {}
+        r = self.call_or_fail("debugger_get_variables", {}, step["describe"]) or {}
+        variables = {v.get("name"): v.get("value") for v in r.get("variables", [])}
+        for name, value in (spec.get("expect") or {}).items():
+            if name not in variables:
+                raise ScenarioError("step {}: no local \"{}\" among {}".format(
+                    self.step_no, name, sorted(variables)))
+            if str(value) not in variables[name]:
+                raise ScenarioError('step {}: local "{}" is {}, expected {}'.format(
+                    self.step_no, name, variables[name], value))
+        note = ", ".join("{} = {}".format(k, v) for k, v in variables.items())
+        self.record(step["describe"], "locals", note="Locals: " + (note or "none"),
+                    tool="locals", check={"expect": spec.get("expect") or {}})
+
+    def do_debug_stop(self, step):
+        self.call_or_fail("debugger_stop", {}, step["describe"])
+        deadline = time.monotonic() + float(step.get("timeout", 30))
+        while time.monotonic() < deadline:
+            r = self.call_or_fail("debugger_get_status", {}, step["describe"]) or {}
+            if not r.get("has_session"):
+                break
+            time.sleep(0.2)
+        else:
+            raise ScenarioError("step {}: the debug session did not end".format(self.step_no))
+        self.record(step["describe"], "debug_stop", note="The debug session ended.",
+                    tool="debug_stop", check={"stopped": True})
+
     def do_click(self, step):
         query = self.subst(step["click_widget"])
         self.point_at(query)
@@ -872,6 +951,16 @@ class Runner:
                 self.do_build(step)
             elif "run" in step:
                 self.do_run(step)
+            elif "breakpoint" in step:
+                self.do_breakpoint(step)
+            elif "debug" in step:
+                self.do_debug(step)
+            elif "debug_step" in step:
+                self.do_debug_step(step)
+            elif "locals" in step:
+                self.do_locals(step)
+            elif "debug_stop" in step:
+                self.do_debug_stop(step)
             elif "remove" in step:
                 self.do_remove(step)
             elif "expect" in step:
@@ -1043,7 +1132,14 @@ def main():
         settings = scratch / "settings"
         settings.mkdir()
         launch = [args.qtcreator, "-settingspath", str(settings)]
-        write_settings(settings, not args.no_preseed)
+        def expand(value):
+            value = str(value)
+            for key, replacement in variables.items():
+                value = value.replace("{" + key + "}", replacement)
+            return value
+        extra = {group: {key: expand(value) for key, value in (values or {}).items()}
+                 for group, values in (scenario.get("settings") or {}).items()}
+        write_settings(settings, not args.no_preseed, extra)
         if not args.no_preseed:
             for plugin in LAUNCH_NOLOAD:
                 launch += ["-noload", plugin]
