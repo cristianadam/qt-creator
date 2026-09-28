@@ -349,6 +349,8 @@ public:
         AbstractProcessStep::setupOutputFormatter(formatter);
     }
 
+    QString board() const { return m_board(); }
+
 private:
     CommandLine westCommand() const
     {
@@ -398,6 +400,13 @@ public:
         setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_BUILD});
     }
 };
+
+QString westBoard(const BuildConfiguration *bc)
+{
+    if (BuildStep *step = bc->buildSteps()->firstStepWithId(Constants::WEST_BUILD_STEP_ID))
+        return static_cast<WestBuildStep *>(step)->board();
+    return boardFromWestConfig(settings().workspaceDir());
+}
 
 static FilePath qmlProjectExporterFromKit(const Kit *kit)
 {
