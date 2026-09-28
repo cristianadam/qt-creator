@@ -7,8 +7,11 @@
 #include "zephyrsettings.h"
 #include "zephyrtr.h"
 
+#include <coreplugin/actionmanager/actionmanager.h>
+
 #include <projectexplorer/abstractprocessstep.h>
 #include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/buildmanager.h>
 #include <projectexplorer/buildsteplist.h>
 #include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/processparameters.h>
@@ -26,18 +29,41 @@
 #include <utils/layoutbuilder.h>
 #include <utils/outputformatter.h>
 #include <utils/pathchooser.h>
+#include <utils/qtcprocess.h>
 #include <utils/terminalhooks.h>
 
 #include <QDesktopServices>
 #include <QDir>
 #include <QSettings>
 
+using namespace Core;
 using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Zephyr::Internal {
 
 static const char SDK_INSTALL_SCHEME[] = "zephyr-sdk-install";
+
+static FilePath westWorkingDirectory(const Project *project)
+{
+    const FilePath ws = settings().workspaceDir();
+    return ws.isEmpty() && project ? project->projectDirectory() : ws;
+}
+
+static void runWestInTerminal(const QStringList &westArgs, const FilePath &workingDir)
+{
+    const OsType osType = workingDir.osType();
+    QString command = ProcessArgs::quoteArg(settings().westFilePath().nativePath(), osType);
+    for (const QString &arg : westArgs)
+        command += ' ' + ProcessArgs::quoteArg(arg, osType);
+
+    CommandLine cmd;
+    if (osType == OsTypeWindows)
+        cmd = {workingDir.findCmdExe(), {"/k", command}};
+    else
+        cmd = {workingDir.withNewPath("/bin/bash"), {"-c", command + "; exec $SHELL"}};
+    Terminal::Hooks::instance().openTerminal({cmd, workingDir, std::nullopt});
+}
 
 class WestSdkInstaller : public QObject
 {
@@ -57,17 +83,82 @@ public:
 public slots:
     void install(const QUrl &)
     {
-        const FilePath ws = settings().workspaceDir();
-        const FilePath west = settings().westFilePath();
-        CommandLine cmd;
-        if (ws.osType() == OsTypeWindows) {
-            cmd = {ws.findCmdExe(), {"/k", west.nativePath() + " sdk install"}};
-        } else {
-            cmd = {ws.withNewPath("/bin/bash"),
-                   {"-c", west.nativePath() + " sdk install; exec $SHELL"}};
-        }
-        Terminal::Hooks::instance().openTerminal({cmd, ws, std::nullopt});
+        runWestInTerminal({"sdk", "install"}, settings().workspaceDir());
     }
+};
+
+class ZephyrActions final : public QObject
+{
+public:
+    ZephyrActions()
+    {
+        namespace PEC = ProjectExplorer::Constants;
+
+        auto addAction = [this](const char *id, const QString &text, QAction **action,
+                                const std::function<void(BuildConfiguration *)> &handler) {
+            ActionBuilder(this, Id("Zephyr.").withSuffix(id))
+                .setText(text)
+                .bindContextAction(action)
+                .setCommandAttribute(Command::CA_Hide)
+                .addToContainer(PEC::M_BUILD_TOOL, PEC::G_BUILD_TOOL)
+                .addOnTriggered(this, [handler] {
+                    if (BuildConfiguration *bc = activeBuildConfigForActiveProject())
+                        handler(bc);
+                });
+        };
+
+        addAction("Menuconfig", Tr::tr("Run Zephyr menuconfig"), &m_menuconfigAction,
+                  [](BuildConfiguration *bc) { runBuildTarget(bc, "menuconfig"); });
+        addAction("Guiconfig", Tr::tr("Run Zephyr guiconfig"), &m_guiconfigAction,
+                  [](BuildConfiguration *bc) {
+                      Process::startDetached({settings().westFilePath(),
+                                              buildTargetArgs(bc, "guiconfig")},
+                                             westWorkingDirectory(bc->project()));
+                  });
+        addAction("RamReport", Tr::tr("Show Zephyr RAM Report"), &m_ramReportAction,
+                  [](BuildConfiguration *bc) { runBuildTarget(bc, "ram_report"); });
+        addAction("RomReport", Tr::tr("Show Zephyr ROM Report"), &m_romReportAction,
+                  [](BuildConfiguration *bc) { runBuildTarget(bc, "rom_report"); });
+        addAction("WestUpdate", Tr::tr("Run west update"), &m_westUpdateAction,
+                  [](BuildConfiguration *bc) {
+                      runWestInTerminal({"update"}, westWorkingDirectory(bc->project()));
+                  });
+
+        connect(ProjectManager::instance(), &ProjectManager::startupProjectChanged,
+                this, &ZephyrActions::updateActions);
+        connect(BuildManager::instance(), &BuildManager::buildStateChanged,
+                this, &ZephyrActions::updateActions);
+        updateActions();
+    }
+
+private:
+    static QStringList buildTargetArgs(const BuildConfiguration *bc, const QString &target)
+    {
+        return {"build", "-d", bc->buildDirectory().nativePath(), "-t", target};
+    }
+
+    static void runBuildTarget(const BuildConfiguration *bc, const QString &target)
+    {
+        runWestInTerminal(buildTargetArgs(bc, target), westWorkingDirectory(bc->project()));
+    }
+
+    void updateActions()
+    {
+        Project *project = ProjectManager::startupProject();
+        const bool isZephyr = project && project->type() == Constants::ZEPHYR_PROJECT_ID;
+        const bool enabled = isZephyr && !BuildManager::isBuilding(project);
+        for (QAction *action : {m_menuconfigAction, m_guiconfigAction, m_ramReportAction,
+                                m_romReportAction, m_westUpdateAction}) {
+            action->setVisible(isZephyr);
+            action->setEnabled(enabled);
+        }
+    }
+
+    QAction *m_menuconfigAction = nullptr;
+    QAction *m_guiconfigAction = nullptr;
+    QAction *m_ramReportAction = nullptr;
+    QAction *m_romReportAction = nullptr;
+    QAction *m_westUpdateAction = nullptr;
 };
 
 class WestOutputParser final : public OutputTaskParser
@@ -506,6 +597,7 @@ void setupWestBuildSteps()
     static WestFlashStepFactory theFlashStepFactory;
     static ZephyrDeployConfigurationFactory theDeployConfigFactory;
     static WestSdkInstaller theSdkInstaller;
+    static ZephyrActions theActions;
 
     for (Project *project : ProjectManager::projects())
         connectProject(project);
