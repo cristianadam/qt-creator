@@ -584,24 +584,38 @@ class Runner:
         timeout = float(spec.pop("timeout", 300))
         deadline = time.monotonic() + timeout
         r = self.call_or_fail("build_project", spec, step["describe"]) or {}
-        # build_project blocks for its own wait_ms only, then hands back a
-        # build_id to attach to - the way to wait for a long build without
-        # holding an HTTP request open past the client's timeout.
-        while r.get("reason") == "still_building" and time.monotonic() < deadline:
-            r = self.call_or_fail("build_project", {"build_id": r["build_id"]},
-                                  step["describe"]) or {}
-        if not r.get("finished"):
-            raise ScenarioError("step {}: the build did not finish within {}s ({})".format(
-                self.step_no, timeout, r.get("reason")))
-        if not r.get("succeeded"):
-            raise ScenarioError("step {}: the build failed: {}".format(
-                self.step_no, r.get("summary_text") or json.dumps(r.get("issues"))))
+        if not r.get("build_id"):
+            raise ScenarioError("step {}: the build did not start: {}".format(
+                self.step_no, r.get("message") or r.get("reason")))
+        # build_get_status waits for its own wait_ms only, the way to wait for
+        # a long build without holding an HTTP request open past the client's
+        # timeout.
+        status = {"state": "running"}
+        while status.get("state") == "running" and time.monotonic() < deadline:
+            status = self.call_or_fail("build_get_status", {"build_id": r["build_id"]},
+                                       step["describe"]) or {}
+        state = status.get("state")
+        if state == "running":
+            raise ScenarioError("step {}: the build did not finish within {}s".format(
+                self.step_no, timeout))
+        if state != "succeeded":
+            # A tool that fails without a parsable diagnostic leaves no issue,
+            # and then only the end of its output says what went wrong.
+            _, issues, _ = self.client.call("build_get_issues", {"build_id": r["build_id"]})
+            detail = (issues or {}).get("issues")
+            if not detail:
+                _, out, _ = self.client.call("build_get_compile_output",
+                                             {"build_id": r["build_id"], "max_chars": 2000})
+                detail = (out or {}).get("output")
+            raise ScenarioError("step {}: the build {}: {}".format(
+                self.step_no, state, detail if isinstance(detail, str) else json.dumps(detail)))
         self.record(step["describe"], "build " + json.dumps(spec),
-                    note="{} ({} errors, {} warnings).".format(
-                        r.get("summary_text"), r.get("error_count"), r.get("warning_count")),
+                    note="Build succeeded in {:.0f}s ({} errors, {} warnings).".format(
+                        status.get("duration_ms", 0) / 1000, status.get("error_count"),
+                        status.get("warning_count")),
                     tool="build", check={"succeeded": True,
-                                         "error_count": r.get("error_count"),
-                                         "warning_count": r.get("warning_count")})
+                                         "error_count": status.get("error_count"),
+                                         "warning_count": status.get("warning_count")})
 
     def do_run(self, step):
         spec = step["run"] if isinstance(step["run"], dict) else {}
