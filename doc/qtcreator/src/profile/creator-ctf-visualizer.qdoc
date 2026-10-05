@@ -332,5 +332,7 @@
     ctf2ctf -o trace.json path/to/lttng trace/
     \endcode
 
+    \if defined(qtcreator)
     \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications}
+    \endif
 */
