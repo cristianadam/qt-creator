@@ -53,6 +53,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QVersionNumber>
 
 using namespace Debugger::Internal;
 using namespace Utils;
@@ -4835,6 +4836,15 @@ Utils::Result<> tst_backends::checkAcceptsBreakpoint(Backend backend, Breakpoint
     if (type == BreakpointByFileAndLine)
         query.fileName = inferiorTestData(backend).source;
     query.startMode = Debugger::StartInternal;
+    // The bridge sees a catch through sys.monitoring, which python has from 3.12 on.
+    if (backend == Backend::Pdb && type == BreakpointAtCatch) {
+        const QString line = inferiorTestData(backend).versionLine;
+        const QVersionNumber version = QVersionNumber::fromString(line.section(' ', 1, 1));
+        if (version < QVersionNumber(3, 12)) {
+            return Utils::ResultError(QString("%1 needs python 3.12, found \"%2\".")
+                                          .arg(description, line));
+        }
+    }
     if (data.acceptsBreakpoint && data.acceptsBreakpoint(query))
         return Utils::ResultOk;
     return Utils::ResultError(QString("%1 not accepted by %2.")
@@ -5416,9 +5426,6 @@ void tst_backends::stopsAtACaughtException()
     if (!testData.throwsAnException)
         QSKIP("This backend's inferior throws nothing to catch.");
 
-    if (backend == Backend::Pdb)
-        QSKIP("This test is flaky");
-
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
     QVERIFY(debuggerBackend);
     DebuggerEngineInterface *engine = debuggerBackend->engine();
@@ -5499,9 +5506,6 @@ void tst_backends::testBreakOnThrowAndCatchCapability()
         checkAcceptsBreakpoint(backend, BreakpointAtCatch, "A catch breakpoint");
     if (!takesThrow && !takesCatch)
         QSKIP(qPrintable(takesThrow.error() + QLatin1Char(' ') + takesCatch.error()));
-
-    if (backend == Backend::Pdb)
-        QSKIP("This test is flaky");
 
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
     QVERIFY(debuggerBackend);
@@ -6803,9 +6807,6 @@ void tst_backends::testRunCommandDeferralCapability()
     // available, the deferred change never lands and there is nothing to observe.
     if (!canInterruptRunningInferior(backend))
         QSKIP("this backend's running inferior cannot be interrupted on this host");
-
-    if (backend == Backend::Pdb)
-        QSKIP("This test is flaky");
 
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
     QVERIFY(debuggerBackend);
@@ -8249,9 +8250,6 @@ void tst_backends::reportsAnInterruptThatCollidesWithATemporaryStop()
     // neither stop happens and there is no collision to observe.
     if (!canInterruptRunningInferior(backend))
         QSKIP("this backend's running inferior cannot be interrupted on this host");
-
-    if (backend == Backend::Pdb)
-        QSKIP("This test is flaky");
 
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
     QVERIFY(debuggerBackend);
