@@ -1,0 +1,280 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-view-android-logcat.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-android
+
+    \title View Android logcat output
+
+    Android reports what happens on a device in a system log called logcat. Use
+    the \uicontrol Logcat tab in \l {Application Output} to read it while your
+    application runs, and to filter it down to the messages that help you debug.
+
+    \section1 Get started
+
+    To follow the log of a device or an emulator:
+
+    \list 1
+        \li Connect the device and \l{Debug on Android devices}
+            {enable USB debugging on it}, or \l {Start AVDs}{start an
+            emulator}.
+        \li Go to \uicontrol Tools > \uicontrol Android >
+            \uicontrol Logcat and select the device. The menu lists the
+            devices that are ready to use.
+    \endlist
+
+    \image {qtcreator-android-logcat.webp} {Logcat tab in Application Output}
+
+    Each device has its own tab. To check which device a tab shows, hover over
+    the tab. The tooltip displays the name, SDK level, and serial number of the
+    device.
+
+    When you run an application on a device, \QC opens the tab for you and
+    filters it to the messages of that application. Stopping or re-running the
+    application in the tab stops or re-runs it on the device.
+
+    \QC reads the log while the tab is visible and while an application that
+    you started from \QC is running on the device. If you hide the tab or the
+    \uicontrol {Application Output} pane while nothing is running, \QC stops
+    reading the log, and the messages that the device logs in the meantime are
+    lost. When you show the tab again, a status message tells you that output
+    was skipped, and \QC continues from there.
+
+    \section1 Read the log
+
+    In the \uicontrol Standard view, each line looks like this:
+
+    \code
+    2026-10-06 12:32:38.084 HWUI                    io.qt.coffeemachine                  W  Image decoding logging dropped!
+    \endcode
+
+    From left to right, the columns show when the message was logged, its tag,
+    the package name of the application that logged it, its level, and the
+    message text. You can also show the IDs of the process and the thread.
+
+    \QC shows the level as a letter and colors the whole line to match:
+
+    \table
+    \header
+        \li Letter
+        \li Level
+        \li Meaning
+    \row
+        \li \c V
+        \li Verbose
+        \li Fine-grained details, useful only while you trace a problem.
+    \row
+        \li \c D
+        \li Debug
+        \li Diagnostic messages that developers add for debugging.
+    \row
+        \li \c I
+        \li Info
+        \li Normal events, such as a service starting.
+    \row
+        \li \c W
+        \li Warning
+        \li An unexpected situation that the application handled, but that
+            might cause problems later.
+    \row
+        \li \c E
+        \li Error
+        \li An operation failed.
+    \row
+        \li \c F
+        \li Fatal
+        \li An unrecoverable failure. The application usually ends right
+            after it.
+    \endtable
+
+    A message that spans several lines, such as a stack trace, shows the columns
+    only on its first line. The other lines are indented, so that the message
+    text stays aligned.
+
+    \section2 Status messages
+
+    Between the log messages, \QC adds lines of its own, enclosed in asterisks,
+    such as \c {**** Phone_API_36 (emulator-5554) - disconnected ****}. They
+    report that:
+
+    \list
+        \li The device disconnected or connected again. After a disconnect,
+            \QC resumes reading the log by itself when the device returns.
+        \li \QC skipped output while the tab was hidden.
+        \li \QC could not start \c adb.
+    \endlist
+
+    These lines are shown whatever the filter is.
+
+    \section1 Choose what each line shows
+
+    There are two layouts, and they apply to all \uicontrol Logcat tabs. To
+    choose one, go to \preferences > \uicontrol {Build & Run} >
+    \uicontrol {Application Output} and set \uicontrol {View mode} in the
+    \uicontrol {Android Logcat} group.
+
+    \image {qtcreator-preferences-android-logcat.webp} {Android Logcat group in Application Output preferences}
+
+    \list
+        \li \uicontrol Compact is short and to the point. It shows the level,
+            the tag, the ID of the process, and the message:
+
+            \code
+            I/ActivityManager( 1483): Start proc 4521:com.example.app
+            \endcode
+        \li \uicontrol Standard lets you decide which columns to show. Select
+            them with \uicontrol {Show date and time},
+            \uicontrol {Show process and thread IDs}, \uicontrol {Show tag},
+            and \uicontrol {Show package name}. All except the process and
+            thread IDs are on by default. The level and the message always
+            follow.
+    \endlist
+
+    The column options are available only in the \uicontrol Standard layout.
+    The columns have a fixed width, so that the messages line up. If a tag or a
+    package name does not fit, \QC replaces the middle of it with three dots.
+
+    Logcat tabs also follow these settings in the \uicontrol {Application
+    Output} preferences:
+
+    \list
+        \li \uicontrol {Word-wrap output} wraps long messages, so that you do
+            not have to scroll sideways.
+        \li \uicontrol {Limit output to} sets how much output \QC keeps for a
+            tab. When the limit is reached, \QC discards the oldest messages.
+        \li \uicontrol {Overwrite background color} sets a background color
+            for the output.
+    \endlist
+
+    \section1 Filter messages
+
+    A Logcat tab shows the messages of the whole system, not only those of your
+    application. To narrow them down, enter a query in the filter field of the
+    \uicontrol {Application Output} pane. Each tab has its own filter, and \QC
+    applies it to the messages that the tab already contains, too.
+
+    A query consists of terms separated by spaces. A message is shown when it
+    matches all the terms. The matching is not case sensitive.
+
+    \section2 Query keys
+
+    A term is either plain text or a key with a value, such as
+    \c {tag:NetworkManager}.
+
+    \table
+    \header
+        \li Term
+        \li Shows messages that
+    \row
+        \li \e text
+        \li contain \e text anywhere in the line, including the tag and the
+            package name.
+    \row
+        \li \c {tag:}\e name
+        \li have a tag that contains \e name.
+    \row
+        \li \c {package:}\e name
+        \li come from an application that has \e name in its package name.
+    \row
+        \li \c package:mine
+        \li come from the application of the active project, including its
+            other processes.
+    \row
+        \li \c {level:}\e level
+        \li have the given level or a more severe one. Use \c verbose,
+            \c debug, \c info, \c warning, \c error, or \c fatal. You can
+            shorten them, as in \c {level:warn}. \c assert means the same as
+            \c fatal.
+    \endtable
+
+    \section2 Exclude messages
+
+    To leave messages out, put a minus sign in front of a term. This works for
+    keys and for plain text. For example, to hide the messages of the Wi-Fi
+    daemon, enter:
+
+    \code
+    -tag:wpa_supplicant
+    \endcode
+
+    \section2 Combine terms
+
+    Each term narrows the result further. For example, to see the warnings and
+    errors of your application, except those with the tag \c Choreographer,
+    enter:
+
+    \code
+    package:mine level:warning -tag:Choreographer
+    \endcode
+
+    The following queries are useful starting points:
+
+    \table
+    \header
+        \li To see
+        \li Enter
+    \row
+        \li All messages of your application
+        \li \c package:mine
+    \row
+        \li Only the problems of your application
+        \li \c {package:mine level:error}
+    \row
+        \li The messages of one component
+        \li \c {tag:NetworkManager}
+    \row
+        \li Messages that mention an exception
+        \li \c exception
+    \row
+        \li The messages of a package, without the noisy ones
+        \li \c {package:com.example -tag:Choreographer}
+    \endtable
+
+    \section2 About package names
+
+    The log does not contain the package name of a message. \QC looks it up in
+    the list of the processes that run on the device. A package name can
+    therefore appear a few seconds after its process has started, and until then
+    \c {package:} terms do not match the messages of that process.
+
+    \c package:mine matches nothing until \QC knows the package name of the
+    active project, which is after you have built the project or run it on the
+    device.
+
+    \section1 Find crashes
+
+    You do not have to search the log for crashes. When you run an application
+    on an Android device, \QC watches the log and lists the following problems
+    in \uicontrol Issues:
+
+    \list
+        \li A native crash.
+        \li A Java \c {FATAL EXCEPTION}, with the stack trace in the details
+            of the issue.
+        \li The termination of the application by the Android low-memory
+            killer, with the name and the process ID of the application.
+    \endlist
+
+    \section1 Troubleshooting
+
+    \list
+        \li \b {The device is not in the Logcat menu.} The menu lists only the
+            devices that are ready to use. Check that USB debugging is enabled
+            and that you have authorized the computer on the device. Also check
+            whether the device is listed in \preferences >
+            \uicontrol Devices.
+        \li \b {The tab is empty.} Check the filter field. A query that no
+            message matches, such as \c package:mine before you have built the
+            project, hides everything.
+        \li \b {Messages are missing.} If the tab contains the status message
+            that output was skipped, the tab was hidden while nothing was
+            running, and \QC did not read the log in the meantime. Keep the tab
+            visible to see all messages.
+    \endlist
+
+    \sa {Android}{How to: Develop for Android}, {Developing for Android},
+    {Application Output}, {Debug on Android devices}
+*/
