@@ -1653,7 +1653,7 @@ void GdbImpl::accessMemory(MemoryOp op, quint64 requestId, quint64 addr, quint64
     }
 
     MemoryRequestCookie cookie;
-    cookie.accumulator = std::make_shared<QByteArray>(lengthOrSize, char());
+    cookie.result = std::make_shared<MemoryReadResult>(addr, lengthOrSize);
     cookie.pendingRequests = std::make_shared<int>(1);
     cookie.requestId = requestId;
     cookie.base = addr;
@@ -1680,7 +1680,9 @@ void GdbImpl::handleFetchMemory(const DebuggerResponse &response, const MemoryRe
         if (memory.childCount() != 0) {
             int i = 0;
             for (const GdbMi &byte : memory.childAt(0)["data"])
-                (*cookie.accumulator)[cookie.offset + i++] = char(byte.data().toUInt(nullptr, 0));
+                cookie.result->data[cookie.offset + i++] = char(byte.data().toUInt(nullptr, 0));
+        } else {
+            cookie.result->setUnreadable(cookie.offset, cookie.length, "GDB returned no data.");
         }
     } else if (cookie.length > 1) {
         *cookie.pendingRequests += 2;
@@ -1692,10 +1694,14 @@ void GdbImpl::handleFetchMemory(const DebuggerResponse &response, const MemoryRe
         second.offset = cookie.offset + hunk;
         fetchMemoryHelper(first);
         fetchMemoryHelper(second);
+    } else {
+        cookie.result->setUnreadable(cookie.offset, cookie.length, response.data["msg"].data());
     }
 
-    if (*cookie.pendingRequests <= 0)
-        emit memoryDataReceived(cookie.requestId, cookie.base, *cookie.accumulator);
+    if (*cookie.pendingRequests <= 0) {
+        cookie.result->normalize();
+        emit memoryRead(cookie.requestId, *cookie.result);
+    }
 }
 
 QChar GdbImpl::mixedDisasmFlag() const

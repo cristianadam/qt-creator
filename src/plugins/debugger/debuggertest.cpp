@@ -23,6 +23,7 @@
 #include "enginemanager.h"
 #include "logwindow.h"
 #include "mcpsupport.h"
+#include "mcpsupport_p.h"
 #include "gdb/gdbengine.h"
 #include "genericdebuggerengine.h"
 #include "registerhandler.h"
@@ -67,6 +68,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QTest>
 #include <QTimer>
 #include <QVersionNumber>
@@ -164,6 +166,10 @@ private slots:
     void testMcpReadsTheRegistersOfTheCurrentStop();
     void testMcpRegistersOfAnOuterFrame_data();
     void testMcpRegistersOfAnOuterFrame();
+    void testMcpMemoryAccessPolicy_data();
+    void testMcpMemoryAccessPolicy();
+    void testMcpReadsMemory_data();
+    void testMcpReadsMemory();
     void testDisassemblyThatMissesTheAddressMarksNoLine();
     void testOnlyMachineCodeIsOfferedADisassembly();
     void testAnEmptyDisassemblyLeavesTheViewAlone();
@@ -2515,6 +2521,174 @@ void DebuggerUnitTests::testMcpRegistersOfAnOuterFrame()
     const quint64 outerPc = hexValue(registerNamed(*outer, programCounterName()).value("value"));
     QVERIFY(outerPc != 0);
     QVERIFY(outerPc != innerPc);
+}
+
+void DebuggerUnitTests::testMcpMemoryAccessPolicy_data()
+{
+    QTest::addColumn<int>("access");
+    QTest::addColumn<int>("startMode");
+    QTest::addColumn<int>("os");
+    QTest::addColumn<QString>("ranges");
+    QTest::addColumn<quint64>("address");
+    QTest::addColumn<quint64>("length");
+    QTest::addColumn<QString>("grant"); // Empty: refused.
+
+    const int processes = CommonSettings::McpMemoryOfProcesses;
+    QTest::newRow("local process")
+        << processes << int(StartExternal) << int(Abi::DarwinOS) << QString()
+        << quint64(0x1000) << quint64(16) << QString("process_memory");
+    QTest::newRow("gdbserver on linux")
+        << processes << int(AttachToRemoteServer) << int(Abi::LinuxOS) << QString()
+        << quint64(0x1000) << quint64(16) << QString("process_memory");
+    QTest::newRow("bare metal without ranges")
+        << processes << int(AttachToRemoteServer) << int(Abi::BareMetalOS) << QString()
+        << quint64(0x20000000) << quint64(16) << QString();
+    QTest::newRow("bare metal in a range")
+        << processes << int(AttachToRemoteServer) << int(Abi::BareMetalOS)
+        << QString("0x08000000-0x080fffff, 0x20000000-0x2001ffff")
+        << quint64(0x20000000) << quint64(0x20000) << QString("allowed_range");
+    QTest::newRow("bare metal past the end of a range")
+        << processes << int(AttachToRemoteServer) << int(Abi::BareMetalOS)
+        << QString("0x20000000-0x2001ffff")
+        << quint64(0x2001fff0) << quint64(32) << QString();
+    QTest::newRow("unknown target")
+        << processes << int(AttachToRemoteServer) << int(Abi::UnknownOS) << QString()
+        << quint64(0x1000) << quint64(16) << QString();
+    QTest::newRow("bare metal even when launched")
+        << processes << int(StartInternal) << int(Abi::BareMetalOS) << QString()
+        << quint64(0x1000) << quint64(16) << QString();
+    QTest::newRow("turned off")
+        << int(CommonSettings::McpMemoryNever) << int(StartExternal) << int(Abi::DarwinOS)
+        << QString() << quint64(0x1000) << quint64(16) << QString();
+    QTest::newRow("anywhere")
+        << int(CommonSettings::McpMemoryAnywhere) << int(AttachToRemoteServer)
+        << int(Abi::BareMetalOS) << QString() << quint64(0x40000000) << quint64(4)
+        << QString("any_memory");
+}
+
+void DebuggerUnitTests::testMcpMemoryAccessPolicy()
+{
+    QFETCH(int, access);
+    QFETCH(int, startMode);
+    QFETCH(int, os);
+    QFETCH(QString, ranges);
+    QFETCH(quint64, address);
+    QFETCH(quint64, length);
+    QFETCH(QString, grant);
+
+    CommonSettings &s = commonSettings();
+    const int oldAccess = s.mcpMemoryAccess();
+    const QString oldRanges = s.mcpMemoryRanges();
+    const QScopeGuard restore([&] {
+        s.mcpMemoryAccess.setValue(oldAccess);
+        s.mcpMemoryRanges.setValue(oldRanges);
+    });
+    s.mcpMemoryAccess.setValue(access);
+    s.mcpMemoryRanges.setValue(ranges);
+
+    DebuggerRunParameters rp;
+    rp.setStartMode(DebuggerStartMode(startMode));
+    rp.setToolChainAbi(Abi(Abi::ArmArchitecture, Abi::OS(os)));
+
+    const Result<QString> result = mcpMemoryAccessGrant(rp, address, length);
+    if (grant.isEmpty()) {
+        QVERIFY2(!result, qPrintable(result ? *result : QString()));
+        QVERIFY(!result.error().isEmpty());
+    } else {
+        QVERIFY2(result, qPrintable(result ? QString() : result.error()));
+        QCOMPARE(*result, grant);
+    }
+}
+
+// A buffer whose bytes say which offset they are at.
+static const char s_memorySource[] = R"CPP(
+int main()
+{
+    unsigned char pattern[64];
+    for (int i = 0; i < 64; ++i)
+        pattern[i] = (unsigned char)i;
+    int first = pattern[0]; // MARKER: read
+    return first;
+}
+)CPP";
+
+void DebuggerUnitTests::testMcpReadsMemory_data()
+{
+    addBackendRows();
+}
+
+void DebuggerUnitTests::testMcpReadsMemory()
+{
+    QFETCH(bool, generic);
+    const BackendUnderTest backend(generic);
+    if (const QString reason = backend.reasonItIsNotUnderTest(); !reason.isEmpty())
+        QSKIP(qPrintable(reason));
+
+    CommonSettings &s = commonSettings();
+    const int oldAccess = s.mcpMemoryAccess();
+    const int oldLimit = s.mcpMemoryReadLimit();
+    const QScopeGuard restore([&] {
+        s.mcpMemoryAccess.setValue(oldAccess);
+        s.mcpMemoryReadLimit.setValue(oldLimit);
+    });
+    s.mcpMemoryAccess.setValue(CommonSettings::McpMemoryOfProcesses);
+    s.mcpMemoryReadLimit.setValue(4096);
+
+    SteppingSession session(s_memorySource);
+    const QString problem = session.start("MARKER: read");
+    QVERIFY2(problem.isEmpty(), qPrintable(problem));
+
+    const Result<QJsonObject> locals = callDebuggerTool("debugger_get_variables");
+    QVERIFY2(locals, qPrintable(errorOf(locals)));
+    const QString patternAddress = variableNamed(*locals, "pattern").value("address").toString();
+    QVERIFY2(patternAddress.startsWith("0x"),
+             QJsonDocument(*locals).toJson(QJsonDocument::Compact).constData());
+
+    const Result<QJsonObject> read = callDebuggerTool(
+        "debugger_read_memory", {{"address", patternAddress}, {"length", 16}});
+    QVERIFY2(read, qPrintable(errorOf(read)));
+    QCOMPARE(read->value("access").toString(), QString("process_memory"));
+    QCOMPARE(read->value("bytes_read").toInt(), 16);
+    QVERIFY(!read->value("truncated").toBool());
+    const QJsonArray segments = read->value("segments").toArray();
+    QCOMPARE(segments.size(), 1);
+    QVERIFY(segments.first().toObject().value("readable").toBool());
+    QCOMPARE(segments.first().toObject().value("data").toString(),
+             QString("000102030405060708090a0b0c0d0e0f"));
+
+    // Address zero is mapped in no process.
+    const Result<QJsonObject> unmapped
+        = callDebuggerTool("debugger_read_memory", {{"address", 0}, {"length", 16}});
+    QVERIFY2(unmapped, qPrintable(errorOf(unmapped)));
+    QCOMPARE(unmapped->value("bytes_read").toInt(), 0);
+    int unreadable = 0;
+    for (const QJsonValue &v : unmapped->value("segments").toArray()) {
+        const QJsonObject segment = v.toObject();
+        QVERIFY(!segment.value("readable").toBool());
+        QVERIFY(!segment.contains("data"));
+        QVERIFY(!segment.value("reason").toString().isEmpty());
+        unreadable += segment.value("length").toInt();
+    }
+    QCOMPARE(unreadable, 16);
+
+    s.mcpMemoryReadLimit.setValue(8);
+    const Result<QJsonObject> limited = callDebuggerTool(
+        "debugger_read_memory", {{"address", patternAddress}, {"length", 16},
+                                 {"encoding", "base64"}});
+    QVERIFY2(limited, qPrintable(errorOf(limited)));
+    QVERIFY(limited->value("truncated").toBool());
+    QCOMPARE(limited->value("length").toInt(), 8);
+    QCOMPARE(limited->value("requested_length").toInt(), 16);
+    QCOMPARE(limited->value("next_address").toString().toULongLong(nullptr, 16),
+             patternAddress.toULongLong(nullptr, 16) + 8);
+    QCOMPARE(QByteArray::fromBase64(limited->value("segments").toArray().first().toObject()
+                                        .value("data").toString().toLatin1()),
+             QByteArray::fromHex("0001020304050607"));
+
+    s.mcpMemoryAccess.setValue(CommonSettings::McpMemoryNever);
+    const Result<QJsonObject> refused = callDebuggerTool(
+        "debugger_read_memory", {{"address", patternAddress}, {"length", 4}});
+    QVERIFY(!refused);
 }
 
 static QStringList s_capturedMessages;
