@@ -57,6 +57,7 @@ QtcPlugin {
             "localsandexpressionswindow.cpp", "localsandexpressionswindow.h",
             "logwindow.cpp", "logwindow.h",
             "memoryagent.cpp", "memoryagent.h",
+            "mcpintrospection.cpp",
             "mcpsessionstate.cpp", "mcpsessionstate.h",
             "mcpsupport.cpp", "mcpsupport.h", "mcpsupport_p.h",
             "moduleshandler.cpp", "moduleshandler.h",

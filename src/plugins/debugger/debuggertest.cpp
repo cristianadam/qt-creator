@@ -156,6 +156,10 @@ private slots:
     void testMcpOperationIsNotCompleteBeforeTheStop();
     void testMcpSelectFrameWaitsForItsLocals_data();
     void testMcpSelectFrameWaitsForItsLocals();
+    void testMcpCollectsTheStacksOfAllThreads_data();
+    void testMcpCollectsTheStacksOfAllThreads();
+    void testMcpThreadStacksAreBounded_data();
+    void testMcpThreadStacksAreBounded();
     void testDisassemblyThatMissesTheAddressMarksNoLine();
     void testOnlyMachineCodeIsOfferedADisassembly();
     void testAnEmptyDisassemblyLeavesTheViewAlone();
@@ -2253,6 +2257,139 @@ void DebuggerUnitTests::testMcpSelectFrameWaitsForItsLocals()
     QCOMPARE(inCaller->value("context").toObject().value("frame_level").toInt(), 1);
     QVERIFY(!variableNamed(*inCaller, "first").isEmpty());
     QVERIFY(variableNamed(*inCaller, "value").isEmpty());
+}
+
+// Two threads that wait in a function of their own name while main stops.
+static const char s_threadsSource[] = R"CPP(
+#include <atomic>
+#include <chrono>
+#include <thread>
+
+std::atomic<int> started{0};
+
+void parkedWorker()
+{
+    ++started;
+    for (;;)
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+}
+
+int main()
+{
+    std::thread first(parkedWorker);
+    std::thread second(parkedWorker);
+    while (started < 2)
+        std::this_thread::yield();
+    int both = started; // MARKER: all-started
+    first.detach();
+    second.detach();
+    return both - 2;
+}
+)CPP";
+
+static bool hasFrameIn(const QJsonObject &thread, const QString &function)
+{
+    for (const QJsonValue &frame : thread.value("frames").toArray()) {
+        if (frame.toObject().value("function").toString().startsWith(function))
+            return true;
+    }
+    return false;
+}
+
+void DebuggerUnitTests::testMcpCollectsTheStacksOfAllThreads_data()
+{
+    addBackendRows();
+}
+
+void DebuggerUnitTests::testMcpCollectsTheStacksOfAllThreads()
+{
+    QFETCH(bool, generic);
+    const BackendUnderTest backend(generic);
+    if (const QString reason = backend.reasonItIsNotUnderTest(); !reason.isEmpty())
+        QSKIP(qPrintable(reason));
+
+    SteppingSession session(s_threadsSource, {"-std=c++17", "-pthread"});
+    const QString problem = session.start("MARKER: all-started");
+    QVERIFY2(problem.isEmpty(), qPrintable(problem));
+
+    const Result<QJsonObject> before = callDebuggerTool("debugger_get_call_stack");
+    QVERIFY2(before, qPrintable(errorOf(before)));
+    const QString originalThread = before->value("context").toObject().value("thread_id").toString();
+    QVERIFY(!originalThread.isEmpty());
+
+    const Result<QJsonObject> stacks
+        = callDebuggerTool("debugger_get_thread_stacks", {{"max_frames", 10}});
+    QVERIFY2(stacks, qPrintable(errorOf(stacks)));
+    QVERIFY(stacks->value("same_stop").toBool());
+    QVERIFY(!stacks->value("target_resumed").toBool());
+    QVERIFY(stacks->value("selection_restored").toBool());
+    QCOMPARE(stacks->value("stop_id").toInt(), stopIdOf(*before));
+
+    int workers = 0;
+    int mains = 0;
+    const QJsonArray threads = stacks->value("threads").toArray();
+    for (const QJsonValue &value : threads) {
+        const QJsonObject thread = value.toObject();
+        QVERIFY2(!thread.contains("error"),
+                 qPrintable(thread.value("id").toString() + ": "
+                            + thread.value("error").toString()));
+        if (hasFrameIn(thread, "parkedWorker"))
+            ++workers;
+        const QJsonObject top = thread.value("frames").toArray().first().toObject();
+        if (top.value("function").toString().startsWith("main")) {
+            ++mains;
+            QCOMPARE(top.value("line").toInt(), session.line());
+            QCOMPARE(thread.value("id").toString(), originalThread);
+        }
+    }
+    QVERIFY2(threads.size() >= 3, qPrintable(QString::number(threads.size())));
+    QCOMPARE(workers, 2);
+    QCOMPARE(mains, 1);
+
+    const Result<QJsonObject> after = callDebuggerTool("debugger_get_call_stack");
+    QVERIFY2(after, qPrintable(errorOf(after)));
+    QCOMPARE(after->value("context").toObject().value("thread_id").toString(), originalThread);
+    QCOMPARE(stopIdOf(*after), stopIdOf(*before));
+    QCOMPARE(after->value("frames").toArray().first().toObject().value("line").toInt(),
+             session.line());
+}
+
+void DebuggerUnitTests::testMcpThreadStacksAreBounded_data()
+{
+    addBackendRows();
+}
+
+void DebuggerUnitTests::testMcpThreadStacksAreBounded()
+{
+    QFETCH(bool, generic);
+    const BackendUnderTest backend(generic);
+    if (const QString reason = backend.reasonItIsNotUnderTest(); !reason.isEmpty())
+        QSKIP(qPrintable(reason));
+
+    SteppingSession session(s_threadsSource, {"-std=c++17", "-pthread"});
+    const QString problem = session.start("MARKER: all-started");
+    QVERIFY2(problem.isEmpty(), qPrintable(problem));
+
+    const Result<QJsonObject> shallow = callDebuggerTool(
+        "debugger_get_thread_stacks", {{"max_frames", 1}, {"fields", QJsonArray{"function"}}});
+    QVERIFY2(shallow, qPrintable(errorOf(shallow)));
+    for (const QJsonValue &value : shallow->value("threads").toArray()) {
+        const QJsonObject thread = value.toObject();
+        const QJsonArray frames = thread.value("frames").toArray();
+        QCOMPARE(frames.size(), 1);
+        const QJsonObject frame = frames.first().toObject();
+        QVERIFY(frame.contains("function"));
+        QVERIFY(!frame.contains("line"));
+        QVERIFY(!frame.contains("address"));
+        if (thread.value("frames_loaded").toInt() > 1)
+            QVERIFY(thread.value("truncated").toBool());
+    }
+
+    const Result<QJsonObject> one
+        = callDebuggerTool("debugger_get_thread_stacks", {{"max_threads", 1}});
+    QVERIFY2(one, qPrintable(errorOf(one)));
+    QCOMPARE(one->value("threads").toArray().size(), 1);
+    QVERIFY(one->value("omitted_threads").toArray().size() >= 2);
 }
 
 static QStringList s_capturedMessages;
