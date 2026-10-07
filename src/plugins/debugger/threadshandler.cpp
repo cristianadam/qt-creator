@@ -217,6 +217,7 @@ bool ThreadsHandler::setData(const QModelIndex &idx, const QVariant &data, int r
             m_currentThread = thread;
             threadSwitcher()->setCurrentIndex(idx.row());
             m_engine->selectThread(thread);
+            emit currentThreadChanged();
         }
         return true;
     }
@@ -269,6 +270,7 @@ void ThreadsHandler::setCurrentThread(const Thread &thread)
     m_currentThread = thread;
     thread->update();
     threadSwitcher()->setCurrentIndex(thread->index().row());
+    emit currentThreadChanged();
 }
 
 void ThreadsHandler::notifyGroupCreated(const QString &groupId, const QString &pid)
@@ -373,6 +375,7 @@ void ThreadsHandler::setThreads(const GdbMi &data)
         updateThread(thread);
     }
 
+    const Thread previous = m_currentThread;
     const QString &currentId = data["current-thread-id"].data();
     m_currentThread = threadForId(currentId);
 
@@ -383,6 +386,8 @@ void ThreadsHandler::setThreads(const GdbMi &data)
         const QModelIndex currentThreadIndex = m_currentThread->index();
         threadSwitcher()->setCurrentIndex(currentThreadIndex.row());
     }
+    if (m_currentThread != previous)
+        emit currentThreadChanged();
 }
 
 QAbstractItemModel *ThreadsHandler::model()

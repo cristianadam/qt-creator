@@ -29,6 +29,7 @@ signals:
     void itemIsExpanded(const QModelIndex &idx);
     void inameIsExpanded(const QString &iname);
     void updateStarted();
+    void updateAborted();
     void updateFinished();
 };
 

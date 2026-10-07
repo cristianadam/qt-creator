@@ -2474,6 +2474,7 @@ void WatchHandler::notifyUpdateAborted()
     m_model->forAllItems([](WatchItem *item) { item->outdated = false; });
     m_model->m_contentsValid = true;
     updateLocalsWindow();
+    emit m_model->updateAborted();
     emit m_model->updateFinished();
 }
 
