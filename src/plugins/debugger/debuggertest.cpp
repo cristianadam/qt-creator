@@ -170,6 +170,8 @@ private slots:
     void testMcpMemoryAccessPolicy();
     void testMcpReadsMemory_data();
     void testMcpReadsMemory();
+    void testMcpEvaluatesAnExpressionOfTheCurrentStop_data();
+    void testMcpEvaluatesAnExpressionOfTheCurrentStop();
     void testMcpReportsCapabilities_data();
     void testMcpReportsCapabilities();
     void testDisassemblyThatMissesTheAddressMarksNoLine();
@@ -2700,6 +2702,56 @@ void DebuggerUnitTests::testMcpReadsMemory()
     const Result<QJsonObject> refused = callDebuggerTool(
         "debugger_read_memory", {{"address", patternAddress}, {"length", 4}});
     QVERIFY(!refused);
+}
+
+void DebuggerUnitTests::testMcpEvaluatesAnExpressionOfTheCurrentStop_data()
+{
+    addBackendRows();
+}
+
+void DebuggerUnitTests::testMcpEvaluatesAnExpressionOfTheCurrentStop()
+{
+    QFETCH(bool, generic);
+    const BackendUnderTest backend(generic);
+    if (const QString reason = backend.reasonItIsNotUnderTest(); !reason.isEmpty())
+        QSKIP(qPrintable(reason));
+
+    SteppingSession session;
+    const QString problem = session.start("MARKER: after-call");
+    QVERIFY2(problem.isEmpty(), qPrintable(problem));
+
+    const auto evaluate = [](const QString &expression) {
+        return callDebuggerTool("debugger_evaluate_expression", {{"expression", expression}});
+    };
+
+    const Result<QJsonObject> second = evaluate("second");
+    QVERIFY2(second, qPrintable(errorOf(second)));
+    QCOMPARE(second->value("value").toString(), QString("2"));
+    QCOMPARE(second->value("type").toString(), QString("int"));
+    QVERIFY(stopIdOf(*second) > 0);
+
+    const Result<QJsonObject> sum = evaluate("first + second");
+    QVERIFY2(sum, qPrintable(errorOf(sum)));
+    QCOMPARE(sum->value("value").toString(), QString("3"));
+
+    // An expression the user watches already is answered, and stays watched.
+    const Result<QJsonObject> watched
+        = callDebuggerTool("debugger_add_watch_expression", {{"expression", "first"}});
+    QVERIFY2(watched, qPrintable(errorOf(watched)));
+    const QString watchIname = watched->value("iname").toString();
+    const QScopeGuard unwatch([watchIname] {
+        callDebuggerTool("debugger_remove_watch_expression", {{"iname", watchIname}});
+    });
+    const Result<QJsonObject> first = evaluate("first");
+    QVERIFY2(first, qPrintable(errorOf(first)));
+    QCOMPARE(first->value("value").toString(), QString("1"));
+    const Result<QJsonObject> variables
+        = callDebuggerTool("debugger_get_variables", {{"include_watchers", true}});
+    QVERIFY2(variables, qPrintable(errorOf(variables)));
+    bool stillWatched = false;
+    for (const QJsonValue &v : variables->value("variables").toArray())
+        stillWatched |= v.toObject().value("iname").toString() == watchIname;
+    QVERIFY(stillWatched);
 }
 
 static QJsonObject capabilityNamed(const QJsonObject &answer, const QString &name)

@@ -2494,6 +2494,11 @@ void WatchModel::removeWatchItem(WatchItem *item)
     m_handler->updateLocalsWindow();
 }
 
+bool WatchHandler::isWatched(const QString &exp)
+{
+    return theWatcherNames.contains(exp);
+}
+
 QString WatchHandler::watcherName(const QString &exp)
 {
     return "watch." + QString::number(theWatcherNames[exp]);
