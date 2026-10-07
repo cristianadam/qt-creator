@@ -867,6 +867,14 @@ public:
         m_locationTimer.start(80);
     }
 
+    // The target stayed where it was, so what it showed there still holds.
+    void cancelResetLocation()
+    {
+        m_locationTimer.stop();
+        m_stackHandler.cancelResetLocation();
+        m_watchHandler.cancelResetLocation();
+    }
+
     void resetLocation()
     {
         m_lookupRequests.clear();
@@ -1847,6 +1855,7 @@ void DebuggerEngine::notifyInferiorRunFailed()
 {
     showMessage("NOTE: INFERIOR RUN FAILED");
     QTC_ASSERT(state() == InferiorRunRequested, qDebug() << this << state());
+    d->cancelResetLocation();
     setState(InferiorRunFailed);
     setState(InferiorStopOk);
     if (isDying())
