@@ -539,6 +539,7 @@ public:
     virtual void requestModuleSections(const Utils::FilePath &moduleName);
 
     virtual void reloadRegisters();
+    void reloadRegistersEvenIfHidden();
     virtual void reloadPeripheralRegisters();
     virtual void reloadSourceFiles();
     virtual void reloadFullStack();
