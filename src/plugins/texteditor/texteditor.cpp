@@ -1624,6 +1624,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
 
     m_document = doc;
     q->PlainTextEdit::setDocument(doc->document());
+    q->editorLayout()->setTabStopOffset(m_visualIndentOffset);
     m_tabSettingsButton->setDocument(q->textDocument());
     previousDocument.clear();
     q->setCursorWidth(2); // Applies to the document layout
@@ -2293,6 +2294,7 @@ QString TextEditorWidget::selectedText() const
 void TextEditorWidget::setVisualIndentOffset(int offset)
 {
     d->m_visualIndentOffset = qMax(0, offset);
+    editorLayout()->setTabStopOffset(d->m_visualIndentOffset);
 }
 
 void TextEditorWidget::updateUndoRedoActions()

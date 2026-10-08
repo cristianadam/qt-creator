@@ -22,6 +22,7 @@
 
 #include <utils/filepath.h>
 #include <utils/multitextcursor.h>
+#include <utils/plaintextedit/texteditorlayout.h>
 #include <utils/temporarydirectory.h>
 
 #include <QScopeGuard>
@@ -109,6 +110,10 @@ private slots:
     void testTextDocumentChanged();
     void testIndentationGuides_data();
     void testIndentationGuides();
+    void testTabStopOffset_data();
+    void testTabStopOffset();
+    void testTabStopArrayBound_data();
+    void testTabStopArrayBound();
     void testMoveLinesEndingInEmptyLine();
 };
 
@@ -393,6 +398,126 @@ void TextEditorTest::testIndentationGuides()
             foundGuide |= changedPixels >= targetRect.height() * scale / 2;
         }
         QVERIFY2(foundGuide, qPrintable(QString("Missing guide at column %1").arg(column)));
+    }
+}
+
+void TextEditorTest::testTabStopOffset_data()
+{
+    QTest::addColumn<QString>("prefix");
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<int>("tabSize");
+    QTest::addColumn<bool>("replaceDocument");
+
+    for (const QString &prefix : {QString(), QString("+"), QString("-"), QString(" ")}) {
+        const QList<QString> texts = {"\ttext", " \t \ttext", "    \ttext",
+                                      QString(32, '\t') + " \ttext"};
+        for (const QString &text : texts) {
+            for (int tabSize : {1, 4, 8}) {
+                for (bool replaceDocument : {false, true}) {
+                    const QString name = QString("%1-%2-%3-%4")
+                                             .arg(prefix, text).arg(tabSize).arg(replaceDocument);
+                    QTest::newRow(qPrintable(name)) << prefix << text << tabSize << replaceDocument;
+                }
+            }
+        }
+    }
+}
+
+void TextEditorTest::testTabStopOffset()
+{
+    QFETCH(QString, prefix);
+    QFETCH(QString, text);
+    QFETCH(int, tabSize);
+    QFETCH(bool, replaceDocument);
+
+    class OffsetEditorWidget : public TextEditorWidget
+    {
+    public:
+        using TextEditorWidget::setVisualIndentOffset;
+        using TextEditorWidget::triggerPendingUpdates;
+    } widget;
+    widget.setTextDocument(TextDocumentPtr(new TextDocument));
+    if (replaceDocument) {
+        widget.setVisualIndentOffset(prefix.size());
+        widget.setTextDocument(TextDocumentPtr(new TextDocument));
+    }
+    widget.triggerPendingUpdates();
+    widget.setLineWrapMode(Utils::PlainTextEdit::NoWrap);
+    TabSettingsData settings = widget.textDocument()->tabSettings();
+    settings.m_autoDetect = false;
+    settings.m_tabSize = tabSize;
+    widget.textDocument()->setTabSettings(settings);
+
+    const int columns = settings.columnAt(text, text.size());
+    widget.setPlainText(prefix + text + '\n' + prefix + QString(columns, ' '));
+    if (!replaceDocument)
+        widget.setVisualIndentOffset(prefix.size());
+
+    const QTextBlock actualBlock = widget.document()->firstBlock();
+    const QTextBlock expectedBlock = actualBlock.next();
+    widget.editorLayout()->ensureBlockLayout(actualBlock);
+    widget.editorLayout()->ensureBlockLayout(expectedBlock);
+    const QTextLine actual = widget.editorLayout()->blockLayout(actualBlock)->lineAt(0);
+    const QTextLine expected = widget.editorLayout()->blockLayout(expectedBlock)->lineAt(0);
+    for (int position = 0; position <= text.size(); ++position) {
+        const int column = settings.columnAt(text, position);
+        const qreal actualX = actual.cursorToX(prefix.size() + position);
+        const qreal expectedX = expected.cursorToX(prefix.size() + column);
+        QVERIFY2(qAbs(actualX - expectedX) < 0.1,
+                 qPrintable(QString("Position %1: %2 != %3")
+                                .arg(position).arg(actualX).arg(expectedX)));
+    }
+}
+
+void TextEditorTest::testTabStopArrayBound_data()
+{
+    QTest::addColumn<QString>("beforeTail");
+    QTest::addColumn<int>("tabSize");
+    const QList<QString> texts = {"\t", QString(1000, ' ') + '\t', QString(128, '\t')};
+    for (int i = 0; i < texts.size(); ++i) {
+        for (int tabSize : {1, 4, 8}) {
+            const QString name = QString("text%1-tab%2").arg(i).arg(tabSize);
+            QTest::newRow(qPrintable(name)) << texts.at(i) << tabSize;
+        }
+    }
+}
+
+void TextEditorTest::testTabStopArrayBound()
+{
+    QFETCH(QString, beforeTail);
+    QFETCH(int, tabSize);
+
+    class OffsetEditorWidget : public TextEditorWidget
+    {
+    public:
+        using TextEditorWidget::setVisualIndentOffset;
+        using TextEditorWidget::triggerPendingUpdates;
+    } widget;
+    widget.setTextDocument(TextDocumentPtr(new TextDocument));
+    widget.triggerPendingUpdates();
+    widget.setVisualIndentOffset(1);
+    widget.setLineWrapMode(Utils::PlainTextEdit::NoWrap);
+    TabSettingsData settings = widget.textDocument()->tabSettings();
+    settings.m_autoDetect = false;
+    settings.m_tabSize = tabSize;
+    widget.textDocument()->setTabSettings(settings);
+
+    const int columns = settings.columnAt(beforeTail, beforeTail.size());
+    widget.setPlainText('+' + beforeTail + QString(100000, 'x') + '\n'
+                        + '+' + QString(columns, ' '));
+    const QTextBlock actualBlock = widget.document()->firstBlock();
+    const QTextBlock expectedBlock = actualBlock.next();
+    widget.editorLayout()->ensureBlockLayout(actualBlock);
+    widget.editorLayout()->ensureBlockLayout(expectedBlock);
+    const QTextLayout *actualLayout = widget.editorLayout()->blockLayout(actualBlock);
+    QVERIFY(actualLayout->textOption().tabArray().size() <= columns / tabSize + 1);
+
+    const QTextLine actual = actualLayout->lineAt(0);
+    const QTextLine expected = widget.editorLayout()->blockLayout(expectedBlock)->lineAt(0);
+    for (int position = beforeTail.indexOf('\t'); position >= 0;
+         position = beforeTail.indexOf('\t', position + 1)) {
+        const int column = settings.columnAt(beforeTail, position + 1);
+        QVERIFY(qAbs(actual.cursorToX(position + 2) - expected.cursorToX(column + 1)) < 0.1);
     }
 }
 

@@ -211,6 +211,7 @@ public:
     bool blockDocumentSizeChanged;
     int cursorWidth;
     int textLayoutFlags;
+    int tabStopOffset = 0;
     // cache for lineSpacing(): recomputing the font metrics on every call is
     // costly and shows up when many blocks are measured (e.g. the inline diff
     // aligner sizing rows while scrolling)
@@ -536,6 +537,16 @@ qreal PlainTextDocumentLayout::textWidth() const
     return d->width;
 }
 
+// Start tab stops after this many leading characters.
+void PlainTextDocumentLayout::setTabStopOffset(int characters)
+{
+    characters = qMax(0, characters);
+    if (d->tabStopOffset == characters)
+        return;
+    d->tabStopOffset = characters;
+    d->relayout();
+}
+
 void PlainTextDocumentLayout::setBreakIndent(bool enabled, int minColumns, int shift)
 {
     if (d->breakIndentEnabled == enabled && d->breakIndentMinColumns == minColumns
@@ -653,6 +664,26 @@ void PlainTextDocumentLayout::layoutBlock(const QTextBlock &block)
     qreal height = 0;
     QTextLayout *tl = blockLayout(block);
     QTextOption option = doc->defaultTextOption();
+    if (d->tabStopOffset > 0 && option.tabStopDistance() > 0) {
+        const QString text = block.text();
+        const int lastTab = text.lastIndexOf('\t');
+        if (lastTab >= 0) {
+            const QFontMetricsF fm(doc->defaultFont());
+            const qreal offset = fm.horizontalAdvance(text.left(d->tabStopOffset));
+            const qreal distance = option.tabStopDistance();
+            QString beforeLastTab = text.left(lastTab);
+            const qsizetype tabCount = beforeLastTab.count('\t') + 1;
+            const qreal maximumWidth = fm.horizontalAdvance(beforeLastTab.remove('\t'))
+                                       + tabCount * distance;
+            QList<qreal> tabs;
+            tabs.reserve(qMax(0, int((maximumWidth - offset) / distance) + 1));
+            for (qreal position = offset + distance; position <= maximumWidth + distance;
+                 position += distance) {
+                tabs.append(position);
+            }
+            option.setTabArray(tabs);
+        }
+    }
     tl->setTextOption(option);
 
     int extraMargin = 0;
