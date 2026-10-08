@@ -6,6 +6,7 @@ and mobile device platforms.
 
 * [Qt Creator Documentation](https://doc.qt.io/qtcreator/index.html)
 * [Overview of the Qt Creator IDE](https://doc.qt.io/qtcreator/creator-overview.html)
+* [Extending Qt Creator Manual](https://doc.qt.io/qtcreator-extending/)
 * [Building Qt Creator from source](BUILDING.md)
 * [Contributing](CONTRIBUTING.md)
 
@@ -13,21 +14,41 @@ and mobile device platforms.
 
 The standalone binary packages support the following platforms:
 
-* Windows 10 (x86_64) or later
-* Windows 11 (ARM64) or later
-* (K)Ubuntu Linux 22.04 (x86_64) or later (glibc 2.34)
-* (K)Ubuntu Linux 24.04 (arm64) or later (glibc 2.39)
-* macOS 13 or later
+| Platform        | Architecture    | Minimum version    |
+| --------------- | --------------- | ------------------ |
+| Windows         | x86_64          | Windows 10         |
+| Windows         | ARM64           | Windows 11         |
+| (K)Ubuntu Linux | x86_64          | 22.04 (glibc 2.34) |
+| (K)Ubuntu Linux | arm64           | 24.04 (glibc 2.39) |
+| macOS           | x86_64, arm64   | 13                 |
 
 When you compile Qt Creator yourself, the Qt version that you build with
 determines the supported platforms.
 
-# Licenses and Attributions
+## Getting Started
 
-Qt Creator is available under commercial licenses from The Qt Company,
-and under the GNU General Public License version 3,
-annotated with The Qt Company GPL Exception 1.0.
-See [LICENSE.GPL3-EXCEPT](LICENSES/LICENSE.GPL3-EXCEPT) for the details.
+To build Qt Creator yourself, you need Qt, CMake, Ninja, a C++ compiler, and the
+Go compiler. Get the sources and build them as described in
+[BUILDING.md](BUILDING.md):
+
+```sh
+git clone --recurse-submodules https://code.qt.io/qt-creator/qt-creator.git
+cmake -S qt-creator -B qtcreator_build -G Ninja "-DCMAKE_PREFIX_PATH=/path/to/Qt"
+cmake --build qtcreator_build
+```
+
+## Contributing
+
+Qt Creator is developed using the Gerrit code review tool. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to submit patches, and
+[TESTING.md](TESTING.md) for how to run the tests.
+
+## Licenses and Attributions
+
+Qt Creator is available under commercial licenses from The Qt Company, and under
+the GNU General Public License version 3, annotated with The Qt Company GPL
+Exception 1.0. See [LICENSE.GPL3-EXCEPT](LICENSES/LICENSE.GPL3-EXCEPT) for the
+details.
 
 For more information about the third-party components that Qt Creator
 includes, see the
