@@ -44,6 +44,7 @@
 #include <QApplication>
 #include <QBrush>
 #include <QClipboard>
+#include <QDataStream>
 #include <QElapsedTimer>
 #include <QEnterEvent>
 #include <QEvent>
@@ -913,6 +914,31 @@ public:
             return;
         m_contextLines = lines;
         refresh();
+    }
+
+    // Expands the collapsed run that hides the block in the view, like a click
+    // on its placeholder. Returns whether there was one.
+    bool reveal(TextEditorWidget *view, const QTextBlock &block)
+    {
+        TextEditorLayout *layout = view ? view->editorLayout() : nullptr;
+        if (!layout || !block.isValid() || layout->isBlockVisibleInEditor(block))
+            return false;
+        const int blockNumber = block.blockNumber();
+        for (const Unit &unit : std::as_const(m_units)) {
+            const Placeholder &placeholder = unit.editor.view == view ? unit.editor
+                                                                      : unit.baseline;
+            if (placeholder.view != view)
+                continue;
+            const QTextBlock anchor = placeholder.anchor.block();
+            const int anchorNumber = anchor.isValid() ? anchor.blockNumber()
+                                                      : view->document()->blockCount();
+            if (blockNumber >= anchorNumber - placeholder.hiddenCount
+                && blockNumber < anchorNumber) {
+                expandUnit(unit.id);
+                return true;
+            }
+        }
+        return false;
     }
 
     // recompute and apply the collapsed runs for the current model and state
@@ -2084,6 +2110,7 @@ public:
         m_decorator = new InlineDiffDecorator(m_diffWidget);
         m_collapseController = new CollapseController(m_diffWidget);
         setupContextMenu(m_diffWidget);
+        connectNavigationHistory(m_diffWidget);
 
         // the diff actions, followed by the tool bar of the focused view, with
         // its cursor position and tab settings
@@ -2097,8 +2124,7 @@ public:
         m_viewToolBars = new QStackedWidget;
         m_viewToolBars->addWidget(m_diffWidget->toolBarWidget());
         toolBarLayout->addWidget(m_viewToolBars, 1);
-        m_diffWidget->setFocusInHandler(
-            [this] { m_viewToolBars->setCurrentWidget(m_diffWidget->toolBarWidget()); });
+        m_diffWidget->setFocusInHandler([this] { viewFocused(m_diffWidget); });
         // like the diff editor's view switcher, the icon shows the view that
         // a click switches to
         m_viewSwitcherAction = m_toolBar->addAction(QIcon(), QString());
@@ -2369,7 +2395,139 @@ public:
         m_centerOnNextModel = centerLine;
     }
 
+    QByteArray saveState() const override { return stateFor(currentView()); }
+
+    void restoreState(const QByteArray &state) override
+    {
+        if (state.isEmpty())
+            return;
+        int version = 0;
+        bool baselineIsCurrent = false;
+        QByteArray viewState;
+        int editorLine = 0;
+        QDataStream stream(state);
+        stream >> version >> baselineIsCurrent >> viewState >> editorLine;
+        if (version != 1)
+            return;
+        const bool toBaseline = baselineIsCurrent && m_viewMode == InlineDiffViewMode::SideBySide
+                                && m_baselineWidget;
+        TextEditorWidget *current = toBaseline ? m_baselineWidget.data() : m_diffWidget.data();
+        // going to a recorded position is not a switch that is recorded
+        m_viewToolBars->setCurrentWidget(current->toolBarWidget());
+        clearSavedNavigationStates();
+        if (baselineIsCurrent && !toBaseline) {
+            // the baseline view is not shown, the editor line it corresponds to
+            // stands in for the baseline position
+            m_diffWidget->gotoLine(qMin(editorLine, m_source->document()->blockCount()));
+        } else {
+            current->restoreState(viewState);
+        }
+        // the position may be on unchanged lines that are hidden by now, and
+        // revealing them moves the lines below
+        const bool revealed = m_collapseController
+                              && m_collapseController->reveal(current,
+                                                              current->textCursor().block());
+        // side by side, the views scroll together, so a side may have been
+        // left with its cursor scrolled out of view from the other side
+        if (current->isVisible()
+            && (revealed || !current->viewport()->rect().intersects(current->cursorRect()))) {
+            current->centerCursor();
+        }
+        if (widget()->isAncestorOf(QApplication::focusWidget()))
+            current->setFocus();
+    }
+
 private:
+    // the view that last had the focus
+    TextEditorWidget *currentView() const
+    {
+        if (m_viewMode == InlineDiffViewMode::SideBySide && m_baselineWidget
+            && m_viewToolBars->currentWidget() == m_baselineWidget->toolBarWidget()) {
+            return m_baselineWidget;
+        }
+        return m_diffWidget;
+    }
+
+    QByteArray stateFor(TextEditorWidget *current) const
+    {
+        QByteArray state;
+        QDataStream stream(&state, QIODevice::WriteOnly);
+        const bool baselineIsCurrent = current && current == m_baselineWidget;
+        const int editorLine = baselineIsCurrent
+                                   ? baselineLineToEditorPosition(
+                                         m_model, current->textCursor().blockNumber() + 1)
+                                   : 0;
+        stream << 1 // version number
+               << baselineIsCurrent
+               << (baselineIsCurrent ? current : m_diffWidget.data())->saveState()
+               << editorLine;
+        return state;
+    }
+
+    QByteArray &savedNavigationState(TextEditorWidget *view)
+    {
+        return view == m_baselineWidget ? m_savedBaselineNavigationState
+                                        : m_savedEditorNavigationState;
+    }
+
+    // Switching to the other side of the side by side view leaves a position
+    // that "Go Back" returns to, like a jump. Like the target of a jump, the
+    // position on the side switched to is recorded once the cursor leaves it.
+    void viewFocused(TextEditorWidget *view)
+    {
+        TextEditorWidget *previous = currentView();
+        m_viewToolBars->setCurrentWidget(view->toolBarWidget());
+        if (previous == view)
+            return;
+        clearSavedNavigationStates();
+        if (m_viewMode == InlineDiffViewMode::SideBySide) {
+            if (EditorManager::currentEditor() == this)
+                EditorManager::addCurrentPositionToNavigationHistory(stateFor(previous));
+            m_enteredSideState = stateFor(view);
+        }
+    }
+
+    // A position a side saved for leaving it is recorded once the side is left
+    // for the other one, or replaced by going to a recorded one.
+    void clearSavedNavigationStates()
+    {
+        m_savedEditorNavigationState.clear();
+        m_savedBaselineNavigationState.clear();
+        m_enteredSideState.clear();
+    }
+
+    void connectNavigationHistory(TextEditorWidget *view)
+    {
+        connect(view, &TextEditorWidget::saveCurrentStateForNavigationHistory, this, [this, view] {
+            // only the side the user is on leaves a position
+            savedNavigationState(view) = view != currentView() || m_updatingBaselineDocument
+                                             ? QByteArray()
+                                             : stateFor(view);
+        });
+        connect(view, &TextEditorWidget::addSavedStateToNavigationHistory, this, [this, view] {
+            const QByteArray &state = savedNavigationState(view);
+            if (!state.isEmpty() && EditorManager::currentEditor() == this)
+                EditorManager::addCurrentPositionToNavigationHistory(state);
+        });
+        connect(view, &TextEditorWidget::addCurrentStateToNavigationHistory, this, [this] {
+            if (EditorManager::currentEditor() == this)
+                EditorManager::addCurrentPositionToNavigationHistory();
+        });
+        connect(view, &PlainTextEdit::cursorPositionChanged, this, [this, view] {
+            if (m_enteredSideState.isEmpty() || view != currentView())
+                return;
+            // the click that switched sides moves the cursor after the focus
+            // arrived, and may go on selecting
+            if (QApplication::mouseButtons() != Qt::NoButton) {
+                m_enteredSideState = stateFor(view);
+                return;
+            }
+            const QByteArray state = std::exchange(m_enteredSideState, {});
+            if (EditorManager::currentEditor() == this)
+                EditorManager::addCurrentPositionToNavigationHistory(state);
+        });
+    }
+
     void setupContextMenu(InlineDiffTextEditorWidget *view)
     {
         view->setContextMenuProvider([this, view](QMenu *menu, const QTextCursor &cursor) {
@@ -2594,6 +2752,7 @@ private:
     {
         if (m_baselineWidget)
             return;
+        m_savedBaselineNavigationState.clear();
         m_baselineDocument = TextDocumentPtr(new TextEditor::TextDocument);
         m_baselineDocument->setMimeType(m_source->mimeType());
         m_baselineWidget = new InlineDiffTextEditorWidget;
@@ -2605,11 +2764,10 @@ private:
         m_baselineDecorator = new InlineDiffDecorator(m_baselineWidget,
                                                       InlineDiffDecorator::DiffSide::Baseline);
         setupContextMenu(m_baselineWidget);
+        connectNavigationHistory(m_baselineWidget);
         m_splitter->insertWidget(0, m_baselineWidget);
         m_viewToolBars->addWidget(m_baselineWidget->toolBarWidget());
-        m_baselineWidget->setFocusInHandler([this] {
-            m_viewToolBars->setCurrentWidget(m_baselineWidget->toolBarWidget());
-        });
+        m_baselineWidget->setFocusInHandler([this] { viewFocused(m_baselineWidget); });
         updateBaselineDocument();
         if (m_baseline.setupBaselineView)
             m_baseline.setupBaselineView(m_baselineWidget);
@@ -2636,8 +2794,11 @@ private:
         if (!m_baselineWidget)
             return;
         const QString text = m_baselineText.value_or(QString());
-        if (m_baselineDocument->plainText() != text)
+        if (m_baselineDocument->plainText() != text) {
+            m_updatingBaselineDocument = true;
             m_baselineDocument->document()->setPlainText(text);
+            m_updatingBaselineDocument = false;
+        }
     }
 
     void startUpdate()
@@ -2855,6 +3016,10 @@ private:
     InlineDiffViewMode m_viewMode = InlineDiffViewMode::Inline;
     bool m_centerOnNextModel = false;
     bool m_jumpToFirstChange = false;
+    QByteArray m_savedEditorNavigationState;
+    QByteArray m_savedBaselineNavigationState;
+    QByteArray m_enteredSideState;
+    bool m_updatingBaselineDocument = false;
     InlineDiffBaseline m_baseline;
     std::optional<QString> m_baselineText;
     InlineDiffRenderModel m_model;

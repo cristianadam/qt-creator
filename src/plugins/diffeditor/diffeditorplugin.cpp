@@ -384,6 +384,11 @@ private slots:
     void testInlineDiffCopyAsPatch();
     void testInlineDiffGoToFirstChange();
     void testInlineDiffChangeNavigation();
+    void testInlineDiffNavigationHistory();
+    void testInlineDiffNavigationHistorySideBySide();
+    void testInlineDiffNavigationHistoryReenterSide();
+    void testInlineDiffNavigationHistoryScroll();
+    void testInlineDiffNavigationHistoryCollapsed();
     void testInlineDiffScrollBarMarkers();
     void testInlineDiffGoToSource();
     void testInlineDiffGhostSelection();
@@ -3180,6 +3185,349 @@ void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffChangeNavigation()
     const QPointer<QWidget> diffWidgetGuard = diffEditor->widget();
     QVERIFY(EditorManager::closeDocuments({sourceDocument.data()}, false));
     QTRY_VERIFY(diffWidgetGuard.isNull());
+}
+
+namespace DiffEditor::Internal {
+
+// An inline diff editor for a file of numbered lines, with some of them changed,
+// for the navigation history tests. The diff is computed and the cursor is on
+// the first change once open() succeeded.
+class NavigationTestEditor
+{
+public:
+    explicit NavigationTestEditor(InlineDiffViewMode viewMode = InlineDiffViewMode::Inline)
+        : m_viewMode(Core::ICore::settings()->value(Constants::INLINE_DIFF_VIEW_MODE_KEY))
+    {
+        Core::ICore::settings()->setValue(Constants::INLINE_DIFF_VIEW_MODE_KEY, int(viewMode));
+    }
+
+    ~NavigationTestEditor()
+    {
+        if (sourceDocument)
+            EditorManager::closeDocuments({sourceDocument.data()}, false);
+        Core::ICore::settings()->setValue(Constants::INLINE_DIFF_VIEW_MODE_KEY, m_viewMode);
+    }
+
+    void open(const QString &name, int lineCount, const QList<int> &changedLines)
+    {
+        QStringList baselineLines;
+        for (int i = 1; i <= lineCount; ++i)
+            baselineLines << QString("line %1").arg(i);
+        QStringList editorLines = baselineLines;
+        for (const int line : changedLines)
+            editorLines[line - 1] = QString("line %1 changed").arg(line);
+        const QString baselineText = baselineLines.join('\n') + '\n';
+
+        QVERIFY(m_temporaryDir.isValid());
+        const FilePath sourceFile = FilePath::fromString(m_temporaryDir.path()) / name;
+        QVERIFY(sourceFile.writeFileContents((editorLines.join('\n') + '\n').toUtf8()));
+        sourceEditor = EditorManager::openEditor(sourceFile);
+        auto sourceTextEditor = qobject_cast<TextEditor::BaseTextEditor *>(sourceEditor);
+        QVERIFY(sourceTextEditor);
+        sourceDocument = sourceTextEditor->editorWidget()->textDocumentPtr();
+        QVERIFY(sourceDocument);
+
+        InlineDiffBaseline baseline;
+        baseline.id = "test";
+        baseline.displayName = "Test";
+        baseline.fetchText = [baselineText](const InlineDiffBaseline::TextCallback &callback) {
+            callback(baselineText);
+        };
+        diffEditor = openInlineDiffEditor(sourceDocument, baseline, name);
+        QVERIFY(diffEditor);
+        diffEditor->widget()->resize(800, 600);
+        QCOMPARE(EditorManager::currentEditor(), diffEditor);
+        diffWidget = inlineDiffEditorWidget(diffEditor);
+        QVERIFY(diffWidget);
+        QTRY_COMPARE(diffEditor->currentLine(), changedLines.first());
+    }
+
+    // the read only view of the side by side mode
+    TextEditor::TextEditorWidget *baselineWidget() const
+    {
+        const QList<TextEditor::TextEditorWidget *> views
+            = diffEditor->widget()->findChildren<TextEditor::TextEditorWidget *>();
+        return Utils::findOrDefault(views, [this](TextEditor::TextEditorWidget *view) {
+            return view != diffWidget;
+        });
+    }
+
+    // focus changes need an active window, which not every platform provides
+    bool activateWindow() const
+    {
+        diffWidget->window()->activateWindow();
+        return QTest::qWaitForWindowActive(diffWidget->window());
+    }
+
+    // a press gives the focus before it moves the cursor, which a synthesized
+    // click does not do on every platform
+    static void click(TextEditor::TextEditorWidget *view, int line)
+    {
+        view->setFocus(Qt::MouseFocusReason);
+        QTest::mouseClick(view->viewport(), Qt::LeftButton, {},
+                          view->cursorRect(
+                                  QTextCursor(view->document()->findBlockByNumber(line - 1)))
+                              .center());
+    }
+
+    static int line(TextEditor::TextEditorWidget *view)
+    {
+        return view->textCursor().blockNumber() + 1;
+    }
+
+    static bool cursorVisible(TextEditor::TextEditorWidget *view)
+    {
+        return view->viewport()->rect().contains(view->cursorRect());
+    }
+
+    IEditor *sourceEditor = nullptr;
+    TextEditor::TextDocumentPtr sourceDocument;
+    IEditor *diffEditor = nullptr;
+    TextEditor::TextEditorWidget *diffWidget = nullptr;
+
+private:
+    const InlineDiffViewGuard m_inlineDiffViewGuard{/*hideUnchangedLines=*/false};
+    const QVariant m_viewMode;
+    QTemporaryDir m_temporaryDir;
+};
+
+} // namespace DiffEditor::Internal
+
+// Jumps within the editor end up in the navigation history, like in a text
+// editor, so "Go Back" returns to the previous location in the diff instead of
+// leaving it for the previous editor.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffNavigationHistory()
+{
+    NavigationTestEditor editor;
+    editor.open("testInlineDiffNavigationHistory.txt", 40, {12, 20, 30});
+    if (QTest::currentTestFailed())
+        return;
+
+    for (const auto &[mode, line] : {std::pair(InlineDiffViewMode::Inline, 20),
+                                     std::pair(InlineDiffViewMode::SideBySide, 30)}) {
+        setInlineDiffViewMode(editor.diffEditor, mode);
+        // leaving the target of a jump records it
+        editor.diffEditor->gotoLine(line);
+        editor.diffWidget->gotoDocumentStart();
+        QCOMPARE(editor.diffEditor->currentLine(), 1);
+
+        EditorManager::goBackInNavigationHistory();
+        QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+        QCOMPARE(editor.diffEditor->currentLine(), line);
+        EditorManager::goForwardInNavigationHistory();
+        QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+        QCOMPARE(editor.diffEditor->currentLine(), 1);
+    }
+}
+
+// Clicking into the other side of the side by side view records the position
+// on the side that is left, and loading the baseline text records nothing.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffNavigationHistorySideBySide()
+{
+    using namespace TextEditor;
+
+    NavigationTestEditor editor(InlineDiffViewMode::SideBySide);
+    editor.open("testInlineDiffNavigationHistorySideBySide.txt", 40, {12});
+    if (QTest::currentTestFailed())
+        return;
+    TextEditorWidget *diffWidget = editor.diffWidget;
+    TextEditorWidget *baselineWidget = editor.baselineWidget();
+    QVERIFY(baselineWidget);
+    if (!editor.activateWindow())
+        QSKIP("Window cannot be activated, focus changes cannot be tested.");
+    diffWidget->setFocus();
+    QTRY_VERIFY(diffWidget->hasFocus());
+
+    diffWidget->gotoDocumentEnd();
+    const int lastLine = NavigationTestEditor::line(diffWidget);
+    QCOMPARE(lastLine, diffWidget->document()->blockCount());
+    NavigationTestEditor::click(baselineWidget, 5);
+    QTRY_VERIFY(baselineWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(baselineWidget), 5);
+
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QTRY_VERIFY(diffWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(diffWidget), lastLine);
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QCOMPARE(NavigationTestEditor::line(diffWidget), 12);
+    // the position before opening the diff
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.sourceEditor);
+
+    EditorManager::goForwardInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QCOMPARE(NavigationTestEditor::line(diffWidget), 12);
+    EditorManager::goForwardInNavigationHistory();
+    QCOMPARE(NavigationTestEditor::line(diffWidget), lastLine);
+    EditorManager::goForwardInNavigationHistory();
+    QTRY_VERIFY(baselineWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(baselineWidget), 5);
+    QCOMPARE(NavigationTestEditor::line(diffWidget), lastLine);
+}
+
+// The position a click into the other side lands on is recorded once the
+// cursor leaves it, like a jump target. Coming back to a side records nothing
+// from before it was left, which leaving it recorded already.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffNavigationHistoryReenterSide()
+{
+    using namespace TextEditor;
+
+    NavigationTestEditor editor(InlineDiffViewMode::SideBySide);
+    editor.open("testInlineDiffNavigationHistoryReenterSide.txt", 40, {12});
+    if (QTest::currentTestFailed())
+        return;
+    TextEditorWidget *diffWidget = editor.diffWidget;
+    TextEditorWidget *baselineWidget = editor.baselineWidget();
+    QVERIFY(baselineWidget);
+    if (!editor.activateWindow())
+        QSKIP("Window cannot be activated, focus changes cannot be tested.");
+    diffWidget->setFocus();
+    QTRY_VERIFY(diffWidget->hasFocus());
+
+    // the cursor is still on the first change, which the opening jumped to
+    NavigationTestEditor::click(baselineWidget, 1);
+    QTRY_VERIFY(baselineWidget->hasFocus());
+    baselineWidget->gotoDocumentEnd();
+    const int baselineLastLine = NavigationTestEditor::line(baselineWidget);
+    const int lastLine = diffWidget->document()->blockCount();
+    NavigationTestEditor::click(diffWidget, lastLine);
+    QTRY_VERIFY(diffWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(diffWidget), lastLine);
+
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QTRY_VERIFY(baselineWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(baselineWidget), baselineLastLine);
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QVERIFY(baselineWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(baselineWidget), 1);
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QTRY_VERIFY(diffWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(diffWidget), 12);
+    // the position before opening the diff
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.sourceEditor);
+}
+
+// Going back to a position also restores the scroll position, so the cursor
+// is where it was on the screen, on either side.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffNavigationHistoryScroll()
+{
+    using namespace TextEditor;
+
+    NavigationTestEditor editor;
+    editor.open("testInlineDiffNavigationHistoryScroll.txt", 200, {12, 100, 190});
+    if (QTest::currentTestFailed())
+        return;
+    TextEditorWidget *diffWidget = editor.diffWidget;
+
+    // jumps to the line, leaves it for the top of the document and goes back
+    const auto checkGoBack = [&editor](TextEditorWidget *view, int line) {
+        view->gotoLine(line, 0, /*centerLine=*/true);
+        const int scrollValue = view->verticalScrollBar()->value();
+        QVERIFY(scrollValue > 0);
+        QVERIFY(NavigationTestEditor::cursorVisible(view));
+        view->gotoDocumentStart();
+        QCOMPARE(view->verticalScrollBar()->value(), 0);
+
+        EditorManager::goBackInNavigationHistory();
+        QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+        QCOMPARE(NavigationTestEditor::line(view), line);
+        QCOMPARE(view->verticalScrollBar()->value(), scrollValue);
+        QVERIFY(NavigationTestEditor::cursorVisible(view));
+    };
+
+    checkGoBack(diffWidget, 190);
+    if (QTest::currentTestFailed())
+        return;
+    setInlineDiffViewMode(editor.diffEditor, InlineDiffViewMode::SideBySide);
+    checkGoBack(diffWidget, 100);
+    if (QTest::currentTestFailed())
+        return;
+
+    TextEditorWidget *baselineWidget = editor.baselineWidget();
+    QVERIFY(baselineWidget);
+    if (!editor.activateWindow())
+        QSKIP("Window cannot be activated, the baseline side cannot be tested.");
+    baselineWidget->setFocus();
+    QTRY_VERIFY(baselineWidget->hasFocus());
+    checkGoBack(baselineWidget, 150);
+    if (QTest::currentTestFailed())
+        return;
+
+    // a side that is left after scrolling its cursor out of view still shows
+    // the cursor when going back to it
+    diffWidget->setFocus();
+    QTRY_VERIFY(diffWidget->hasFocus());
+    diffWidget->gotoDocumentEnd();
+    const int lastLine = NavigationTestEditor::line(diffWidget);
+    diffWidget->verticalScrollBar()->setValue(0);
+    QVERIFY(!NavigationTestEditor::cursorVisible(diffWidget));
+    baselineWidget->setFocus(Qt::MouseFocusReason);
+    QTRY_VERIFY(baselineWidget->hasFocus());
+
+    EditorManager::goBackInNavigationHistory();
+    QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+    QTRY_VERIFY(diffWidget->hasFocus());
+    QCOMPARE(NavigationTestEditor::line(diffWidget), lastLine);
+    QVERIFY(NavigationTestEditor::cursorVisible(diffWidget));
+}
+
+// Going back to a position on unchanged lines that are hidden by now reveals
+// them, on both sides.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffNavigationHistoryCollapsed()
+{
+    using namespace TextEditor;
+
+    NavigationTestEditor editor;
+    editor.open("testInlineDiffNavigationHistoryCollapsed.txt", 200, {12, 100, 190});
+    if (QTest::currentTestFailed())
+        return;
+    TextEditorWidget *diffWidget = editor.diffWidget;
+
+    auto toolBar = editor.diffEditor->toolBar()->findChild<QToolBar *>("InlineDiffToolBar");
+    QVERIFY(toolBar);
+    QAction *collapseAction = Utils::findOrDefault(toolBar->actions(), [](QAction *a) {
+        return a->objectName() == "InlineDiffCollapseAction";
+    });
+    QVERIFY(collapseAction);
+    QVERIFY(!collapseAction->isChecked());
+
+    const auto visibleInEditor = [](TextEditorWidget *view, int line) {
+        return view->editorLayout()->isBlockVisibleInEditor(
+            view->document()->findBlockByNumber(line - 1));
+    };
+
+    for (const InlineDiffViewMode mode :
+         {InlineDiffViewMode::Inline, InlineDiffViewMode::SideBySide}) {
+        setInlineDiffViewMode(editor.diffEditor, mode);
+        TextEditorWidget *baselineWidget = mode == InlineDiffViewMode::SideBySide
+                                               ? editor.baselineWidget()
+                                               : nullptr;
+
+        collapseAction->setChecked(false);
+        diffWidget->gotoLine(50);
+        diffWidget->gotoDocumentStart();
+        collapseAction->setChecked(true);
+        QVERIFY(!visibleInEditor(diffWidget, 50));
+        if (baselineWidget)
+            QVERIFY(!visibleInEditor(baselineWidget, 50));
+
+        EditorManager::goBackInNavigationHistory();
+        QCOMPARE(EditorManager::currentEditor(), editor.diffEditor);
+        QCOMPARE(NavigationTestEditor::line(diffWidget), 50);
+        QVERIFY(visibleInEditor(diffWidget, 50));
+        if (baselineWidget) // the sides stay aligned
+            QVERIFY(visibleInEditor(baselineWidget, 50));
+        QTRY_VERIFY(NavigationTestEditor::cursorVisible(diffWidget));
+        // only the run with the position is revealed
+        QVERIFY(!visibleInEditor(diffWidget, 150));
+        QVERIFY(collapseAction->isChecked());
+    }
 }
 
 // Each change is marked on the scroll bar in the color of its band.
