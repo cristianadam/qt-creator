@@ -3,6 +3,7 @@
 
 #include "textdocument.h"
 
+#include "editorconfig.h"
 #include "extraencodingsettings.h"
 #include "fontsettings.h"
 #include "icodestylepreferences.h"
@@ -75,6 +76,7 @@ public:
     ICodeStylePreferences *m_codeStylePreferences = nullptr;
     TabSettingsData m_tabSettings;
     ExtraEncodingSettingsData m_extraEncodingSettings;
+    EditorConfigProperties m_editorConfig;
     FontSettingsData m_fontSettings;
     bool m_fontSettingsNeedsApply = false; // for applying font settings delayed till an editor becomes visible
     QTextDocument m_document;
@@ -363,6 +365,7 @@ void TextDocument::setTypingSettings(const TypingSettingsData &typingSettings)
 void TextDocument::setStorageSettings(const StorageSettingsData &storageSettings)
 {
     d->m_storageSettings = storageSettings;
+    d->m_editorConfig.applyTo(d->m_storageSettings);
 }
 
 const TypingSettingsData &TextDocument::typingSettings() const
@@ -398,6 +401,13 @@ void TextDocument::setTabSettings(const TabSettingsData &tabSettings)
 TabSettingsData TextDocument::tabSettings() const
 {
     return d->m_tabSettings;
+}
+
+void TextDocument::setCodeStyleTabSettings(const TabSettingsData &tabSettings)
+{
+    TabSettingsData candidate = tabSettings;
+    d->m_editorConfig.applyTo(candidate);
+    setTabSettings(candidate);
 }
 
 void TextDocument::setFontSettings(const FontSettingsData &fontSettings)
@@ -476,17 +486,17 @@ void TextDocument::setCodeStyle(ICodeStylePreferences *preferences)
     indenter()->setCodeStylePreferences(preferences);
     if (d->m_codeStylePreferences) {
         disconnect(d->m_codeStylePreferences, &ICodeStylePreferences::currentTabSettingsChanged,
-                   this, &TextDocument::setTabSettings);
+                   this, &TextDocument::setCodeStyleTabSettings);
         disconnect(d->m_codeStylePreferences, &ICodeStylePreferences::currentValueChanged,
                    this, &TextDocument::slotCodeStyleSettingsChanged);
     }
     d->m_codeStylePreferences = preferences;
     if (d->m_codeStylePreferences) {
         connect(d->m_codeStylePreferences, &ICodeStylePreferences::currentTabSettingsChanged,
-                this, &TextDocument::setTabSettings);
+                this, &TextDocument::setCodeStyleTabSettings);
         connect(d->m_codeStylePreferences, &ICodeStylePreferences::currentValueChanged,
                 this, &TextDocument::slotCodeStyleSettingsChanged);
-        setTabSettings(d->m_codeStylePreferences->currentTabSettings());
+        setCodeStyleTabSettings(d->m_codeStylePreferences->currentTabSettings());
         slotCodeStyleSettingsChanged();
     }
 }
@@ -521,6 +531,7 @@ const FontSettingsData &TextDocument::fontSettings() const
 void TextDocument::setExtraEncodingSettings(const ExtraEncodingSettingsData &extraEncodingSettings)
 {
     d->m_extraEncodingSettings = extraEncodingSettings;
+    d->m_editorConfig.applyTo(d->m_extraEncodingSettings);
 }
 
 void TextDocument::autoIndent(const QTextCursor &cursor, QChar typedChar, int currentCursorPosition)
@@ -584,6 +595,16 @@ bool TextDocument::applyChangeSet(const ChangeSet &changeSet)
 const ExtraEncodingSettingsData &TextDocument::extraEncodingSettings() const
 {
     return d->m_extraEncodingSettings;
+}
+
+/*!
+    Returns the settings from \c .editorconfig files that applied to the
+    document when it was opened. They take precedence over the storage, tab
+    and encoding settings set on the document.
+*/
+const EditorConfigProperties &TextDocument::editorConfig() const
+{
+    return d->m_editorConfig;
 }
 
 void TextDocument::setIndenter(Indenter *indenter)
@@ -764,10 +785,19 @@ bool TextDocument::isModified() const
 Result<> TextDocument::open(const FilePath &filePath, const FilePath &realFilePath)
 {
     emit aboutToOpen(filePath, realFilePath);
+    d->m_editorConfig = EditorConfigProperties::forFile(filePath);
+    if (d->m_editorConfig.encoding && supportsEncoding(*d->m_editorConfig.encoding))
+        setEncoding(*d->m_editorConfig.encoding);
     const Result<> result = openImpl(filePath, realFilePath, /*reload =*/ false);
     if (result) {
         setMimeType(Utils::mimeTypeForFile(filePath, MimeMatchMode::MatchDefaultAndRemote).name());
-        setTabSettings(d->m_tabSettings);
+        if (d->m_editorConfig.lineTerminationMode)
+            setLineTerminationMode(*d->m_editorConfig.lineTerminationMode);
+        d->m_editorConfig.applyTo(d->m_storageSettings);
+        d->m_editorConfig.applyTo(d->m_extraEncodingSettings);
+        TabSettingsData tabSettings = d->m_tabSettings;
+        d->m_editorConfig.applyTo(tabSettings);
+        setTabSettings(tabSettings);
         emit openFinishedSuccessfully();
     }
     return result;

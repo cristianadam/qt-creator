@@ -15,6 +15,7 @@
 #include "codeassist/documentcontentcompletion.h"
 #include "completionsettings.h"
 #include "displaysettings.h"
+#include "editorconfig.h"
 #include "extraencodingsettings.h"
 #include "fontsettings.h"
 #include "highlighter.h"
@@ -2425,6 +2426,7 @@ void TextEditorWidget::openFinishedSuccessfully()
     d->moveCursor(QTextCursor::Start);
     d->updateCannotDecodeInfo();
     updateTextCodecLabel();
+    textDocument()->editorConfig().applyTo(d->m_marginSettings);
     updateVisualWrapColumn();
 }
 
@@ -10294,6 +10296,7 @@ void TextEditorWidget::setDiffChangeSigns(const QHash<int, QChar> &blockSigns, b
 void TextEditorWidget::setMarginSettings(const MarginSettingsData &ms)
 {
     d->m_marginSettings = ms;
+    textDocument()->editorConfig().applyTo(d->m_marginSettings);
     updateVisualWrapColumn();
 
     viewport()->update();

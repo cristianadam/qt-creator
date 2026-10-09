@@ -12,6 +12,7 @@
 
 #include <texteditor/behaviorsettings.h>
 #include <texteditor/codestylepool.h>
+#include <texteditor/editorconfig.h>
 #include <texteditor/texteditorconstants.h>
 #include <texteditor/icodestylepreferences.h>
 #include <texteditor/extraencodingsettings.h>
@@ -211,14 +212,17 @@ void EditorConfiguration::configureEditor(Core::IEditor *editor) const
         TextDocument *document = widget->textDocument();
         document->setCodeStyle(codeStyle(widget->languageSettingsId()));
         if (!useGlobalSettings()) {
+            const bool useProjectEncoding = !document->editorConfig().encoding;
             // On session restore, editors are reopened before the project has
             // finished loading, so a file may have been decoded with the global
             // default encoding instead of the project's. Re-read unmodified,
             // undecodable files now.
-            const bool reloadWithProjectEncoding = document->hasDecodingError()
+            const bool reloadWithProjectEncoding = useProjectEncoding
+                    && document->hasDecodingError()
                     && !document->isModified()
                     && document->encoding() != d->m_textEncoding;
-            document->setEncoding(d->m_textEncoding);
+            if (useProjectEncoding)
+                document->setEncoding(d->m_textEncoding);
             switchSettings(widget);
             if (reloadWithProjectEncoding)
                 document->reload(d->m_textEncoding);
@@ -292,9 +296,11 @@ TabSettingsData actualTabSettings(const FilePath &file, const TextDocument *base
 {
     if (baseTextdocument)
         return baseTextdocument->tabSettings();
+    TabSettingsData tabSettings = globalCodeStyle().tabSettings();
     if (Project *project = ProjectManager::projectForFile(file))
-        return project->editorConfiguration()->codeStyle()->tabSettings();
-    return globalCodeStyle().tabSettings();
+        tabSettings = project->editorConfiguration()->codeStyle()->tabSettings();
+    EditorConfigProperties::forFile(file).applyTo(tabSettings);
+    return tabSettings;
 }
 
 } // ProjectExplorer
