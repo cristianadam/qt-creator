@@ -1,0 +1,39 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-profile-qml.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-collect-data
+
+    \title Profile QML applications
+
+    With QML Profiler, you can find causes for typical performance problems
+    in your applications, such as slowness and unresponsive, stuttering user
+    interfaces.
+
+    To collect data about a QML application:
+
+    \list 1
+        \li Set up QML debugging for the project. For more information, see
+            \l{Setting up QML debugging}.
+        \li In the \uicontrol Projects mode, select a \l{Managing kits}
+            {kit} with Qt version 4.7.4 or later.
+            \note To profile applications on \l{glossary-device}{devices}, you
+            must install Qt libraries on them.
+        \li Go to \uicontrol Analyze > \uicontrol {QML Profiler} to profile the
+            current application.
+            \image {qtcreator-qml-profiler-toolbar.webp} {QML Profiler}
+        \li Use the application to collect profiling data.
+    \endlist
+
+    The profiler immediately begins to collect data, as indicated by
+    the time running in the \uicontrol Elapsed field.
+
+    Data is collected until you exit the application.
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {QML Profiler}
+*/

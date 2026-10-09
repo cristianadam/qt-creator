@@ -85,12 +85,7 @@
     take periodic snapshots of the call chain of an application and visualizes
     them in a timeline view or as a flame graph.
 
-    For more information, see:
-
-    \list
-        \li \l{Analyze CPU usage}
-        \li \l{Performance Analyzer}
-    \endlist
+    For more information, see \l{Performance Analyzer}.
 
     \section1 Using QML Profiler
 

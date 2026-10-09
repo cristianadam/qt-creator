@@ -55,9 +55,9 @@
     \section1 Separating debug info
 
     If debug info is being generated, you can have it placed into separate
-    files, rather than embedded into the binary, by selecting
-    \uicontrol Enable in \uicontrol {Separate debug info}. For
-    more information, see \l{Analyze CPU usage}. To use default
+    files, rather than embedded into the binary, by selecting \uicontrol Enable
+    in \uicontrol {Separate debug info}. For more information, see
+    \l {Generate separate debug info for qmake projects}. To use default
     settings, select \uicontrol {Default}.
 
     \section1 Compiling QML

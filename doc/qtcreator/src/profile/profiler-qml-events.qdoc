@@ -1,0 +1,103 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-qml-events.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup profiling-tools
+
+    \title QML events
+
+    \brief QML events shown in the timeline.
+
+    Generally, events in the timeline view indicate how long QML or JavaScript
+    execution took. Move the mouse over them to see details. For most events,
+    they include location in source code, duration and some relevant parts of
+    the source code itself.
+
+    Select an event to move the cursor in the code editor to the part
+    of the code the event is associated with.
+
+    The following types of events are displayed in the timeline view on one or
+    several rows.
+
+    \table
+
+    \header
+        \li Event Category
+        \li Description
+    \row
+        \li \uicontrol {Pixmap Cache}
+        \li Displays the general amount of pixmap data cached, in pixels. In
+            addition, displays a separate event for each picture being loaded,
+            with specifics about its file name and size.
+
+    \row
+        \li \uicontrol {Scene Graph}
+        \li Displays the time when scene graph frames are rendered and some
+            additional timing information for the various stages executed to do
+            so.
+    \row
+        \li \uicontrol {Memory Usage}
+        \li Displays block allocations of the JavaScript memory manager.
+            Generally, the memory manager will reserve larger blocks of memory
+            in one piece and later hand them out to the application in smaller
+            bits. If the application requests single blocks of memory
+            surpassing a certain size, the memory manager will allocate those
+            separately. Those two modes of operation are shown as events of
+            different colors.
+            The second row displays the actual usage of the allocated memory.
+            This is the amount of JavaScript heap the application has actually
+            requested.
+    \row
+        \li \uicontrol {Input Events}
+        \li Displays mouse and keyboard events.
+    \row
+        \li \uicontrol Painting
+        \li Not used.
+    \row
+        \li \uicontrol Animations
+        \li Displays the amount of animations that are active and the frame
+            rate that they are running at.
+            Render thread animations are shown on a separate row.
+    \row
+        \li \uicontrol Compiling
+        \li Displays the time spent compiling the QML files.
+    \row
+        \li \uicontrol Creating
+        \li Displays the time spent creating the elements in the scene.
+            The creation of elements takes place in two stages. The first
+            stage is for the creation of the data structures, including child
+            elements. The second stage represents the completion callbacks. Not
+            all elements trigger completion callbacks, though. The stages are
+            shown as separate events in the timeline.
+    \row
+        \li \uicontrol Binding
+        \li Displays the time when a binding is evaluated and how long the
+            evaluation takes.
+    \row
+        \li \uicontrol {Handling Signal}
+        \li Displays the time when a signal is handled and how long the
+            handling takes.
+    \row
+        \li \uicontrol JavaScript
+        \li Displays the time spent executing the actual JavaScript behind
+            bindings and signal handlers. It lists all the JavaScript functions
+            you may be using to evaluate bindings or handle signals.
+    \row
+        \li \uicontrol Quick3D
+        \li Displays the time spent rendering Qt Quick 3D frames, timing information
+            for frame preparation and synchronization, particle system update times
+            and particle update count, as well as texture and mesh memory allocations
+            and memory consumption.
+
+            This event type is available since Qt 6.3.
+    \endtable
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications}
+
+    \endif
+*/

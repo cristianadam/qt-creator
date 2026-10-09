@@ -1,0 +1,28 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-interaction-between-views.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Interaction between profiler views
+
+    When you select a stack frame in either of the \uicontrol {Timeline},
+    \uicontrol {Flame Graph}, or \uicontrol {Statistics} views, information
+    about it is displayed in the other two views.
+
+    To view a time range in the \uicontrol {Statistics} and
+    \uicontrol {Flame Graph} views, select
+    \uicontrol Analyze > \uicontrol {Performance Analyzer Options} >
+    \uicontrol {Limit to the Range Selected in Timeline}. To show the full
+    stack frame, select \uicontrol {Show Full Range}.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

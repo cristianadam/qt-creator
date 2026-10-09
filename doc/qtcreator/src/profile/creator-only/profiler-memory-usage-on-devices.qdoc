@@ -1,0 +1,43 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-how-to-profile-on-devices.html
+    \previouspage creator-how-tos.html
+    \nextpage creator-cpu-usage-analyzer.html
+
+    \ingroup creator-how-to-profile
+
+    \title Profile memory usage on devices
+
+    Record a memory trace to view usage graphs in the samples rows of
+    the timeline and to view memory allocations, peaks, and releases in the
+    flame graph.
+
+    To create trace points for profiling memory usage on a target device:
+
+    \list
+        \li Go to \uicontrol Analyze > \uicontrol {Performance Analyzer Options}
+            > \uicontrol {Create Memory Trace Points}.
+        \li Select
+            \inlineimage {icons/create-tracepoint.png} {Create trace points for memory profiling on the target device}
+            on the \uicontrol {Performance Analyzer} toolbar.
+    \endlist
+
+    In the \uicontrol {Create Memory Trace Points} dialog, modify the
+    script to run.
+
+    \image {qtcreator-performance-analyzer-create-memory-trace-points.png} {Create Memory Trace Points dialog}
+
+    If you need root privileges to run scripts as root, select the privileges to
+    use in \uicontrol {Elevate privileges using}.
+
+    Select \uicontrol OK to run the script.
+
+    \section1 Add events for trace points
+
+    To add events for the trace points, see \l{Select CPU event types}.
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+*/

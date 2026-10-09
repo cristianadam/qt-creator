@@ -1,0 +1,30 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-perf-cli-options.html
+    \previouspage creator-ctf-visualizer.html
+    \nextpage creator-qml-performance-monitor.html
+
+    \ingroup creator-how-to-profile
+
+    \title Add command-line options for Perf
+
+    To set global preferences for the profiler, go to \preferences >
+    \uicontrol Analyzer > \uicontrol {CPU Usage}.
+
+    To set preferences for a particular run configuration, go to
+    \uicontrol Projects > \uicontrol {Run Settings} and select \uicontrol Details
+    next to \uicontrol {Performance Analyzer Settings}.
+
+    \image {qtcreator-performance-analyzer-settings.png} {Performance Analyzer Preferences}
+
+    Set additional command-line options to pass to Perf when
+    recording data in \uicontrol {Additional arguments}. Set \c{--no-delay}
+    or \c{--no-buffering} to reduce the processing
+    delay. However, those options are not supported by all versions of Perf and
+    Perf may not start if an unsupported option is given.
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+*/

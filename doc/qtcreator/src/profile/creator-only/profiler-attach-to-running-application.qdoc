@@ -1,0 +1,34 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-attach-to-running-application.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-collect-data
+
+    \title Attach profiler to a running Qt Quick application
+
+    You can profile a Qt Quick application that you do not run from \QC.
+    However, you must enable QML debugging and profiling for the application
+    in the project build settings. For more information, see
+    \l{Setting up QML debugging}.
+
+    To attach to a waiting application:
+
+    \list 1
+        \li Go to \uicontrol Analyze >
+            \uicontrol {QML Profiler (Attach to Waiting Application)}.
+            \image {qml-profiler-start-dialog.png} {Start QML Profiler dialog}
+         \li In \uicontrol Kit, select the kit used to build the application.
+         \li In \uicontrol Port, specify the port to listen to.
+         \li Select \uicontrol OK.
+    \endlist
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profiling applications}, {QML Profiler}
+
+    \endif
+*/

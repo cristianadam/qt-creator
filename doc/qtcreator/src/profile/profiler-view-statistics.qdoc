@@ -1,0 +1,54 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-statistics.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title View statistics
+
+    \image {qtcreator-performance-analyzer-statistics.png} {the profiler Statistics view}
+
+    The \uicontrol Statistics view displays:
+
+    \list
+        \li The number of CPU samples each function in the timeline was contained
+            in, in total and when on the top of the stack (called \c self).
+        \li The number of times each QML binding, create, compile, JavaScript, or
+            signal event is triggered and the average time it takes.
+    \endlist
+
+    Examine the statistics to learn which events to optimize. A high number of
+    occurrences might indicate that an event is triggered unnecessarily or takes
+    very long to execute.
+
+    To view the median, longest, and shortest time for the occurrences, select
+    \uicontrol {Extended Event Statistics} in the context menu.
+    This allows you to examine which events you need
+    to optimize. A high number of occurrences might indicate that a function is
+    triggered unnecessarily .
+
+    Select a row to move to it in the source code in the code editor.
+
+    The \uicontrol Callers and \uicontrol Callees panes show dependencies
+    between functions. They allow you to examine the internal functions of the
+    application. The \uicontrol Callers pane summarizes the functions that
+    called the function selected in the main view.  The \uicontrol Callees pane
+    summarizes the functions called from the function selected in the main
+    view.
+
+    Select a row to move to the respective function in the source code in the
+    code editor and select it in the main view.
+
+    To copy the contents of one view or row to the clipboard, select
+    \uicontrol {Copy Table} or \uicontrol {Copy Row} in the context menu.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

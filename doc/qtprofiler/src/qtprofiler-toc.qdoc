@@ -19,6 +19,7 @@
         \li Record profiling data
             \generatelist profiler-collect-data
         \li Analyze profiling data
+            \generatelist profiler-analyze-data
         \li \l{Reference}
             \generatelist profiling-tools
     \endlist

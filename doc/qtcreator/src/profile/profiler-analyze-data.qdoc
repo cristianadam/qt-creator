@@ -1,0 +1,93 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-analyze-data.html
+    \previouspage creator-how-tos.html
+    \nextpage creator-qml-performance-monitor.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Analyze collected data
+
+    The \uicontrol Timeline view displays a graphical representation of the data
+    and a condensed view of all recorded events.
+
+    The timeline shows the following kinds of events, depending on the profiling
+    backend:
+
+    \list
+        \li CPU usage per thread
+        \li QML and JavaScript execution
+        \li Trace events generated in Chrome Trace Format (CTF)
+    \endlist
+
+    \image {qtcreator-performance-analyzer-timeline.webp} {Timeline view}
+
+    \section1 Event categories
+
+    Each category in the timeline describes an event.
+
+    The thread that the application runs on is labeled with the name of the
+    application, where the trace has one, rather than with the name that all
+    Qt applications give that thread. Move the cursor over a label to see the
+    process and the thread it stands for.
+
+    Move the cursor on an event on a row to see how long it takes and which
+    function in the source it represents or where in the source it is being
+    called.
+
+    To display the information only when an event is selected, turn off
+     \uicontrol {View Event Information on Mouseover}.
+
+    \section1
+
+    A trace that lists its events under more than one tracepoint provider, as a
+    Qt application traced with \c {-trace ctf} lists them under the Qt modules
+    they come from (\c qtcore, \c qtgui, and so on), also has a
+    \uicontrol Providers button. Its menu lists the providers of the trace,
+    with the ones that the timeline and the statistics show selected. All of
+    them are selected for a trace that you have just opened or reloaded.
+
+    Clear a provider to leave its events out. The profiler reads the trace again,
+    so they are gone from the timeline and the statistics until you select the
+    provider again. The last selected provider cannot be cleared, because that
+    would leave nothing to look at. Events that name no provider, such as the
+    events of a kernel trace recorded beside a Qt one, are always shown.
+
+    The threads that you selected in \uicontrol {Restrict to Threads} stay
+    selected. If the events of a selected thread all came from a provider that
+    you clear, the profiler shows all the threads until you select that provider
+    again.
+
+    The part of the timeline that you zoomed into stays in view. If the trace
+    that the profiler reads has no events there, because the providers that recorded
+    them are not selected, it shows the whole trace instead.
+
+    \section1 Outline
+
+    The outline summarizes the period for which data was collected. Drag
+    the zoom range or select the outline to move on the outline.
+
+    You can also move between events by selecting \uicontrol {Jump to Previous Event}
+    and \uicontrol {Jump to Next Event}.
+
+    \section1 Zoom slider
+
+    Select \uicontrol {Show Zoom Slider} to open a slider that sets the zoom
+    level.
+
+    You can also drag the zoom handles.
+
+    To reset the default zoom level, right-click the timeline to open the
+    context menu, and select \uicontrol {Reset Zoom}.
+
+    Select the time ruler to add vertical orientation lines to the timeline.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

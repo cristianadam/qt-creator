@@ -1,0 +1,24 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-save-and-load-data.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-collect-data
+
+    \title Save and load profiling data
+
+    To save all the collected data in the \c .qzt format, go to
+    \uicontrol Analyze > \uicontrol {QML Profiler Options} and select
+    \uicontrol {Save QML Trace}.
+
+    To view the saved data, select \uicontrol {Load QML Trace}.
+
+    You can also deliver \c .qzt files to others for examination
+    or load files that you receive from them.
+
+    \sa {Profile}{How to: Profile}, {Profiling applications}, {QML Profiler}
+*/

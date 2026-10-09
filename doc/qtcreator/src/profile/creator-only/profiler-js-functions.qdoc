@@ -1,0 +1,25 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-js-functions.html
+    \previouspage creator-ctf-visualizer.html
+    \nextpage creator-qml-performance-monitor.html
+
+    \ingroup creator-how-to-profile
+
+    \title Resolve names for JIT-compiled JavaScript functions
+
+    Since version 5.6.0, Qt can generate \c perf.map files with information about
+    JavaScript functions. The profiler will read them and show the
+    function names in the \uicontrol Timeline, \uicontrol Statistics, and
+    \uicontrol {Flame Graph} views. This only works if the process being
+    profiled is running on the host computer, not on the target device.
+
+    To switch on the generation of \c perf.map files, add the environment
+    variable \c QV4_PROFILE_WRITE_PERF_MAP to \uicontrol {Run Environment}
+    and set its value to \c 1.
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+*/

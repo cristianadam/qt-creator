@@ -1,0 +1,29 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-load-and-save-traces.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Load and save trace files
+
+    You can save and load trace data in a format specific to the
+    the profiler (.ptq). This format is self-contained, and
+    therefore loading it does not require you to specify the recording
+    environment. You can transfer such trace files to a different computer
+    without any toolchain or debug symbols and analyze them there.
+
+    To load trace data, go to \uicontrol Analyze >
+    \uicontrol {performance analyzerr Options} > \uicontrol {Load Trace File}.
+
+    To save trace data, select \uicontrol {Save Trace File}.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

@@ -1,15 +1,10 @@
 // Copyright (C) 2026 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
-// **********************************************************************
-// NOTE: the sections are not ordered by their logical order to avoid
-// reshuffling the file each time the index order changes (i.e., often).
-// Run the fixnavi.pl script to adjust the links to the index order.
-// **********************************************************************
-
 /*!
     \page creator-ctf-visualizer.html
-    \previouspage creator-reference-profilers.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
 
     \ingroup profiling-tools
 
@@ -45,93 +40,43 @@
         \li Metadata events (process and thread name)
     \endlist
 
-    \section1 Opening JSON files
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/
+
+/*!
+    \page profiler-open-json-files.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Open JSON files
 
     To open JSON files for viewing, select \uicontrol Analyze >
     \uicontrol {Chrome Trace Format Viewer} > \uicontrol {Load JSON File}.
 
-    \section1 Visualizing events
 
-    The \uicontrol Timeline view displays a graphical representation of trace
-    events and a condensed view of all recorded events.
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
 
-    \image {qtcreator-ctf-visualizer-timeline.webp} {Timeline view}
+    \endif
+*/
 
-    Each category in the timeline describes a thread in the application. The
-    thread that the application runs on is labeled with the name of the
-    application, where the trace has one, rather than with the name that all
-    Qt applications give that thread. Move the cursor over a label to see the
-    process and the thread it stands for.
+/*!
+    \page profiler-add-trace-points.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
 
-    Move the cursor on an event (5) on a row to view its duration and event
-    category.
-    To display the information only when an event is selected, disable the
-    \uicontrol {View Event Information on Mouseover} button (4).
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
 
-    The outline (10) summarizes the period for which data was collected. Drag
-    the zoom range (8) or click the outline to move on the outline. To move
-    between events, select the \uicontrol {Jump to Previous Event} and
-    \uicontrol {Jump to Next Event} buttons (1).
-
-    Select the \uicontrol {Show Zoom Slider} button (2) to open a slider that
-    you can use to set the zoom level. You can also drag the zoom handles (9).
-    To reset the default zoom level, right-click the timeline to open the
-    context menu, and select \uicontrol {Reset Zoom}.
-
-    Select the \inlineimage {icons/filtericon.png} {Restrict to Threads}
-    (\uicontrol {Restrict to Threads}) button (6) to select the threads to
-    show.
-
-    A trace that lists its events under more than one tracepoint provider, as a
-    Qt application traced with \c {-trace ctf} lists them under the Qt modules
-    they come from (\c qtcore, \c qtgui, and so on), also has a
-    \uicontrol Providers button. Its menu lists the providers of the trace,
-    with the ones that the timeline and the statistics show selected. All of
-    them are selected for a trace that you have just opened or reloaded.
-
-    Clear a provider to leave its events out. The profiler reads the trace again,
-    so they are gone from the timeline and the statistics until you select the
-    provider again. The last selected provider cannot be cleared, because that
-    would leave nothing to look at. Events that name no provider, such as the
-    events of a kernel trace recorded beside a Qt one, are always shown.
-
-    The threads that you selected in \uicontrol {Restrict to Threads} stay
-    selected. If the events of a selected thread all came from a provider that
-    you clear, the profiler shows all the threads until you select that provider
-    again.
-
-    The part of the timeline that you zoomed into stays in view. If the trace
-    that the profiler reads has no events there, because the providers that recorded
-    them are not selected, it shows the whole trace instead.
-
-    \section2 Selecting event ranges
-
-    You can select an event range (7) to view the time it represents or to zoom
-    into a specific region of the trace. Select the \uicontrol {Select Range}
-    button (3) to activate the selection tool. Then click in the timeline to
-    specify the beginning of the event range. Drag the selection handle to
-    define the end of the range.
-
-    You can use event ranges also to measure delays between two subsequent
-    events. Place a range between the end of the first event and the beginning
-    of the second event. The \uicontrol Duration field displays the delay
-    between the events in milliseconds.
-
-    To zoom into an event range, double-click it.
-
-    To remove an event range, close the \uicontrol Selection dialog.
-
-    \section1 Viewing statistics
-
-    \image {qtcreator-ctf-visualizer-statistics.png} {Statistics view}
-
-    The \uicontrol Statistics view displays the number of samples each function
-    in the timeline was contained in, in total and when on the top of the
-    stack (called \c self). This allows you to examine which functions you need
-    to optimize. A high number of occurrences might indicate that a function is
-    triggered unnecessarily or takes very long to execute.
-
-    \section1 Adding trace points to an application
+    \title Add trace points to an application
 
     An application records trace points of its own through the Qt tracing
     subsystem. It declares them in a \e {trace point provider}, a \c
@@ -156,7 +101,7 @@
     qt_add_tracepoints(myapp myapp.tracepoints)
     \endcode
 
-    \section2 Tracing a function
+    \section1 Trace a function
 
     To trace how long a function takes, place the cursor on its signature and
     select \uicontrol {Trace This Function} from the
@@ -192,7 +137,7 @@
     \c QByteArray stops \c tracegen and the configuration of the project with
     it, so parameters of other types are left out.
 
-    \section2 Tracing by hand
+    \section1 Trace by hand
 
     Declare a trace point in the provider with the arguments it carries. A name
     ending in \c _entry, paired with the same name ending in \c _exit, is shown
@@ -219,7 +164,22 @@
     QT_TRACEPOINT_FORMAT CMake variable where the Qt you use was built with
     another one.
 
-    \section1 Collecting LTTng data
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/
+
+/*!
+    \page profiler-collect-lttng-data.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Collect LTTng data
 
     LTTng is a tracing toolkit for Linux that you can apply on embedded Linux
     systems to find out how to optimize the startup time of an application.
@@ -250,7 +210,7 @@
     In Yocto, you can activate the above options in \uicontrol Menu >
     \uicontrol Config > \uicontrol {Kernel Hacking} > \uicontrol Tracers.
 
-    \section2 Installing LTTng
+    \section1 Installing LTTng
 
     After you build the kernel and deploy it on your device, you'll need to
     install the following LTTng packages on your device:
@@ -269,7 +229,7 @@
     Trace points are continuously being added to Qt versions. To use them, you
     need to build Qt yourself with the \c {configure -trace lttng} option.
 
-    \section2 Recording events
+    \section1 Recording events
 
     To create a session, you call the \c {lttng create} command. Then you
     call \c {lttng enable-channel kernel -k} to enable the kernel channel.
@@ -290,7 +250,7 @@
     session. Usually, it is useful to enable scheduler switch, syscall, and Qt
     trace points.
 
-    \section3 Scheduler switch trace points
+    \section2 Scheduler switch trace points
 
     Scheduler switch trace points are reached when an application is switched
     out due to predemption, for example, when another process gets the chance
@@ -298,7 +258,7 @@
     the thread that is currently running and the process it belongs to, as
     well as the time when the process started and stopped.
 
-    \section3 Syscall trace points
+    \section2 Syscall trace points
 
     Syscall trace points help you to understand why a scheduler switch happened.
     The following are examples of syscalls to trace:

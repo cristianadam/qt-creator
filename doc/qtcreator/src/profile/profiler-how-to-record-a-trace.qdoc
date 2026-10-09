@@ -1,0 +1,40 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-how-to-record-a-trace.html
+    \previouspage creator-how-to-profile-qml.html
+    \nextpage creator-preferences-testing.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-collect-data
+
+    \title Record a trace
+
+    Use integrated profiling tools to find causes for typical performance
+    problems in your applications, analyze CPU and memory usage, and visualize
+    trace events.
+
+    To record profiling data:
+
+    \list 1
+        \li In \uicontrol {Profile}, set preferences for profiling.
+            \image {profiler-settings-call-stack-sampler.webp} {Settings in the Profiler view}
+        \li In \uicontrol {Backends}, select the profiling tool to use.
+        \li Select \uicontrol {Start recording}.
+        \li Use the application to collect data.
+        \li Select \uicontrol {Stop recording} to view the results.
+    \endlist
+
+    When you start analyzing an application, the application is launched, and
+    the profiler immediately begins to collect data. This is indicated
+    by the time running in \uicontrol Recorded. However, as the data
+    is passed through the profiling tool and a helper program, which buffer and
+    process it on the fly, data may arrive several seconds after it was generated.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications}
+    \else
+    \sa {Getting started}, {Command-line options}
+    \endif
+*/

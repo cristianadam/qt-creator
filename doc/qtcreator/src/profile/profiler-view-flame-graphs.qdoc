@@ -1,0 +1,81 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-flame-graph.html
+    \previouspage profiler-flame-graph.html
+    \nextpage profiler-flame-graph.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Visualize statistics as flame graphs
+
+    \image {qtcreator-performance-analyzer-flamegraph.png} {Flame Graph view}
+
+    The \uicontrol {Flame Graph} view shows a more concise statistical overview
+    of the execution.
+
+    Unlike the \uicontrol Timeline view, the \uicontrol {Flame Graph} view does
+    not show the time spans when no QML or JavaScript is running at all. Thus, it
+    is not suitable for analyzing per frame execution times. However, it is very
+    easy to see the total impact of the various QML and JavaScript events there.
+
+    \section1 View total time
+
+    In the \uicontrol {Total Time} view, the horizontal bars show:
+
+    \list
+        \li An aspect of the CPU samples taken for a certain function, relative
+            to the same aspect of all samples together.
+        \li The amount of time all invocations of a certain function took
+            together, relative to the total runtime of all JavaScript and QML
+            events.
+    \endlist
+
+    The nesting shows which functions were called by which other ones.
+
+    \section1 Select the aspect
+
+    The \uicontrol {Visualize} button lets you select what aspect to show in the
+    \uicontrol {Flame Graph}.
+
+    \list
+        \li \uicontrol {Samples} is the default visualization. The size of the
+            horizontal bars represents the number of samples recorded for the
+            given function.
+        \li In \uicontrol {Peak Usage} mode, the size of the horizontal bars
+            represents the amount of memory allocated by the respective
+            functions, at the point in time when the allocation's memory usage
+            was at its peak.
+        \li In \uicontrol {Allocations} mode, the size of the horizontal bars
+            represents the number of memory allocations triggered by the
+            respective functions.
+        \li In \uicontrol {Releases} mode, the size of the horizontal bars
+            represents the number of memory releases triggered by the respective
+            functions.
+    \endlist
+
+    The \uicontrol {Peak Usage}, \uicontrol {Allocations}, and
+    \uicontrol {Releases} modes will only show any data if samples from memory
+    trace points have been recorded.
+
+    \section1 View total memory allocation
+
+    To view the total amount of memory allocated by the functions, select
+    \uicontrol Memory in the drop-down menu.
+
+    To view the number of memory allocations performed by the functions,
+    select \uicontrol Allocations.
+
+    \section1 Zoom in and out
+
+    Double-click an item in a view to zoom into it. Double-click an empty
+    area in the view to zoom out again.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

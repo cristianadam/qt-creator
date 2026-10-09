@@ -1,0 +1,25 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-debug-info-for-qmake.html
+    \previouspage creator-how-tos.html
+    \nextpage creator-cpu-usage-analyzer.html
+
+    \ingroup creator-how-to-profile
+
+    \title Generate separate debug info for qmake projects
+
+    To manually set up a build configuration that generates debug symbols also
+    for applications compiled for release, edit the build settings of a qmake
+    project:
+
+    \list 1
+        \li Go to \uicontrol {Projects} > \uicontrol {Build Settings}.
+        \li In \uicontrol {Separate debug info}, select \uicontrol Enable.
+        \li Select \uicontrol Yes to recompile the project.
+    \endlist
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+*/

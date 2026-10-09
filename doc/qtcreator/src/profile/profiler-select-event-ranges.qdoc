@@ -1,0 +1,49 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page profiler-select-event-ranges.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-profile
+    \ingroup profiler-analyze-data
+
+    \title Select event ranges
+
+    Select an event range in \uicontrol Timeline to view the time it represents
+    or to zoom into a specific region of the trace. For QML events, you can view
+    the frame rate of events and compare them with the frame rate of similar
+    events.
+
+    To activate the selection tool:
+
+    \list 1
+        \li Select \uicontrol {Select Range}.
+        \li Click in the timeline to set the beginning of the event range.
+        \li Drag the selection handle to define the end of the range.
+    \endlist
+
+    Use event ranges also to measure delays between two subsequent
+    events. Place a range between the end of the first event and the beginning
+    of the second event. \uicontrol Duration shows the delay
+    between the events in milliseconds.
+
+    To narrow down the current range in the timeline view,
+    \uicontrol Statistics, and \uicontrol {Flame Graph} views, right-click
+    the range and select \uicontrol {Analyze Current Range}. To return to
+    the full range, select \uicontrol {Analyze Full Range} in the context menu.
+
+    \section1 Zoom into event ranges
+
+    To zoom into an event range, double-click it.
+
+    \section1 Remove event ranges
+
+    To remove an event range, close the \uicontrol Selection dialog.
+
+    \if defined(qtcreator)
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+
+    \endif
+*/

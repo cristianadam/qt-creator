@@ -1,0 +1,46 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-profiler-call-graph-mode.html
+    \previouspage creator-ctf-visualizer.html
+    \nextpage creator-qml-performance-monitor.html
+
+    \ingroup creator-how-to-profile
+
+    \title Select call graph mode
+
+    To set global preferences for the profiler, go to \preferences >
+    \uicontrol Analyzer > \uicontrol {CPU Usage}.
+
+    To set preferences for a particular run configuration, go to
+    \uicontrol Projects > \uicontrol {Run Settings} and select \uicontrol Details
+    next to \uicontrol {Performance Analyzer Settings}.
+
+    \image {qtcreator-performance-analyzer-settings.png} {Performance Analyzer Preferences}
+
+    In \uicontrol {Call graph mode}, you can specify how
+    the profiler recovers call chains from your application:
+
+    \list
+        \li The \uicontrol {Frame Pointer}, or \c fp, mode relies on frame pointers
+            being available in the profiled application and will instruct the kernel on
+            the target device to walk the chain of frame pointers in order to retrieve
+            a call chain for each sample.
+        \li The \uicontrol {Dwarf} mode works also without frame pointers, but
+            generates significantly more data. It takes a snapshot of the current
+            application stack each time a sample is triggered and transmits that
+            snapshot to the host computer for analysis.
+        \li The \uicontrol {Last Branch Record} mode does not use a memory buffer.
+            It automatically decodes the last 16 taken branches every time execution
+            stops. It is supported only on recent Intel CPUs.
+    \endlist
+
+    The frame pointer mode is the default because it is the cheapest. However,
+    Qt and most system libraries are compiled without frame pointers by
+    default, so call chains through them may be incomplete. Select the dwarf
+    mode in that case.
+
+    \sa {Profile}{How to: Profile}, {Profilers}, {Profiling applications},
+    {Performance Analyzer}
+*/
