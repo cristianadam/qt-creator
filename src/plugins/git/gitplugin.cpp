@@ -3,6 +3,7 @@
 
 #include "gitplugin.h"
 
+#include "branchmodel.h"
 #include "branchview.h"
 #include "changeselectiondialog.h"
 #include "commitdata.h"
@@ -2472,6 +2473,8 @@ private slots:
     void testInlineDiffConflictedFile();
     void testConflictedFileInTextEditor();
     void testGraphModelRepositorySwitch();
+    void testBranchModelDetachedHead_data();
+    void testBranchModelDetachedHead();
     void testWorkingDirectoryForShow();
     void testFileLinkResolution();
     void testFileLinkContextMenu();
@@ -3115,6 +3118,66 @@ void GitTest::testGraphModelRepositorySwitch()
     model.refresh(second);
     QCOMPARE(resetSpy.count(), 1);
     QCOMPARE(model.rowCount(), 2);
+}
+
+void GitTest::testBranchModelDetachedHead_data()
+{
+    QTest::addColumn<QString>("remoteBranch");
+    QTest::newRow("origin") << QString("origin/21.0");
+    QTest::newRow("gerrit") << QString("gerrit/21.0");
+}
+
+void GitTest::testBranchModelDetachedHead()
+{
+    QFETCH(QString, remoteBranch);
+    const QString remoteRef = "refs/remotes/" + remoteBranch;
+
+    QTemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+    const FilePath repo = FilePath::fromString(temporaryDir.path());
+    const auto runGit = [repo](const QStringList &arguments) {
+        return gitClient().vcsSynchronousExec(repo, arguments).result()
+               == ProcessResult::FinishedWithSuccess;
+    };
+    QVERIFY(runGit({"init", "-b", "main"}));
+    QVERIFY(runGit({"config", "user.email", "test@test"}));
+    QVERIFY(runGit({"config", "user.name", "test"}));
+    QVERIFY(runGit({"config", "commit.gpgsign", "false"}));
+    QVERIFY(runGit({"commit", "--allow-empty", "-m", "initial"}));
+    QVERIFY(runGit({"update-ref", remoteRef, "HEAD"}));
+
+    BranchModel model;
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    const auto refresh = [&] {
+        resetSpy.clear();
+        model.refresh(repo);
+        QTRY_VERIFY(!resetSpy.isEmpty() && model.currentBranch().isValid());
+    };
+
+    refresh();
+    QCOMPARE(model.fullName(model.currentBranch()), QString("main"));
+    QVERIFY(model.isLocal(model.currentBranch()));
+
+    QVERIFY(runGit({"checkout", remoteRef}));
+    refresh();
+    QCOMPARE(model.fullName(model.currentBranch()), remoteBranch);
+    QVERIFY(!model.isHead(model.currentBranch()));
+    QVERIFY(!model.isLocal(model.currentBranch()));
+
+    QVERIFY((repo / "untracked.txt").writeFileContents("untracked\n"));
+    refresh();
+    QCOMPARE(model.fullName(model.currentBranch()), remoteBranch);
+
+    QVERIFY(runGit({"commit", "--allow-empty", "-m", "detached commit"}));
+    refresh();
+    QVERIFY(model.isHead(model.currentBranch()));
+    QCOMPARE(model.fullName(model.currentBranch()), QString("HEAD"));
+
+    QVERIFY(runGit({"checkout", "main"}));
+    QVERIFY(runGit({"update-ref", "-d", remoteRef}));
+    QVERIFY(runGit({"checkout", "--detach", "main"}));
+    refresh();
+    QVERIFY(model.isHead(model.currentBranch()));
 }
 
 void GitTest::testWorkingDirectoryForShow()
