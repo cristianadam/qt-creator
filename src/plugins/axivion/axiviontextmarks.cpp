@@ -224,9 +224,19 @@ void handleIssuesForFile(const Dto::FileViewDto &fileView, const FilePath &fileP
 void clearAllMarks(LineMarkerType type)
 {
     QHash<FilePath, QSet<AxivionTextMark *>> &markers = textMarkManager().marks(type);
-    for (const QSet<AxivionTextMark *> &marks : std::as_const(markers))
-       qDeleteAll(marks);
-    markers.clear();
+
+    switch (type) {
+    case LineMarkerType::Dashboard:
+        for (const QSet<AxivionTextMark *> &marks : std::as_const(markers))
+            qDeleteAll(marks);
+        markers.clear();
+        break;
+    case LineMarkerType::SFA:
+        const FilePaths files = markers.keys();
+        for (auto file : files)
+            clearMarks(file, LineMarkerType::SFA);
+        break;
+    }
 }
 
 void clearMarks(const FilePath &filePath, LineMarkerType type)
