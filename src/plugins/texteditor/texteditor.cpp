@@ -1141,6 +1141,15 @@ public:
     };
     using UndoMultiCursor = QList<UndoCursor>;
     QStack<UndoMultiCursor> m_undoCursorStack;
+    QStack<UndoMultiCursor> m_redoCursorStack;
+    UndoMultiCursor m_cursorsBeforeEdit;
+
+    UndoMultiCursor currentCursors() const;
+    void rememberCursorsBeforeEdit();
+    void pushUndoCursors();
+    void restoreCursors(const UndoMultiCursor &cursors);
+    void undoRedo(bool undo);
+
     QList<int> m_visualIndentCache;
     int m_visualIndentOffset = 0;
 
@@ -1337,6 +1346,9 @@ TextEditorWidgetPrivate::TextEditorWidgetPrivate(TextEditorWidget *parent)
 
     connect(q, &PlainTextEdit::cursorPositionChanged,
             this, &TextEditorWidgetPrivate::updateCursorPosition);
+
+    connect(q, &PlainTextEdit::cursorPositionChanged,
+            this, &TextEditorWidgetPrivate::rememberCursorsBeforeEdit);
 
     connect(q, &PlainTextEdit::updateRequest,
             this, &TextEditorWidgetPrivate::slotUpdateRequest);
@@ -1624,6 +1636,9 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
 
     m_document = doc;
     q->PlainTextEdit::setDocument(doc->document());
+    m_undoCursorStack.clear();
+    m_redoCursorStack.clear();
+    m_cursorsBeforeEdit.clear();
     m_tabSettingsButton->setDocument(q->textDocument());
     previousDocument.clear();
     q->setCursorWidth(2); // Applies to the document layout
@@ -1681,6 +1696,11 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
                                      &QTextDocument::contentsChange,
                                      this,
                                      &TextEditorWidgetPrivate::editorContentsChange);
+
+    m_documentConnections << connect(m_document->document(),
+                                     &QTextDocument::undoCommandAdded,
+                                     this,
+                                     &TextEditorWidgetPrivate::pushUndoCursors);
 
     m_documentConnections << connect(m_document->document(),
                                      &QTextDocument::modificationChanged,
@@ -2959,16 +2979,73 @@ void TextEditorWidget::unindent()
     setMultiTextCursor(textDocument()->unindent(multiTextCursor()));
 }
 
+TextEditorWidgetPrivate::UndoMultiCursor TextEditorWidgetPrivate::currentCursors() const
+{
+    UndoMultiCursor cursors;
+    for (const QTextCursor &cursor : m_cursors.cursors())
+        cursors.append({cursor.position(), cursor.anchor()});
+    return cursors;
+}
+
+void TextEditorWidgetPrivate::rememberCursorsBeforeEdit()
+{
+    m_cursorsBeforeEdit = currentCursors();
+}
+
+void TextEditorWidgetPrivate::pushUndoCursors()
+{
+    m_redoCursorStack.clear();
+    m_undoCursorStack.push(m_cursorsBeforeEdit);
+}
+
+void TextEditorWidgetPrivate::restoreCursors(const UndoMultiCursor &cursors)
+{
+    const int lastPosition = q->document()->characterCount() - 1;
+    QList<QTextCursor> restored;
+    for (const UndoCursor &cursor : cursors) {
+        QTextCursor c(q->document());
+        c.setPosition(qMin(cursor.anchor, lastPosition));
+        c.setPosition(qMin(cursor.position, lastPosition), QTextCursor::KeepAnchor);
+        restored.append(c);
+    }
+    if (restored.isEmpty())
+        return;
+    q->setMultiTextCursor(MultiTextCursor(restored));
+    q->ensureCursorVisible();
+}
+
+void TextEditorWidgetPrivate::undoRedo(bool undo)
+{
+    const UndoMultiCursor cursorsBefore = currentCursors();
+    q->doSetTextCursor(m_cursors.mainCursor());
+
+    QStack<UndoMultiCursor> &stack = undo ? m_undoCursorStack : m_redoCursorStack;
+    QStack<UndoMultiCursor> &otherStack = undo ? m_redoCursorStack : m_undoCursorStack;
+    const bool available = undo ? q->isUndoAvailable() : q->isRedoAvailable();
+    const bool restore = available && !stack.isEmpty();
+    UndoMultiCursor cursors;
+    if (restore) {
+        cursors = stack.pop();
+        otherStack.push(cursorsBefore);
+    }
+
+    if (undo)
+        q->PlainTextEdit::undo();
+    else
+        q->PlainTextEdit::redo();
+
+    if (restore)
+        restoreCursors(cursors);
+}
+
 void TextEditorWidget::undo()
 {
-    doSetTextCursor(multiTextCursor().mainCursor());
-    PlainTextEdit::undo();
+    d->undoRedo(true);
 }
 
 void TextEditorWidget::redo()
 {
-    doSetTextCursor(multiTextCursor().mainCursor());
-    PlainTextEdit::redo();
+    d->undoRedo(false);
 }
 
 bool TextEditorWidget::isUndoAvailable() const
@@ -5089,12 +5166,18 @@ void TextEditorWidgetPrivate::updateOptionalActions()
 
 void TextEditorWidgetPrivate::updateRedoAction()
 {
-    m_redoAction->setEnabled(q->isRedoAvailable());
+    const bool available = q->isRedoAvailable();
+    if (!available)
+        m_redoCursorStack.clear();
+    m_redoAction->setEnabled(available);
 }
 
 void TextEditorWidgetPrivate::updateUndoAction()
 {
-    m_undoAction->setEnabled(q->isUndoAvailable());
+    const bool available = q->isUndoAvailable();
+    if (!available)
+        m_undoCursorStack.clear();
+    m_undoAction->setEnabled(available);
 }
 
 void TextEditorWidgetPrivate::updateCopyAction(bool hasCopyableText)
