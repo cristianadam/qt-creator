@@ -579,6 +579,122 @@ QObject *createSelectAllTest()
     return new SelectAllTest;
 }
 
+class UndoCursorTest final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testSelectionRestoredOnUndo();
+    void testMultiCursorRestoredOnUndo();
+    void testSelectionRestoredOnRedo();
+
+private:
+    TextEditorWidget *openEditor(const QByteArray &contents);
+
+    Core::IEditor *m_editor = nullptr;
+};
+
+TextEditorWidget *UndoCursorTest::openEditor(const QByteArray &contents)
+{
+    QString title = "undo_cursor.txt";
+    m_editor = Core::EditorManager::openEditorWithContents(
+        Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, &title, contents);
+    if (!m_editor)
+        return nullptr;
+    auto baseEditor = qobject_cast<BaseTextEditor *>(m_editor);
+    return baseEditor ? baseEditor->editorWidget() : nullptr;
+}
+
+void UndoCursorTest::testSelectionRestoredOnUndo()
+{
+    const QString contents = "first line\nsecond line";
+    TextEditorWidget *editorWidget = openEditor(contents.toUtf8());
+    QVERIFY(editorWidget);
+    const QScopeGuard cleanup([this] { Core::EditorManager::closeEditors({m_editor}, false); });
+
+    QTextCursor cursor = editorWidget->textCursor();
+    cursor.setPosition(0);
+    cursor.setPosition(5, QTextCursor::KeepAnchor);
+    editorWidget->setTextCursor(cursor);
+
+    QTest::keyClick(editorWidget, Qt::Key_X);
+    QCOMPARE(editorWidget->textDocument()->plainText(), QString("x line\nsecond line"));
+
+    editorWidget->undo();
+
+    QCOMPARE(editorWidget->textDocument()->plainText(), contents);
+    cursor = editorWidget->textCursor();
+    QVERIFY(cursor.hasSelection());
+    QCOMPARE(cursor.anchor(), 0);
+    QCOMPARE(cursor.position(), 5);
+}
+
+void UndoCursorTest::testMultiCursorRestoredOnUndo()
+{
+    const QString contents = "first line\nsecond line";
+    TextEditorWidget *editorWidget = openEditor(contents.toUtf8());
+    QVERIFY(editorWidget);
+    const QScopeGuard cleanup([this] { Core::EditorManager::closeEditors({m_editor}, false); });
+
+    QTextDocument *document = editorWidget->document();
+    QTextCursor first(document);
+    first.setPosition(0);
+    first.setPosition(5, QTextCursor::KeepAnchor);
+    QTextCursor second(document);
+    second.setPosition(11);
+    second.setPosition(17, QTextCursor::KeepAnchor);
+    editorWidget->setMultiTextCursor(Utils::MultiTextCursor({first, second}));
+
+    QTest::keyClick(editorWidget, Qt::Key_X);
+    QCOMPARE(editorWidget->textDocument()->plainText(), QString("x line\nx line"));
+
+    editorWidget->undo();
+
+    QCOMPARE(editorWidget->textDocument()->plainText(), contents);
+    const QList<QTextCursor> cursors = editorWidget->multiTextCursor().cursors();
+    QCOMPARE(cursors.size(), 2);
+    QCOMPARE(cursors.at(0).anchor(), 0);
+    QCOMPARE(cursors.at(0).position(), 5);
+    QCOMPARE(cursors.at(1).anchor(), 11);
+    QCOMPARE(cursors.at(1).position(), 17);
+}
+
+void UndoCursorTest::testSelectionRestoredOnRedo()
+{
+    const QString contents = "first line\nsecond line";
+    TextEditorWidget *editorWidget = openEditor(contents.toUtf8());
+    QVERIFY(editorWidget);
+    const QScopeGuard cleanup([this] { Core::EditorManager::closeEditors({m_editor}, false); });
+
+    QTextCursor cursor = editorWidget->textCursor();
+    cursor.setPosition(0);
+    cursor.setPosition(5, QTextCursor::KeepAnchor);
+    editorWidget->setTextCursor(cursor);
+
+    QTest::keyClick(editorWidget, Qt::Key_X);
+    const QString edited = editorWidget->textDocument()->plainText();
+
+    // the selection the redo has to bring back is not the one around the edit
+    cursor = editorWidget->textCursor();
+    cursor.setPosition(2);
+    cursor.setPosition(6, QTextCursor::KeepAnchor);
+    editorWidget->setTextCursor(cursor);
+
+    editorWidget->undo();
+    editorWidget->redo();
+
+    QCOMPARE(editorWidget->textDocument()->plainText(), edited);
+    cursor = editorWidget->textCursor();
+    QVERIFY(cursor.hasSelection());
+    QCOMPARE(cursor.anchor(), 2);
+    QCOMPARE(cursor.position(), 6);
+}
+
+QObject *createUndoCursorTest()
+{
+    return new UndoCursorTest;
+}
+
 // Regression test for QTCREATORBUG-31149: reflowing a comment must not pull
 // adjacent code lines into the paragraph.
 class RewrapParagraphTest final : public QObject
