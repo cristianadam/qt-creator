@@ -29,6 +29,7 @@ const Id INLINE_DIFF_GHOST_CATEGORY("TextEditor.InlineDiff.Ghost");
 // (FULL_LINE_HIGHLIGHT_FORMAT_PROPERTY_ID is UserProperty + 43)
 constexpr int INLINE_DIFF_FORMAT_PROPERTY_ID = QTextFormat::UserProperty + 44;
 constexpr int INLINE_DIFF_SIGN_PROPERTY_ID = QTextFormat::UserProperty + 45;
+constexpr int INLINE_DIFF_LINE_ENDING_PROPERTY_ID = QTextFormat::UserProperty + 46;
 
 // Deletion runs longer than this are elided to keep the ghost rows scannable.
 constexpr int maxGhostLines = 100;
@@ -66,6 +67,17 @@ QStringList inlineDiffChangedCharTexts(TextEditorWidget *widget)
     return texts;
 }
 
+QString inlineDiffGhostLineEnding(const QTextLayout *layout, int textPosition)
+{
+    for (const QTextLayout::FormatRange &range : layout->formats()) {
+        if (range.start <= textPosition && textPosition < range.start + range.length
+            && range.format.hasProperty(INLINE_DIFF_LINE_ENDING_PROPERTY_ID)) {
+            return range.format.stringProperty(INLINE_DIFF_LINE_ENDING_PROPERTY_ID);
+        }
+    }
+    return {};
+}
+
 static std::unique_ptr<QTextLayout> createGhostLayout(
     const InlineDiffDecorator::GhostBlock &ghost,
     const QTextDocument *doc,
@@ -73,6 +85,10 @@ static std::unique_ptr<QTextLayout> createGhostLayout(
     const QTextCharFormat &charFormat)
 {
     QStringList lines = ghost.lines;
+    for (QString &line : lines) {
+        if (line.endsWith('\r'))
+            line.chop(1);
+    }
     QList<InlineDiffDecorator::CharRanges> charHighlights = ghost.charHighlights;
     if (lines.size() > maxGhostLines) {
         const int elided = int(lines.size()) - maxGhostLines;
@@ -112,6 +128,14 @@ static std::unique_ptr<QTextLayout> createGhostLayout(
                 if (range.first >= 0 && r.length > 0 && range.first + r.length <= lines.at(i).size())
                     formats << r;
             }
+        }
+        if (i < maxGhostLines && i < ghost.lineEndings.size()
+            && !ghost.lineEndings.at(i).isEmpty()) {
+            QTextLayout::FormatRange ending;
+            ending.start = lineStart;
+            ending.length = int(lines.at(i).size()) + 1;
+            ending.format.setProperty(INLINE_DIFF_LINE_ENDING_PROPERTY_ID, ghost.lineEndings.at(i));
+            formats << ending;
         }
         lineStart += int(lines.at(i).size()) + 1; // + line separator
     }
@@ -337,14 +361,18 @@ void InlineDiffDecorator::apply(const QList<GhostBlock> &ghosts, const QList<Cha
     // side and '-' on the baseline side; removed lines rendered as ghost rows
     // are marked '-' by the widget from the layout (hasGhostRows)
     QHash<int, QChar> signs;
+    QHash<int, QString> lineEndings;
     const QChar changedSign = isBaseline ? u'-' : u'+';
     for (const ChangedRange &range : std::as_const(m_changes)) {
         for (int line = range.startLine; line <= range.endLine; ++line) {
             const QChar sign = range.diffSigns.value(line, changedSign);
             signs.insert(line - 1, sign);
+            if (range.lineEndings.contains(line))
+                lineEndings.insert(line - 1, range.lineEndings.value(line));
         }
     }
     m_widget->setDiffChangeSigns(signs, hasGhostRows);
+    m_widget->setDiffLineEndings(lineEndings);
 
     layout->emitDocumentSizeChanged();
     layout->requestUpdate();
@@ -363,6 +391,7 @@ void InlineDiffDecorator::clear()
     if (cleared > 0 && layout)
         layout->requestUpdate();
     m_widget->setDiffChangeSigns({}, false);
+    m_widget->setDiffLineEndings({});
     m_widget->setScrollBarHighlights(Constants::SCROLL_BAR_INLINE_DIFF, {});
 }
 

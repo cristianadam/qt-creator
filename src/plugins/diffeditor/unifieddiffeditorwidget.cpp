@@ -211,6 +211,7 @@ void UnifiedDiffEditorWidget::clear(const QString &message)
 {
     m_data = {};
     setDiffChangeSigns({}, false);
+    setDiffLineEndings({});
     setSelections({});
     if (m_asyncTask) {
         m_asyncTask.reset();
@@ -329,6 +330,9 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
             if (!line.isEmpty()) {
                 m_diffSigns.insert(*blockNumber + blockCount + 1,
                                    DiffUtils::changeSign(rowData, side));
+                const QString ending = DiffUtils::lineEndingLabel(rowData, side);
+                if (!ending.isEmpty())
+                    m_lineEndings.insert(*blockNumber + blockCount + 1, ending);
                 setLineNumber(side,
                               *blockNumber + blockCount + 1,
                               chunkData.startingLineNumber[side] + lineCount[side] + 1,
@@ -483,6 +487,7 @@ void UnifiedDiffEditorWidget::showDiff()
             }
             setSelections(result.selections);
             setDiffChangeSigns(result.diffData.m_diffSigns, false);
+            setDiffLineEndings(result.diffData.m_lineEndings);
             setCurrentDiffFileIndex(m_controller.currentDiffFileIndex());
         }
         m_asyncTask.release()->deleteLater();

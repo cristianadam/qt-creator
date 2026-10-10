@@ -2469,6 +2469,8 @@ private slots:
     void testGitRemote_data();
     void testGitRemote();
     void testInlineDiffFile();
+    void testDiffLineEndings_data();
+    void testDiffLineEndings();
     void testInlineDiffConflictedFile();
     void testConflictedFileInTextEditor();
     void testGraphModelRepositorySwitch();
@@ -2975,6 +2977,69 @@ void GitTest::testInlineDiffFile()
     diffWidget->setTextCursor(cursor); // leave a blame timer pending while the editor closes
     QVERIFY(EditorManager::closeDocuments({sourceDocument}, false));
     QTRY_VERIFY(!baselineBlame);
+}
+
+void GitTest::testDiffLineEndings_data()
+{
+    QTest::addColumn<bool>("reverse");
+    QTest::newRow("CRLF to LF") << false;
+    QTest::newRow("LF to CRLF") << true;
+}
+
+void GitTest::testDiffLineEndings()
+{
+    QFETCH(bool, reverse);
+    QTemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+    const FilePath repo = FilePath::fromString(temporaryDir.path());
+    const auto runGit = [repo](const QStringList &arguments) {
+        return gitClient().vcsSynchronousExec(repo, arguments).result()
+               == ProcessResult::FinishedWithSuccess;
+    };
+    QVERIFY(runGit({"init", "-b", "main"}));
+    QVERIFY(runGit({"config", "user.email", "test@test"}));
+    QVERIFY(runGit({"config", "user.name", "test"}));
+    QVERIFY(runGit({"config", "commit.gpgsign", "false"}));
+    QVERIFY(runGit({"config", "core.autocrlf", "false"}));
+    const FilePath file = repo / "file.txt";
+    const QByteArray oldText = reverse ? "same\nold\nending\nother\n"
+                                      : "same\nold\r\nending\r\nother\n";
+    const QByteArray newText = reverse ? "same\nnew\r\nending\r\nchanged\n"
+                                      : "same\nnew\nending\nchanged\n";
+    QVERIFY(file.writeFileContents(oldText));
+    QVERIFY(runGit({"add", "file.txt"}));
+    QVERIFY(runGit({"commit", "-m", "initial"}));
+    QVERIFY(file.writeFileContents(newText));
+
+    gitClient().diffBranch(repo, "HEAD");
+    Core::IEditor *classic = EditorManager::currentEditor();
+    QVERIFY(classic);
+    const auto labels = [classic] {
+        QStringList result;
+        for (auto *widget : classic->widget()->findChildren<TextEditor::TextEditorWidget *>())
+            result.append(widget->diffLineEndings().values());
+        return result;
+    };
+    QTRY_VERIFY(labels().contains("CRLF") && labels().contains("LF"));
+
+    gitClient().inlineDiffFile(repo, "file.txt");
+    Core::IEditor *inlined = EditorManager::currentEditor();
+    QVERIFY(inlined);
+    auto *widget = DiffEditor::inlineDiffEditorWidget(inlined);
+    QVERIFY(widget);
+    QTRY_COMPARE(widget->diffLineEndings().size(), 2);
+    const QString newEnding = QString::fromLatin1(reverse ? "CRLF" : "LF");
+    QCOMPARE(widget->diffLineEndings().value(1), newEnding);
+    QCOMPARE(widget->diffLineEndings().value(2), newEnding);
+    QVERIFY(!widget->diffLineEndings().contains(0));
+    QVERIFY(!widget->diffLineEndings().contains(3));
+    DiffEditor::InlineDiffChunk hunk;
+    hunk.editorStartLine = 2;
+    hunk.editorLineCount = 3;
+    gitClient().stageHunk(repo, "file.txt", hunk, QString::fromUtf8(newText));
+    QTRY_COMPARE(gitClient().vcsSynchronousExec(repo, {"show", ":file.txt"}).rawStdOut(), newText);
+    QVERIFY(EditorManager::closeDocuments({classic->document()}, false));
+    QVERIFY(EditorManager::closeDocuments({Core::DocumentModel::documentForFilePath(file)}, false));
 }
 
 // Builds a repo whose file.txt is left unmerged: "base" is committed first,

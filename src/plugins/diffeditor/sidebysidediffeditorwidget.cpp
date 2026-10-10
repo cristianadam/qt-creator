@@ -276,6 +276,9 @@ static SideBySideDiffOutput diffOutput(QPromise<SideBySideShowResults> &promise,
                 *lastLineNumber = *lineNumber;
             ++(*lineNumber);
             output.side[side].diffData.setLineNumber(blockNumber, *lineNumber);
+            const QString ending = DiffUtils::lineEndingLabel(rowData, side);
+            if (!ending.isEmpty())
+                output.side[side].diffData.m_lineEndings.insert(blockNumber, ending);
         } else if (rowData.line[side].textLineType == TextLineData::Separator) {
             output.side[side].diffData.setSeparator(blockNumber, true);
         }
@@ -419,6 +422,7 @@ void SideDiffEditorWidget::clearAll(const QString &message)
     clear();
     m_data = {};
     setDiffChangeSigns({}, false);
+    setDiffLineEndings({});
     setSelections({});
     setExtraSelections(TextEditorWidget::OtherSelection, {});
     setPlainText(message);
@@ -913,6 +917,8 @@ void SideBySideDiffEditorWidget::showDiff()
             m_editor[RightSide]->setSelections(results[RightSide].selections);
             m_editor[LeftSide]->setDiffChangeSigns(results[LeftSide].diffData.m_diffSigns, false);
             m_editor[RightSide]->setDiffChangeSigns(results[RightSide].diffData.m_diffSigns, false);
+            m_editor[LeftSide]->setDiffLineEndings(results[LeftSide].diffData.m_lineEndings);
+            m_editor[RightSide]->setDiffLineEndings(results[RightSide].diffData.m_lineEndings);
             setCurrentDiffFileIndex(m_controller.currentDiffFileIndex());
         }
         m_asyncTask.release()->deleteLater();

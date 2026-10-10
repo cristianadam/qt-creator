@@ -102,6 +102,20 @@ QChar DiffUtils::changeSign(const RowData &row, DiffSide side)
     return side == LeftSide ? QChar('-') : QChar('+');
 }
 
+QString DiffUtils::lineEndingLabel(const RowData &row, DiffSide side)
+{
+    const TextLineData &left = row.line[LeftSide];
+    const TextLineData &right = row.line[RightSide];
+    if (left.textLineType != TextLineData::TextLine
+        || right.textLineType != TextLineData::TextLine
+        || left.lineEnding == TextLineData::NoLineEnding
+        || right.lineEnding == TextLineData::NoLineEnding
+        || left.lineEnding == right.lineEnding) {
+        return {};
+    }
+    return QString::fromLatin1(row.line[side].lineEnding == TextLineData::CRLF ? "CRLF" : "LF");
+}
+
 static QList<TextLineData> assemblyRows(const QList<TextLineData> &lines,
                                         const QMap<int, int> &lineSpans)
 {
@@ -130,6 +144,10 @@ static void handleLine(const QStringList &newLines, int line, QList<TextLineData
 {
     if (line < newLines.size()) {
         const QString text = newLines.at(line);
+        if (line > 0 && !lines->isEmpty()) {
+            lines->last().lineEnding = lines->last().text.endsWith('\r')
+                                          ? TextLineData::CRLF : TextLineData::LF;
+        }
         if (lines->isEmpty() || line > 0) {
             if (line > 0)
                 ++*lineNumber;
@@ -591,6 +609,7 @@ QString DiffUtils::makePatch(const QList<FileData> &fileDataList)
 static QList<RowData> readLines(QStringView patch, bool lastChunk, bool *lastChunkAtTheEndOfFile, bool *ok)
 {
     QList<Diff> diffList;
+    std::array<QList<TextLineData::LineEnding>, SideCount> lineEndings;
 
     const QChar newLine = '\n';
 
@@ -619,6 +638,13 @@ static QList<RowData> readLines(QStringView patch, bool lastChunk, bool *lastChu
                 Diff &last = diffList.last();
                 if (last.text.isEmpty())
                     break;
+                for (DiffSide side : {LeftSide, RightSide}) {
+                    if (last.command == Diff::Equal
+                        || (side == LeftSide && last.command == Diff::Delete)
+                        || (side == RightSide && last.command == Diff::Insert)) {
+                        lineEndings[side].last() = TextLineData::NoLineEnding;
+                    }
+                }
 
                 if (last.command == Diff::Equal) {
                     if (noNewLineInEqual >= 0)
@@ -649,6 +675,12 @@ static QList<RowData> readLines(QStringView patch, bool lastChunk, bool *lastChu
             }
 
             Diff diffToBeAdded(command, line.mid(1).toString() + newLine);
+            const TextLineData::LineEnding ending = line.endsWith('\r')
+                                                       ? TextLineData::CRLF : TextLineData::LF;
+            if (command != Diff::Insert)
+                lineEndings[LeftSide].append(ending);
+            if (command != Diff::Delete)
+                lineEndings[RightSide].append(ending);
 
             if (!diffList.isEmpty() && diffList.last().command == command)
                 diffList.last().text.append(diffToBeAdded.text);
@@ -754,8 +786,17 @@ static QList<RowData> readLines(QStringView patch, bool lastChunk, bool *lastChu
                                   &outputLeftDiffList,
                                   &outputRightDiffList);
 
-    return DiffUtils::calculateOriginalData(outputLeftDiffList,
-                                            outputRightDiffList).rows;
+    QList<RowData> rows = DiffUtils::calculateOriginalData(outputLeftDiffList,
+                                                        outputRightDiffList).rows;
+    std::array<int, SideCount> lineIndex{};
+    for (RowData &row : rows) {
+        for (DiffSide side : {LeftSide, RightSide}) {
+            TextLineData &line = row.line[side];
+            if (line.textLineType == TextLineData::TextLine)
+                line.lineEnding = lineEndings[side].value(lineIndex[side]++, TextLineData::NoLineEnding);
+        }
+    }
+    return rows;
 }
 
 static QStringView readLine(QStringView text, QStringView *remainingText, bool *hasNewLine)

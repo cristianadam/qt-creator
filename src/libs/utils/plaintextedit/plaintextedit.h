@@ -268,6 +268,7 @@ public:
 
     int pageCount() const override;
     QSizeF documentSize() const override;
+    void setExtraDocumentWidth(qreal width);
 
     QRectF frameBoundingRect(QTextFrame *) const override;
     QRectF blockBoundingRect(const QTextBlock &block) const override;

@@ -172,9 +172,11 @@ static QList<ReloadInput> reloadInputHelper(IDocument *doc, bool onlyIfModified 
     TextFileFormat format = textDocument->format();
 
     const FilePath filePath = textDocument->filePath();
-    const TextFileFormat::ReadResult leftResult = format.readFile(filePath, format.encoding());
+    const TextFileFormat::ReadResult leftResult = format.readFile(filePath, format.encoding(), true);
 
-    const QString rightText = textDocument->plainText();
+    QString rightText = textDocument->plainText();
+    if (textDocument->lineTerminationMode() == TextFileFormat::CRLFLineTerminator)
+        rightText.replace("\n", "\r\n");
 
     ReloadInput reloadInput;
     reloadInput.text = {leftResult.content, rightText};
@@ -218,8 +220,8 @@ static QList<ReloadInput> externalFilesReloadInputList(const FilePath &leftFileP
     TextFileFormat format;
     format.setEncoding(EditorManager::defaultTextEncoding());
 
-    const TextFileFormat::ReadResult leftResult = format.readFile(leftFilePath, format.encoding());
-    const TextFileFormat::ReadResult rightResult = format.readFile(rightFilePath, format.encoding());
+    const TextFileFormat::ReadResult leftResult = format.readFile(leftFilePath, format.encoding(), true);
+    const TextFileFormat::ReadResult rightResult = format.readFile(rightFilePath, format.encoding(), true);
 
     ReloadInput reloadInput;
     reloadInput.text = {leftResult.content, rightResult.content};
@@ -369,6 +371,8 @@ private slots:
     void testReadPatch();
     void testChangeSigns_data();
     void testChangeSigns();
+    void testLineEndingLabels_data();
+    void testLineEndingLabels();
     void testInlineDiffGhostSigns();
     void testOpenPatch_data();
     void testOpenPatch();
@@ -494,7 +498,7 @@ void DiffEditorPlugin::diffCurrentFile()
         baseline.fetchText = [filePath, format = document->format()](
                                  const InlineDiffBaseline::TextCallback &callback) mutable {
             const TextFileFormat::ReadResult result = format.readFile(filePath,
-                                                                      format.encoding());
+                                                                      format.encoding(), true);
             if (result.code == TextFileFormat::ReadSuccess)
                 callback(result.content);
             else if (result.code == TextFileFormat::ReadIOError)
@@ -1863,6 +1867,105 @@ static void onContextMenuEntry(Core::IEditor *editor,
 }
 
 } // namespace DiffEditor::Internal
+
+void DiffEditor::Internal::DiffEditorPlugin::testLineEndingLabels_data()
+{
+    QTest::addColumn<bool>("reverse");
+    QTest::addColumn<bool>("textChange");
+    QTest::newRow("CRLF to LF") << false << false;
+    QTest::newRow("LF to CRLF") << true << false;
+    QTest::newRow("text and CRLF to LF") << false << true;
+    QTest::newRow("text and LF to CRLF") << true << true;
+}
+
+void DiffEditor::Internal::DiffEditorPlugin::testLineEndingLabels()
+{
+    QFETCH(bool, reverse);
+    QFETCH(bool, textChange);
+    const QString oldLine = QString("old") + (reverse ? "" : "\r");
+    const QString newLine = QString(textChange ? "new" : "old") + (reverse ? "\r" : "");
+    const QString patch = "--- a/file\n+++ b/file\n@@ -1,4 +1,4 @@\n same\n-" + oldLine
+                          + "\n-other\n+" + newLine + "\n+changed\n unchanged\n";
+    const auto parsed = DiffUtils::readPatch(patch);
+    QVERIFY(parsed);
+    QCOMPARE(parsed->size(), 1);
+    const FileData &file = parsed->first();
+    QCOMPARE(file.chunks.size(), 1);
+    const ChunkData &chunk = file.chunks.first();
+    QStringList labels;
+    for (const RowData &row : chunk.rows) {
+        for (DiffSide side : {LeftSide, RightSide}) {
+            const QString label = DiffUtils::lineEndingLabel(row, side);
+            if (!label.isEmpty())
+                labels << label;
+        }
+    }
+    QCOMPARE(labels, (reverse ? QStringList{"LF", "CRLF"} : QStringList{"CRLF", "LF"}));
+    const QString generated = DiffUtils::makePatch(chunk, file.lastChunkAtTheEndOfFile);
+    QVERIFY(generated.contains("-" + oldLine + "\n"));
+    QVERIFY(generated.contains("+" + newLine + "\n"));
+
+    DiffEditorWidgetController controller(nullptr);
+    UnifiedDiffData unified;
+    DiffSelections selections;
+    int blockNumber = 0;
+    unified.setChunk(DiffEditorInput(&controller), chunk, true, &blockNumber, &selections);
+    QCOMPARE(unified.m_lineEndings.size(), 2);
+    QVERIFY(unified.m_lineEndings.values().contains("CRLF"));
+    QVERIFY(unified.m_lineEndings.values().contains("LF"));
+
+    const InlineDiffRenderModel model = mapChunkToRenderModel(chunk);
+    TextEditorWidget widget;
+    widget.setupFallBackEditor(Utils::Id("DiffEditor.LineEndingTest"));
+    widget.setPlainText("same\n" + newLine + "\nchanged\nunchanged\n");
+    InlineDiffDecorator decorator(&widget);
+    decorator.apply(model.ghosts, model.changes);
+    QCOMPARE(widget.diffLineEndings().size(), 1);
+    QCOMPARE(widget.diffLineEndings().value(1), QString::fromLatin1(reverse ? "CRLF" : "LF"));
+    const auto items = widget.editorLayout()->layoutItemsForCategory(
+        widget.document()->findBlockByNumber(1), inlineDiffGhostCategory());
+    QCOMPARE(items.size(), 1);
+    auto *item = static_cast<Utils::TextLayoutItem *>(items.first());
+    QCOMPARE(inlineDiffGhostLineEnding(item->layout(), 0), QString::fromLatin1(reverse ? "LF" : "CRLF"));
+    QVERIFY(!widget.toPlainText().contains("CRLF"));
+    QVERIFY(!widget.toPlainText().contains("LF"));
+    widget.resize(800, 600);
+    widget.show();
+    QVERIFY(!widget.grab().isNull());
+    decorator.clear();
+    QVERIFY(widget.diffLineEndings().isEmpty());
+
+    const QString lastLinePatch = "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-" + oldLine
+                                  + "\n+" + newLine + "\n";
+    const auto lastLine = DiffUtils::readPatch(lastLinePatch);
+    QVERIFY(lastLine);
+    const RowData &lastRow = lastLine->first().chunks.first().rows.first();
+    QCOMPARE(DiffUtils::lineEndingLabel(lastRow, LeftSide), labels.first());
+    QCOMPARE(DiffUtils::lineEndingLabel(lastRow, RightSide), labels.last());
+
+    const QString noNewlinePatch = "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n"
+                                   "\\ No newline at end of file\n+new\n"
+                                   "\\ No newline at end of file\n";
+    const auto noNewline = DiffUtils::readPatch(noNewlinePatch);
+    QVERIFY(noNewline);
+    for (const RowData &row : noNewline->first().chunks.first().rows) {
+        QVERIFY(DiffUtils::lineEndingLabel(row, LeftSide).isEmpty());
+        QVERIFY(DiffUtils::lineEndingLabel(row, RightSide).isEmpty());
+    }
+
+    widget.setPlainText(QString(2000, 'x'));
+    widget.setDiffLineEndings({{0, "CRLF"}});
+    QTextCursor end(widget.document());
+    end.movePosition(QTextCursor::End);
+    widget.setTextCursor(end);
+    QVERIFY(!widget.grab().isNull());
+    QTRY_VERIFY(widget.horizontalScrollBar()->maximum() > 0);
+    widget.horizontalScrollBar()->setValue(widget.horizontalScrollBar()->maximum());
+    QTRY_VERIFY(widget.cursorRect(end).right()
+                    + QFontMetrics(widget.document()->defaultFont()).horizontalAdvance("CRLF")
+                < widget.viewport()->width());
+    widget.setDiffLineEndings({});
+}
 
 void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffGhostSigns()
 {

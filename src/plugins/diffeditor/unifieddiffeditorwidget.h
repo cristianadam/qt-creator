@@ -40,6 +40,7 @@ public:
     std::array<int, SideCount> m_lineNumberDigits{1, 1};
     // block number, extra-area diff sign.
     QHash<int, QChar> m_diffSigns;
+    QHash<int, QString> m_lineEndings;
 
     int blockNumberForFileIndex(int fileIndex) const;
     int fileIndexForBlockNumber(int blockNumber) const;

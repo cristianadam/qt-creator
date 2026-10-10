@@ -13,6 +13,7 @@
 #include <utils/result.h>
 
 #include <functional>
+#include <optional>
 
 namespace Core { class IEditor; }
 
@@ -49,8 +50,10 @@ public:
     // read only source document, which has no file path of its own. A patch
     // copied out of the diff names this file.
     QString sourceFileName;
+    // Original contents for a read-only source, including its line endings.
+    std::optional<QString> sourceText;
     // Asynchronous provider for the baseline contents. The callback must be
-    // invoked on the main thread with '\n' line endings.
+    // invoked on the main thread with the original line endings.
     std::function<void(const TextCallback &)> fetchText;
     // Optional: called for the read only baseline view of the side by side
     // mode, e.g. to attach revision annotations. Attached objects should
@@ -59,7 +62,8 @@ public:
     std::function<void(TextEditor::TextEditorWidget *)> setupBaselineView;
     // Optional: takes over the editor's state of the hunk's lines, e.g.
     // staging them to the git index. editorText is the full current editor
-    // contents; implementations derive what to apply from it, so that
+    // contents with the intended save line endings; implementations derive
+    // what to apply from it, so that
     // staging works regardless of which baseline is displayed.
     std::function<void(const InlineDiffChunk &hunk, const QString &editorText)> stageHunk;
     // Optional: reports (asynchronously, on the main thread) which lines of

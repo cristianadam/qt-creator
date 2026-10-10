@@ -50,6 +50,7 @@ public:
     QMap<int, bool> m_separators;
     // block number, extra-area diff sign.
     QHash<int, QChar> m_diffSigns;
+    QHash<int, QString> m_lineEndings;
 
     int m_lineNumberDigits = 1;
 

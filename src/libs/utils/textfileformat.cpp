@@ -128,6 +128,13 @@ bool TextFileFormat::decode(const QByteArray &data, QString *target) const
 TextFileFormat::ReadResult
 TextFileFormat::readFile(const FilePath &filePath, const TextEncoding &fallbackEncoding)
 {
+    return readFile(filePath, fallbackEncoding, false);
+}
+
+TextFileFormat::ReadResult
+TextFileFormat::readFile(const FilePath &filePath, const TextEncoding &fallbackEncoding,
+                         bool preserveLineEndings)
+{
     QByteArray data;
     try {
         const Result<QByteArray> res = filePath.fileContents();
@@ -146,7 +153,10 @@ TextFileFormat::readFile(const FilePath &filePath, const TextEncoding &fallbackE
         m_encoding = TextEncoding::encodingForLocale();
 
     TextFileFormat::ReadResult result;
-    if (!decode(data, &result.content)) {
+    TextFileFormat decodingFormat = *this;
+    if (preserveLineEndings)
+        decodingFormat.lineTerminationMode = LFLineTerminator;
+    if (!decodingFormat.decode(data, &result.content)) {
         result.code = TextFileFormat::ReadEncodingError;
         result.error = Tr::tr("An encoding error was encountered.");
         result.decodingErrorSample = TextFileFormat::decodingErrorSample(data);

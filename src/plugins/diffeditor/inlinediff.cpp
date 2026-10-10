@@ -124,6 +124,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
     InlineDiffDecorator::GhostBlock pendingGhost;
     InlineDiffDecorator::ChangedRange pendingChange;
     QHash<int, QChar> pendingBaselineSigns;
+    QHash<int, QString> pendingBaselineEndings;
     bool hasPendingChange = false;
 
     const auto flushRun = [&] {
@@ -135,6 +136,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
             pendingGhost = {};
             pendingChange = {};
             pendingBaselineSigns.clear();
+            pendingBaselineEndings.clear();
             hasPendingChange = false;
             runStartLeftLine = -1;
             runStartRightLine = -1;
@@ -151,6 +153,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
             baselineRange.startLine = runStartLeftLine;
             baselineRange.endLine = runStartLeftLine + runLeftCount - 1;
             baselineRange.diffSigns = pendingBaselineSigns;
+            baselineRange.lineEndings = pendingBaselineEndings;
             for (int i = 0; i < runLeftCount && i < pendingGhost.charHighlights.size(); ++i) {
                 if (!pendingGhost.charHighlights.at(i).isEmpty())
                     baselineRange.charHighlights.insert(runStartLeftLine + i,
@@ -167,6 +170,7 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
         pendingGhost = {};
         pendingChange = {};
         pendingBaselineSigns.clear();
+        pendingBaselineEndings.clear();
         hasPendingChange = false;
         runStartLeftLine = -1;
         runStartRightLine = -1;
@@ -195,6 +199,10 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
                 pendingGhost.charHighlights.append(
                     toCharRanges(left.changedPositions, int(left.text.size())));
                 pendingGhost.diffSigns.append(DiffUtils::changeSign(row, LeftSide));
+                const QString ending = DiffUtils::lineEndingLabel(row, LeftSide);
+                pendingGhost.lineEndings.append(ending);
+                if (!ending.isEmpty())
+                    pendingBaselineEndings.insert(leftLine, ending);
                 pendingBaselineSigns.insert(leftLine, DiffUtils::changeSign(row, LeftSide));
             }
             ++leftLine;
@@ -208,6 +216,9 @@ InlineDiffRenderModel mapChunkToRenderModel(const ChunkData &chunk,
                 }
                 pendingChange.endLine = rightLine;
                 pendingChange.diffSigns.insert(rightLine, DiffUtils::changeSign(row, RightSide));
+                const QString ending = DiffUtils::lineEndingLabel(row, RightSide);
+                if (!ending.isEmpty())
+                    pendingChange.lineEndings.insert(rightLine, ending);
                 const InlineDiffDecorator::CharRanges ranges
                     = toCharRanges(right.changedPositions, int(right.text.size()));
                 if (!ranges.isEmpty())
@@ -1811,6 +1822,9 @@ public:
                 m_hunkControls->invalidate();
             m_updateTimer.start();
         });
+        connect(source.data(), &Core::IDocument::changed, this, [this] {
+            m_updateTimer.start();
+        });
 
         // saving may change what the baseline refers to (e.g. a "diff against
         // the saved file" baseline), so refresh it
@@ -2148,9 +2162,7 @@ private:
             const Utils::Id infoId("DiffEditor.InlineDiff.BaselineError");
             guard->m_document->infoBar()->removeInfo(infoId);
             if (result) {
-                QString text = *result;
-                text.replace("\r\n", "\n");
-                guard->m_baselineText = text;
+                guard->m_baselineText = *result;
                 guard->updateBaselineDocument();
                 guard->startUpdate();
             } else {
@@ -2217,13 +2229,33 @@ private:
             m_baselineDocument->document()->setPlainText(text);
     }
 
+    QString editorTextWithLineEndings() const
+    {
+        if (m_baseline.sourceText)
+            return *m_baseline.sourceText;
+        if (!m_source->isModified() && !m_source->filePath().isEmpty()) {
+            const Result<QByteArray> contents = m_source->filePath().fileContents();
+            if (contents) {
+                TextFileFormat format = m_source->format();
+                format.lineTerminationMode = TextFileFormat::LFLineTerminator;
+                QString text;
+                if (format.decode(*contents, &text))
+                    return text;
+            }
+        }
+        QString text = m_source->plainText();
+        if (m_source->lineTerminationMode() == TextFileFormat::CRLFLineTerminator)
+            text.replace("\n", "\r\n");
+        return text;
+    }
+
     void startUpdate()
     {
         if (!m_baselineText)
             return; // still fetching, an update is started once the baseline arrived
         m_updateTimer.stop();
 
-        const QString editorText = m_source->plainText();
+        const QString editorText = editorTextWithLineEndings();
         if (m_baselineText->size() > maxInlineDiffTextSize
             || editorText.size() > maxInlineDiffTextSize) {
             applyModel({});
@@ -2318,7 +2350,7 @@ private:
         if (m_baseline.fetchActionableLines && !m_model.hunks.isEmpty()) {
             m_hunkControls->setHunks({}, {}, {});
             m_baseline.fetchActionableLines(
-                m_source->plainText(),
+                editorTextWithLineEndings(),
                 [guard = QPointer<InlineDiffEditor>(this),
                  requestId](const InlineDiffLineRanges &ranges) {
                     if (!guard || guard->m_actionableRequestId != requestId)
@@ -2344,7 +2376,7 @@ private:
         HunkControls::HunkAction stage;
         if (m_baseline.stageHunk) {
             stage = [this](const InlineDiffChunk &hunk) {
-                m_baseline.stageHunk(hunk, m_source->plainText());
+                m_baseline.stageHunk(hunk, editorTextWithLineEndings());
                 m_updateTimer.start();
             };
         }

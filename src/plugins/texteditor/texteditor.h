@@ -391,6 +391,8 @@ public:
     // hasRemovedRows tells the widget that removed lines are shown as ghost
     // rows, which get a '-' derived from the layout. Used by InlineDiffDecorator.
     void setDiffChangeSigns(const QHash<int, QChar> &blockSigns, bool hasRemovedRows);
+    void setDiffLineEndings(const QHash<int, QString> &blockLabels);
+    QHash<int, QString> diffLineEndings() const;
 
     // A marker on the scroll bar covering the 1-based document lines
     // [firstLine, lastLine], in a theme color of its own.

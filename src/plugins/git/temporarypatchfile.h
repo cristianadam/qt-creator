@@ -11,7 +11,7 @@ namespace Git::Internal {
 class TemporaryPatchFile
 {
 public:
-    TemporaryPatchFile(const QString &patch);
+    TemporaryPatchFile(const QString &patch, bool preserveLineEndings = false);
 
     Utils::FilePath filePath() const;
 

@@ -55,6 +55,8 @@ public:
     bool decode(const QByteArray &data, QString *target) const;
 
     ReadResult readFile(const FilePath &filePath, const TextEncoding &fallbackEncoding);
+    ReadResult readFile(const FilePath &filePath, const TextEncoding &fallbackEncoding,
+                        bool preserveLineEndings);
 
     static Result<> readFileUtf8(const FilePath &filePath,
                                  const TextEncoding &fallbackEncoding,

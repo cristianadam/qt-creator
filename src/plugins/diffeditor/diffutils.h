@@ -57,6 +57,7 @@ private:
 
 class DIFFEDITOR_EXPORT TextLineData {
 public:
+    enum LineEnding { NoLineEnding, LF, CRLF };
     enum TextLineType {
         TextLine,
         Separator,
@@ -66,6 +67,7 @@ public:
     TextLineData(const QString &txt) : text(txt), textLineType(TextLine) {}
     TextLineData(TextLineType t) : textLineType(t) {}
     QString text;
+    LineEnding lineEnding = NoLineEnding;
     /*
      * <start position, end position>
      * <-1, n> means this is a continuation from the previous line
@@ -130,6 +132,7 @@ class DIFFEDITOR_EXPORT DiffUtils {
 public:
     static bool isWhitespaceOnlyChange(const RowData &row);
     static QChar changeSign(const RowData &row, DiffSide side);
+    static QString lineEndingLabel(const RowData &row, DiffSide side);
     static ChunkData calculateOriginalData(const QList<Utils::Diff> &leftDiffList,
                                            const QList<Utils::Diff> &rightDiffList);
     static FileData calculateContextData(const ChunkData &originalData,

@@ -26,6 +26,7 @@ class TextEditorWidget;
 // category of the ghost row layout items in Utils::TextEditorLayout
 TEXTEDITOR_EXPORT Utils::Id inlineDiffGhostCategory();
 TEXTEDITOR_EXPORT QChar inlineDiffGhostSign(const QTextLayout *layout, int textPosition);
+TEXTEDITOR_EXPORT QString inlineDiffGhostLineEnding(const QTextLayout *layout, int textPosition);
 // the text covered by the character level change highlights the decorator
 // applied to the widget, in document order (for tests)
 TEXTEDITOR_EXPORT QStringList inlineDiffChangedCharTexts(TextEditorWidget *widget);
@@ -56,6 +57,7 @@ public:
         QStringList lines;
         QList<CharRanges> charHighlights; // one entry per line, may be shorter than lines
         QList<QChar> diffSigns; // one entry per removed line
+        QStringList lineEndings; // one entry per removed line
     };
 
     class TEXTEDITOR_EXPORT ChangedRange
@@ -65,6 +67,7 @@ public:
         int endLine = 1;   // 1-based, inclusive
         QHash<int, CharRanges> charHighlights; // per 1-based editor line
         QHash<int, QChar> diffSigns; // per 1-based editor line
+        QHash<int, QString> lineEndings; // per 1-based editor line
     };
 
     class TEXTEDITOR_EXPORT Spacer

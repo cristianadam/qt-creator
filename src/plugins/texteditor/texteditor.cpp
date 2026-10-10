@@ -972,6 +972,7 @@ public:
     // main line published by an InlineDiffDecorator; ghost (removed) rows carry
     // their own sign and are detected from the layout instead
     QHash<int, QChar> m_diffChangeSigns;
+    QHash<int, QString> m_diffLineEndings;
     bool m_diffHasRemovedRows = false;
     // the distinct sign glyphs currently in use, the column is sized after them
     QString m_diffSignGlyphs;
@@ -6813,6 +6814,24 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                             data.visibleCollapsedBlockOffset, data.eventRect);
 }
 
+static void paintDiffLineEnding(QPainter *painter, const QTextLine &line,
+                               const QPointF &offset, const QString &label, const QPalette &palette)
+{
+    if (label.isEmpty() || !line.isValid())
+        return;
+    const qreal padding = StyleHelper::SpacingTokens::PaddingHXs;
+    const QRectF rect(offset.x() + line.naturalTextRect().right() + padding,
+                      offset.y() + line.y(),
+                      painter->fontMetrics().horizontalAdvance(label) + 2 * padding, line.height());
+    painter->save();
+    painter->fillRect(rect, palette.brush(QPalette::AlternateBase));
+    painter->setPen(palette.color(QPalette::Mid));
+    painter->drawRect(rect);
+    painter->setPen(palette.color(QPalette::Text));
+    painter->drawText(rect, Qt::AlignCenter, label);
+    painter->restore();
+}
+
 void TextEditorWidget::paintBlock(QPainter *painter,
                                   const QTextBlock &block,
                                   const QPointF &offset,
@@ -6841,6 +6860,35 @@ void TextEditorWidget::paintBlock(QPainter *painter,
     }
 
     editorLayout()->paintBlock(block, painter, offset, selections, clipRect);
+    painter->save();
+    painter->setClipRect(clipRect, Qt::IntersectClip);
+    painter->setFont(document()->defaultFont());
+    const QTextLayout *mainLayout = editorLayout()->existingBlockLayout(block);
+    if (mainLayout && mainLayout->lineCount() > 0) {
+        paintDiffLineEnding(painter, mainLayout->lineAt(mainLayout->lineCount() - 1),
+                           offset + QPointF(0, editorLayout()->mainLayoutOffset(block)),
+                           d->m_diffLineEndings.value(block.blockNumber()), palette());
+    }
+    qreal top = offset.y();
+    for (Utils::LayoutItem *item : editorLayout()->layoutItems(block)) {
+        if (item->category() == inlineDiffGhostCategory()) {
+            auto *textItem = static_cast<Utils::TextLayoutItem *>(item);
+            QTextLayout *layout = textItem->layout();
+            for (int i = 0; layout && i < layout->lineCount(); ++i) {
+                const QTextLine line = layout->lineAt(i);
+                // Wrapped ghost lines carry a badge on their last visual line only.
+                if (line.textLength() > 0 && i + 1 < layout->lineCount()
+                    && layout->text().at(line.textStart() + line.textLength() - 1)
+                           != QChar::LineSeparator) {
+                    continue;
+                }
+                paintDiffLineEnding(painter, line, QPointF(offset.x(), top),
+                                   inlineDiffGhostLineEnding(layout, line.textStart()), palette());
+            }
+        }
+        top += item->height();
+    }
+    painter->restore();
 }
 
 int TextEditorWidget::visibleFoldedBlockNumber() const
@@ -10137,6 +10185,8 @@ void TextEditorWidget::applyFontSettings()
         d->slotUpdateExtraAreaWidth();   // Adjust to new font width
     }
 
+    if (!d->m_diffLineEndings.isEmpty())
+        setDiffLineEndings(d->m_diffLineEndings);
     d->updateHighlights();
 }
 
@@ -10217,6 +10267,22 @@ void TextEditorWidget::setDiffChangeSigns(const QHash<int, QChar> &blockSigns, b
             d->slotUpdateExtraAreaWidth(); // the sign column appeared or resized
     }
     extraArea()->update();
+}
+
+void TextEditorWidget::setDiffLineEndings(const QHash<int, QString> &blockLabels)
+{
+    d->m_diffLineEndings = blockLabels;
+    const qreal extraWidth = blockLabels.isEmpty()
+                                 ? 0
+                                 : QFontMetrics(document()->defaultFont()).horizontalAdvance("CRLF")
+                                       + 3 * StyleHelper::SpacingTokens::PaddingHXs;
+    editorLayout()->setExtraDocumentWidth(extraWidth);
+    viewport()->update();
+}
+
+QHash<int, QString> TextEditorWidget::diffLineEndings() const
+{
+    return d->m_diffLineEndings;
 }
 
 void TextEditorWidget::setMarginSettings(const MarginSettingsData &ms)

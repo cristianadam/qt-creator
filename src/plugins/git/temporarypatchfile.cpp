@@ -11,14 +11,15 @@ using namespace Utils;
 
 namespace Git::Internal {
 
-TemporaryPatchFile::TemporaryPatchFile(const QString &patch)
+TemporaryPatchFile::TemporaryPatchFile(const QString &patch, bool preserveLineEndings)
     : patchFile(new TemporaryFile("git-patchfile"))
 {
     if (!patchFile->open())
         return;
 
     QString normalized = patch;
-    normalized.replace("\r\n", "\n").replace('\r', '\n');
+    if (!preserveLineEndings)
+        normalized.replace("\r\n", "\n").replace('\r', '\n');
     const TextEncoding encoding = Core::EditorManager::defaultTextEncoding();
     const QByteArray patchData = encoding.isValid() ? encoding.encode(normalized) : normalized.toLocal8Bit();
     patchFile->write(patchData);

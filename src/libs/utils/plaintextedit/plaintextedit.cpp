@@ -199,6 +199,7 @@ public:
 
     qreal width;
     qreal maximumWidth;
+    qreal extraDocumentWidth = 0;
     bool breakIndentEnabled;
     int breakIndentMinColumns;
     int breakIndentShift;
@@ -300,7 +301,15 @@ int PlainTextDocumentLayout::pageCount() const
  */
 QSizeF PlainTextDocumentLayout::documentSize() const
 {
-    return QSizeF(d->maximumWidth, lineCount());
+    return QSizeF(d->maximumWidth + d->extraDocumentWidth, lineCount());
+}
+
+void PlainTextDocumentLayout::setExtraDocumentWidth(qreal width)
+{
+    if (d->extraDocumentWidth == width)
+        return;
+    d->extraDocumentWidth = width;
+    emitDocumentSizeChanged();
 }
 
 QRectF PlainTextDocumentLayout::frameBoundingRect(QTextFrame *) const

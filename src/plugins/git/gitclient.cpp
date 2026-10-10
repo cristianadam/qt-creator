@@ -160,7 +160,7 @@ static void stage(DiffEditorController *diffController, const QString &patch, bo
 {
     if (patch.isEmpty())
         return;
-    TemporaryPatchFile patchFile(patch);
+    TemporaryPatchFile patchFile(patch, true);
     const FilePath baseDir = diffController->workingDirectory();
     QStringList args = {"--cached"};
     if (revert)
@@ -288,7 +288,7 @@ GitDiffEditorController::GitDiffEditorController(IDocument *document,
     };
     const auto onDiffDone = [diffInputStorage](const Process &process) {
         if (process.result() == ProcessResult::FinishedWithSuccess)
-            *diffInputStorage = process.cleanedStdOut();
+            *diffInputStorage = process.stdOut();
         else
             VcsOutputWindow::appendError(process.workingDirectory(), process.cleanedStdErr());
     };
@@ -390,7 +390,7 @@ FileListDiffController::FileListDiffController(IDocument *document, const QStrin
         return SetupResult::Continue;
     };
     const auto onStagedDone = [storage](const Process &process) {
-        storage->m_stagedOutput = process.cleanedStdOut();
+        storage->m_stagedOutput = process.stdOut();
     };
 
     const auto onUnstagedSetup = [this, unstagedFiles](Process &process) {
@@ -403,7 +403,7 @@ FileListDiffController::FileListDiffController(IDocument *document, const QStrin
         return SetupResult::Continue;
     };
     const auto onUnstagedDone = [storage](const Process &process) {
-        storage->m_unstagedOutput = process.cleanedStdOut();
+        storage->m_unstagedOutput = process.stdOut();
     };
 
     const auto onDone = [storage, diffInputStorage] {
@@ -659,7 +659,7 @@ ShowController::ShowController(IDocument *document, const QString &id)
     };
     const Storage<QString> diffInputStorage;
     const auto onDiffDone = [diffInputStorage](const Process &process) {
-        *diffInputStorage = process.cleanedStdOut();
+        *diffInputStorage = process.stdOut();
     };
 
     const Group root {
@@ -1505,19 +1505,19 @@ void GitClient::withIndexDiff(
     const std::function<void(const Utils::Result<DiffEditor::InlineDiffRenderModel> &,
                              const QString &indexText)> &handler)
 {
+    const TextEncoding sourceEncoding = encoding(EncodingSource, workingDirectory.resolvePath(relativeFile));
     enqueueCommand(
         {workingDirectory,
          {"show", ":" + relativeFile},
          RunFlag::NoOutput | RunFlag::ForceCLocale,
          {},
-         encoding(EncodingSource, workingDirectory.resolvePath(relativeFile)),
-         [editorText, handler](const CommandResult &result) {
+         sourceEncoding,
+         [editorText, handler, sourceEncoding](const CommandResult &result) {
              if (result.result() != ProcessResult::FinishedWithSuccess) {
                  handler(Utils::ResultError(result.cleanedStdErr()), {});
                  return;
              }
-             QString indexText = result.cleanedStdOut();
-             indexText.replace("\r\n", "\n");
+             const QString indexText = sourceEncoding.decode(result.rawStdOut());
              handler(diffAgainstEditorText(indexText, editorText), indexText);
          }});
 }
@@ -1609,7 +1609,7 @@ void GitClient::stageHunk(const FilePath &workingDirectory, const QString &relat
 
              const QString patch = "--- a/" + relativeFile + "\n+++ b/" + relativeFile + "\n"
                                    + patchBody;
-             TemporaryPatchFile patchFile(patch);
+             TemporaryPatchFile patchFile(patch, true);
              // no --whitespace=fix here: staging must put exactly the
              // editor's contents into the index, not a cleaned up variant
              // that would leave the block looking unstaged
@@ -1660,14 +1660,15 @@ void GitClient::openSnapshotInlineDiff(const FilePath &topLevel, const FilePath 
 
     // fetch the newer contents, then show them read only with the older
     // revision as the baseline
+    const TextEncoding sourceEncoding = encoding(EncodingSource, filePath);
     enqueueCommand(
         {topLevel,
          {"show", showSpec},
          RunFlag::NoOutput | RunFlag::ForceCLocale,
          {},
-         encoding(EncodingSource, filePath),
+         sourceEncoding,
          [topLevel, filePath, showSpec, blameRev, snapshotFileName, snapshotBaseline, title, line,
-          classicFallback](const CommandResult &result) {
+          classicFallback, sourceEncoding](const CommandResult &result) {
              if (result.result() != ProcessResult::FinishedWithSuccess) {
                  // e.g. a staged deletion: the newer side does not exist, but
                  // the classic diff view can still show the change
@@ -1690,8 +1691,10 @@ void GitClient::openSnapshotInlineDiff(const FilePath &topLevel, const FilePath 
              snapshot->document()->setPlainText(result.cleanedStdOut());
              snapshot->document()->setModified(false);
 
+             DiffEditor::InlineDiffBaseline baselineWithSource = snapshotBaseline;
+             baselineWithSource.sourceText = sourceEncoding.decode(result.rawStdOut());
              Core::IEditor *diffEditor = DiffEditor::openInlineDiffEditor(
-                 snapshot, snapshotBaseline, title, /*readOnlySource=*/true);
+                 snapshot, baselineWithSource, title, /*readOnlySource=*/true);
              if (!diffEditor) {
                  classicFallback();
                  return;
@@ -1764,16 +1767,17 @@ DiffEditor::InlineDiffBaseline GitClient::revisionBaseline(const FilePath &worki
     // an empty ref denotes the index version, "git show :<file>"
     baseline.fetchText = [workingDirectory, ref, relativeFile, sourceFile](
                              const DiffEditor::InlineDiffBaseline::TextCallback &callback) {
+        const TextEncoding sourceEncoding = gitClient().encoding(EncodingSource, sourceFile);
         gitClient().enqueueCommand(
             {workingDirectory,
              {"show", ref + ":" + relativeFile},
              RunFlag::NoOutput | RunFlag::ForceCLocale,
              {},
-             gitClient().encoding(EncodingSource, sourceFile),
-             [workingDirectory, ref, relativeFile, sourceFile,
+             sourceEncoding,
+             [workingDirectory, ref, relativeFile, sourceFile, sourceEncoding,
               callback](const CommandResult &result) {
                  if (result.result() == ProcessResult::FinishedWithSuccess) {
-                     callback(result.cleanedStdOut());
+                     callback(sourceEncoding.decode(result.rawStdOut()));
                      return;
                  }
                  // a file that does not exist in the baseline revision (e.g.
@@ -1794,10 +1798,10 @@ DiffEditor::InlineDiffBaseline GitClient::revisionBaseline(const FilePath &worki
                           {"show", ":2:" + relativeFile},
                           RunFlag::NoOutput | RunFlag::ForceCLocale,
                           {},
-                          gitClient().encoding(EncodingSource, sourceFile),
-                          [callback](const CommandResult &oursResult) {
+                          sourceEncoding,
+                          [callback, sourceEncoding](const CommandResult &oursResult) {
                               if (oursResult.result() == ProcessResult::FinishedWithSuccess)
-                                  callback(oursResult.cleanedStdOut());
+                                  callback(sourceEncoding.decode(oursResult.rawStdOut()));
                               else
                                   callback(Utils::ResultError(oursResult.cleanedStdErr()));
                           }});
