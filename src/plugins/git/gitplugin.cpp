@@ -88,6 +88,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QSplitter>
@@ -2479,6 +2480,8 @@ private slots:
     void testRebaseActionSelection();
     void testSubmitMessageSpellCheck();
     void testDiffDescriptionEditor();
+    void testCommitMessageHighlighting_data();
+    void testCommitMessageHighlighting();
     void testRebaseAction();
 };
 
@@ -3429,6 +3432,132 @@ void GitTest::testSubmitMessageSpellCheck()
 
     widget.setDescriptionText("Rename mispelledFunction in src/libs/utils/spellcheckr.cpp");
     QCOMPARE(underlinedTexts(widget.descriptionEdit()->document()), QStringList());
+}
+
+void GitTest::testCommitMessageHighlighting_data()
+{
+    QTest::addColumn<bool>("show");
+    QTest::addColumn<QStringList>("arguments");
+    QTest::newRow("log") << false << QStringList{};
+    QTest::newRow("log-patch") << false << QStringList{"--patch"};
+    QTest::newRow("log-graph") << false << QStringList{"--graph"};
+    QTest::newRow("show") << true << QStringList{};
+}
+
+void GitTest::testCommitMessageHighlighting()
+{
+    QFETCH(bool, show);
+    QFETCH(QStringList, arguments);
+
+    QTemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+    const FilePath repo = FilePath::fromString(temporaryDir.path());
+    const auto runGit = [repo](const QStringList &args) {
+        return gitClient().vcsSynchronousExec(repo, args).result()
+               == ProcessResult::FinishedWithSuccess;
+    };
+    QVERIFY(runGit({"init", "."}));
+    QVERIFY(runGit({"config", "user.email", "test@test"}));
+    QVERIFY(runGit({"config", "user.name", "test"}));
+    QVERIFY(runGit({"config", "commit.gpgsign", "false"}));
+    QVERIFY((repo / "file.txt").writeFileContents("Change-Id: patch content\n"));
+    QVERIFY(runGit({"add", "file.txt"}));
+    const QString hash = "baaefcf1235fb8d6651ac7ca3c227152535e0423";
+    const QString cherryPickHash = "9195f056e3b654a0d759109ae9cf36729d53b565";
+    const QString secondCherryPickHash = "2be7e981f2b36eae350029b61d664e551c225";
+    const QString message = "QUIP-32: Highlight commit footers\n\n"
+                            "Task-number: mentioned in the body\nMore prose follows.\n\n"
+                            "Fixes: body example\n\nMore prose after a blank line.\n\n"
+                            "Note: ordinary prose\n"
+                            "Reviewed-by: body example\n\nAmends " + hash + ".\n\n"
+                            "Assisted-by: OpenAI codex\n"
+                            "Task-number: QTCREATORBUG-12345\n"
+                            "Fixes: QTCREATORBUG-54321\n"
+                            "Change-Id: I0123456789012345678901234567890123456789\n"
+                            "Reviewed-by: Test Reviewer\n"
+                            "(cherry picked from commit " + cherryPickHash + ")\n"
+                            "Reviewed-by: Cherry-pick Bot\n"
+                            "(cherry picked from commit " + secondCherryPickHash + ")";
+    QVERIFY(runGit({"commit", "-m", message}));
+
+    if (show)
+        gitClient().show(repo, "HEAD");
+    else
+        gitClient().log(repo, {}, false, arguments);
+
+    TextEditorWidget *widget = nullptr;
+    QTRY_VERIFY(EditorManager::currentEditor());
+    if (show) {
+        QTRY_VERIFY((widget = EditorManager::currentEditor()->widget()
+                                 ->findChild<VcsBaseDescriptionEditorWidget *>()));
+    } else {
+        widget = EditorManager::currentEditor()->widget()->findChild<GitEditorWidget *>();
+        QVERIFY(widget);
+    }
+    QTRY_VERIFY(widget->toPlainText().contains("Change-Id: I0123456789"));
+    widget->textDocument()->syntaxHighlighter()->rehighlight();
+
+    const auto syntaxFormat = [widget](const QString &text) {
+        const QTextCursor cursor = widget->document()->find(text);
+        if (cursor.isNull())
+            return QTextCharFormat{};
+        const QTextBlock block = cursor.block();
+        const int offset = cursor.selectionStart() - block.position();
+        for (const QTextLayout::FormatRange &range : block.layout()->formats()) {
+            if (offset >= range.start && offset < range.start + range.length)
+                return range.format;
+        }
+        return QTextCharFormat{};
+    };
+    const FontSettingsData fontSettings = widget->textDocument()->fontSettings();
+    const QStringList labels = {"Amends", "Assisted-by:", "Task-number: QTC", "Fixes: QTC",
+                                "Change-Id: I", "Reviewed-by: Test", "Reviewed-by: Cherry"};
+    for (const QString &label : labels)
+        QCOMPARE(syntaxFormat(label).foreground(), fontSettings.toTextCharFormat(C_LABEL).foreground());
+    QCOMPARE(syntaxFormat(hash).foreground(),
+             fontSettings.toTextCharFormat(C_LOG_COMMIT_HASH).foreground());
+    QVERIFY(!syntaxFormat(hash).fontUnderline());
+    QCOMPARE(syntaxFormat("cherry picked").foreground(),
+             fontSettings.toTextCharFormat(C_LABEL).foreground());
+    QVERIFY(!syntaxFormat("from commit").hasProperty(QTextFormat::ForegroundBrush));
+    for (const QString &cherryHash : QStringList{cherryPickHash, secondCherryPickHash}) {
+        QCOMPARE(syntaxFormat(cherryHash).foreground(),
+                 fontSettings.toTextCharFormat(C_LOG_COMMIT_HASH).foreground());
+        QVERIFY(!syntaxFormat(cherryHash).fontUnderline());
+    }
+    QVERIFY(!syntaxFormat("OpenAI codex").hasProperty(QTextFormat::ForegroundBrush));
+    QVERIFY(!syntaxFormat("Note: ordinary prose").hasProperty(QTextFormat::ForegroundBrush));
+    QVERIFY(!syntaxFormat("QUIP-32:").hasProperty(QTextFormat::ForegroundBrush));
+    QVERIFY(!syntaxFormat("Task-number: mentioned").hasProperty(QTextFormat::ForegroundBrush));
+    QVERIFY(!syntaxFormat("Fixes: body example").hasProperty(QTextFormat::ForegroundBrush));
+    QVERIFY(!syntaxFormat("Reviewed-by: body example").hasProperty(QTextFormat::ForegroundBrush));
+    if (arguments.contains("--patch"))
+        QCOMPARE(syntaxFormat("Change-Id: patch content").foreground(),
+                 fontSettings.toTextCharFormat(C_ADDED_LINE).foreground());
+
+    const auto hoverText = [widget](const QString &text) {
+        QTextCursor cursor = widget->document()->find(text);
+        cursor.setPosition(cursor.selectionStart() + 1);
+        widget->setTextCursor(cursor);
+        widget->ensureCursorVisible();
+        const QPoint position = widget->cursorRect(cursor).center();
+        QMouseEvent event(QEvent::MouseMove, QPointF(position),
+                          QPointF(widget->viewport()->mapToGlobal(position)),
+                          Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(widget->viewport(), &event);
+    };
+    for (const QString &reference : QStringList{hash, cherryPickHash, secondCherryPickHash}) {
+        hoverText(reference);
+        const QList<QTextEdit::ExtraSelection> selections
+            = widget->extraSelections(TextEditorWidget::OtherSelection);
+        QCOMPARE(selections.size(), 1);
+        QCOMPARE(selections.first().cursor.selectedText(), reference);
+        QVERIFY(selections.first().format.fontUnderline());
+        hoverText("ordinary prose");
+        QVERIFY(widget->extraSelections(TextEditorWidget::OtherSelection).isEmpty());
+    }
+
+    QVERIFY(EditorManager::closeDocuments({EditorManager::currentDocument()}, false));
 }
 
 void GitTest::testDiffDescriptionEditor()
