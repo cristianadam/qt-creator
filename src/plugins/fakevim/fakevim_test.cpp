@@ -33,6 +33,7 @@
 #include <utils/stringutils.h>
 
 #include <QApplication>
+#include <QClipboard>
 #include <QFocusEvent>
 #include <QJsonObject>
 #include <QDir>
@@ -167,6 +168,9 @@ private slots:
 //    // functional tests
     void test_vim_indentation();
     void test_vim_readonly();
+    void test_vim_readonly_search_and_copy();
+    void test_vim_readonly_edits_data();
+    void test_vim_readonly_edits();
     void test_vim_ctrl_backslash();
 
     // command mode
@@ -1213,6 +1217,84 @@ void FakeVimTester::test_vim_readonly()
     // (QTCREATORBUG-24237).
     data.editor()->setReadOnly(false);
     KEYS("x", X "bc def");
+}
+
+void FakeVimTester::test_vim_readonly_search_and_copy()
+{
+    TestData data;
+    setup(&data);
+    data.doCommand("set noucs");
+    data.setText("one target" N "middle" N "target last");
+    data.editor()->setReadOnly(true);
+    const int revision = data.editor()->document()->revision();
+
+    KEYS("G0", "one target" N "middle" N X "target last");
+    KEYS("gg0/target<CR>", "one " X "target" N "middle" N "target last");
+    KEYS("n", "one target" N "middle" N X "target last");
+    KEYS("N", "one " X "target" N "middle" N "target last");
+    KEYS("?one<CR>", X "one target" N "middle" N "target last");
+    KEYS("\"ayiw", X "one target" N "middle" N "target last");
+
+    QString message;
+    data.handler->commandBufferChanged.set([&](const QString &text, int, int, int) {
+        message = text;
+    });
+    data.doCommand("echo getreg('a')");
+    QCOMPARE(message, QString("one"));
+    KEYS("\"+yy", X "one target" N "middle" N "target last");
+    QCOMPARE(QApplication::clipboard()->text(), QString("one target\n"));
+    KEYS("Vj\"by", X "one target" N "middle" N "target last");
+    data.doCommand("echo getreg('b')");
+    QCOMPARE(message, QString("one target\nmiddle\n"));
+    QCOMPARE(data.editor()->document()->revision(), revision);
+
+    data.doCommand("set ucs");
+    bool findRequested = false;
+    data.handler->findRequested.set([&](bool reverse) {
+        QVERIFY(!reverse);
+        findRequested = true;
+    });
+    data.doKeys("/");
+    QVERIFY(findRequested);
+    data.doCommand("set noucs");
+}
+
+void FakeVimTester::test_vim_readonly_edits_data()
+{
+    QTest::addColumn<QString>("keys");
+    const QStringList commands = {"x", "dd", "cwreplacement<Esc>", "iX<Esc>", "RX<Esc>",
+                                  "ra", "p", "J", "~", ">>", "==", "u", "<C-r>", ".",
+                                  "Vjd", "Vjp", ":delete<CR>", ":%s/abc/changed/g<CR>",
+                                  ":put a<CR>", ":call setline(1, 'changed')<CR>",
+                                  ":set modifiable<CR>x"};
+    for (const QString &keys : commands)
+        QTest::newRow(qPrintable(keys)) << keys;
+}
+
+void FakeVimTester::test_vim_readonly_edits()
+{
+    QFETCH(QString, keys);
+    TestData data;
+    setup(&data);
+    data.doCommand("set notildeop");
+    data.setText("abc" N " def" N "xyz");
+    KEYS("iQ<Esc>", X "Qabc" N " def" N "xyz");
+    KEYS("\"ayiw", X "Qabc" N " def" N "xyz");
+    QVERIFY(data.editor()->document()->isUndoAvailable());
+    if (keys == "<C-r>") {
+        KEYS("u", X "abc" N " def" N "xyz");
+        QVERIFY(data.editor()->document()->isRedoAvailable());
+    }
+    data.editor()->setReadOnly(true);
+    const QByteArray text = data.text();
+    const int revision = data.editor()->document()->revision();
+    data.doKeys(keys);
+    QCOMPARE(data.text(), text);
+    QCOMPARE(data.editor()->document()->revision(), revision);
+
+    data.editor()->setReadOnly(false);
+    data.doKeys("<Esc>gg0x");
+    QCOMPARE(data.text(), text.mid(1));
 }
 
 void FakeVimTester::test_vim_ctrl_backslash()

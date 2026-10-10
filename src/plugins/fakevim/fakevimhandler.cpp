@@ -9180,11 +9180,6 @@ EventResult FakeVimHandler::Private::handleCommandMode(const Input &input)
     // Process input for a sub-mode.
     if (input.isEscape() && g.subsubmode != ExpressionSubSubMode) {
         handled = handleEscape();
-    } else if (EDITOR(isReadOnly())) {
-        // Queried live, not cached: a document can become writable later (e.g.
-        // reloaded with another encoding), and FakeVim must handle keys again
-        // (QTCREATORBUG-24237).
-        return EventUnhandled;
     } else if (g.subsubmode != NoSubSubMode) {
         const SubSubMode subsubmode = g.subsubmode;
         handled = handleCommandSubSubMode(input);
@@ -9453,6 +9448,8 @@ bool FakeVimHandler::Private::handleNoSubMode(const Input &input)
     } else if (s.commaPassesShortcuts() && input.is(',')) {
         passShortcuts(true);
     } else if (input.is('.')) {
+        if (refuseUnmodifiable())
+            return true;
         //qDebug() << "REPEATING" << quoteUnprintable(g.dotCommand) << count()
         //    << input;
         // What is played back was counted when it was typed, so v:prevcount
@@ -16551,10 +16548,12 @@ bool FakeVimHandler::Private::isBufferReadOnly()
 // would bypass the undo blocks too.
 bool FakeVimHandler::Private::refuseUnmodifiable()
 {
-    if (m_modifiable)
+    if (m_modifiable && !EDITOR(isReadOnly()))
         return false;
 
-    showMessage(MessageError, Tr::tr("E21: Cannot make changes, 'modifiable' is off"));
+    showMessage(MessageError, m_modifiable
+                                 ? Tr::tr("E21: Cannot make changes, editor is read-only")
+                                 : Tr::tr("E21: Cannot make changes, 'modifiable' is off"));
     return true;
 }
 
