@@ -3,6 +3,7 @@
 
 #include "diffeditor.h"
 
+#include "diffalgorithm.h"
 #include "diffeditorconstants.h"
 #include "diffeditorcontroller.h"
 #include "diffeditordocument.h"
@@ -52,7 +53,6 @@ static const char descriptionHeightKeyC[] = "DescriptionHeight";
 static const char horizontalScrollBarSynchronizationKeyC[] = "HorizontalScrollBarSynchronization";
 static const char contextLineCountKeyC[] = "ContextLineNumbers";
 static const char ignoreWhitespaceKeyC[] = "IgnoreWhitespace";
-static const char patienceKeyC[] = "Patience";
 
 static const char diffViewKeyC[] = "DiffEditorType";
 
@@ -311,7 +311,7 @@ private:
     void foldAllHasChanged();
     void contextLineCountHasChanged(int lines);
     void ignoreWhitespaceHasChanged();
-    void patienceHasChanged();
+    void diffAlgorithmHasChanged();
     void prepareForReload();
     void reloadHasFinished(bool success);
     void currentIndexChanged(int index);
@@ -347,7 +347,8 @@ private:
     QAction *m_contextSpinBoxAction = nullptr;
     QAction *m_toggleSyncAction = nullptr;
     QAction *m_whitespaceButtonAction = nullptr;
-    QAction *m_patienceButtonAction = nullptr;
+    QComboBox *m_diffAlgorithmComboBox = nullptr;
+    QAction *m_diffAlgorithmAction = nullptr;
     QAction *m_foldAllAction = nullptr;
     QAction *m_toggleDescriptionAction = nullptr;
     QAction *m_reloadAction = nullptr;
@@ -441,9 +442,10 @@ DiffEditor::DiffEditor()
     m_whitespaceButtonAction = addAction({}, Tr::tr("Ignore Whitespace"),
                                          Tr::tr("Ctrl+Meta+I"), Tr::tr("Ctrl+Alt+I"));
     m_whitespaceButtonAction->setCheckable(true);
-    m_patienceButtonAction = addAction({}, Tr::tr("Patience"),
-                                       Tr::tr("Ctrl+Meta+P"), Tr::tr("Ctrl+Alt+P"));
-    m_patienceButtonAction->setCheckable(true);
+    m_diffAlgorithmComboBox = new QComboBox(m_toolBar);
+    m_diffAlgorithmComboBox->setObjectName("DiffEditorAlgorithmComboBox"); // autotest
+    populateDiffAlgorithms(m_diffAlgorithmComboBox);
+    m_diffAlgorithmAction = m_toolBar->addWidget(m_diffAlgorithmComboBox);
 
     m_foldAllAction = addAction(Utils::Icons::EXPAND_ALL_TOOLBAR.icon(), Tr::tr("Fold All"),
                                 Tr::tr("Ctrl+Meta+U"), Tr::tr("Ctrl+Alt+U"));
@@ -467,8 +469,8 @@ DiffEditor::DiffEditor()
             this, &DiffEditor::foldAllHasChanged);
     connect(m_whitespaceButtonAction, &QAction::toggled,
             this, &DiffEditor::ignoreWhitespaceHasChanged);
-    connect(m_patienceButtonAction, &QAction::toggled,
-            this, &DiffEditor::patienceHasChanged);
+    connect(m_diffAlgorithmComboBox, &QComboBox::currentIndexChanged,
+            this, &DiffEditor::diffAlgorithmHasChanged);
     connect(m_contextSpinBox, &QSpinBox::valueChanged,
             this, &DiffEditor::contextLineCountHasChanged);
     connect(m_toggleSyncAction, &QAction::toggled, this, &DiffEditor::toggleSync);
@@ -560,6 +562,8 @@ QWidget *DiffEditor::toolBar()
 void DiffEditor::documentHasChanged()
 {
     GuardLocker guard(m_ignoreChanges);
+    m_diffAlgorithmComboBox->setCurrentIndex(
+        m_diffAlgorithmComboBox->findData(m_document->diffAlgorithm()));
     const QList<FileData> &diffFileList = m_document->diffFiles();
 
     updateDescription();
@@ -748,15 +752,14 @@ void DiffEditor::ignoreWhitespaceHasChanged()
     m_document->reload();
 }
 
-void DiffEditor::patienceHasChanged()
+void DiffEditor::diffAlgorithmHasChanged()
 {
-    const bool patience = m_patienceButtonAction->isChecked();
-
-    if (m_ignoreChanges.isLocked() || patience == m_document->patience())
+    const auto algorithm = static_cast<Utils::Differ::DiffAlgorithm>(
+        m_diffAlgorithmComboBox->currentData().toInt());
+    if (m_ignoreChanges.isLocked() || algorithm == m_document->diffAlgorithm())
         return;
-    m_document->setPatience(patience);
-    saveSetting(patienceKeyC, patience);
-
+    m_document->setDiffAlgorithm(algorithm);
+    saveDiffAlgorithm(algorithm);
     m_document->reload();
 }
 
@@ -823,10 +826,9 @@ void DiffEditor::documentStateChanged()
 {
     const bool canReload = m_document->isTemporary();
     const bool contextVisible = !m_document->isContextLineCountForced();
-    const bool patienceVisible = m_document->isPatienceButtonEnabled();
 
     m_whitespaceButtonAction->setVisible(canReload);
-    m_patienceButtonAction->setVisible(patienceVisible);
+    m_diffAlgorithmAction->setVisible(m_document->isDiffAlgorithmEnabled());
     m_contextLabelAction->setVisible(canReload && contextVisible);
     m_contextSpinBoxAction->setVisible(canReload && contextVisible);
     m_reloadAction->setVisible(canReload);
@@ -868,6 +870,7 @@ IDiffView *DiffEditor::loadSettings()
     m_document->setContextLineCount(s->value(contextLineCountKeyC, 3).toInt());
     Id id = Id::fromSetting(s->value(diffViewKeyC));
     s->endGroup();
+    m_document->setDiffAlgorithm(readDiffAlgorithm());
 
     IDiffView *view = Utils::findOr(m_views, m_views.at(0),
                                     Utils::equal(&IDiffView::id, id));

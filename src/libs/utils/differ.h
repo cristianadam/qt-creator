@@ -45,6 +45,7 @@ public:
         WordMode,
         LineMode
     };
+    enum DiffAlgorithm { Myers, Patience, Histogram };
     Differ(const std::optional<QFuture<void>> &future = {});
     QList<Diff> diff(const QString &text1, const QString &text2);
     QList<Diff> unifiedDiff(const QString &text1, const QString &text2);
@@ -57,6 +58,8 @@ public:
     // which has no subtexts to be unique.
     void setPatience(bool patience);
     bool patience() const;
+    void setDiffAlgorithm(DiffAlgorithm algorithm);
+    DiffAlgorithm diffAlgorithm() const;
     static QList<Diff> merge(const QList<Diff> &diffList);
     static QList<Diff> cleanupLineDiffSemantics(const QList<Diff> &diffList);
     static QList<Diff> cleanupSemantics(const QList<Diff> &diffList);
@@ -91,6 +94,8 @@ private:
                                const QString &text2, int y);
     QList<Diff> diffPatience(const QString &text1, const QString &text2);
     QList<Diff> diffPatienceBetweenAnchors(const QString &text1, const QString &text2);
+    QList<Diff> diffEncoded(const QString &text1, const QString &text2);
+    QList<Diff> diffHistogram(const QString &text1, const QString &text2);
     QList<Diff> diffNonCharMode(const QString &text1, const QString &text2);
     QStringList encode(const QString &text1,
                        const QString &text2,
@@ -103,7 +108,7 @@ private:
                        int subTextStart);
     DiffMode m_diffMode = Differ::LineMode;
     DiffMode m_currentDiffMode = Differ::LineMode;
-    bool m_patience = false;
+    DiffAlgorithm m_diffAlgorithm = Myers;
     std::optional<QFuture<void>> m_future;
 };
 

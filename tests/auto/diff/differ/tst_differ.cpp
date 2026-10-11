@@ -5,6 +5,8 @@
 #include <QMetaType>
 #include <QObject>
 #include <QTest>
+#include <QPromise>
+#include <QRandomGenerator>
 #include <QTextDocument>
 #include <QTextBlock>
 
@@ -64,6 +66,9 @@ private Q_SLOTS:
     void patience_data();
     void patience();
     void patienceLinesUpUniqueLines();
+    void histogramFunctionExtraction();
+    void histogramRoundTrip();
+    void histogramCancellation();
 };
 
 // The lines of these two texts repeat, so the smallest set of changes is not
@@ -170,6 +175,85 @@ void tst_Differ::patienceLinesUpUniqueLines()
     Differ myersDiffer;
     QVERIFY(!myersDiffer.patience()); // the comparison rests on that default
     QVERIFY(!myersDiffer.diff(text1, text2).contains(Diff(Diff::Delete, "check();\n")));
+}
+
+void tst_Differ::histogramFunctionExtraction()
+{
+    const QString queryBefore = "    QString realQuery = query.trimmed();\n"
+                                "    if (realQuery.isEmpty()) {\n"
+                                "        realQuery = \"status:open\";\n"
+                                "        const QString user = m_server->user.userName;\n"
+                                "        if (!user.isEmpty())\n"
+                                "            realQuery += user;\n"
+                                "    }\n";
+    const QString queryAfter = "    QString realQuery = query.trimmed();\n"
+                               "    if (realQuery.isEmpty()) {\n"
+                               "        realQuery = \"NOT (status:merged OR status:abandoned)\";\n"
+                               "        const QString user = server.user.userName;\n"
+                               "        if (!user.isEmpty())\n"
+                               "            realQuery += user;\n"
+                               "    }\n";
+    const QString refresh = "void refresh()\n{\n    clearData();\n    setServer();\n\n";
+    const QString tail = "\n    FilePath binary;\n    QStringList arguments;\n}\n";
+    const QString before = refresh + queryBefore + tail;
+    const QString after = "static QString gerritQuery()\n{\n" + queryAfter
+                          + "    return realQuery;\n}\n\n" + refresh
+                          + "    const QString realQuery = gerritQuery();\n" + tail;
+    Differ differ;
+    differ.setDiffAlgorithm(Differ::Histogram);
+    const QList<Diff> result = differ.unifiedDiff(before, after);
+    QCOMPARE(textOfSide(result, Diff::Delete), before);
+    QCOMPARE(textOfSide(result, Diff::Insert), after);
+    QVERIFY(result.contains(Diff(Diff::Equal, refresh)));
+    differ.setDiffAlgorithm(Differ::Patience);
+    QVERIFY(!differ.unifiedDiff(before, after).contains(Diff(Diff::Equal, refresh)));
+}
+
+void tst_Differ::histogramRoundTrip()
+{
+    Differ differ;
+    differ.setDiffAlgorithm(Differ::Histogram);
+    QRandomGenerator random(12345);
+    for (int test = 0; test < 500; ++test) {
+        QString before;
+        QString after;
+        for (int i = random.bounded(80); i > 0; --i)
+            before += QString(QChar('a' + random.bounded(5))) + '\n';
+        for (int i = random.bounded(80); i > 0; --i)
+            after += QString(QChar('a' + random.bounded(5))) + '\n';
+        if (!before.isEmpty() && random.bounded(2))
+            before.chop(1);
+        if (!after.isEmpty() && random.bounded(2))
+            after.chop(1);
+        const QList<Diff> result = differ.unifiedDiff(before, after);
+        QCOMPARE(textOfSide(result, Diff::Delete), before);
+        QCOMPARE(textOfSide(result, Diff::Insert), after);
+        const QList<Diff> refined = differ.diff(before, after);
+        QCOMPARE(textOfSide(refined, Diff::Delete), before);
+        QCOMPARE(textOfSide(refined, Diff::Insert), after);
+    }
+    const QString before = QString("a\nb\n").repeated(100);
+    const QString after = QString("b\na\n").repeated(100);
+    const QList<Diff> repeated = differ.unifiedDiff(before, after);
+    QCOMPARE(textOfSide(repeated, Diff::Delete), before);
+    QCOMPARE(textOfSide(repeated, Diff::Insert), after);
+
+    differ.setDiffMode(Differ::CharMode);
+    Differ myers;
+    myers.setDiffMode(Differ::CharMode);
+    QCOMPARE(differ.diff("abcde", "bcdef"), myers.diff("abcde", "bcdef"));
+}
+
+void tst_Differ::histogramCancellation()
+{
+    QPromise<void> promise;
+    promise.start();
+    QFuture<void> future = promise.future();
+    future.cancel();
+    Differ differ(future);
+    differ.setDiffAlgorithm(Differ::Histogram);
+    QVERIFY(differ.unifiedDiff("a\nb\nc\n", "c\nb\na\n").isEmpty());
+    promise.finish();
 }
 
 void tst_Differ::preprocess_data()
