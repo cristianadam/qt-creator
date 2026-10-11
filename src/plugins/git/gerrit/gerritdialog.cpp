@@ -25,6 +25,7 @@
 #include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QPushButton>
 #include <QSortFilterProxyModel>
@@ -87,6 +88,7 @@ GerritDialog::GerritDialog(const std::shared_ptr<GerritServer> &s,
     m_detailsBrowser->setOpenExternalLinks(true);
 
     m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Close);
+    m_buttonBox->button(QDialogButtonBox::Close)->setAutoDefault(false);
 
     auto queryLabel = new QLabel(Git::Tr::tr("&Query:"), changesGroup);
     queryLabel->setBuddy(m_queryLineEdit);
@@ -216,6 +218,18 @@ void GerritDialog::updateCompletions(const QString &query)
 }
 
 GerritDialog::~GerritDialog() = default;
+
+bool GerritDialog::event(QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride) {
+        auto keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Escape && !keyEvent->modifiers()) {
+            keyEvent->accept();
+            return true;
+        }
+    }
+    return QDialog::event(event);
+}
 
 void GerritDialog::slotActivated(const QModelIndex &i)
 {
