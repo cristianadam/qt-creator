@@ -79,6 +79,16 @@ QtcPlugin {
     ]
 
     Group {
+        name: "Branch model tests"
+        condition: qtc.withPluginTests
+        files: [
+            "branchmodel_test.cpp",
+            "branchmodel_test.h",
+            "../../../tests/manual/git/branchmodelstress.cpp",
+        ]
+    }
+
+    Group {
         name: "Gerrit"
         prefix: "gerrit/"
         files: [

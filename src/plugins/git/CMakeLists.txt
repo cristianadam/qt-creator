@@ -44,3 +44,10 @@ add_qtc_plugin(Git
     stashdialog.cpp stashdialog.h
     temporarypatchfile.cpp temporarypatchfile.h
 )
+
+extend_qtc_plugin(Git
+  CONDITION WITH_TESTS
+  SOURCES
+    branchmodel_test.cpp branchmodel_test.h
+    ../../../tests/manual/git/branchmodelstress.cpp
+)

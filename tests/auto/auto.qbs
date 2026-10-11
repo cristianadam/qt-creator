@@ -20,6 +20,7 @@ Project {
         "externaltool/externaltool.qbs",
         "fakevim/fakevim.qbs",
         "filesearch/filesearch.qbs",
+        "git/git.qbs",
         "json/json.qbs",
         "languageserverprotocol/languageserverprotocol.qbs",
         "mcp/mcp.qbs",

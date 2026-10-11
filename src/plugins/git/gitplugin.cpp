@@ -95,6 +95,8 @@
 #include <QVBoxLayout>
 
 #ifdef WITH_TESTS
+#include "branchmodel_test.h"
+
 #include "gerrit/gerritdialog.h"
 #include "gerrit/gerritmodel.h"
 #include "gerrit/gerritparameters.h"
@@ -3641,6 +3643,9 @@ class GITSHARED_EXPORT GitPlugin final : public ExtensionSystem::IPlugin
     {
 #ifdef WITH_TESTS
         addTest<GitTest>();
+        addTestCreator(createBranchModelTest);
+        if (!qEnvironmentVariableIsEmpty("QTC_GIT_BRANCH_STRESS_REPOSITORY"))
+            addTestCreator(createBranchModelStressTest);
         registerInstantBlameTests(this);
         Gerrit::Internal::registerGerritModelTests(this);
 #endif
