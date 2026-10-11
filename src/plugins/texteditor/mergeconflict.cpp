@@ -9,10 +9,15 @@
 #include "texteditorconstants.h"
 #include "texteditortr.h"
 
+#include <utils/async.h>
+#include <utils/differ.h>
 #include <utils/plaintextedit/texteditorlayout.h>
+#include <utils/stylehelper.h>
 #include <utils/qtcassert.h>
 
+#include <QComboBox>
 #include <QFont>
+#include <QMap>
 #include <QLabel>
 #include <QTextBlock>
 #include <QTextCursor>
@@ -31,6 +36,131 @@ const Id MERGE_CONFLICT_SPACER_CATEGORY("TextEditor.MergeConflict.Spacer");
 // be swept from the main block layouts on refresh (UserProperty + 43 and + 44
 // are the full line highlight and the inline diff formats)
 constexpr int MERGE_CONFLICT_SECTION_PROPERTY_ID = QTextFormat::UserProperty + 45;
+constexpr int MERGE_CONFLICT_WORD_PROPERTY_ID = QTextFormat::UserProperty + 46;
+
+enum ConflictComparison { BaseIncoming, BaseCurrent, CurrentIncoming };
+
+struct ConflictSection
+{
+    int position = 0;
+    QString text;
+};
+
+struct ConflictComparisonInput
+{
+    ConflictSection source;
+    ConflictSection destination;
+};
+
+struct ConflictWordHighlight
+{
+    int position;
+    int length;
+    bool added;
+};
+
+static ConflictSection conflictSection(const QTextDocument *doc, int firstLine, int lastLine)
+{
+    ConflictSection result;
+    const QTextBlock first = doc->findBlockByNumber(firstLine - 1);
+    result.position = first.position();
+    for (QTextBlock block = first; block.isValid() && block.blockNumber() < lastLine;
+         block = block.next()) {
+        result.text += block.text();
+        result.text += '\n';
+    }
+    return result;
+}
+
+static void computeConflictWords(QPromise<QList<ConflictWordHighlight>> &promise,
+                                 const QList<ConflictComparisonInput> &inputs)
+{
+    QList<ConflictWordHighlight> result;
+    Differ differ(QFuture<void>(promise.future()));
+    for (const ConflictComparisonInput &input : inputs) {
+        if (promise.isCanceled())
+            return;
+        const QList<Diff> diff = differ.diff(input.source.text, input.destination.text);
+        int sourcePosition = 0;
+        int destinationPosition = 0;
+        const auto wordCharacter = [](QChar c) {
+            return c.isLetterOrNumber() || c.isMark() || c == '_' || c == '\\';
+        };
+        const auto append = [&](const ConflictSection &section, int position, int length, bool added) {
+            if (!length)
+                return;
+            int start = position;
+            int end = position + length;
+            if (wordCharacter(section.text.at(start))) {
+                while (start > 0 && wordCharacter(section.text.at(start - 1)))
+                    --start;
+            }
+            if (wordCharacter(section.text.at(end - 1))) {
+                while (end < section.text.size() && wordCharacter(section.text.at(end)))
+                    ++end;
+            }
+            result.append({section.position + start, end - start, added});
+        };
+        for (const Diff &part : diff) {
+            const int length = int(part.text.size());
+            if (part.command == Diff::Delete)
+                append(input.source, sourcePosition, length, false);
+            else if (part.command == Diff::Insert)
+                append(input.destination, destinationPosition, length, true);
+            if (part.command != Diff::Insert)
+                sourcePosition += length;
+            if (part.command != Diff::Delete)
+                destinationPosition += length;
+        }
+    }
+    std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) {
+        return a.position < b.position;
+    });
+    QList<ConflictWordHighlight> merged;
+    for (const ConflictWordHighlight &highlight : std::as_const(result)) {
+        if (!merged.isEmpty() && merged.last().added == highlight.added
+            && merged.last().position + merged.last().length >= highlight.position) {
+            merged.last().length = qMax(merged.last().length,
+                highlight.position + highlight.length - merged.last().position);
+        } else {
+            merged.append(highlight);
+        }
+    }
+    if (!promise.isCanceled())
+        promise.addResult(merged);
+}
+
+static void highlightConflictWords(TextEditorWidget *widget,
+                                    const QList<ConflictWordHighlight> &highlights)
+{
+    const FontSettingsData &settings = widget->textDocument()->fontSettings();
+    const auto format = [&settings](TextStyle style) {
+        QTextCharFormat result;
+        result.setBackground(settings.toTextCharFormat(style).background());
+        result.setProperty(MERGE_CONFLICT_WORD_PROPERTY_ID, true);
+        return result;
+    };
+    const QTextCharFormat removed = format(C_DIFF_SOURCE_CHAR);
+    const QTextCharFormat added = format(C_DIFF_DEST_CHAR);
+    TextEditorLayout *layout = widget->editorLayout();
+    layout->removeMainLayoutFormatsWithProperty(MERGE_CONFLICT_WORD_PROPERTY_ID);
+    for (const ConflictWordHighlight &highlight : highlights) {
+        const int end = highlight.position + highlight.length;
+        for (QTextBlock block = widget->document()->findBlock(highlight.position);
+             block.isValid() && block.position() < end; block = block.next()) {
+            const int start = qMax(highlight.position, block.position());
+            const int stop = qMin(end, block.position() + int(block.text().size()));
+            if (stop > start) {
+                QTextLayout::FormatRange range;
+                range.start = start - block.position();
+                range.length = stop - start;
+                range.format = highlight.added ? added : removed;
+                layout->addBlockEditorFormats(block, {range});
+            }
+        }
+    }
+    layout->requestUpdate();
+}
 
 // Seven is the shortest run Git writes; the conflict-marker-size gitattribute
 // makes it write longer ones, and that attribute is set on exactly the files
@@ -176,7 +306,8 @@ static void highlightMergeConflictSections(TextEditorWidget *widget,
     TextEditorLayout *layout = widget->editorLayout();
     if (!layout)
         return;
-    const int removed = layout->removeMainLayoutFormatsWithProperty(MERGE_CONFLICT_SECTION_PROPERTY_ID);
+    const int removed = layout->removeMainLayoutFormatsWithProperty(MERGE_CONFLICT_SECTION_PROPERTY_ID)
+                        + layout->removeMainLayoutFormatsWithProperty(MERGE_CONFLICT_WORD_PROPERTY_ID);
     if (conflicts.isEmpty()) {
         widget->setScrollBarHighlights(Constants::SCROLL_BAR_MERGE_CONFLICT, {});
         if (removed > 0)
@@ -264,6 +395,7 @@ public:
     {
     public:
         QPointer<QWidget> label;
+        QPointer<QComboBox> comparison;
         // start of the "<<<<<<<" block. A cursor is moved by the document's
         // own edits, so the row stays anchored to its conflict while the line
         // numbers found by the last scan are still stale
@@ -277,6 +409,7 @@ public:
     // consulting the line numbers of the last scan
     QList<QTextCursor> conflictRegions;
 
+    std::unique_ptr<Async<QList<ConflictWordHighlight>>> diffTask;
     QTimer rescanTimer;
     bool repositionScheduled = false;
 
@@ -285,6 +418,10 @@ public:
     void clearRows()
     {
         for (const Row &row : std::as_const(rows)) {
+            if (row.comparison) {
+                row.comparison->hide();
+                row.comparison->deleteLater();
+            }
             if (row.label) {
                 row.label->hide();
                 row.label->deleteLater(); // a resolution link may be the caller
@@ -315,7 +452,8 @@ public:
             return false;
         for (int i = 0; i < rows.size(); ++i) {
             const Row &row = rows.at(i);
-            if (!row.label || row.anchorLine() != conflicts.at(i).startLine)
+            if (!row.label || !row.comparison || row.anchorLine() != conflicts.at(i).startLine
+                || (row.comparison->count() > 1) != (conflicts.at(i).baseLine > 0))
                 return false;
         }
         return true;
@@ -333,7 +471,45 @@ public:
         // the highlights are swept and reapplied in one go, so they can be
         // refreshed unconditionally without the sections flickering
         highlightMergeConflictSections(widget, conflicts);
+        updateWordHighlights();
         reposition();
+    }
+
+    void updateWordHighlights()
+    {
+        diffTask.reset();
+        if (!widget || conflicts.isEmpty())
+            return;
+        QList<ConflictComparisonInput> inputs;
+        const QTextDocument *doc = widget->document();
+        for (const MergeConflict &conflict : std::as_const(conflicts)) {
+            ConflictComparison comparison = conflict.baseLine > 0 ? BaseIncoming : CurrentIncoming;
+            for (const Row &row : std::as_const(rows)) {
+                if (row.anchorLine() == conflict.startLine && row.comparison)
+                    comparison = ConflictComparison(row.comparison->currentData().toInt());
+            }
+            const int currentEnd = (conflict.baseLine > 0 ? conflict.baseLine
+                                                         : conflict.separatorLine) - 1;
+            const ConflictSection current = conflictSection(doc, conflict.startLine + 1, currentEnd);
+            const ConflictSection incoming
+                = conflictSection(doc, conflict.separatorLine + 1, conflict.endLine - 1);
+            if (comparison == CurrentIncoming) {
+                inputs.append({current, incoming});
+            } else {
+                const ConflictSection base
+                    = conflictSection(doc, conflict.baseLine + 1, conflict.separatorLine - 1);
+                inputs.append({base, comparison == BaseCurrent ? current : incoming});
+            }
+        }
+        const int revision = doc->revision();
+        diffTask = std::make_unique<Async<QList<ConflictWordHighlight>>>();
+        diffTask->setConcurrentCallData(computeConflictWords, inputs);
+        QObject::connect(diffTask.get(), &AsyncBase::done, q, [this, revision] {
+            if (widget && widget->document()->revision() == revision && !diffTask->isCanceled()
+                && diffTask->isResultAvailable())
+                highlightConflictWords(widget, diffTask->result());
+        });
+        diffTask->start();
     }
 
     void trackConflictRegions()
@@ -379,6 +555,11 @@ public:
 
     void rebuildRows()
     {
+        QMap<int, int> comparisons;
+        for (const Row &row : std::as_const(rows)) {
+            if (row.comparison)
+                comparisons.insert(row.anchorLine(), row.comparison->currentData().toInt());
+        }
         clearRows();
         clearSpacers();
         TextEditorLayout *l = layout();
@@ -390,10 +571,25 @@ public:
             const QTextBlock block = doc->findBlockByNumber(conflict.startLine - 1);
             if (!block.isValid())
                 continue;
-            // reserve a line above the "<<<<<<<" marker for the links to float on
+            auto comparison = new QComboBox(widget->viewport());
+            comparison->setObjectName(QLatin1StringView(MERGE_CONFLICT_COMPARISON_OBJECT_NAME));
+            comparison->setFont(Utils::StyleHelper::uiFont(Utils::StyleHelper::UiElementLabelSmall));
+            comparison->setToolTip(Tr::tr("Compare changes within this conflict"));
+            if (conflict.baseLine > 0) {
+                comparison->addItem(Tr::tr("Base to Incoming"), BaseIncoming);
+                comparison->addItem(Tr::tr("Base to Current"), BaseCurrent);
+            } else {
+                comparison->addItem(Tr::tr("Current to Incoming"), CurrentIncoming);
+            }
+            const int selected = comparison->findData(comparisons.value(conflict.startLine, -1));
+            if (selected >= 0)
+                comparison->setCurrentIndex(selected);
+            comparison->adjustSize();
+            const int rowHeight = qMax(lineHeight, comparison->sizeHint().height());
+            // reserve a line above the "<<<<<<<" marker for the controls to float on
             l->ensureBlockLayout(block);
             l->prependLayoutItem(block,
-                                 std::make_unique<EmptyLayoutItem>(lineHeight,
+                                 std::make_unique<EmptyLayoutItem>(rowHeight,
                                                                    MERGE_CONFLICT_SPACER_CATEGORY));
             auto label = new QLabel(widget->viewport());
             label->setObjectName(QLatin1StringView(MERGE_CONFLICT_CHOICES_OBJECT_NAME));
@@ -414,8 +610,11 @@ public:
                 resolveAt(anchor.blockNumber() + 1, choice);
             });
             label->adjustSize();
-            label->setFixedHeight(lineHeight);
-            rows.append({label, anchor});
+            label->setFixedHeight(rowHeight);
+            comparison->setFixedHeight(rowHeight);
+            QObject::connect(comparison, &QComboBox::currentIndexChanged, q,
+                             [this] { rescan(); });
+            rows.append({label, comparison, anchor});
         }
         l->emitDocumentSizeChanged();
         l->requestUpdate();
@@ -451,12 +650,19 @@ public:
             const QTextBlock block = row.anchor.block();
             if (!block.isValid() || !block.isVisible()) {
                 row.label->hide();
+                if (row.comparison)
+                    row.comparison->hide();
                 continue;
             }
             // float on the spacer line reserved above the marker
             const int top = widget->cursorRect(QTextCursor(block)).top() - l->mainLayoutOffset(block);
             row.label->move(int(doc->documentMargin()), top);
             row.label->show();
+            if (row.comparison) {
+                row.comparison->move(row.label->x() + row.label->width()
+                                         + Utils::StyleHelper::SpacingTokens::GapHS, top);
+                row.comparison->show();
+            }
         }
     }
 
@@ -488,13 +694,16 @@ MergeConflictController::MergeConflictController(TextEditorWidget *widget)
     // until the debounced rescan refreshes the conflicts' line numbers
     connect(widget->document(), &QTextDocument::contentsChange, this,
             [this](int position, int /*charsRemoved*/, int charsAdded) {
-        if (d->changeMayAffectConflicts(position, charsAdded))
+        if (d->changeMayAffectConflicts(position, charsAdded)
+            || (d->diffTask && !d->diffTask->isDone())) {
+            d->diffTask.reset();
             d->rescanTimer.start();
+        }
     });
     // updateRequest also fires on scrolling
     connect(widget, &PlainTextEdit::updateRequest, this, [this] { d->scheduleReposition(); });
     connect(widget->textDocument(), &TextDocument::fontSettingsChanged, this, [this] {
-        d->clearRows(); // the reserved lines follow the new line height
+        d->rebuildRows(); // the reserved lines follow the new line height
         d->rescan();
     });
     // the read-only state decides whether the links are offered, and has no
@@ -523,6 +732,8 @@ bool MergeConflictController::eventFilter(QObject *watched, QEvent *event)
 
 void MergeConflictController::detach()
 {
+    d->rescanTimer.stop();
+    d->diffTask.reset();
     d->clearRows();
     d->clearSpacers();
     highlightMergeConflictSections(d->widget, {});

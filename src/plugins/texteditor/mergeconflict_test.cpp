@@ -12,6 +12,7 @@
 
 #include <utils/plaintextedit/texteditorlayout.h>
 
+#include <QComboBox>
 #include <QLabel>
 #include <QTest>
 #include <QTextBlock>
@@ -103,6 +104,129 @@ private slots:
         QTRY_VERIFY(formats(2).isEmpty());
     }
 
+    void testDiff3WordHighlights()
+    {
+        const QString current = "    to open the CMakeLists.txt file for the current run configuration\n"
+            "    in the editor. This is the same build target as when you go to\n"
+            "    \\uicontrol Build and select \\uicontrol {Build for Run Configuration}.\n";
+        const QString base = "    to open the CMakeLists.txt file for the current run configuration\n"
+            "    in the editor. This is the same build target as when you select\n"
+            "    \\uicontrol Build > \\uicontrol {Build for Run Configuration}.\n";
+        const QString incoming = "    to open the \\c CMakeLists.txt file for the current run configuration\n"
+            "    in the editor. This is the same build target as when you select\n"
+            "    \\uicontrol Build > \\uicontrol {Build for Run Configuration}.\n";
+        const QString text = "<<<<<<< HEAD\n" + current + "||||||| base\n" + base
+                             + "=======\n" + incoming + ">>>>>>> branch\n";
+        setText(text);
+        QTRY_COMPARE(comparisons().size(), 1);
+        QComboBox *comparison = comparisons().first();
+        QCOMPARE(comparison->currentText(), QString("Base to Incoming"));
+        QTRY_COMPARE(wordHighlights(10), QStringList{"\\c"});
+        QVERIFY(wordHighlights(2).isEmpty());
+        QVERIFY(wordHighlights(6).isEmpty());
+        QVERIFY(wordHighlights(11).isEmpty());
+        QVERIFY(wordHighlights(1).isEmpty());
+        QCOMPARE(m_widget->toPlainText(), text);
+
+        comparison->setCurrentIndex(1);
+        QTRY_VERIFY(!wordHighlights(3).isEmpty());
+        QVERIFY(wordHighlights(10).isEmpty());
+        QVERIFY(!wordHighlights(7).isEmpty());
+        QCOMPARE(m_widget->toPlainText(), text);
+        comparison->setCurrentIndex(0);
+        QTRY_COMPARE(wordHighlights(10), QStringList{"\\c"});
+        QVERIFY(wordHighlights(3).isEmpty());
+
+        QTextCursor cursor(block(10));
+        const int position = block(10).text().indexOf("\\c");
+        cursor.setPosition(block(10).position() + position);
+        cursor.setPosition(cursor.position() + 2, QTextCursor::KeepAnchor);
+        cursor.insertText("\\code");
+        QTRY_COMPARE(wordHighlights(10), QStringList{"\\code"});
+        m_widget->document()->undo();
+        QTRY_COMPARE(wordHighlights(10), QStringList{"\\c"});
+        QCOMPARE(m_widget->toPlainText(), text);
+    }
+
+    void testTwoWayWordHighlights()
+    {
+        const QString text = "<<<<<<< HEAD\nunchanged\nint value = 10;\nreturn value;\n"
+            "=======\nextra line\nunchanged\nint value = 20;\nreturn value;\n>>>>>>> branch\n";
+        setText(text);
+        QTRY_COMPARE(comparisons().size(), 1);
+        QCOMPARE(comparisons().first()->currentText(), QString("Current to Incoming"));
+        QTRY_COMPARE(wordHighlights(8), QStringList{"20"});
+        QCOMPARE(wordHighlights(3), QStringList{"10"});
+        QVERIFY(!wordHighlights(6).isEmpty());
+        QVERIFY(wordHighlights(2).isEmpty());
+        QVERIFY(wordHighlights(7).isEmpty());
+        QVERIFY(wordHighlights(5).isEmpty());
+        QCOMPARE(m_widget->toPlainText(), text);
+        resolveMergeConflict(m_widget->document(), findMergeConflicts(m_widget->document()).first(),
+                             MergeConflictChoice::Incoming);
+        QTRY_VERIFY(comparisons().isEmpty());
+        QVERIFY(wordHighlights(3).isEmpty());
+        m_widget->document()->undo();
+        QTRY_COMPARE(wordHighlights(8), QStringList{"20"});
+    }
+
+    void testChangedWords()
+    {
+        setText("<<<<<<< HEAD\nreturn oldCount;\n=======\nreturn newCount;\n>>>>>>> branch");
+        QTRY_COMPARE(wordHighlights(4), QStringList{"newCount"});
+        QCOMPARE(wordHighlights(2), QStringList{"oldCount"});
+        QVERIFY(!wordHighlights(4).contains("return"));
+    }
+
+    void testIndependentComparisons()
+    {
+        const QString conflict = "<<<<<<< HEAD\ncurrent\n||||||| base\nbase\n"
+                                 "=======\nincoming\n>>>>>>> branch\n";
+        setText(conflict + conflict);
+        QTRY_COMPARE(comparisons().size(), 2);
+        QTRY_COMPARE(wordHighlights(13), QStringList{"incoming"});
+        comparisons().first()->setCurrentIndex(1);
+        QTRY_COMPARE(wordHighlights(2), QStringList{"current"});
+        QCOMPARE(wordHighlights(13), QStringList{"incoming"});
+        QVERIFY(wordHighlights(6).isEmpty());
+        QTextCursor cursor(m_widget->document());
+        cursor.insertText("prefix\n");
+        QCOMPARE(comparisons().first()->currentText(), QString("Base to Current"));
+        QCOMPARE(wordHighlights(3), QStringList{"current"});
+        QCOMPARE(wordHighlights(14), QStringList{"incoming"});
+        comparisons().last()->setCurrentIndex(1);
+        setText("<<<<<<< HEAD\noldValue\n=======\nnewValue\n>>>>>>> branch");
+        QTRY_COMPARE(comparisons().size(), 1);
+        QTRY_COMPARE(wordHighlights(4), QStringList{"newValue"});
+        QCOMPARE(wordHighlights(2), QStringList{"oldValue"});
+        QCOMPARE(comparisons().first()->currentText(), QString("Current to Incoming"));
+    }
+
+    void testWordHighlightsEmptySides_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<int>("line");
+        QTest::newRow("empty-current") << QString("<<<<<<< HEAD\n=======\nadded\n>>>>>>> branch")
+                                        << 3;
+        QTest::newRow("empty-incoming") << QString("<<<<<<< HEAD\nremoved\n=======\n>>>>>>> branch")
+                                         << 2;
+        QTest::newRow("empty-base")
+            << QString("<<<<<<< HEAD\ncurrent\n||||||| base\n=======\nincoming\n>>>>>>> branch")
+            << 5;
+        QTest::newRow("deleted-incoming")
+            << QString("<<<<<<< HEAD\ncurrent\n||||||| base\nbase\n=======\n>>>>>>> branch")
+            << 4;
+    }
+
+    void testWordHighlightsEmptySides()
+    {
+        QFETCH(QString, text);
+        QFETCH(int, line);
+        setText(text);
+        QTRY_VERIFY(!wordHighlights(line).isEmpty());
+        QCOMPARE(m_widget->toPlainText(), text);
+    }
+
     void testMarksSidesOnScrollBar()
     {
         setText(QLatin1StringView(conflictText));
@@ -159,6 +283,7 @@ private slots:
         setText(QLatin1StringView(conflictText));
         QTRY_VERIFY(!formats(2).isEmpty());
         QVERIFY(links().isEmpty());
+        QTRY_COMPARE(wordHighlights(5), QStringList{"theirs"});
 
         // ... and picks the links up once it becomes writable
         m_widget->setReadOnly(false);
@@ -174,6 +299,7 @@ private slots:
         // the highlighting back, while the document stays as it is
         m_widget->setMergeConflictResolutionEnabled(false);
         QTRY_VERIFY(links().isEmpty());
+        QTRY_VERIFY(comparisons().isEmpty());
         QCOMPARE(reservedHeight(2), 0);
         QVERIFY(formats(2).isEmpty());
         QCOMPARE(m_widget->toPlainText(), QString(QLatin1StringView(conflictText)));
@@ -218,6 +344,26 @@ private:
     QList<QTextLayout::FormatRange> formats(int line) const
     {
         return layout()->blockLayout(block(line))->formats();
+    }
+
+    QList<QComboBox *> comparisons() const
+    {
+        return m_widget->findChildren<QComboBox *>(
+            QLatin1StringView(MERGE_CONFLICT_COMPARISON_OBJECT_NAME));
+    }
+
+    QStringList wordHighlights(int line) const
+    {
+        QStringList result;
+        for (const QTextLayout::FormatRange &range : formats(line)) {
+            if (range.format.hasProperty(QTextFormat::BackgroundBrush)
+                && !range.format.boolProperty(FULL_LINE_HIGHLIGHT_FORMAT_PROPERTY_ID)) {
+                const QString text = block(line).text().mid(range.start, range.length).trimmed();
+                if (!text.isEmpty())
+                    result.append(text);
+            }
+        }
+        return result;
     }
 
     bool isBold(int line) const
