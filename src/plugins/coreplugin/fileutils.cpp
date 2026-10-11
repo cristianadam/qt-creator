@@ -230,16 +230,25 @@ QString msgTerminalWithAction()
                   "Opens a submenu for choosing an environment, such as \"Run Environment\"");
 }
 
-void removeFiles(const FilePaths &filePaths, bool deleteFromFS)
+void removeFiles(const FilePaths &filePaths, bool deleteFromFS,
+                 RemoveFromVersionControl removeFromVersionControl)
 {
-    // remove from version control
-    VcsManager::promptToDelete(filePaths);
+    if (removeFromVersionControl == RemoveFromVersionControl::Ask)
+        VcsManager::promptToDelete(filePaths);
 
-    if (!deleteFromFS)
-        return;
-
-    // remove from file system
     for (const FilePath &fp : filePaths) {
+        if (removeFromVersionControl == RemoveFromVersionControl::Yes) {
+            IVersionControl *vc = VcsManager::findVersionControlForDirectory(fp.parentDir());
+            if (vc && vc->supportsOperation(IVersionControl::DeleteOperation)
+                && vc->managesFile(fp.parentDir(), fp.fileName()) && !vc->vcsDelete(fp)) {
+                MessageManager::writeDisrupting(
+                    Tr::tr("Failed to remove file \"%1\" from version control (%2).")
+                        .arg(fp.toUserOutput(), vc->displayName()));
+                continue;
+            }
+        }
+        if (!deleteFromFS)
+            continue;
         if (!fp.exists()) // could have been deleted by vc
             continue;
         Result<> removeResult = fp.removeFile();

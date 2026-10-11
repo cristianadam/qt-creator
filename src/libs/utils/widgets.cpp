@@ -22,6 +22,7 @@
 #include <QHeaderView>
 #include <QHideEvent>
 #include <QKeyEvent>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -30,6 +31,7 @@
 #include <QProgressDialog>
 #include <QPropertyAnimation>
 #include <QRect>
+#include <QRadioButton>
 #include <QScreen>
 #include <QSize>
 #include <QStyleOption>
@@ -482,34 +484,51 @@ void OverrideCursor::reset()
 }
 
 RemoveFileDialog::RemoveFileDialog(const FilePath &filePath)
+    : RemoveFileDialog(FilePaths{filePath})
+{}
+
+RemoveFileDialog::RemoveFileDialog(const FilePaths &filePaths)
     : QDialog(dialogParent())
 {
-    const bool isFile = filePath.isFile();
-    setWindowTitle(isFile ? Tr::tr("Remove File") : Tr::tr("Remove Folder"));
-    resize(514, 159);
+    QTC_ASSERT(!filePaths.isEmpty(), return);
+    m_multipleItems = filePaths.size() > 1;
+    const bool isFile = filePaths.first().isFile();
+    setWindowTitle(m_multipleItems ? Tr::tr("Remove Items")
+                                  : isFile ? Tr::tr("Remove File") : Tr::tr("Remove Folder"));
+    QWidget *fileNamesWidget;
+    if (m_multipleItems) {
+        auto fileNamesList = new QListWidget;
+        fileNamesList->setSelectionMode(QAbstractItemView::NoSelection);
+        for (const FilePath &filePath : filePaths)
+            fileNamesList->addItem(filePath.toUserOutput());
+        fileNamesWidget = fileNamesList;
+    } else {
+        auto fileNameLabel = new QLabel(filePaths.first().toUserOutput());
+        fileNameLabel->setTextFormat(Qt::PlainText);
+        fileNameLabel->setWordWrap(true);
+        fileNamesWidget = fileNameLabel;
+    }
 
-    QFont font;
-    font.setFamilies({"Courier New"});
-
-    auto fileNameLabel = new QLabel(filePath.toUserOutput());
-    fileNameLabel->setFont(font);
-    fileNameLabel->setWordWrap(true);
-
-    m_deleteFileCheckBox = new QCheckBox(Tr::tr("&Delete file permanently"));
-
-    auto removeVCCheckBox = new QCheckBox(Tr::tr("&Remove from version control"));
-    removeVCCheckBox->setVisible(false); // TODO
+    m_keepFileRadioButton = new QRadioButton(m_multipleItems ? Tr::tr("&Keep local items")
+                                                           : Tr::tr("&Keep local file"));
+    m_keepFileRadioButton->setChecked(true);
+    m_deleteFileRadioButton = new QRadioButton(m_multipleItems ? Tr::tr("&Delete local items")
+                                                             : Tr::tr("&Delete local file"));
+    m_removeFromVersionControlRadioButton = new QRadioButton;
+    m_removeFromVersionControlRadioButton->setVisible(false);
 
     auto buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 
     using namespace Layouting;
 
     Column {
-        isFile ? Tr::tr("File to remove:") : Tr::tr("Folder to remove:"),
-        fileNameLabel,
-        Space(10),
-        m_deleteFileCheckBox,
-        removeVCCheckBox,
+        m_multipleItems ? Tr::tr("Items to remove:")
+                        : isFile ? Tr::tr("File to remove:") : Tr::tr("Folder to remove:"),
+        fileNamesWidget,
+        Space(StyleHelper::SpacingTokens::GapVM),
+        m_keepFileRadioButton,
+        m_deleteFileRadioButton,
+        m_removeFromVersionControlRadioButton,
         buttonBox
     }.attachTo(this);
 
@@ -519,12 +538,47 @@ RemoveFileDialog::RemoveFileDialog(const FilePath &filePath)
 
 void RemoveFileDialog::setDeleteFileVisible(bool visible)
 {
-    m_deleteFileCheckBox->setVisible(visible);
+    m_keepFileRadioButton->setVisible(visible);
+    m_deleteFileRadioButton->setVisible(visible);
+    m_removeFromVersionControlRadioButton->setVisible(
+        visible && !m_removeFromVersionControlRadioButton->text().isEmpty());
+    if (!visible)
+        m_keepFileRadioButton->setChecked(true);
+}
+
+void RemoveFileDialog::setKeepFileVisible(bool visible)
+{
+    m_keepFileRadioButton->setVisible(visible);
+    if (!visible && m_keepFileRadioButton->isChecked())
+        m_deleteFileRadioButton->setChecked(true);
+}
+
+void RemoveFileDialog::setVersionControlName(const QString &name)
+{
+    m_deleteFileRadioButton->setText(
+        name.isEmpty() ? (m_multipleItems ? Tr::tr("&Delete local items") : Tr::tr("&Delete local file"))
+                      : (m_multipleItems ? Tr::tr("&Delete local items but keep in version control")
+                                         : Tr::tr("&Delete local file but keep in version control")));
+    m_removeFromVersionControlRadioButton->setText(
+        name.isEmpty() ? QString()
+                       : (m_multipleItems
+                              ? Tr::tr("Delete local items and &remove selected files from version control (%1)")
+                              : Tr::tr("Delete local file and &remove from version control (%1)")).arg(name));
+    m_removeFromVersionControlRadioButton->setVisible(
+        !name.isEmpty() && !m_deleteFileRadioButton->isHidden());
+    if (name.isEmpty() && m_removeFromVersionControlRadioButton->isChecked())
+        (m_keepFileRadioButton->isHidden() ? m_deleteFileRadioButton : m_keepFileRadioButton)
+            ->setChecked(true);
 }
 
 bool RemoveFileDialog::isDeleteFileChecked() const
 {
-    return m_deleteFileCheckBox->isChecked();
+    return m_deleteFileRadioButton->isChecked() || isRemoveFromVersionControlChecked();
+}
+
+bool RemoveFileDialog::isRemoveFromVersionControlChecked() const
+{
+    return m_removeFromVersionControlRadioButton->isChecked();
 }
 
 StatusLabel::StatusLabel(QWidget *parent) : QLabel(parent)

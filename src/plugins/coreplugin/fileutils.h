@@ -26,7 +26,10 @@ CORE_EXPORT QString msgGraphicalShellAction();
 CORE_EXPORT QString msgTerminalHereAction();
 CORE_EXPORT QString msgTerminalWithAction();
 // File operations aware of version control and file system case-insensitiveness
-CORE_EXPORT void removeFiles(const Utils::FilePaths &filePaths, bool deleteFromFS);
+enum class RemoveFromVersionControl { Ask, No, Yes };
+CORE_EXPORT void removeFiles(const Utils::FilePaths &filePaths, bool deleteFromFS,
+                            RemoveFromVersionControl removeFromVersionControl
+                            = RemoveFromVersionControl::Ask);
 CORE_EXPORT bool renameFile(const Utils::FilePath &from, const Utils::FilePath &to,
                             HandleIncludeGuards handleGuards = HandleIncludeGuards::No);
 

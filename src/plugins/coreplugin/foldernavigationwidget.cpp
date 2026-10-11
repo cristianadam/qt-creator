@@ -496,29 +496,35 @@ void FolderNavigationWidget::removeSelectedItems()
     if (count == 0)
         return;
 
-    if (count == 1) {
-        RemoveFileDialog dialog(filePaths.isEmpty() ? dirPaths.first() : filePaths.first());
-        dialog.setDeleteFileVisible(false);
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-    } else {
-        QMessageBox box(QMessageBox::Question,
-                        Tr::tr("Remove Items"),
-                        Tr::tr("Remove these %n items from the file system?", nullptr, count),
-                        QMessageBox::Yes | QMessageBox::No,
-                        ICore::dialogParent());
-        box.setDetailedText(Utils::transform(filePaths + dirPaths, &FilePath::toUserOutput)
-                                .join('\n'));
-        if (box.exec() != QMessageBox::Yes)
-            return;
+    QStringList versionControlNames;
+    for (const FilePath &filePath : std::as_const(filePaths)) {
+        IVersionControl *vc = VcsManager::findVersionControlForDirectory(filePath.parentDir());
+        if (vc && vc->supportsOperation(IVersionControl::DeleteOperation)
+            && vc->managesFile(filePath.parentDir(), filePath.fileName())) {
+            versionControlNames.append(vc->displayName());
+        }
     }
+    versionControlNames.removeDuplicates();
+
+    RemoveFileDialog dialog(filePaths + dirPaths);
+    if (versionControlNames.isEmpty()) {
+        dialog.setDeleteFileVisible(false);
+    } else {
+        dialog.setVersionControlName(versionControlNames.join(", "));
+        dialog.setKeepFileVisible(false);
+    }
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const auto removeFromVersionControl = dialog.isRemoveFromVersionControlChecked()
+        ? FileUtils::RemoveFromVersionControl::Yes
+        : FileUtils::RemoveFromVersionControl::No;
 
     for (const FilePath &filePath : std::as_const(filePaths)) {
         emit m_instance->aboutToRemoveFile(filePath);
         DocumentManager::expectFileChange(filePath);
     }
-    // One call, so that version control asks about the whole set at once.
-    FileUtils::removeFiles(filePaths, true /*delete from disk*/);
+    FileUtils::removeFiles(filePaths, true /*delete from disk*/, removeFromVersionControl);
     for (const FilePath &filePath : std::as_const(filePaths))
         DocumentManager::unexpectFileChange(filePath);
 

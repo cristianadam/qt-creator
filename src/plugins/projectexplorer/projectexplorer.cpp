@@ -4285,10 +4285,19 @@ void ProjectExplorerPluginPrivate::removeFile()
         siblings.push_back({n, n->filePath()});
 
     RemoveFileDialog removeFileDialog(filePath);
+    if (IVersionControl *vc = VcsManager::findVersionControlForDirectory(filePath.parentDir())) {
+        if (vc->supportsOperation(IVersionControl::DeleteOperation)
+            && vc->managesFile(filePath.parentDir(), filePath.fileName())) {
+            removeFileDialog.setVersionControlName(vc->displayName());
+        }
+    }
     if (removeFileDialog.exec() != QDialog::Accepted)
         return;
 
     const bool deleteFile = removeFileDialog.isDeleteFileChecked();
+    const auto removeFromVersionControl = removeFileDialog.isRemoveFromVersionControlChecked()
+        ? Core::FileUtils::RemoveFromVersionControl::Yes
+        : Core::FileUtils::RemoveFromVersionControl::No;
 
     if (!siblings.isEmpty()) {
         const QMessageBox::StandardButton reply = QMessageBox::question(
@@ -4342,7 +4351,7 @@ void ProjectExplorerPluginPrivate::removeFile()
     }
 
     if (deleteFile)
-        Core::FileUtils::removeFiles(pathList, deleteFile);
+        Core::FileUtils::removeFiles(pathList, deleteFile, removeFromVersionControl);
 }
 
 void ProjectExplorerPluginPrivate::duplicateFile()

@@ -19,11 +19,13 @@ class QHeaderView;
 class QMenu;
 class QMouseEvent;
 class QProgressDialog;
+class QRadioButton;
 class QTimer;
 QT_END_NAMESPACE
 
 namespace Utils {
 class FilePath;
+class FilePaths;
 
 class QTCREATOR_UTILS_EXPORT FadingPanel : public QWidget
 {
@@ -138,12 +140,19 @@ class QTCREATOR_UTILS_EXPORT RemoveFileDialog : public QDialog
 {
 public:
     explicit RemoveFileDialog(const FilePath &filePath);
+    explicit RemoveFileDialog(const FilePaths &filePaths);
 
     void setDeleteFileVisible(bool visible);
+    void setKeepFileVisible(bool visible);
+    void setVersionControlName(const QString &name);
     bool isDeleteFileChecked() const;
+    bool isRemoveFromVersionControlChecked() const;
 
 private:
-    QCheckBox *m_deleteFileCheckBox;
+    bool m_multipleItems = false;
+    QRadioButton *m_keepFileRadioButton;
+    QRadioButton *m_deleteFileRadioButton;
+    QRadioButton *m_removeFromVersionControlRadioButton;
 };
 
 class QTCREATOR_UTILS_EXPORT StatusLabel : public QLabel

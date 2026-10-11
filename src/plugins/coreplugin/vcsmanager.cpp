@@ -6,6 +6,8 @@
 #include "coreplugintr.h"
 #include "documentmanager.h"
 #include "editormanager/editormanager.h"
+#include "fileutils.h"
+#include "foldernavigationwidget.h"
 #include "icore.h"
 #include "idocument.h"
 #include "iversioncontrol.h"
@@ -810,10 +812,17 @@ void VcsManager::handleConfigurationChanges(IVersionControl *vc)
 
 #ifdef WITH_TESTS
 
+#include <QAbstractEventDispatcher>
+#include <QApplication>
 #include <QFile>
+#include <QListWidget>
+#include <QRadioButton>
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTreeView>
+
+#include <utils/widgets.h>
 
 #include <extensionsystem/pluginmanager.h>
 
@@ -866,16 +875,26 @@ public:
     bool managesDirectory(const FilePath &filePath, FilePath *topLevel) const final;
     bool managesFile(const FilePath &workingDirectory, const QString &fileName) const final;
     bool isConfigured() const final { return true; }
-    bool supportsOperation(Operation) const final { return false; }
+    bool supportsOperation(Operation operation) const final
+    { return operation == DeleteOperation && supportsDelete; }
     bool vcsOpen(const FilePath &) final { return false; }
     bool vcsAdd(const FilePath &) final { return false; }
-    bool vcsDelete(const FilePath &) final { return false; }
+    bool vcsDelete(const FilePath &filePath) final
+    {
+        deletedFiles.append(filePath);
+        return deleteSucceeds && (!deleteRemovesFile || bool(filePath.removeFile()));
+    }
     bool vcsMove(const FilePath &, const FilePath &) final { return false; }
     bool vcsCreateRepository(const FilePath &) final { return false; }
     void vcsAnnotate(const FilePath &, int) final {}
     void vcsLog(const Utils::FilePath &, const Utils::FilePath &) final {};
     void vcsDiff(const Utils::FilePath &, const Utils::FilePath &) final {};
     void vcsDescribe(const FilePath &, const QString &) final {}
+
+    bool supportsDelete = false;
+    bool deleteSucceeds = true;
+    bool deleteRemovesFile = false;
+    FilePaths deletedFiles;
 
 private:
     Id m_id;
@@ -951,7 +970,252 @@ private slots:
     void testVcsManager();
     void testTopicCacheSurvivesReentrantRefresher();
     void testTopicCacheKeepsNewerTopicFromReentrantRefresher();
+    void testRemoveFiles_data();
+    void testRemoveFiles();
+    void testRemoveFileDialog();
+    void testFileSystemRemovalDialog();
+    void testFileSystemRemoval_data();
+    void testFileSystemRemoval();
 };
+
+void VcsManagerTest::testRemoveFiles_data()
+{
+    QTest::addColumn<bool>("deleteFromDisk");
+    QTest::addColumn<bool>("removeFromVcs");
+    QTest::addColumn<bool>("supportsDelete");
+    QTest::addColumn<bool>("deleteSucceeds");
+    QTest::addColumn<bool>("deleteRemovesFile");
+
+    QTest::newRow("keep-local-and-vcs") << false << false << true << true << false;
+    QTest::newRow("delete-local-keep-vcs") << true << false << true << true << false;
+    QTest::newRow("delete-local-and-vcs") << true << true << true << true << false;
+    QTest::newRow("vcs-deletes-local") << true << true << true << true << true;
+    QTest::newRow("vcs-delete-fails") << true << true << true << false << false;
+    QTest::newRow("vcs-delete-unsupported") << true << true << false << true << false;
+}
+
+void VcsManagerTest::testRemoveFiles()
+{
+    QFETCH(bool, deleteFromDisk);
+    QFETCH(bool, removeFromVcs);
+    QFETCH(bool, supportsDelete);
+    QFETCH(bool, deleteSucceeds);
+    QFETCH(bool, deleteRemovesFile);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const FilePath root = FilePath::fromString(tempDir.path());
+    const FilePath tracked = root / "tracked.txt";
+    const FilePath untracked = root / "untracked.txt";
+    QVERIFY(tracked.writeFileContents("staged content"));
+    QVERIFY(untracked.writeFileContents("untracked content"));
+
+    const QList<IVersionControl *> orig = Core::d->m_versionControlList;
+    const auto restore = qScopeGuard([orig] { Core::d->m_versionControlList = orig; });
+    TestVersionControl vcs(ID_VCS_A, "A");
+    vcs.setManagedDirectories({{root, root}});
+    vcs.setManagedFiles({tracked});
+    vcs.supportsDelete = supportsDelete;
+    vcs.deleteSucceeds = deleteSucceeds;
+    vcs.deleteRemovesFile = deleteRemovesFile;
+
+    FileUtils::removeFiles({tracked, untracked}, deleteFromDisk,
+                          removeFromVcs ? FileUtils::RemoveFromVersionControl::Yes
+                                        : FileUtils::RemoveFromVersionControl::No);
+
+    const bool vcsDeleteCalled = removeFromVcs && supportsDelete;
+    QCOMPARE(vcs.deletedFiles, vcsDeleteCalled ? FilePaths{tracked} : FilePaths{});
+    QCOMPARE(tracked.exists(), !deleteFromDisk || (vcsDeleteCalled && !deleteSucceeds));
+    QCOMPARE(untracked.exists(), !deleteFromDisk);
+    if (tracked.exists()) {
+        const auto contents = tracked.fileContents();
+        QVERIFY(contents);
+        QCOMPARE(*contents, QByteArray("staged content"));
+    }
+}
+
+void VcsManagerTest::testRemoveFileDialog()
+{
+    RemoveFileDialog dialog(FilePath::fromString("file.txt"));
+    const auto choices = dialog.findChildren<QRadioButton *>();
+    QCOMPARE(choices.size(), 3);
+    QVERIFY(choices.at(0)->isChecked());
+    QVERIFY(choices.at(2)->isHidden());
+    QVERIFY(!dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+
+    dialog.setVersionControlName("Git");
+    QVERIFY(!choices.at(2)->isHidden());
+    QVERIFY(choices.at(2)->text().contains("Git"));
+    choices.at(1)->click();
+    QVERIFY(dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+    choices.at(2)->click();
+    QVERIFY(dialog.isDeleteFileChecked());
+    QVERIFY(dialog.isRemoveFromVersionControlChecked());
+    QVERIFY(!choices.at(1)->isChecked());
+
+    dialog.setVersionControlName({});
+    QVERIFY(choices.at(2)->isHidden());
+    QVERIFY(!dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+
+    dialog.setVersionControlName("Git");
+    choices.at(2)->click();
+    dialog.setDeleteFileVisible(false);
+    for (const QRadioButton *choice : choices)
+        QVERIFY(choice->isHidden());
+    QVERIFY(!dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+    dialog.setDeleteFileVisible(true);
+    for (const QRadioButton *choice : choices)
+        QVERIFY(!choice->isHidden());
+}
+
+void VcsManagerTest::testFileSystemRemovalDialog()
+{
+    const FilePaths files{FilePath::fromString("tracked.cpp"),
+                         FilePath::fromString("untracked.cpp"),
+                         FilePath::fromString("folder")};
+    RemoveFileDialog dialog(files);
+    const auto fileList = dialog.findChild<QListWidget *>();
+    QVERIFY(fileList);
+    QCOMPARE(fileList->count(), files.size());
+    for (int i = 0; i < fileList->count(); ++i)
+        QCOMPARE(fileList->item(i)->text(), files.at(i).toUserOutput());
+
+    dialog.setVersionControlName("Git");
+    dialog.setKeepFileVisible(false);
+    const auto choices = dialog.findChildren<QRadioButton *>();
+    QCOMPARE(choices.size(), 3);
+    QVERIFY(choices.at(0)->isHidden());
+    QVERIFY(!choices.at(1)->isHidden());
+    QVERIFY(!choices.at(2)->isHidden());
+    QVERIFY(dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+
+    choices.at(2)->click();
+    QVERIFY(dialog.isDeleteFileChecked());
+    QVERIFY(dialog.isRemoveFromVersionControlChecked());
+
+    dialog.setVersionControlName({});
+    QVERIFY(choices.at(2)->isHidden());
+    QVERIFY(dialog.isDeleteFileChecked());
+    QVERIFY(!dialog.isRemoveFromVersionControlChecked());
+
+    dialog.setDeleteFileVisible(false);
+    for (const QRadioButton *choice : choices)
+        QVERIFY(choice->isHidden());
+}
+
+void VcsManagerTest::testFileSystemRemoval_data()
+{
+    QTest::addColumn<bool>("multipleItems");
+    QTest::addColumn<bool>("removeFromVcs");
+    QTest::addColumn<bool>("accept");
+    QTest::addColumn<bool>("trackedFile");
+    QTest::newRow("single-local") << false << false << true << true;
+    QTest::newRow("single-vcs") << false << true << true << true;
+    QTest::newRow("multiple-local") << true << false << true << true;
+    QTest::newRow("multiple-vcs") << true << true << true << true;
+    QTest::newRow("single-cancel") << false << false << false << true;
+    QTest::newRow("multiple-cancel") << true << true << false << true;
+    QTest::newRow("single-untracked") << false << false << true << false;
+    QTest::newRow("multiple-untracked") << true << false << true << false;
+}
+
+void VcsManagerTest::testFileSystemRemoval()
+{
+    QFETCH(bool, multipleItems);
+    QFETCH(bool, removeFromVcs);
+    QFETCH(bool, accept);
+    QFETCH(bool, trackedFile);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const FilePath root = FilePath::fromString(tempDir.path());
+    const FilePath tracked = root / "tracked.cpp";
+    const FilePath untracked = root / "untracked.cpp";
+    const FilePath folder = root / "folder";
+    QVERIFY(tracked.writeFileContents("tracked"));
+    QVERIFY(untracked.writeFileContents("untracked"));
+    QVERIFY(folder.ensureWritableDir());
+    QVERIFY((folder / "nested.cpp").writeFileContents("nested"));
+
+    const QList<IVersionControl *> orig = Core::d->m_versionControlList;
+    const auto restore = qScopeGuard([orig] { Core::d->m_versionControlList = orig; });
+    TestVersionControl vcs(ID_VCS_A, "A");
+    vcs.setManagedDirectories({{root, root}});
+    vcs.setManagedFiles(trackedFile ? QSet<FilePath>{tracked} : QSet<FilePath>{});
+    vcs.supportsDelete = true;
+
+    FolderNavigationWidget widget;
+    widget.setAutoSynchronization(false);
+    widget.insertRootDirectory({"computer", -1, "Computer", {}, {}}, false);
+    widget.insertRootDirectory({"removal-test", 0, "Removal Test", root, {}});
+    widget.syncWithFilePath(tracked);
+    const auto view = widget.findChild<QTreeView *>();
+    QVERIFY(view);
+    const auto indexForName = [view](const QString &name) {
+        for (int row = 0; row < view->model()->rowCount(view->rootIndex()); ++row) {
+            const QModelIndex index = view->model()->index(row, 0, view->rootIndex());
+            if (index.data().toString() == name)
+                return index;
+        }
+        return QModelIndex();
+    };
+    QTRY_VERIFY(indexForName(tracked.fileName()).isValid());
+    QTRY_VERIFY(indexForName(untracked.fileName()).isValid());
+    QTRY_VERIFY(indexForName(folder.fileName()).isValid());
+    view->selectionModel()->clearSelection();
+    const FilePaths selected = multipleItems ? FilePaths{tracked, untracked, folder}
+                                            : FilePaths{tracked};
+    for (const FilePath &file : selected) {
+        view->selectionModel()->select(indexForName(file.fileName()),
+                                       QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    }
+
+    int dialogCount = 0;
+    int choiceCount = 0;
+    bool keepHidden = false;
+    bool localSelected = false;
+    bool vcsHidden = false;
+    const auto connection = connect(
+        QAbstractEventDispatcher::instance(), &QAbstractEventDispatcher::aboutToBlock, &widget, [&] {
+            auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            ++dialogCount;
+            const auto choices = dialog->findChildren<QRadioButton *>();
+            choiceCount = choices.size();
+            if (choiceCount == 3) {
+                keepHidden = choices.at(0)->isHidden();
+                localSelected = choices.at(1)->isChecked();
+                vcsHidden = choices.at(2)->isHidden();
+                if (removeFromVcs)
+                    choices.at(2)->click();
+            }
+            // Also close legacy confirmation dialogs so a regression fails instead of hanging.
+            if (qobject_cast<QMessageBox *>(dialog))
+                dialog->done(accept ? QMessageBox::Yes : QMessageBox::No);
+            else if (accept)
+                dialog->accept();
+            else
+                dialog->reject();
+        });
+    widget.removeSelectedItems();
+    disconnect(connection);
+
+    QCOMPARE(dialogCount, 1);
+    QCOMPARE(choiceCount, 3);
+    QVERIFY(keepHidden);
+    QCOMPARE(localSelected, trackedFile);
+    QCOMPARE(vcsHidden, !trackedFile);
+    QCOMPARE(vcs.deletedFiles, accept && removeFromVcs ? FilePaths{tracked} : FilePaths{});
+    QCOMPARE(tracked.exists(), !accept);
+    QCOMPARE(untracked.exists(), !accept || !multipleItems);
+    QCOMPARE(folder.exists(), !accept || !multipleItems);
+}
 
 void VcsManagerTest::testVcsManager_data()
 {
