@@ -51,6 +51,7 @@ public:
     QString status;
     QDateTime lastUpdated;
     GerritPatchSet currentPatchSet;
+    QList<GerritPatchSet> patchSets;
     int depth = -1;
 };
 
@@ -82,7 +83,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
     GerritChangePtr change(const QModelIndex &index) const;
-    QString toHtml(const QModelIndex &index) const;
+    QString toHtml(const QModelIndex &index, int patchSetNumber = 0) const;
 
     QStandardItem *itemForNumber(int number) const;
     std::shared_ptr<GerritServer> server() const { return m_server; }
@@ -112,5 +113,9 @@ private:
     QtTaskTree::QSingleTaskTreeRunner m_queryRunner;
     QueryState m_state = Idle;
 };
+
+#ifdef WITH_TESTS
+QObject *createGerritModelTest();
+#endif
 
 } // Gerrit::Internal

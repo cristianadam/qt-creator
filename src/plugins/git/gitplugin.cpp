@@ -26,6 +26,10 @@
 #include "temporarypatchfile.h"
 
 #include "gerrit/gerritplugin.h"
+#ifdef WITH_TESTS
+#include "gerrit/gerritdialog.h"
+#include "gerrit/gerritmodel.h"
+#endif
 
 #include <coreplugin/icore.h>
 #include <coreplugin/coreconstants.h>
@@ -3538,6 +3542,8 @@ class GITSHARED_EXPORT GitPlugin final : public ExtensionSystem::IPlugin
 #ifdef WITH_TESTS
         addTest<GitTest>();
         registerInstantBlameTests(this);
+        addTestCreator(Gerrit::Internal::createGerritModelTest);
+        addTestCreator(Gerrit::Internal::createGerritDialogTest);
 #endif
 
         dd = new GitPluginPrivate;

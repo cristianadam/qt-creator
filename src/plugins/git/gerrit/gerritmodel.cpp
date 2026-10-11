@@ -28,6 +28,10 @@
 
 #include <chrono>
 
+#ifdef WITH_TESTS
+#include <QTest>
+#endif
+
 using namespace Utils;
 using namespace QtTaskTree;
 using namespace VcsBase;
@@ -247,7 +251,7 @@ QString GerritModel::dependencyHtml(const QString &header, const int changeNumbe
     return res;
 }
 
-QString GerritModel::toHtml(const QModelIndex& index) const
+QString GerritModel::toHtml(const QModelIndex& index, int patchSetNumber) const
 {
     static const QString subjectHeader = Git::Tr::tr("Subject");
     static const QString numberHeader = Git::Tr::tr("Number");
@@ -262,6 +266,8 @@ QString GerritModel::toHtml(const QModelIndex& index) const
     if (!index.isValid())
         return {};
     const GerritChangePtr c = change(index);
+    const GerritPatchSet patchSet = Utils::findOr(c->patchSets, c->currentPatchSet,
+        [patchSetNumber](const GerritPatchSet &p) { return p.patchSetNumber == patchSetNumber; });
     const QString projectPrefix = c->url.left(c->url.lastIndexOf('/') + 1);
     QString result;
     QTextStream str(&result);
@@ -275,8 +281,8 @@ QString GerritModel::toHtml(const QModelIndex& index) const
         << dependencyHtml(neededByHeader, c->neededByNumber, projectPrefix)
         << "<tr><td>" << statusHeader << "</td><td>" << c->status
         << ", " << QLocale::system().toString(c->lastUpdated, QLocale::ShortFormat) << "</td></tr>"
-        << "<tr><td>" << patchSetHeader << "</td><td>" << "</td></tr>" << c->currentPatchSet.patchSetNumber << "</td></tr>"
-        << c->currentPatchSet.approvalsToHtml()
+        << "<tr><td>" << patchSetHeader << "</td><td>" << patchSet.patchSetNumber << "</td></tr>"
+        << patchSet.approvalsToHtml()
         << "<tr><td>" << urlHeader << "</td><td><a href=\"" << c->url << "\">" << c->url << "</a></td></tr>"
         << "</table></body></html>";
     return result;
@@ -327,13 +333,13 @@ void GerritModel::refresh(const std::shared_ptr<GerritServer> &server, const QSt
             arguments << gerritSettings().portFlag << QString::number(m_server->port);
         arguments << m_server->hostArgument() << "gerrit"
                   << "query" << "--dependencies"
-                  << "--current-patch-set"
+                  << "--current-patch-set" << "--patch-sets"
                   << "--format=JSON" << realQuery;
     } else {
         binary = gerritSettings().curl;
         const QString url = m_server->url(GerritServer::RestUrl) + "/changes/?q="
                 + QString::fromUtf8(QUrl::toPercentEncoding(realQuery))
-                + "&o=CURRENT_REVISION&o=DETAILED_LABELS&o=DETAILED_ACCOUNTS";
+                + "&o=ALL_REVISIONS&o=DETAILED_LABELS&o=DETAILED_ACCOUNTS";
         arguments = m_server->curlArguments() << url;
     }
 
@@ -426,7 +432,7 @@ static GerritUser parseGerritUser(const QJsonObject &object)
 
 static int numberValue(const QJsonObject &object)
 {
-    return object.value("number").toInt();
+    return object.value("number").toVariant().toInt();
 }
 
 /* Parse gerrit query Json output.
@@ -447,14 +453,12 @@ static int numberValue(const QJsonObject &object)
 \endcode
 */
 
-static GerritChangePtr parseSshOutput(const QJsonObject &object)
+static GerritPatchSet parseSshPatchSet(const QJsonObject &object)
 {
-    GerritChangePtr change(new GerritChange);
-    // Read current patch set.
-    const QJsonObject patchSet = object.value("currentPatchSet").toObject();
-    change->currentPatchSet.patchSetNumber = qMax(1, numberValue(patchSet));
-    change->currentPatchSet.ref = patchSet.value("ref").toString();
-    const QJsonArray approvalsJ = patchSet.value("approvals").toArray();
+    GerritPatchSet result;
+    result.patchSetNumber = qMax(1, numberValue(object));
+    result.ref = object.value("ref").toString();
+    const QJsonArray approvalsJ = object.value("approvals").toArray();
     const int ac = approvalsJ.size();
     for (int a = 0; a < ac; ++a) {
         const QJsonObject ao = approvalsJ.at(a).toObject();
@@ -463,11 +467,33 @@ static GerritChangePtr parseSshOutput(const QJsonObject &object)
         approval.approval = ao.value("value").toString().toInt();
         approval.type = ao.value("type").toString();
         approval.description = ao.value("description").toString();
-        change->currentPatchSet.approvals.push_back(approval);
+        result.approvals.push_back(approval);
     }
-    std::stable_sort(change->currentPatchSet.approvals.begin(),
-                     change->currentPatchSet.approvals.end(),
-                     gerritApprovalLessThan);
+    std::stable_sort(result.approvals.begin(), result.approvals.end(), gerritApprovalLessThan);
+    return result;
+}
+
+static void completePatchSets(GerritChange &change)
+{
+    change.patchSets.removeIf([&change](const GerritPatchSet &patchSet) {
+        return patchSet.ref.isEmpty()
+               || patchSet.patchSetNumber == change.currentPatchSet.patchSetNumber;
+    });
+    if (!change.currentPatchSet.ref.isEmpty())
+        change.patchSets.append(change.currentPatchSet);
+    std::sort(change.patchSets.begin(), change.patchSets.end(),
+              [](const GerritPatchSet &a, const GerritPatchSet &b) {
+        return a.patchSetNumber > b.patchSetNumber;
+    });
+}
+
+static GerritChangePtr parseSshOutput(const QJsonObject &object)
+{
+    GerritChangePtr change(new GerritChange);
+    change->currentPatchSet = parseSshPatchSet(object.value("currentPatchSet").toObject());
+    for (const QJsonValue &value : object.value("patchSets").toArray())
+        change->patchSets.append(parseSshPatchSet(value.toObject()));
+    completePatchSets(*change);
     // Remaining
     change->number = numberValue(object);
     change->url = object.value("url").toString();
@@ -632,13 +658,22 @@ static GerritChangePtr parseRestOutput(const QJsonObject &object, const GerritSe
     change->status =  object.value("status").toString();
     change->lastUpdated = QDateTime::fromString(object.value("updated").toString() + "Z",
                                                 Qt::DateFormat::ISODate).toLocalTime();
-    // Read current patch set.
-    const QJsonObject patchSet = object.value("revisions").toObject().begin().value().toObject();
-    change->currentPatchSet.patchSetNumber = qMax(1, restNumberValue(patchSet));
-    const QJsonObject fetchInfo = patchSet.value("fetch").toObject().value("http").toObject();
-    change->currentPatchSet.ref = fetchInfo.value("ref").toString();
-    // Replace * in ssh://*:29418/qt-creator/qt-creator with the hostname
-    change->currentPatchSet.url = fetchInfo.value("url").toString().replace('*', server.host);
+    const QJsonObject revisions = object.value("revisions").toObject();
+    const QString currentRevision = object.value("current_revision").toString();
+    for (auto it = revisions.constBegin(); it != revisions.constEnd(); ++it) {
+        const QJsonObject revision = it.value().toObject();
+        GerritPatchSet patchSet;
+        patchSet.patchSetNumber = qMax(1, restNumberValue(revision));
+        const QJsonObject fetchInfo = revision.value("fetch").toObject().value("http").toObject();
+        patchSet.ref = fetchInfo.value("ref").toString();
+        if (patchSet.ref.isEmpty())
+            patchSet.ref = revision.value("ref").toString();
+        // Replace * in ssh://*:29418/qt-creator/qt-creator with the hostname.
+        patchSet.url = fetchInfo.value("url").toString().replace('*', server.host);
+        change->patchSets.append(patchSet);
+        if (it.key() == currentRevision)
+            change->currentPatchSet = patchSet;
+    }
     const QJsonObject labels = object.value("labels").toObject();
     for (auto it = labels.constBegin(), end = labels.constEnd(); it != end; ++it) {
         const QJsonArray all = it.value().toObject().value("all").toArray();
@@ -657,6 +692,7 @@ static GerritChangePtr parseRestOutput(const QJsonObject &object, const GerritSe
     std::stable_sort(change->currentPatchSet.approvals.begin(),
                      change->currentPatchSet.approvals.end(),
                      gerritApprovalLessThan);
+    completePatchSets(*change);
     return change;
 }
 
@@ -836,4 +872,93 @@ void GerritModel::queryFinished()
     emit refreshStateChanged(false);
 }
 
+#ifdef WITH_TESTS
+
+class GerritModelTest final : public QObject
+{
+    Q_OBJECT
+private slots:
+    void testPatchSets_data();
+    void testPatchSets();
+};
+
+void GerritModelTest::testPatchSets_data()
+{
+    QTest::addColumn<bool>("ssh");
+    QTest::addColumn<QByteArray>("json");
+    QTest::addColumn<QList<int>>("numbers");
+    QTest::newRow("ssh-history") << true << QByteArray(R"({
+        "number":42,"project":"project","url":"https://review/42",
+        "currentPatchSet":{"number":3,"ref":"refs/changes/42/42/3",
+            "approvals":[{"type":"Code-Review","value":"2"}]},
+        "patchSets":[{"number":1,"ref":"refs/changes/42/42/1"},
+                     {"number":3,"ref":"refs/changes/42/42/3"}]
+    })") << QList<int>{3, 1};
+    QTest::newRow("ssh-current-only") << true << QByteArray(R"({
+        "number":"42","project":"project","url":"https://review/42",
+        "currentPatchSet":{"number":"3","ref":"refs/changes/42/42/3"}
+    })") << QList<int>{3};
+    QTest::newRow("rest-history-current-last") << false << QByteArray(R"({
+        "_number":42,"project":"project","current_revision":"zzz",
+        "labels":{"Code-Review":{"all":[{"value":2}]}},
+        "revisions":{
+            "aaa":{"_number":1,"fetch":{"http":{
+                "ref":"refs/changes/42/42/1","url":"https://review/project"}}},
+            "zzz":{"_number":3,"fetch":{"http":{
+                "ref":"refs/changes/42/42/3","url":"https://review/project"}}}
+        }
+    })") << QList<int>{3, 1};
+    QTest::newRow("rest-history-current-first") << false << QByteArray(R"({
+        "_number":42,"project":"project","current_revision":"aaa",
+        "revisions":{
+            "zzz":{"_number":1,"ref":"refs/changes/42/42/1"},
+            "aaa":{"_number":3,"ref":"refs/changes/42/42/3"}
+        }
+    })") << QList<int>{3, 1};
+    QTest::newRow("rest-current-only") << false << QByteArray(R"({
+        "_number":42,"project":"project","current_revision":"aaa",
+        "revisions":{"aaa":{"_number":3,"fetch":{"http":{
+            "ref":"refs/changes/42/42/3","url":"ssh://*:29418/project"}}}}
+    })") << QList<int>{3};
+}
+
+void GerritModelTest::testPatchSets()
+{
+    QFETCH(bool, ssh);
+    QFETCH(QByteArray, json);
+    QFETCH(QList<int>, numbers);
+    GerritServer server("review", 29418, {}, ssh ? GerritServer::Ssh : GerritServer::Https);
+    const QJsonObject object = QJsonDocument::fromJson(json).object();
+    const GerritChangePtr change = ssh ? parseSshOutput(object) : parseRestOutput(object, server);
+    QVERIFY(change->isValid());
+    QCOMPARE(change->currentPatchSet.patchSetNumber, 3);
+    QList<int> actual;
+    for (const GerritPatchSet &patchSet : change->patchSets) {
+        actual.append(patchSet.patchSetNumber);
+        GerritChange selected = *change;
+        selected.currentPatchSet = patchSet;
+        const QStringList arguments = selected.gitFetchArguments(server);
+        QCOMPARE(arguments.last(), QString("refs/changes/42/42/%1").arg(patchSet.patchSetNumber));
+        const QString url = patchSet.url.isEmpty() ? server.url(GerritServer::UrlWithHttpUser)
+                                                    + "/project" : patchSet.url;
+        QCOMPARE(arguments.at(1), url);
+        QVERIFY(!arguments.at(1).contains('*'));
+    }
+    QCOMPARE(actual, numbers);
+    QCOMPARE(change->patchSets.first().approvals.size(), change->currentPatchSet.approvals.size());
+    if (numbers.size() > 1)
+        QVERIFY(change->patchSets.last().approvals.isEmpty());
+}
+
+QObject *createGerritModelTest()
+{
+    return new GerritModelTest;
+}
+
+#endif
+
 } // Gerrit::Internal
+
+#ifdef WITH_TESTS
+#include "gerritmodel.moc"
+#endif
