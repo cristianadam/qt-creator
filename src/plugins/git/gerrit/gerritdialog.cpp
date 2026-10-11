@@ -143,7 +143,10 @@ GerritDialog::GerritDialog(const std::shared_ptr<GerritServer> &s,
     }.attachTo(this);
 
     connect(filterLineEdit, &Utils::FancyLineEdit::filterChanged,
-            m_filterModel, &QSortFilterProxyModel::setFilterFixedString);
+            this, [this](const QString &filter) {
+        m_filterModel->setFilterFixedString(filter);
+        m_treeView->expandAll();
+    });
     connect(m_queryLineEdit, &QLineEdit::returnPressed,
             this, &GerritDialog::refresh);
     connect(m_model, &GerritModel::stateChanged,
@@ -258,7 +261,7 @@ void GerritDialog::refresh()
     const QString &query = m_queryLineEdit->text().trimmed();
     updateCompletions(query);
     m_model->refresh(m_server, query);
-    m_treeView->sortByColumn(-1, Qt::DescendingOrder);
+    m_treeView->sortByColumn(-1, Qt::AscendingOrder);
 }
 
 void GerritDialog::scheduleUpdateRemotes()
