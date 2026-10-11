@@ -63,6 +63,8 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 #include <QVersionNumber>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 
 #include <optional>
 
@@ -538,6 +540,47 @@ static QByteArray darkDocumentationCss(const QHelpEngineCore &engine, const QUrl
     return {};
 }
 
+// A figure is drawn for the page it expects: black strokes and black lettering on nothing,
+// which on a dark page all but disappears. A stylesheet cannot reach inside an image to say
+// otherwise and no viewer repaints one, but the drawing can be told which page it is on.
+// Put class="dark" on the root <svg> element, and a drawing that carries a dark scheme of
+// its own answers with it. Qt Assistant does the same; documentation whose drawings carry no
+// such scheme is unaffected, nothing there matching svg.dark.
+static QByteArray darkThemeSvg(const QByteArray &data)
+{
+    QXmlStreamReader reader(data);
+
+    // the first element of an SVG file is the svg element
+    if (!reader.readNextStartElement() || reader.name() != QLatin1String("svg"))
+        return data;
+
+    // A second class attribute beside a first would not be XML, so a drawing that already
+    // names a class is added to rather than written over.
+    QString classes = "dark";
+    QXmlStreamAttributes kept;
+    for (const QXmlStreamAttribute &attribute : reader.attributes()) {
+        if (attribute.qualifiedName() == QLatin1String("class"))
+            classes = attribute.value().toString() + " dark";
+        else
+            kept.append(attribute);
+    }
+
+    // the character offset is the one after the element start
+    const qint64 rest = reader.characterOffset();
+
+    QByteArray head;
+    QXmlStreamWriter writer(&head);
+    writer.writeStartDocument();
+    writer.writeStartElement("svg");
+    writer.writeAttributes(kept);
+    writer.writeAttribute("class", classes);
+    // ensure that the opening tag for the svg element is closed
+    writer.writeCharacters("");
+
+    // the new document start, and the rest of the original after it
+    return head + data.mid(rest);
+}
+
 LocalHelpManager::HelpData LocalHelpManager::helpData(const QUrl &url)
 {
     const bool darkTheme = Utils::creatorTheme()
@@ -571,6 +614,10 @@ LocalHelpManager::HelpData LocalHelpManager::helpData(const QUrl &url, bool dark
         data.mimeType = HelpViewer::mimeFromUrl(data.resolvedUrl);
         if (data.mimeType.isEmpty())
             data.mimeType = Utils::Constants::OCTET_STREAM_MIMETYPE;
+        if (darkTheme
+            && data.resolvedUrl.path(QUrl::FullyEncoded).endsWith(".svg", Qt::CaseInsensitive)) {
+            data.data = darkThemeSvg(data.data);
+        }
     } else {
         data.data = loadErrorMessage(url, Tr::tr("The page could not be found"));
         data.mimeType = "text/html";
