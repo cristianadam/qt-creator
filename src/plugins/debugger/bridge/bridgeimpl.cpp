@@ -1173,6 +1173,8 @@ void BridgeImpl::handleResponse(DapResponseType type, const QJsonObject &respons
             item.addChild(constMi("size", QString::number(reg.value("size").toInt())));
             item.addChild(constMi("groups", reg.value("groups").toString()));
             item.addChild(constMi("type", gdbRegisterTypeName(reg.value("type").toString())));
+            if (const QString error = reg.value("error").toString(); !error.isEmpty())
+                item.addChild(constMi("error", error));
             registers.addChild(item);
         }
         emit refreshDataReceived(m_pendingRegistersRequestId, RefreshKind::Registers, registers);

@@ -11198,17 +11198,22 @@ void tst_backends::reportsVectorRegistersInHex()
     static const QRegularExpression hex("^0x[0-9a-fA-F]+$");
     int seen = 0;
     QStringList notHex;
+    QStringList reported; // all that came back, and why a register has no value
     for (const GdbMi &item : responses.value(int(RefreshKind::Registers))) {
         const QString name = item["name"].data();
+        const QString error = item["error"].data();
+        const QString why = error.isEmpty() ? QString() : " (" + error + ")";
+        reported.append(name + why);
         if (!vectorName.match(name).hasMatch())
             continue;
         ++seen;
         const QString value = item["value"].data();
         if (!hex.match(value).hasMatch() || value.size() > 2 + 2 * item["size"].toInt())
-            notHex.append(name + " = " + value.left(60));
+            notHex.append(name + " = " + value.left(60) + why);
     }
-    QVERIFY2(seen > 0, "no xmm or ymm register came back");
-    QVERIFY2(notHex.isEmpty(), qPrintable(notHex.join(", ").left(400)));
+    QVERIFY2(seen > 0, qPrintable("no xmm or ymm register came back, only: "
+                                  + reported.join(", ").left(1500)));
+    QVERIFY2(notHex.isEmpty(), qPrintable(notHex.join(", ").left(1500)));
 }
 
 void tst_backends::reportsWhereAModuleIsLoaded()

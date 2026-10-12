@@ -2360,7 +2360,11 @@ class DapServer():
         for desc in descriptors:
             try:
                 value = frame.read_register(desc)
-            except Exception:
+            except Exception as error:
+                # Listed without a value, as gdb lists what it cannot read.
+                registers.append({'name': desc.name, 'value': '', 'size': 0, 'type': '',
+                                  'groups': ','.join(groupsByName.get(desc.name, [])),
+                                  'error': str(error)})
                 continue
             size = 0
             try:
