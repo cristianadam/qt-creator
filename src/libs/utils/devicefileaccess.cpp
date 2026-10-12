@@ -2042,6 +2042,28 @@ Result<> UnixDeviceFileAccess::iterateWithFind(
     return ResultOk;
 }
 
+static const DirFilterFlags lsSupportedFilters = DirFilterFlag::AllEntries | DirFilterFlag::Hidden
+                                                 | DirFilterFlag::System
+                                                 | DirFilterFlag::NoDotAndDotDot;
+
+static bool lsEntryMatches(const QString &entry, bool isDir, DirFilterFlags filters)
+{
+    if (filters == DirFilterFlag::NoFilter)
+        return true;
+    const auto has = [filters](DirFilterFlags flags) {
+        return (filters & flags) != DirFilterFlags{};
+    };
+    if (entry == "." || entry == "..") {
+        if (has(DirFilterFlag::NoDotAndDotDot))
+            return false;
+    } else if (entry.startsWith('.') && !has(DirFilterFlag::Hidden)) {
+        return false;
+    }
+    if (!has(DirFilterFlag::Dirs | DirFilterFlag::Files))
+        return true;
+    return has(isDir ? DirFilterFlag::Dirs : DirFilterFlag::Files);
+}
+
 Result<> UnixDeviceFileAccess::findUsingLs(
     const QString &current, const FileFilter &filter, QStringList *found, const QString &start) const
 {
@@ -2053,15 +2075,16 @@ Result<> UnixDeviceFileAccess::findUsingLs(
     // so ignore the exit code
     const QStringList entries = QString::fromUtf8(res->stdOut).split('\n', Qt::SkipEmptyParts);
     for (QString entry : entries) {
-        const QChar last = entry.back();
-        if (last == '/') {
+        const bool isDir = entry.back() == '/';
+        if (isDir) {
             entry.chop(1);
             if ((filter.iteratorFlags & DirIteratorFlag::Subdirectories) != DirIteratorFlag{}
                 && entry != "."
                 && entry != "..")
                 findUsingLs(current + '/' + entry, filter, found, start + entry + "/");
         }
-        found->append(start + entry);
+        if (lsEntryMatches(entry, isDir, filter.fileFilters))
+            found->append(start + entry);
     }
     return ResultOk;
 }
@@ -2089,8 +2112,9 @@ static void iterateLsOutput(const FilePath &base,
         return nameRegexps.isEmpty();
     };
 
-    // FIXME: Handle filters. For now bark on unsupported options.
-    QTC_CHECK(filter.fileFilters == DirFilterFlag::NoFilter);
+    // FIXME: Handle the remaining filters. For now bark on unsupported options.
+    QTC_CHECK(filter.fileFilters == DirFilterFlag::NoFilter
+              || (filter.fileFilters & ~lsSupportedFilters) == DirFilterFlags{});
 
     for (const QString &entry : entries) {
         if (!nameMatches(entry))
