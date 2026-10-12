@@ -666,12 +666,11 @@ Result<CopyResult> copyRecursively(const FilePath &srcFilePath,
             return ResultError(Tr::tr("Failed to create directory \"%1\": %2")
                                     .arg(tgtFilePath.toUserOutput(), res.error()));
         }
-        const QDir sourceDir(srcFilePath.toFSPathString());
-        const QStringList fileNames = sourceDir.entryList(
-            QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
-        for (const QString &fileName : fileNames) {
-            const FilePath newSrcFilePath = srcFilePath / fileName;
-            const FilePath newTgtFilePath = tgtFilePath / fileName;
+        const FilePaths entries = srcFilePath.dirEntries(
+            DirFilterFlag::Files | DirFilterFlag::Dirs | DirFilterFlag::NoDotAndDotDot
+            | DirFilterFlag::Hidden | DirFilterFlag::System);
+        for (const FilePath &newSrcFilePath : entries) {
+            const FilePath newTgtFilePath = tgtFilePath / newSrcFilePath.fileName();
             const Result<CopyResult> res =
                 copyRecursively(newSrcFilePath, newTgtFilePath, copyHelper);
             if (!res || *res == CopyResult::Canceled)
