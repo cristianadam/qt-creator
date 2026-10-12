@@ -961,7 +961,7 @@ private slots:
     void testUnwindsThroughCodeWithoutCfi();
     void testUnwindsThroughCodeWithoutCfiInGccLayout();
     void testUnwindsSampledCodeWithoutCfiOnce();
-    void testStripsSignaturesOfRecordingsTakenElsewhere();
+    void testStripsSignaturesAboveAssumedAddressSize();
     void testTellsWhereTheReturnAddressIs();
     void testAddsLeafCallerFromLinkRegister();
 #endif
@@ -1754,15 +1754,14 @@ void PerfRecordReaderTest::testUnwindsSampledCodeWithoutCfiOnce()
                             .arg(callerPc, 0, 16)));
 }
 
-// What this machine's CPU strips as signature says nothing about a recording
-// taken on another machine, not even whether that one signed, so there the
-// signature is taken to be above 48-bit virtual addresses.
-void PerfRecordReaderTest::testStripsSignaturesOfRecordingsTakenElsewhere()
+// Where nothing tells how far the recording's addresses reach, the signature
+// is taken to be above 48-bit virtual addresses.
+void PerfRecordReaderTest::testStripsSignaturesAboveAssumedAddressSize()
 {
     UnwindInput input;
     dwarfTestAboveNoCfi(&input);
     QVERIFY(input.isValid());
-    input.useHostPointerAuthentication = false;
+    QCOMPARE(input.highestUserAddress, quint64(0));
     QVERIFY(signNoCfiTrampolineReturnAddress(&input, 0x002a000000000000ull));
 
     Dl_info info = {};

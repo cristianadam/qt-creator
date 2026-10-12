@@ -250,6 +250,7 @@ quint64 PerfRecordDecoder::relativeUs(quint64 timeNs) const
 
 void PerfRecordDecoder::mmap(const PerfData::Mmap &mmap)
 {
+    m_symbolizer.addMappedRange(mmap.addr, mmap.len);
     // Anonymous and special mappings ("[heap]", "[stack]") have nothing to
     // symbolize, except the vdso, which the symbolizer finds elsewhere.
     if (mmap.path.isEmpty() || (mmap.path.startsWith('[') && mmap.path != QLatin1StringView(vdsoName)))
@@ -376,8 +377,8 @@ Result<> PerfRecordDecoder::sample(const PerfData::Sample &sample)
     // "--call-graph fp" on aarch64: perf samples the link register as well,
     // and no stack.
     if (sample.userStack.isEmpty() && layout.lr >= 0 && layout.lr < sample.userRegs.size()) {
-        raw.linkRegister = withoutPointerAuthentication(hostPerfArchitecture(),
-                                                        sample.userRegs.at(layout.lr));
+        raw.linkRegister = m_symbolizer.withoutPointerAuthentication(hostPerfArchitecture(),
+                                                                     sample.userRegs.at(layout.lr));
     }
     raw.dwarfRegs = std::move(dwarfRegs);
     if (!raw.dwarfRegs.isEmpty())
