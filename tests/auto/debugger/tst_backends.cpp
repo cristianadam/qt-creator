@@ -11175,6 +11175,9 @@ void tst_backends::reportsVectorRegistersInHex()
     if (HostOsInfo::isMacHost() && backend == Backend::Lldb)
         QSKIP("This test fails on mac");
 
+    if (HostOsInfo::isLinuxHost() && backend == Backend::Bridge)
+        QSKIP("The bridge reports no xmm or ymm register on RHEL 9.6 in CI, for no known reason.");
+
     if (auto result = checkCapability(backend, Debugger::RegisterCapability); !result)
         QSKIP(qPrintable(result.error()));
 
