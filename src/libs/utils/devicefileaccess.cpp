@@ -229,11 +229,23 @@ Result<> DeviceFileAccess::createSymLink(const FilePath &filePath, const FilePat
         Tr::tr("createSymLink is not implemented for \"%1\".").arg(filePath.toUserOutput()));
 }
 
-static Result<> copyRecursively_fallback(const FilePath &src, const FilePath &target)
+static Result<> copyCanceled(const FilePath &src, const FilePath &target)
+{
+    return ResultError(Tr::tr("Copying \"%1\" to \"%2\" was canceled.")
+                           .arg(src.toUserOutput(), target.toUserOutput()));
+}
+
+static Result<> copyRecursively_fallback(const FilePath &src,
+                                         const FilePath &target,
+                                         const std::function<bool()> &isCanceled)
 {
     Result<> result = ResultOk;
     src.iterateDirectory(
-        [&target, &src, &result](const FilePath &path) {
+        [&target, &src, &result, &isCanceled](const FilePath &path) {
+            if (isCanceled && isCanceled()) {
+                result = copyCanceled(src, target);
+                return IterationPolicy::Stop;
+            }
             const QString relative = path.relativePathFromDir(src);
             const FilePath targetPath = target.pathAppended(relative);
             result = targetPath.parentDir().ensureWritableDir();
@@ -251,7 +263,25 @@ static Result<> copyRecursively_fallback(const FilePath &src, const FilePath &ta
     return result;
 }
 
-Result<> DeviceFileAccess::copyRecursively(const FilePath &src, const FilePath &target) const
+// Returns false if canceled. Without a cancel hook this keeps Process's default time limit,
+// with one there is no limit and the caller stops it instead.
+static bool waitUnlessCanceled(Process &process, const std::function<bool()> &isCanceled)
+{
+    if (!isCanceled) {
+        process.waitForFinished();
+        return true;
+    }
+    while (process.state() != ProcessState::NotRunning) {
+        if (isCanceled())
+            return false;
+        process.waitForFinished(std::chrono::milliseconds(100));
+    }
+    return true;
+}
+
+Result<> DeviceFileAccess::copyRecursively(const FilePath &src,
+                                           const FilePath &target,
+                                           const std::function<bool()> &isCanceled) const
 {
     if (!src.isDir()) {
         return ResultError(
@@ -266,7 +296,7 @@ Result<> DeviceFileAccess::copyRecursively(const FilePath &src, const FilePath &
     }
 
 #ifdef UTILS_STATIC_LIBRARY
-    return copyRecursively_fallback(src, target);
+    return copyRecursively_fallback(src, target, isCanceled);
 #else
     const FilePath targetTar = target.withNewPath("tar").searchInPath();
     const FilePath sourceTar = src.withNewPath("tar").searchInPath();
@@ -275,7 +305,7 @@ Result<> DeviceFileAccess::copyRecursively(const FilePath &src, const FilePath &
                                   || target.toFSPathString().startsWith(":/");
 
     if (isSrcOrTargetQrc || !targetTar.isExecutableFile() || !sourceTar.isExecutableFile())
-        return copyRecursively_fallback(src, target);
+        return copyRecursively_fallback(src, target, isCanceled);
 
     Process srcProcess;
     Process targetProcess;
@@ -296,7 +326,11 @@ Result<> DeviceFileAccess::copyRecursively(const FilePath &src, const FilePath &
     targetProcess.waitForStarted();
 
     srcProcess.start();
-    srcProcess.waitForFinished();
+    if (!waitUnlessCanceled(srcProcess, isCanceled)) {
+        srcProcess.kill();
+        targetProcess.kill();
+        return copyCanceled(src, target);
+    }
 
     targetProcess.closeWriteChannel();
 
@@ -308,7 +342,10 @@ Result<> DeviceFileAccess::copyRecursively(const FilePath &src, const FilePath &
                 .arg(src.toUserOutput(), target.toUserOutput(), srcProcess.readAllStandardError()));
     }
 
-    targetProcess.waitForFinished();
+    if (!waitUnlessCanceled(targetProcess, isCanceled)) {
+        targetProcess.kill();
+        return copyCanceled(src, target);
+    }
 
     if (targetProcess.result() != ProcessResult::FinishedWithSuccess) {
         return ResultError(Tr::tr("Failed to copy recursively from \"%1\" to \"%2\" while "

@@ -55,6 +55,9 @@ private slots:
 
     void copyRecursively();
     void copyRecursivelyCanceled();
+
+    void filePathCopyRecursively();
+    void filePathCopyRecursivelyCanceled();
 };
 
 void tst_fileutils::initTestCase() {}
@@ -257,6 +260,41 @@ void tst_fileutils::copyRecursivelyCanceled()
     if (!res)
         QFAIL(qPrintable(res.error()));
     QCOMPARE(*res, FileUtils::CopyResult::Canceled);
+    QCOMPARE(calls, 1);
+}
+
+void tst_fileutils::filePathCopyRecursively()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const FilePath root = FilePath::fromString(tmp.path());
+    const FilePath src = createSourceTree(root);
+    const FilePath target = root / "target";
+
+    const Result<> res = src.copyRecursively(target, [] { return false; });
+
+    if (!res)
+        QFAIL(qPrintable(res.error()));
+    QCOMPARE(target.pathAppended("top.txt").fileContents().value_or(QByteArray()), "top");
+    QCOMPARE(target.pathAppended(".hidden").fileContents().value_or(QByteArray()), "hidden");
+    QCOMPARE(target.pathAppended("sub/deeper/leaf.txt").fileContents().value_or(QByteArray()),
+             "leaf");
+}
+
+void tst_fileutils::filePathCopyRecursivelyCanceled()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const FilePath root = FilePath::fromString(tmp.path());
+    const FilePath src = createSourceTree(root);
+
+    int calls = 0;
+    const Result<> res = src.copyRecursively(root / "target", [&calls] {
+        ++calls;
+        return true;
+    });
+
+    QVERIFY(!res);
     QCOMPARE(calls, 1);
 }
 
