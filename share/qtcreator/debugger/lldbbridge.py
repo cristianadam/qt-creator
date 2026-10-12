@@ -7,7 +7,6 @@ import os
 import platform
 import re
 import sys
-import tempfile
 import threading
 import time
 import lldb
@@ -1415,8 +1414,10 @@ class Dumper(DumperBase):
     # The loader exists only on the device, and without it _dl_debug_state cannot be
     # found, so that one file is worth fetching. The platform can read it even though
     # it refuses the /proc entries of the process.
+    # Not tempfile.gettempdir(): the Python bundled with LLDB on Windows lacks tempfile.
     def fetchedFromDevice(self, remotePath):
-        directory = os.path.join(tempfile.gettempdir(), 'qtc-device-modules')
+        tempDir = os.environ.get('TMPDIR') or os.environ.get('TEMP') or os.environ.get('TMP')
+        directory = os.path.join(tempDir or '/tmp', 'qtc-device-modules')
         local = os.path.join(directory, os.path.basename(remotePath))
         if os.path.exists(local):
             return local
