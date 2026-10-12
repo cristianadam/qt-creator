@@ -345,8 +345,23 @@ def deploy_clang(qtc_binary_path, llvm_install_dir, chrpath_bin):
         shutil.rmtree(resourcetarget)
     common.copytree(resourcesource, resourcetarget, symlinks=True)
 
+def deploy_elfutils_windows(qtc_install_dir, args):
+    lib_path = os.path.join(args.elfutils_path, 'lib')
+    install_path = os.path.join(qtc_install_dir, 'bin')
+    files = [os.path.join(lib_path, lib + '.dll') for lib in ['elf', 'dw', 'eu_compat']]
+    # libdw loads the backend of an architecture by its file name, which
+    # Windows finds next to the executable.
+    files += [os.path.join(lib_path, 'elfutils', 'ebl_' + arch + '.dll')
+              for arch in ['x86_64', 'i386', 'aarch64', 'arm']]
+    for file in files:
+        print(file, '->', install_path)
+        shutil.copy(file, install_path)
+
 def deploy_elfutils(qtc_install_dir, chrpath_bin, args):
-    # Only the Linux build of the Profiler plugin uses libdw.
+    # The Profiler plugin uses libdw on Linux and Windows.
+    if common.is_windows_platform():
+        deploy_elfutils_windows(qtc_install_dir, args)
+        return
     if not common.is_linux_platform():
         return
 
