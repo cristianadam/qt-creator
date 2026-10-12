@@ -44,6 +44,7 @@
 #include <QTimer>
 
 #ifdef WITH_TESTS
+#include <QDebug>
 #include <QTemporaryDir>
 #include <QTest>
 #endif
@@ -1102,6 +1103,7 @@ void InstantBlameTest::testBlameDocumentContents()
 
     document->setProperty("GitRepository", repo.path());
     InstantBlame instantBlame;
+    const FilePath initialTopLevel = currentState().currentFileTopLevel();
     QVERIFY(instantBlame.setEditor(&widget));
     instantBlame.scheduleInstantBlame();
 
@@ -1115,15 +1117,41 @@ void InstantBlameTest::testBlameDocumentContents()
         return QString();
     };
 
-    QTRY_VERIFY(markToolTip(2).contains("-committed"));
-    QVERIFY(markToolTip(2).contains("+working tree"));
+    const auto failureDetails = [&] {
+        QString details;
+        QDebug debug(&details);
+        debug.noquote().nospace()
+            << "\nTest repository: " << repo.path()
+            << "\nInitial current-file repository: " << initialTopLevel.path()
+            << "\nCurrent-file repository: " << currentState().currentFileTopLevel().path()
+            << "\nDocument file: " << document->filePath().path()
+            << "\nDocument modified: " << document->isModified()
+            << "\nCursor line: " << widget.textCursor().blockNumber() + 1
+            << "\nDocument contents:\n" << document->plainText()
+            << "\nMark count: " << document->marks().size();
+        for (const TextMark *mark : document->marks()) {
+            debug << "\nMark line: " << mark->lineNumber()
+                  << "\nTooltip:\n" << mark->toolTip();
+        }
+        const FilePath topLevel = initialTopLevel.isEmpty() ? repo : initialTopLevel;
+        const QStringList blameArguments = blameCommandArguments(
+            file.path(), {}, widget.textCursor().blockNumber() + 1,
+            settings().instantBlameIgnoreSpaceChanges(), settings().instantBlameIgnoreLineMoves(),
+            document->isModified());
+        debug << "\nBlame repository: " << topLevel.path()
+              << "\nBlame arguments: " << blameArguments.join(' ');
+        return details;
+    };
+
+    QTRY_VERIFY2(markToolTip(2).contains("-committed"), qPrintable(failureDetails()));
+    QVERIFY2(markToolTip(2).contains("+working tree"), qPrintable(failureDetails()));
 
     QVERIFY(document->setPlainText("inserted\nfirst\nworking tree\n"));
     document->document()->setModified(true);
     cursor = QTextCursor(widget.document());
     widget.setTextCursor(cursor);
     instantBlame.scheduleInstantBlame();
-    QTRY_VERIFY(markToolTip(1).contains("+inserted"));
+    QTRY_VERIFY2(markToolTip(1).contains("+inserted"), qPrintable(failureDetails()));
 
     const QByteArray latin1Contents = "caf\xe9\ncaf\xe9 old\n";
     QVERIFY(file.writeFileContents(latin1Contents));
