@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifdef WITH_TESTS
+#include <QTemporaryDir>
 #include <QtTest>
 #endif
 
@@ -165,7 +166,8 @@ Internal::CMakeSpecificSettings &CMakeProject::settings()
     return m_settings;
 }
 
-void CMakeProject::readPresets()
+static Internal::PresetsData readPresetsData(const FilePath &projectDirectory,
+                                             FilePaths *readFilesOut = nullptr)
 {
     auto parsePreset = [](const Utils::FilePath &presetFile) -> Internal::PresetsData {
         Internal::PresetsData data;
@@ -193,7 +195,7 @@ void CMakeProject::readPresets()
 
             for (const QString &path : *presetData.include) {
                 QString expandedPath = path;
-                CMakePresets::Macros::expandFileMacros(projectDirectory(),
+                CMakePresets::Macros::expandFileMacros(projectDirectory,
                                                        presetData.fileDir,
                                                        expandedPath);
 
@@ -229,8 +231,9 @@ void CMakeProject::readPresets()
             }
         };
 
-    const Utils::FilePath cmakePresetsJson = projectDirectory().pathAppended("CMakePresets.json");
-    const Utils::FilePath cmakeUserPresetsJson = projectDirectory().pathAppended("CMakeUserPresets.json");
+    const Utils::FilePath cmakePresetsJson = projectDirectory.pathAppended("CMakePresets.json");
+    const Utils::FilePath cmakeUserPresetsJson = projectDirectory.pathAppended(
+        "CMakeUserPresets.json");
 
     Internal::PresetsData cmakePresetsData;
     if (cmakePresetsJson.exists())
@@ -238,10 +241,6 @@ void CMakeProject::readPresets()
     Internal::PresetsData cmakeUserPresetsData;
     if (cmakeUserPresetsJson.exists())
         cmakeUserPresetsData = parsePreset(cmakeUserPresetsJson);
-
-    // Both presets are optional, but at least one needs to be present
-    if (!cmakePresetsJson.exists() && !cmakeUserPresetsJson.exists())
-        return;
 
     // resolve the include
     readFiles = {cmakePresetsJson, cmakeUserPresetsJson};
@@ -252,7 +251,53 @@ void CMakeProject::readPresets()
     includeChain = {cmakeUserPresetsJson};
     resolveIncludes(cmakeUserPresetsData, includeChain);
 
-    // Watch before the presets are validated, so that correcting a rejected file reloads it.
+    if (readFilesOut)
+        *readFilesOut = readFiles;
+
+    Internal::PresetsData presetsData = Internal::combinePresets(cmakePresetsData,
+                                                                 cmakeUserPresetsData);
+    Internal::setupBuildPresets(presetsData);
+    Internal::setupTestPresets(presetsData);
+
+    for (const Internal::PresetsError &error : std::as_const(presetsData.errors)) {
+        TaskHub::addTask<BuildSystemTask>(Task::TaskType::DisruptingError,
+                                          error.message,
+                                          error.filePath);
+    }
+
+    if (!presetsData.hasValidPresets)
+        return {};
+
+    for (const auto &configPreset : std::as_const(presetsData.configurePresets)) {
+        if (configPreset.hidden)
+            continue;
+
+        if (configPreset.condition) {
+            if (!CMakePresets::Macros::evaluatePresetCondition(configPreset, projectDirectory))
+                continue;
+        }
+        presetsData.havePresets = true;
+        break;
+    }
+
+    return presetsData;
+}
+
+void CMakeProject::readPresets()
+{
+    // Both presets are optional, but at least one needs to be present. Keep the watchers: if
+    // the files were there before, they were deleted, and recreating one has to reload them.
+    if (!projectDirectory().pathAppended("CMakePresets.json").exists()
+        && !projectDirectory().pathAppended("CMakeUserPresets.json").exists()) {
+        m_presetsData = {};
+        m_presetKitIds.clear();
+        return;
+    }
+
+    FilePaths readFiles;
+    m_presetsData = readPresetsData(projectDirectory(), &readFiles);
+
+    // Watch also the files of presets that were rejected, so that correcting one reloads them.
     m_includeFilesWatcher = FilePath::watch(readFiles);
     for (Result<std::unique_ptr<FilePathWatcher>> &watcher : m_includeFilesWatcher) {
         if (watcher) {
@@ -276,40 +321,12 @@ void CMakeProject::readPresets()
         }
     }
 
-    m_presetsData = Internal::combinePresets(cmakePresetsData, cmakeUserPresetsData);
-    Internal::setupBuildPresets(m_presetsData);
-    Internal::setupTestPresets(m_presetsData);
-
-    for (const Internal::PresetsError &error : std::as_const(m_presetsData.errors)) {
-        TaskHub::addTask<BuildSystemTask>(Task::TaskType::DisruptingError,
-                                          error.message,
-                                          error.filePath);
-    }
-
-    if (!m_presetsData.hasValidPresets) {
-        m_presetsData = {};
-        m_presetKitIds.clear();
-        return;
-    }
-
     m_presetKitIds = Utils::transform(
         m_presetsData.configurePresets,
         [project = projectFilePath().toSettings().toString()](
             const Internal::PresetsDetails::ConfigurePreset &preset) {
             return CMakeConfigurationKitAspect::cmakePresetKitId(project, preset.name);
         });
-
-    for (const auto &configPreset : std::as_const(m_presetsData.configurePresets)) {
-        if (configPreset.hidden)
-            continue;
-
-        if (configPreset.condition) {
-            if (!CMakePresets::Macros::evaluatePresetCondition(configPreset, projectDirectory()))
-                continue;
-        }
-        m_presetsData.havePresets = true;
-        break;
-    }
 }
 
 void CMakeProject::createKitsFromPresets() const
@@ -332,6 +349,19 @@ FilePath CMakeProject::buildDirectoryToImport() const
 class TestPresetsInheritance final : public QObject
 {
     Q_OBJECT
+
+    static Result<> writePresetFile(const FilePath &projectDir,
+                                    const QString &relativePath,
+                                    const QByteArray &content)
+    {
+        const FilePath file = projectDir.pathAppended(relativePath);
+        if (const Result<> result = file.parentDir().ensureWritableDir(); !result)
+            return result;
+        if (const Result<qint64> written = file.writeFileContents(content); !written)
+            return ResultError(written.error());
+        return ResultOk;
+    }
+
 private slots:
 
     // QTCREATORBUG-32853
@@ -363,12 +393,12 @@ private slots:
                 ]
             }
         )";
-        const FilePath presetFiles = FilePath::fromUserInput(QDir::tempPath() + "/CMakePresets.json");
-        QVERIFY(presetFiles.writeFileContents(content));
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const FilePath projectDir = FilePath::fromString(tempDir.path());
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMakePresets.json", content));
 
-        // create a CMakeProject – this will automatically read & combine presets
-        CMakeProject project(presetFiles);
-        const PresetsData &pd = project.presetsData();
+        const PresetsData pd = readPresetsData(projectDir);
 
         // locate the child preset
         auto it = std::find_if(
@@ -411,13 +441,13 @@ private slots:
                 ]
             }
         )";
-        const FilePath presetFiles = FilePath::fromUserInput(QDir::tempPath()
-                                                             + "/CMakePresets.json");
-        QVERIFY(presetFiles.writeFileContents(content));
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const FilePath projectDir = FilePath::fromString(tempDir.path());
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMakePresets.json", content));
 
         // Reading the presets reports the cycle instead of recursing until the stack is gone
-        CMakeProject project(presetFiles);
-        QVERIFY(!project.presetsData().havePresets);
+        QVERIFY(!readPresetsData(projectDir).havePresets);
     }
 
     void testDiamondInheritanceIsNotCyclic()
@@ -455,14 +485,14 @@ private slots:
                 ]
             }
         )";
-        const FilePath presetFiles = FilePath::fromUserInput(QDir::tempPath()
-                                                             + "/CMakePresets.json");
-        QVERIFY(presetFiles.writeFileContents(content));
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const FilePath projectDir = FilePath::fromString(tempDir.path());
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMakePresets.json", content));
 
         // "base" is reached both through "ninja" and through "vcpkg". That is a diamond, which
         // CMake allows, and not a cycle, so the presets survive and "dev" inherits from "base".
-        CMakeProject project(presetFiles);
-        const PresetsData &pd = project.presetsData();
+        const PresetsData pd = readPresetsData(projectDir);
         QVERIFY(pd.havePresets);
 
         auto it = std::find_if(pd.configurePresets.begin(),
@@ -505,20 +535,15 @@ private slots:
             }
         )";
 
-        const QString tempPath = QDir::tempPath();
-        const FilePath presetFiles = FilePath::fromUserInput(tempPath + "/CMakePresets.json");
-        QVERIFY(presetFiles.writeFileContents(root));
-        for (const QString &name : {QString("first"), QString("second")}) {
-            const FilePath file = FilePath::fromUserInput(
-                tempPath + "/include/" + name + ".json");
-            QVERIFY(file.parentDir().ensureWritableDir());
-            QVERIFY(file.writeFileContents(includer));
-        }
-        const FilePath commonFile = FilePath::fromUserInput(tempPath + "/include/common.json");
-        QVERIFY(commonFile.writeFileContents(common));
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const FilePath projectDir = FilePath::fromString(tempDir.path());
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMakePresets.json", root));
+        QVERIFY_RESULT(writePresetFile(projectDir, "include/first.json", includer));
+        QVERIFY_RESULT(writePresetFile(projectDir, "include/second.json", includer));
+        QVERIFY_RESULT(writePresetFile(projectDir, "include/common.json", common));
 
-        CMakeProject project(presetFiles);
-        const PresetsData &pd = project.presetsData();
+        const PresetsData pd = readPresetsData(projectDir);
 
         // Both included files include the same file, whose presets appear only once
         const int commonPresets = Utils::count(pd.configurePresets,
@@ -764,31 +789,20 @@ private slots:
             }
         )";
 
-        QString tempStringPath = QDir::tempPath();
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const FilePath projectDir = FilePath::fromString(tempDir.path());
 
-        const FilePath presetsFiles = FilePath::fromUserInput(tempStringPath + "/CMakePresets.json");
-        QVERIFY(presetsFiles.parentDir().ensureWritableDir());
-        QVERIFY(presetsFiles.writeFileContents(presets));
-        const FilePath commonPresets = FilePath::fromUserInput(
-            tempStringPath + "/CMake/Platform/Common/CMakePresets.json");
-        QVERIFY(commonPresets.parentDir().ensureWritableDir());
-        QVERIFY(commonPresets.writeFileContents(common));
-        const FilePath linuxPresets = FilePath::fromUserInput(
-            tempStringPath + "/CMake/Platform/Linux/CMakePresets.json");
-        QVERIFY(linuxPresets.parentDir().ensureWritableDir());
-        QVERIFY(linuxPresets.writeFileContents(linux));
-        const FilePath macPresets = FilePath::fromUserInput(
-            tempStringPath + "/CMake/Platform/Mac/CMakePresets.json");
-        QVERIFY(macPresets.parentDir().ensureWritableDir());
-        QVERIFY(macPresets.writeFileContents(mac));
-        const FilePath windowsPresets = FilePath::fromUserInput(
-            tempStringPath + "/CMake/Platform/Windows/CMakePresets.json");
-        QVERIFY(windowsPresets.parentDir().ensureWritableDir());
-        QVERIFY(windowsPresets.writeFileContents(windows));
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMakePresets.json", presets));
+        QVERIFY_RESULT(
+            writePresetFile(projectDir, "CMake/Platform/Common/CMakePresets.json", common));
+        QVERIFY_RESULT(
+            writePresetFile(projectDir, "CMake/Platform/Linux/CMakePresets.json", linux));
+        QVERIFY_RESULT(writePresetFile(projectDir, "CMake/Platform/Mac/CMakePresets.json", mac));
+        QVERIFY_RESULT(
+            writePresetFile(projectDir, "CMake/Platform/Windows/CMakePresets.json", windows));
 
-        // create a CMakeProject – this will automatically read & combine presets
-        CMakeProject project(presetsFiles);
-        const PresetsData &pd = project.presetsData();
+        const PresetsData pd = readPresetsData(projectDir);
 
         // locate the loaded preset
         QMap<OsType, QPair<QString, bool>> visibleOsMap;
@@ -812,7 +826,7 @@ private slots:
             if (it->condition)
                 visible
                     = !it->hidden
-                      && CMakePresets::Macros::evaluatePresetCondition(*it, presetsFiles.parentDir());
+                      && CMakePresets::Macros::evaluatePresetCondition(*it, projectDir);
             QCOMPARE(os.second, visible);
         }
     }
