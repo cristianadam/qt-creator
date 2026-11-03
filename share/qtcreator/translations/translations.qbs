@@ -21,6 +21,7 @@ Project {
                 "qtcreator_hr.ts",
                 "qtcreator_ja.ts",
                 "qtcreator_pl.ts",
+                "qtcreator_ro.ts",
                 "qtcreator_ru.ts",
                 "qtcreator_sl.ts",
                 "qtcreator_uk.ts",
